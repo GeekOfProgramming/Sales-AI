@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title pyBIM-LLM Local AI & BIM Gateway
+title pyBIM-LLM Local AI ^& BIM Gateway
 cd /d "%~dp0"
 
 echo ======================================================================
-echo           🏛️ pyBIM-LLM - Local AI & RAG Gateway for Revit
+echo           🏛️ pyBIM-LLM - Local AI ^& RAG Gateway for Revit
 echo ======================================================================
 echo.
 
@@ -35,8 +35,10 @@ echo [OK] Python virtual environment ready.
 :: 3. Free Port 8000 if occupied
 echo [3/3] Checking Port 8000 availability...
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING 2^>nul') do (
-    echo [*] Freeing busy port 8000 (PID %%a)...
-    taskkill /F /PID %%a >nul 2>&1
+    if not "%%a"=="" if not "%%a"=="0" (
+        echo [*] Freeing busy port 8000 [PID %%a]...
+        taskkill /F /PID %%a >nul 2>&1
+    )
 )
 echo [OK] Port 8000 is ready.
 
@@ -54,6 +56,6 @@ echo Opening pyBIM-LLM Studio in your default browser...
 start "" cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:8000/ui"
 
 :: Launch main gateway server
-".venv\Scripts\python.exe" start_server.py
+".venv\Scripts\python.exe" -u start_server.py
 
 pause

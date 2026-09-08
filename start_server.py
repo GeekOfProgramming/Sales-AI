@@ -6,13 +6,14 @@ import sys
 import io
 import os
 
-# Ensure UTF-8 stdout encoding for Windows
+# Ensure UTF-8 stdout encoding with immediate line buffering for Windows
 if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf-8":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 import subprocess
 import socket
+import threading
 import time
 from pathlib import Path
 import uvicorn
@@ -61,7 +62,7 @@ def main():
     cloudflared_path = find_cloudflared()
     tunnel_proc = None
     if cloudflared_path:
-        print(f"\n🌐 Starting Cloudflare Quick Tunnel using: {cloudflared_path}")
+        print(f"\n🌐 Starting Cloudflare Quick Tunnel using: {cloudflared_path}", flush=True)
         try:
             tunnel_proc = subprocess.Popen(
                 [cloudflared_path, "tunnel", "--url", "http://127.0.0.1:8000"],
@@ -71,55 +72,61 @@ def main():
                 encoding="utf-8",
                 errors="replace",
             )
-            print("  (Waiting for public tunnel URL...)")
-            # Wait up to 10 seconds to read the tunnel URL
-            time_start = time.time()
-            import re
-            while time.time() - time_start < 15:
-                line = tunnel_proc.stdout.readline()
-                match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line)
-                if match:
-                    base_url = match.group(0)
-                    public_ui_url = f"{base_url}/ui"
-                    print("\n" + "=" * 70)
-                    print("🎉 GLOBAL PUBLIC HTTPS TUNNEL READY FOR ANY CITY:")
-                    print(f"👉 LINK TO SHARE:  {public_ui_url}")
-                    print("=" * 70)
-                    print("  (Anyone anywhere in the world can open this link in their browser!)\n")
-                    
-                    # Save link to PUBLIC_URL.txt for easy copy-pasting
-                    try:
-                        url_file = Path(__file__).parent / "PUBLIC_URL.txt"
-                        url_file.write_text(
-                            f"=== pyBIM-LLM Public Access Link ===\n\n"
-                            f"Web Studio UI (Share with anyone in any city):\n"
-                            f"{public_ui_url}\n\n"
-                            f"API Base URL:\n"
-                            f"{base_url}\n",
-                            encoding="utf-8",
-                        )
-                        print(f"💾 Link also saved to: {url_file.name}")
-                    except Exception:
-                        pass
-                    
-                    # Copy link to Windows clipboard automatically
-                    try:
-                        subprocess.run(
-                            ["clip.exe"],
-                            input=public_ui_url.encode("utf-8"),
-                            check=False,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                        )
-                        print("📋 Link automatically copied to your clipboard! Just press Ctrl+V to send.")
-                    except Exception:
-                        pass
-                    break
-        except Exception as e:
-            print(f"⚠️ Cloudflare tunnel notice: {e}")
 
-    print("\n" + "-" * 70)
-    print("⚡ Starting Uvicorn Gateway on 0.0.0.0:8000 ... (Press Ctrl+C to stop)")
-    print("-" * 70 + "\n")
+            def _watch_tunnel_output(proc):
+                import re
+                try:
+                    for line in iter(proc.stdout.readline, ""):
+                        if not line:
+                            break
+                        match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line)
+                        if match:
+                            base_url = match.group(0)
+                            public_ui_url = f"{base_url}/ui"
+                            print("\n" + "=" * 70, flush=True)
+                            print("🎉 GLOBAL PUBLIC HTTPS TUNNEL READY FOR ANY CITY:", flush=True)
+                            print(f"👉 LINK TO SHARE:  {public_ui_url}", flush=True)
+                            print("=" * 70, flush=True)
+                            print("  (Anyone anywhere in the world can open this link in their browser!)\n", flush=True)
+
+                            # Save link to PUBLIC_URL.txt for easy copy-pasting
+                            try:
+                                url_file = Path(__file__).parent / "PUBLIC_URL.txt"
+                                url_file.write_text(
+                                    f"=== pyBIM-LLM Public Access Link ===\n\n"
+                                    f"Web Studio UI (Share with anyone in any city):\n"
+                                    f"{public_ui_url}\n\n"
+                                    f"API Base URL:\n"
+                                    f"{base_url}\n",
+                                    encoding="utf-8",
+                                )
+                                print(f"💾 Link also saved to: {url_file.name}", flush=True)
+                            except Exception:
+                                pass
+
+                            # Copy link to Windows clipboard automatically
+                            try:
+                                subprocess.run(
+                                    ["clip.exe"],
+                                    input=public_ui_url.encode("utf-8"),
+                                    check=False,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                                )
+                                print("📋 Link automatically copied to your clipboard! Just press Ctrl+V to send.\n", flush=True)
+                            except Exception:
+                                pass
+                            break
+                except Exception:
+                    pass
+
+            tunnel_thread = threading.Thread(target=_watch_tunnel_output, args=(tunnel_proc,), daemon=True)
+            tunnel_thread.start()
+        except Exception as e:
+            print(f"⚠️ Cloudflare tunnel notice: {e}", flush=True)
+
+    print("\n" + "-" * 70, flush=True)
+    print("⚡ Starting Uvicorn Gateway on 0.0.0.0:8000 ... (Press Ctrl+C to stop)", flush=True)
+    print("-" * 70 + "\n", flush=True)
 
     try:
         uvicorn.run(
