@@ -89,6 +89,11 @@ Mandatory Execution Guidelines (Strict and Inviolable):
 5. Provide ONLY valid executable Python code enclosed in a ```python ... ``` markdown block.
 """
 
+SYSTEM_PROMPT_BIM_ADVISOR = """You are an expert BIM software consultant, Revit automation advisor, and ISO 19650 specialist.
+Your task is to provide comprehensive, clear, and technically precise explanations, advisory answers, and conceptual guidance for Revit API, Dynamo, pyRevit, and BIM workflows.
+Use clear headings, bullet points, and clean formatting.
+"""
+
 
 
 class BIMLLMClient:
@@ -135,7 +140,9 @@ class BIMLLMClient:
         env = getattr(request, "environment", "").lower()
         lang = getattr(request, "language", "").lower()
 
-        if env == "dynamo" or lang == "dynamo":
+        if env in ("text", "chat", "advisory", "nlp") or lang in ("text", "markdown", "nlp"):
+            base_system = SYSTEM_PROMPT_BIM_ADVISOR
+        elif env == "dynamo" or lang == "dynamo":
             base_system = SYSTEM_PROMPT_REVIT_DYNAMO
         elif env == "csharp" or lang in ("c#", "csharp", "cs"):
             base_system = SYSTEM_PROMPT_REVIT_CSHARP
@@ -157,6 +164,9 @@ class BIMLLMClient:
     @staticmethod
     def extract_code(raw_text: str, language: str = "python") -> str:
         """Extract clean code from markdown code fences or return raw text if no fence found."""
+        if language.lower() in ("text", "markdown", "nlp"):
+            return raw_text.strip()
+
         patterns = [
             rf"```(?:{language}|py|cs|csharp)?\s*([\s\S]*?)```",
             r"```\s*([\s\S]*?)```",
@@ -167,9 +177,13 @@ class BIMLLMClient:
                 return match.group(1).strip()
         return raw_text.strip()
 
-    def generate_code(self, request: CodeGenerationRequest) -> CodeGenerationResponse:
-        """Synchronously generate code using Ollama."""
-        target_model = request.model or self.default_model
+    def generate_code(
+        self,
+        request: CodeGenerationRequest,
+        model_name: Optional[str] = None,
+    ) -> CodeGenerationResponse:
+        """Synchronously generate code using Ollama with dynamically supplied model_name."""
+        target_model = model_name or request.model or self.default_model
         messages = self._build_messages(request)
         start_time = time.perf_counter()
 
@@ -192,9 +206,13 @@ class BIMLLMClient:
             duration_seconds=round(duration, 3),
         )
 
-    async def generate_code_async(self, request: CodeGenerationRequest) -> CodeGenerationResponse:
-        """Asynchronously generate code using Ollama."""
-        target_model = request.model or self.default_model
+    async def generate_code_async(
+        self,
+        request: CodeGenerationRequest,
+        model_name: Optional[str] = None,
+    ) -> CodeGenerationResponse:
+        """Asynchronously generate code using Ollama with dynamically supplied model_name."""
+        target_model = model_name or request.model or self.default_model
         messages = self._build_messages(request)
         start_time = time.perf_counter()
 
@@ -217,9 +235,13 @@ class BIMLLMClient:
             duration_seconds=round(duration, 3),
         )
 
-    def stream_code_sync(self, request: CodeGenerationRequest) -> Generator[str, None, None]:
-        """Stream generated tokens synchronously."""
-        target_model = request.model or self.default_model
+    def stream_code_sync(
+        self,
+        request: CodeGenerationRequest,
+        model_name: Optional[str] = None,
+    ) -> Generator[str, None, None]:
+        """Stream generated tokens synchronously using dynamic model_name."""
+        target_model = model_name or request.model or self.default_model
         messages = self._build_messages(request)
 
         stream = self._sync_client.chat(
@@ -235,9 +257,13 @@ class BIMLLMClient:
             if chunk.message and chunk.message.content:
                 yield chunk.message.content
 
-    async def stream_code_async(self, request: CodeGenerationRequest) -> AsyncGenerator[str, None]:
-        """Stream generated tokens asynchronously."""
-        target_model = request.model or self.default_model
+    async def stream_code_async(
+        self,
+        request: CodeGenerationRequest,
+        model_name: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream generated tokens asynchronously using dynamic model_name."""
+        target_model = model_name or request.model or self.default_model
         messages = self._build_messages(request)
 
         stream = await self._async_client.chat(

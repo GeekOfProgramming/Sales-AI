@@ -4,6 +4,7 @@ Coordinates requests from Revit Addin (C# / pyRevit) with local ChromaDB RAG and
 
 import sys
 import io
+import re
 import ast
 import time
 from pathlib import Path
@@ -151,6 +152,50 @@ def _validate_code(code: str, language: str) -> Optional[str]:
     return None
 
 
+def intent_router(prompt: str) -> str:
+    """Classify user prompt intent into 'text_generation' or 'code_generation'.
+
+    Analyzes keywords and regex patterns to differentiate conceptual/explanatory
+    inquiries from actionable script/code generation requests.
+    """
+    if not prompt or not prompt.strip():
+        return "code_generation"
+
+    clean = prompt.lower().strip()
+
+    # Patterns indicating explanatory, descriptive, or conceptual queries
+    text_patterns = [
+        r"\b(explain|what is|how does|why|describe|summarize|tell me about|guide|difference between|compare|overview|concept|pros and cons)\b",
+        r"(توضیح|چیست|چرا|چگونه|تفاوت|مقایسه|راهنما|خلاصه|مفهوم|مستندات|تعریف کن|به چه صورت|معرفی|منظور از)",
+    ]
+
+    # Patterns indicating code/script generation, modification, or automation
+    code_patterns = [
+        r"\b(write|generate|create|build|script|code|macro|plugin|addin|filter|collector|transaction|unwrapelement|parameter)\b",
+        r"\b(def\s+|class\s+|import\s+|clr\.addreference)\b",
+        r"(کد|اسکریپت|برنامه|پلاگین|ماکرو|المان|دیوار|تراکنش|پارامتر|تغییر بده|ایجاد کن|بساز|بنویس|فیلتر کن|حذف کن|محاسبه کن|اضافه کن|تنظیم کن)",
+    ]
+
+    is_text = any(re.search(pat, clean, re.IGNORECASE) for pat in text_patterns)
+    is_code = any(re.search(pat, clean, re.IGNORECASE) for pat in code_patterns)
+
+    # Pure text inquiry (unless user explicitly requests code writing)
+    if is_text and not (
+        "کد بنویس" in clean
+        or "اسکریپت بنویس" in clean
+        or "write code" in clean
+        or "write a script" in clean
+        or "generate script" in clean
+        or "generate code" in clean
+    ):
+        return "text_generation"
+
+    if is_code:
+        return "code_generation"
+
+    return "code_generation"
+
+
 @app.post("/generate-script", response_model=ScriptGenerationResponse, tags=["AI Inference"])
 async def generate_script(request: ScriptGenerationRequest):
     """Receive a prompt and optional selected Revit elements, retrieve rules via RAG, and generate code."""
@@ -206,11 +251,41 @@ async def generate_script(request: ScriptGenerationRequest):
 
     combined_context = "\n\n".join(rag_context_parts) if rag_context_parts else None
 
-    # 3. Determine Execution Environment and Target Language
+    # 3. Semantic Routing: Intent Classification and Dynamic Model Assignment
+    detected_intent = intent_router(request.user_prompt)
+
+    available_models = []
+    try:
+        available_models = llm_client.list_available_models()
+    except Exception:
+        pass
+
+    if request.model:
+        selected_model = request.model
+    elif detected_intent == "text_generation":
+        # Check for local NLP model (e.g., llama3)
+        llama_variant = next((m for m in available_models if "llama3" in m.lower()), None)
+        if llama_variant:
+            selected_model = llama_variant
+        elif "llama3" in available_models:
+            selected_model = "llama3"
+        else:
+            # Fallback to local coder model if llama3 is not yet pulled
+            selected_model = "qwen2.5-coder:1.5b"
+            print(f"ℹ️ Semantic Router: Intent is 'text_generation'. llama3 not installed locally; using {selected_model}")
+    else:
+        # Code generation default: qwen2.5-coder
+        coder_variant = next((m for m in available_models if "qwen2.5-coder" in m.lower()), None)
+        selected_model = coder_variant or "qwen2.5-coder:1.5b"
+
+    # 4. Determine Execution Environment and Target Language
     target_env = getattr(request, "environment", "pyrevit")
     target_lang = getattr(request, "language", "python") or "python"
 
-    if target_env == "dynamo" or target_lang.lower() == "dynamo":
+    if detected_intent == "text_generation" and target_env not in ("dynamo", "csharp"):
+        target_env = "text"
+        target_lang = "markdown"
+    elif target_env == "dynamo" or target_lang.lower() == "dynamo":
         target_env = "dynamo"
         target_lang = "python"
     elif target_env == "csharp" or target_lang.lower() in ("csharp", "cs", "c#"):
@@ -225,12 +300,12 @@ async def generate_script(request: ScriptGenerationRequest):
         environment=target_env,
         language=target_lang,
         context_rules=combined_context,
-        model=request.model,
+        model=selected_model,
         temperature=request.temperature,
     )
 
     try:
-        llm_resp = await llm_client.generate_code_async(llm_req)
+        llm_resp = await llm_client.generate_code_async(llm_req, model_name=selected_model)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -245,6 +320,7 @@ async def generate_script(request: ScriptGenerationRequest):
         code=llm_resp.extracted_code,
         language=f"{target_lang} ({target_env})",
         model_used=llm_resp.model,
+        intent=detected_intent,
         retrieved_rules_count=len(rag_context_parts),
         retrieved_sources=retrieved_sources,
         execution_time_seconds=total_duration,

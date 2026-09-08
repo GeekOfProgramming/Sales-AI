@@ -148,6 +148,35 @@ def test_gateway():
         assert "RevitServices" in code_str or "DocumentManager" in code_str or "TransactionManager" in code_str or "OUT" in code_str
         print("✅ Test 6 Passed: Dynamo Python environment generated valid node code.")
 
+        # 7. Test Semantic Intent Router (Text vs Code Generation)
+        print("\n" + "-" * 50)
+        print("🔹 Test 7: Semantic Intent Routing & Dynamic Model Allocation")
+        print("-" * 50)
+        from backend.main import intent_router
+
+        # Unit checks on intent_router function
+        assert intent_router("Explain the difference between Document and UIDocument in Revit API") == "text_generation"
+        assert intent_router("تفاوت بین تراکنش و ساب‌تراکنش را در رویت توضیح بده") == "text_generation"
+        assert intent_router("Write a script to count all doors in active view") == "code_generation"
+        assert intent_router("اسکریپت فیلتر کردن دیوارها بر اساس متراژ را بنویس") == "code_generation"
+        print("✅ Intent router classification passed for both English and Persian prompts.")
+
+        # Test API endpoint semantic routing for explanatory query
+        payload_explain = {
+            "user_prompt": "Explain what is the role of DocumentManager in Dynamo Revit scripts.",
+            "language": "python",
+            "include_rag_rules": True,
+            "temperature": 0.1,
+        }
+        res_explain = client.post("/generate-script", json=payload_explain)
+        assert res_explain.status_code == 200
+        explain_data = res_explain.json()
+        assert explain_data["intent"] == "text_generation"
+        print(f"Detected Intent: {explain_data['intent']}")
+        print(f"Model Allocated: {explain_data['model_used']}")
+        print(f"Explanation Response Sample:\n{explain_data['code'][:200]}...")
+        print("✅ Test 7 Passed: Semantic routing successfully classified text intent and routed model.")
+
     print("\n" + "=" * 65)
     print("🎉 ALL BACKEND ENDPOINTS PASSED TESTS SUCCESSFULLY!")
     print("=" * 65)
@@ -155,3 +184,4 @@ def test_gateway():
 
 if __name__ == "__main__":
     test_gateway()
+

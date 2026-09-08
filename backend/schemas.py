@@ -65,6 +65,7 @@ class ScriptGenerationResponse(BaseModel):
     code: str = Field(..., description="Clean, executable code ready for Revit execution.")
     language: str = Field(..., description="Target language of the generated code.")
     model_used: str = Field(..., description="Name of the LLM model that performed inference.")
+    intent: Optional[str] = Field(default="code_generation", description="Classified intent: 'code_generation' or 'text_generation'.")
     retrieved_rules_count: int = Field(default=0, description="Number of knowledge chunks retrieved from RAG.")
     retrieved_sources: List[str] = Field(default=[], description="List of source rule files consulted by RAG.")
     execution_time_seconds: float = Field(..., description="Total time taken for RAG + inference in seconds.")
