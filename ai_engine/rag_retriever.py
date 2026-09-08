@@ -141,6 +141,18 @@ class BIMRAGRetriever:
 
     index_file = index_markdown_file
 
+    def delete_source(self, source_name: str) -> int:
+        """Remove all chunks associated with a specific file/source from ChromaDB."""
+        try:
+            existing = self.collection.get(where={"source": source_name})
+            if existing and existing.get("ids"):
+                ids_to_del = existing["ids"]
+                self.collection.delete(ids=ids_to_del)
+                return len(ids_to_del)
+        except Exception:
+            pass
+        return 0
+
     def index_directory(self, directory_path: str | Path) -> int:
         """Index all markdown files found in the given directory."""
         dir_path = Path(directory_path)

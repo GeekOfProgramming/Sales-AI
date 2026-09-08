@@ -393,9 +393,18 @@ def _run_approved_ingest(request_id: str, url: str, slug: Optional[str] = None):
         result = ingestor.ingest_url(url, slug=slug)
         chunk_count = result.get("indexed_chunks", 0)
         file_path = result.get("file_path", "")
-        success_msg = f"Successfully scraped & indexed {chunk_count} chunks into ChromaDB."
-        ingest_queue.update_status(request_id, "approved", message=success_msg)
+        effective_slug = result.get("effective_slug", "")
+        slug_feedback = result.get("slug_feedback")
+
+        if slug_feedback:
+            success_msg = f"Indexed as '{effective_slug}' ({chunk_count} chunks). 💡 Note: {slug_feedback}"
+        else:
+            success_msg = f"Successfully indexed as '{effective_slug}' ({chunk_count} chunks)."
+
+        ingest_queue.update_status(request_id, "approved", message=success_msg, slug=effective_slug)
         print(f"✅ [Admin-Gate Ingest] Approved & Indexed {url} -> {file_path} ({chunk_count} chunks)")
+        if slug_feedback:
+            print(f"💡 [Admin-Gate Ingest] Naming note: {slug_feedback}")
     except Exception as e:
         err_msg = f"Ingestion error: {str(e)}"
         ingest_queue.update_status(request_id, "rejected", message=err_msg)
@@ -444,14 +453,19 @@ async def submit_ingest_request(request: IngestRequest):
             detail="Invalid URL scheme. Only http:// and https:// URLs are supported.",
         )
 
+    initial_slug, slug_note = BIMDataIngestor.generate_smart_slug(target_url, user_slug=request.slug)
     item = ingest_queue.enqueue(
         url=target_url,
-        slug=request.slug,
+        slug=initial_slug,
         submitter=request.submitter or "Revit Client / Web User",
     )
+    resp_msg = "Documentation request queued for administrator review. Use request_id to track approval status."
+    if slug_note:
+        resp_msg += f" 💡 Note: {slug_note}"
+
     return IngestResponse(
         status="pending",
-        message="Documentation request queued for administrator review. Use request_id to track approval status.",
+        message=resp_msg,
         url=target_url,
         request_id=item["request_id"],
         current_state="pending",

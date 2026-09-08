@@ -6,7 +6,7 @@ and indexes the resulting knowledge chunks directly into the ChromaDB vector sto
 import re
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 from scrapling import Fetcher, Selector
 from markdownify import markdownify
@@ -101,10 +101,84 @@ class BIMDataIngestor:
             "markdown": md_text,
         }
 
+    @staticmethod
+    def is_guid_or_hash(text: str) -> bool:
+        """Detect if a string is a raw GUID or hexadecimal hash."""
+        cleaned = re.sub(r"\.html?$", "", text.strip().lower())
+        guid_pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        hex_pattern = r"^[0-9a-f]{16,}$"
+        return bool(re.match(guid_pattern, cleaned) or re.match(hex_pattern, cleaned))
+
+    @classmethod
+    def generate_smart_slug(
+        cls,
+        url: str,
+        title: Optional[str] = None,
+        user_slug: Optional[str] = None,
+    ) -> Tuple[str, Optional[str]]:
+        """
+        Derives an optimal, human-readable, and standard snake_case slug.
+        Determines domain prefix (revit_api, pyrevit, dynamo, iso),
+        cleans title or URL segments, and provides feedback if user's slug was unstandardized.
+        Returns: (effective_slug, slug_feedback_message)
+        """
+        url_lower = url.lower()
+        if "pyrevit" in url_lower:
+            prefix = "pyrevit"
+        elif "revitapidocs.com" in url_lower or "revit" in url_lower:
+            prefix = "revit_api"
+        elif "dynamo" in url_lower:
+            prefix = "dynamo"
+        elif "iso" in url_lower or "19650" in url_lower:
+            prefix = "iso"
+        else:
+            prefix = "bim"
+
+        title_clean = ""
+        if title:
+            # Clean common generic keywords to focus on actual class/method/subject
+            t = re.sub(r"\b(revit|api|docs|pyrevit|autodesk|documentation)\b", "", title, flags=re.IGNORECASE)
+            t = re.sub(r"[^a-zA-Z0-9\s_]", " ", t)
+            words = [w.lower() for w in t.split() if len(w) > 1]
+            title_clean = "_".join(words)
+
+        if not title_clean:
+            # Fallback parsing path segments from URL
+            parts = [p for p in url.split("/") if p and not cls.is_guid_or_hash(p) and not p.startswith("202")]
+            candidate = parts[-1] if parts else "documentation"
+            candidate = re.sub(r"\.html?$", "", candidate)
+            title_clean = re.sub(r"[^a-zA-Z0-9_]", "_", candidate).strip("_")
+
+        suggested_slug = f"{prefix}_{title_clean}".strip("_")
+        suggested_slug = re.sub(r"_+", "_", suggested_slug)
+
+        # 1. If user provided no slug
+        if not user_slug or not user_slug.strip():
+            return suggested_slug, None
+
+        # 2. Analyze user-provided slug
+        cleaned_user = re.sub(r"\.html?$", "", user_slug.strip().lower())
+        cleaned_user = re.sub(r"[^a-zA-Z0-9_]", "_", cleaned_user)
+        cleaned_user = re.sub(r"_+", "_", cleaned_user).strip("_")
+
+        # Check if user slug was unstandardized (raw GUID, too short, or meaningless keyword)
+        if cls.is_guid_or_hash(user_slug) or len(cleaned_user) < 3 or cleaned_user in ["test", "doc", "file", "script", "revit"]:
+            feedback = f"Provided slug '{user_slug}' was unstandardized/generic. Optimized to standard identifier '{suggested_slug}'."
+            return suggested_slug, feedback
+
+        # If user provided a valid slug with spaces or extension that got normalized
+        if cleaned_user != user_slug.strip():
+            feedback = f"Normalized slug from '{user_slug.strip()}' to snake_case '{cleaned_user}'."
+            return cleaned_user, feedback
+
+        return cleaned_user, None
+
     def save_markdown_rule(self, rule_slug: str, markdown_content: str) -> Path:
         """Save clean structured Markdown into data/rules directory."""
-        # Sanitize filename slug
+        # Sanitize filename slug: remove HTML extensions and ensure valid filename
         safe_name = re.sub(r"[^\w\-_\.]", "_", rule_slug).lower()
+        safe_name = re.sub(r"\.html?$", "", safe_name)
+        safe_name = re.sub(r"_+", "_", safe_name).strip("_")
         if not safe_name.endswith(".md"):
             safe_name += ".md"
 
@@ -124,24 +198,28 @@ class BIMDataIngestor:
         reindex: bool = True,
     ) -> Dict[str, Any]:
         """End-to-end ingestion: Fetch online URL via Scrapling, convert to Markdown, save, and index."""
-        # Derive slug if not provided
-        effective_slug = slug or rule_slug
-        if not effective_slug:
-            clean_url = url.split("?")[0].rstrip("/")
-            effective_slug = clean_url.split("/")[-1] or "web_documentation"
-
         raw_html = self.fetch_url(url)
         parsed = self.clean_and_convert(raw_html, title=title, main_selector=main_selector)
-        
-        file_path = self.save_markdown_rule(effective_slug, parsed["markdown"])
 
+        # Derive smart standardized slug and evaluate user input
+        user_provided_slug = slug or rule_slug
+        effective_slug, slug_feedback = self.generate_smart_slug(
+            url=url,
+            title=parsed["title"],
+            user_slug=user_provided_slug,
+        )
+
+        file_path = self.save_markdown_rule(effective_slug, parsed["markdown"])
 
         indexed_chunks = 0
         if reindex:
             indexed_chunks = self.retriever.index_file(file_path)
 
         return {
-            "rule_slug": rule_slug,
+            "rule_slug": effective_slug,
+            "effective_slug": effective_slug,
+            "user_provided_slug": user_provided_slug,
+            "slug_feedback": slug_feedback,
             "title": parsed["title"],
             "file_path": str(file_path),
             "markdown_preview": parsed["markdown"][:300] + "...",

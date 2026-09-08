@@ -140,3 +140,44 @@ def test_admin_approval_triggers_processing():
     )
     assert approve_resp.status_code == 200
     assert approve_resp.json()["status"] == "processing"
+
+
+def test_smart_slug_generation_and_guid_upgrade():
+    """Verify smart slug derivation, prefixing, GUID detection, and normalization."""
+    from ai_engine.data_ingestor import BIMDataIngestor
+
+    # 1. No slug provided - derives from title and revitapidocs domain
+    slug, note = BIMDataIngestor.generate_smart_slug(
+        url="https://www.revitapidocs.com/2027/94db8ea8-d2c3-5e71-8030-466bcb8e4426.htm",
+        title="Application Class",
+    )
+    assert slug == "revit_api_application_class"
+    assert note is None
+
+    # 2. Raw GUID provided by user - detected and upgraded with friendly feedback
+    slug_guid, note_guid = BIMDataIngestor.generate_smart_slug(
+        url="https://www.revitapidocs.com/2027/94db8ea8-d2c3-5e71-8030-466bcb8e4426.htm",
+        title="Application Class",
+        user_slug="94db8ea8-d2c3-5e71-8030-466bcb8e4426.htm",
+    )
+    assert slug_guid == "revit_api_application_class"
+    assert note_guid is not None
+    assert "unstandardized/generic" in note_guid
+
+    # 3. pyRevit domain prefixing
+    slug_py, _ = BIMDataIngestor.generate_smart_slug(
+        url="https://docs.pyrevitlabs.io/pyrevit/forms/",
+        title="Forms UI Module",
+    )
+    assert slug_py.startswith("pyrevit_")
+
+    # 4. Normalization of user slug with spaces
+    slug_norm, note_norm = BIMDataIngestor.generate_smart_slug(
+        url="https://revitapidocs.com/sample",
+        title="Sample",
+        user_slug="my custom collector",
+    )
+    assert slug_norm == "my_custom_collector"
+    assert note_norm is not None
+    assert "Normalized" in note_norm
+

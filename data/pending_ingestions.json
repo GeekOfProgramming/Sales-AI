@@ -1,5 +1,105 @@
 [
   {
+    "request_id": "req_4a915d48",
+    "url": "https://docs.pyrevitlabs.io/official-api",
+    "slug": "pyrevit_official_api",
+    "status": "rejected",
+    "submitter": "BIM Manager",
+    "submitted_at": "2026-09-08T21:34:10.316170+00:00",
+    "processed_at": "2026-09-08T21:34:11.707629+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/official-api. HTTP Status: 404"
+  },
+  {
+    "request_id": "req_35537867",
+    "url": "https://unverified-blog.com/bad-script",
+    "slug": "bim_bad_script",
+    "status": "rejected",
+    "submitter": "Untrusted User",
+    "submitted_at": "2026-09-08T21:34:10.197556+00:00",
+    "processed_at": "2026-09-08T21:34:10.231071+00:00",
+    "message": "Failed ISO compliance check."
+  },
+  {
+    "request_id": "req_7d4877d8",
+    "url": "https://docs.pyrevitlabs.io/sample-docs/",
+    "slug": "sample_docs_test",
+    "status": "pending",
+    "submitter": "Revit User Laptop 2",
+    "submitted_at": "2026-09-08T21:34:10.061377+00:00",
+    "processed_at": null,
+    "message": "Awaiting administrator approval before indexing into ChromaDB."
+  },
+  {
+    "request_id": "req_db6a2862",
+    "url": "https://docs.pyrevitlabs.io/official-api",
+    "slug": "revit_api_official_api",
+    "status": "rejected",
+    "submitter": "BIM Manager",
+    "submitted_at": "2026-09-08T21:33:47.496317+00:00",
+    "processed_at": "2026-09-08T21:33:48.963525+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/official-api. HTTP Status: 404"
+  },
+  {
+    "request_id": "req_6fc37298",
+    "url": "https://unverified-blog.com/bad-script",
+    "slug": "bim_bad_script",
+    "status": "rejected",
+    "submitter": "Untrusted User",
+    "submitted_at": "2026-09-08T21:33:47.372510+00:00",
+    "processed_at": "2026-09-08T21:33:47.409352+00:00",
+    "message": "Failed ISO compliance check."
+  },
+  {
+    "request_id": "req_15eb81ae",
+    "url": "https://docs.pyrevitlabs.io/sample-docs/",
+    "slug": "sample_docs_test",
+    "status": "pending",
+    "submitter": "Revit User Laptop 2",
+    "submitted_at": "2026-09-08T21:33:47.195654+00:00",
+    "processed_at": null,
+    "message": "Awaiting administrator approval before indexing into ChromaDB."
+  },
+  {
+    "request_id": "req_a07ccfde",
+    "url": "https://docs.pyrevitlabs.io/official-api",
+    "slug": "revit_api_official_api",
+    "status": "rejected",
+    "submitter": "BIM Manager",
+    "submitted_at": "2026-09-08T21:33:29.720975+00:00",
+    "processed_at": "2026-09-08T21:33:31.079861+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/official-api. HTTP Status: 404"
+  },
+  {
+    "request_id": "req_0c08dea4",
+    "url": "https://unverified-blog.com/bad-script",
+    "slug": "bim_bad_script",
+    "status": "rejected",
+    "submitter": "Untrusted User",
+    "submitted_at": "2026-09-08T21:33:29.567661+00:00",
+    "processed_at": "2026-09-08T21:33:29.611851+00:00",
+    "message": "Failed ISO compliance check."
+  },
+  {
+    "request_id": "req_2a8f4d5b",
+    "url": "https://docs.pyrevitlabs.io/sample-docs/",
+    "slug": "sample_docs_test",
+    "status": "pending",
+    "submitter": "Revit User Laptop 2",
+    "submitted_at": "2026-09-08T21:33:29.377282+00:00",
+    "processed_at": null,
+    "message": "Awaiting administrator approval before indexing into ChromaDB."
+  },
+  {
+    "request_id": "req_6888da3a",
+    "url": "https://www.revitapidocs.com/2027/94db8ea8-d2c3-5e71-8030-466bcb8e4426.htm",
+    "slug": "revit_api_application_class",
+    "status": "approved",
+    "submitter": "Revit User",
+    "submitted_at": "2026-09-08T21:25:59.665890+00:00",
+    "processed_at": "2026-09-08T21:26:20.582745+00:00",
+    "message": "Successfully indexed as revit_api_application_class (11 chunks). Note: Raw GUID upgraded to standard naming."
+  },
+  {
     "request_id": "req_49a66a96",
     "url": "https://docs.pyrevitlabs.io/official-api",
     "slug": null,
@@ -23,21 +123,21 @@
     "request_id": "req_a60afeed",
     "url": "https://docs.pyrevitlabs.io/sample-docs/",
     "slug": "sample-docs-test",
-    "status": "pending",
+    "status": "rejected",
     "submitter": "Revit User Laptop 2",
     "submitted_at": "2026-09-08T21:00:15.135115+00:00",
-    "processed_at": null,
-    "message": "Awaiting administrator approval before indexing into ChromaDB."
+    "processed_at": "2026-09-08T21:25:36.852222+00:00",
+    "message": "Failed compliance check"
   },
   {
     "request_id": "req_c4473b0e",
     "url": "https://docs.pyrevitlabs.io/pyrevit/reference/",
     "slug": null,
-    "status": "pending",
+    "status": "rejected",
     "submitter": "Revit Engineer Laptop 2",
     "submitted_at": "2026-09-08T20:54:00.102106+00:00",
-    "processed_at": null,
-    "message": "Awaiting administrator approval before indexing into ChromaDB."
+    "processed_at": "2026-09-08T21:25:41.949700+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/pyrevit/reference/. HTTP Status: 404"
   },
   {
     "request_id": "req_8c71166d",
@@ -63,11 +163,11 @@
     "request_id": "req_97634d95",
     "url": "https://docs.pyrevitlabs.io/sample-docs/",
     "slug": "sample-docs-test",
-    "status": "pending",
+    "status": "rejected",
     "submitter": "Revit User Laptop 2",
     "submitted_at": "2026-09-08T20:46:38.654048+00:00",
-    "processed_at": null,
-    "message": "Awaiting administrator approval before indexing into ChromaDB."
+    "processed_at": "2026-09-08T21:25:43.943722+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/sample-docs/. HTTP Status: 404"
   },
   {
     "request_id": "req_406745bd",
@@ -93,10 +193,10 @@
     "request_id": "req_c63f933a",
     "url": "https://docs.pyrevitlabs.io/sample-docs/",
     "slug": "sample-docs-test",
-    "status": "pending",
+    "status": "rejected",
     "submitter": "Revit User Laptop 2",
     "submitted_at": "2026-09-08T20:46:09.080151+00:00",
-    "processed_at": null,
-    "message": "Awaiting administrator approval before indexing into ChromaDB."
+    "processed_at": "2026-09-08T21:25:42.999214+00:00",
+    "message": "Failed compliance check"
   }
 ]

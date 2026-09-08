@@ -452,11 +452,16 @@ function renderQueueTable() {
       actions = '<span style="color: #34d399; font-size: 0.75rem;">Indexed ✓</span>';
     }
 
+    const slugBadge = item.slug ? `<div style="font-size: 0.76rem; color: #a78bfa; margin-top: 4px; font-weight: 500;">🏷️ <code>${item.slug}</code></div>` : '';
+    const noteMsg = (item.message && item.status !== 'pending') ? `<div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px; line-height: 1.3;">${item.message}</div>` : '';
+
     return `
       <tr>
         <td><code style="color: var(--accent-cyan);">${item.request_id}</code></td>
-        <td style="max-width: 280px; word-break: break-all;">
+        <td style="max-width: 320px; word-break: break-all;">
           <a href="${item.url}" target="_blank" style="color: #cbd5e1; text-decoration: underline;">${item.url}</a>
+          ${slugBadge}
+          ${noteMsg}
         </td>
         <td>${item.submitter || 'Revit Client'}</td>
         <td style="white-space: nowrap; color: var(--text-muted); font-size: 0.8rem;">${dateStr}</td>

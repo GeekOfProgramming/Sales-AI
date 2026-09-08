@@ -78,8 +78,14 @@ class IngestQueueManager:
                     return it
             return None
 
-    def update_status(self, request_id: str, status: str, message: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Update the status and message of a queue item."""
+    def update_status(
+        self,
+        request_id: str,
+        status: str,
+        message: Optional[str] = None,
+        slug: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update the status, message, and optionally resolved slug of a queue item."""
         with _lock:
             items = self._read_all()
             for it in items:
@@ -88,6 +94,8 @@ class IngestQueueManager:
                     it["processed_at"] = datetime.now(timezone.utc).isoformat()
                     if message is not None:
                         it["message"] = message
+                    if slug is not None:
+                        it["slug"] = slug
                     self._write_all(items)
                     return it
             return None
