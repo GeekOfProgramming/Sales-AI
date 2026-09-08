@@ -259,6 +259,8 @@ async function handleIngestSubmit(event) {
   const statusEl = document.getElementById('ingest-status');
 
   const targetUrl = urlInput.value.trim();
+  const slugInput = document.getElementById('ingest-slug');
+  const customSlug = slugInput ? slugInput.value.trim() : '';
   const submitter = submitterInput ? submitterInput.value.trim() : 'Revit User';
   if (!targetUrl) return;
 
@@ -277,6 +279,7 @@ async function handleIngestSubmit(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url: targetUrl,
+        slug: customSlug || null,
         submitter: submitter || 'Revit User'
       })
     });
@@ -289,9 +292,10 @@ async function handleIngestSubmit(event) {
       statusEl.innerHTML = `
         <div><strong>✅ Request Submitted to Admin Queue!</strong></div>
         <div style="margin-top: 4px;">Tracking ID: <strong style="color: #fff; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">${data.request_id}</strong></div>
-        <div style="margin-top: 4px; font-size: 0.8rem; color: #94a3b8;">Awaiting administrator approval before indexing into ChromaDB.</div>
+        <div style="margin-top: 4px; font-size: 0.8rem; color: #94a3b8;">${data.message || 'Awaiting administrator approval before indexing into ChromaDB.'}</div>
       `;
       urlInput.value = '';
+      if (slugInput) slugInput.value = '';
       const trackInput = document.getElementById('track-id-input');
       if (trackInput) trackInput.value = data.request_id;
       loadKnowledgeQueue();

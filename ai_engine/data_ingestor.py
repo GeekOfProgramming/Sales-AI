@@ -49,9 +49,15 @@ class BIMDataIngestor:
 
         # 1. Extract Page Title if not provided
         if not title:
-            h1_el = page.css("h1::text").get()
             title_el = page.css("title::text").get()
-            title = (h1_el or title_el or "BIM Documentation").strip()
+            h1_el = page.css("h1::text").get()
+            # If title tag is more descriptive than h1, prefer title tag
+            t_words = len(title_el.strip().split()) if title_el else 0
+            h_words = len(h1_el.strip().split()) if h1_el else 0
+            if title_el and t_words >= h_words:
+                title = title_el.strip()
+            else:
+                title = (h1_el or title_el or "BIM Documentation").strip()
 
         # 2. Locate main content container using candidate CSS selectors
         content_html = ""
