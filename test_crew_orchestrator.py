@@ -23,7 +23,7 @@ async def run_tests():
     print("\n🔹 Test 1: QA Reviewer Static Code Audit Checklist")
     flawed_code = "print('Hello Revit without transactions')"
     checklist_bad = orchestrator._static_code_audit(flawed_code, environment="pyrevit", language="python")
-    print("Checklist on flawed code:", checklist_bad.dict())
+    print("Checklist on flawed code:", checklist_bad.model_dump())
     assert checklist_bad.passed_all is False
     assert checklist_bad.transaction_managed is False
     print("✅ Test 1.1 Passed: QA Reviewer correctly flagged missing transactions.")
@@ -38,7 +38,7 @@ walls = FilteredElementCollector(doc).OfCategory(DB.BuiltInCategory.OST_Walls).T
 t.Commit()
 """
     checklist_good = orchestrator._static_code_audit(good_pyrevit_code, environment="pyrevit", language="python")
-    print("Checklist on compliant code:", checklist_good.dict())
+    print("Checklist on compliant code:", checklist_good.model_dump())
     assert checklist_good.passed_all is True
     assert checklist_good.transaction_managed is True
     assert checklist_good.imports_valid is True
@@ -86,8 +86,40 @@ t.Commit()
     assert "OUT" in result_dyn.code or "TransactionManager" in result_dyn.code or "RevitServices" in result_dyn.code
     print("✅ Test 3 Passed: Multi-Agent Dynamo pipeline verified.")
 
+    # 4. Test Barrier 2 Auto-Remediation directly
+    print("\n" + "-" * 50)
+    print("🔹 Test 4: Barrier 2 Structural Auto-Remediation")
+    print("-" * 50)
+    bad_dynamo_code = "elements = IN[0]\nelements.Name = 'New'"
+    bad_checklist = orchestrator._static_code_audit(bad_dynamo_code, environment="dynamo", language="python")
+    assert bad_checklist.passed_all is False
+
+    remediated_dyn, ok_dyn, actions_dyn = orchestrator._auto_remediate_code(
+        bad_dynamo_code, environment="dynamo", language="python", checklist=bad_checklist
+    )
+    print("Auto-Remediation Actions (Dynamo):", actions_dyn)
+    print("Remediated Dynamo Code Sample:\n", remediated_dyn[:250])
+    assert ok_dyn is True
+    assert "RevitServices" in remediated_dyn
+    assert "TransactionManager" in remediated_dyn
+    assert "OUT" in remediated_dyn
+    print("✅ Test 4.1 Passed: Auto-remediation restored Dynamo official contracts.")
+
+    bad_pyrevit_code = "walls = [w for w in doc.Walls]"
+    bad_py_checklist = orchestrator._static_code_audit(bad_pyrevit_code, environment="pyrevit", language="python")
+    assert bad_py_checklist.passed_all is False
+
+    remediated_py, ok_py, actions_py = orchestrator._auto_remediate_code(
+        bad_pyrevit_code, environment="pyrevit", language="python", checklist=bad_py_checklist
+    )
+    print("Auto-Remediation Actions (pyRevit):", actions_py)
+    assert ok_py is True
+    assert "Autodesk.Revit.DB" in remediated_py
+    assert "Transaction" in remediated_py
+    print("✅ Test 4.2 Passed: Auto-remediation restored pyRevit official contracts.")
+
     print("\n" + "=" * 65)
-    print("🎉 ALL MULTI-AGENT ORCHESTRATOR TESTS PASSED!")
+    print("🎉 ALL MULTI-AGENT & HYBRID PIPELINE TESTS PASSED!")
     print("=" * 65)
 
 

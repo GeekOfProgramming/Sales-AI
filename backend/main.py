@@ -313,6 +313,7 @@ async def generate_script(request: ScriptGenerationRequest):
             qa_passed = crew_result.audit_passed
             qa_cycles = crew_result.feedback_cycles
             qa_checklist = crew_result.checklist
+            auto_remediated = crew_result.auto_remediated
             validation_note = crew_result.audit_notes
         except Exception as e:
             raise HTTPException(
@@ -341,6 +342,7 @@ async def generate_script(request: ScriptGenerationRequest):
             qa_passed = True
             qa_cycles = 1
             qa_checklist = None
+            auto_remediated = False
             validation_note = "Direct NLP explanation generated without multi-agent overhead."
         except Exception as e:
             raise HTTPException(
@@ -359,6 +361,7 @@ async def generate_script(request: ScriptGenerationRequest):
         qa_audit_passed=qa_passed,
         qa_feedback_cycles=qa_cycles,
         qa_checklist=qa_checklist,
+        auto_remediated=auto_remediated,
         retrieved_rules_count=len(rag_context_parts),
         retrieved_sources=retrieved_sources,
         execution_time_seconds=total_duration,

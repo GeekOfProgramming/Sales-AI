@@ -103,7 +103,7 @@ class BIMLLMClient:
         self,
         host: Optional[str] = None,
         default_model: str = "qwen2.5-coder:1.5b",
-        timeout: float = 120.0,
+        timeout: float = 180.0,
     ):
         """Initialize Ollama sync and async clients.
         

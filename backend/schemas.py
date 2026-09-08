@@ -69,6 +69,7 @@ class ScriptGenerationResponse(BaseModel):
     qa_audit_passed: Optional[bool] = Field(default=True, description="Whether QA Reviewer Agent passed all Revit API checklist rules.")
     qa_feedback_cycles: Optional[int] = Field(default=1, description="Number of feedback cycles between Developer and QA Reviewer agents.")
     qa_checklist: Optional[Dict[str, bool]] = Field(default=None, description="Detailed audit checklist status (transactions, imports, etc.).")
+    auto_remediated: Optional[bool] = Field(default=False, description="Whether structural auto-remediation was applied against official standards.")
     retrieved_rules_count: int = Field(default=0, description="Number of knowledge chunks retrieved from RAG.")
     retrieved_sources: List[str] = Field(default=[], description="List of source rule files consulted by RAG.")
     execution_time_seconds: float = Field(..., description="Total time taken for RAG + inference in seconds.")
