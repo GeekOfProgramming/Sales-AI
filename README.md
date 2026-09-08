@@ -200,17 +200,46 @@ Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file://
 11. **Offline Document Parsing Foundation:** Direct multi-format extraction capabilities.
 12. **Cloud BIM Integration (Autodesk Construction Cloud - ACC):** Read-Only metadata audit and Human-in-the-loop controls.
 
-### ⏳ Pending Actions (معوقه - نیازمند استقرار و تست نهایی)
-1. **End-to-End Live Validation:** Deploying the plugin onto the client workstation (Laptop 3) and executing AI-generated commands on live, complex Autodesk Revit models.
-2. **RAG Error Calibration:** Analyzing live runtime execution logs to calibrate semantic chunking boundaries and eliminate version-specific Revit API discrepancies (Revit 2023–2026).
-3. **Containerization & Docker Orchestration:** Crafting production `Dockerfile` and `docker-compose.yml` for unified, single-command server deployment across corporate environments.
+### وضعیت و اولویت‌بندی اقدامات آتی
 
-### 🔮 Under Active Development & Architectural Expansion (در حال توسعه و مسیرهای ارتقاء معماری)
-- **Interactive Code Preview & Human-in-the-Loop:** Mandatory visual code diff and parameter preview gate before scripts execute in Revit/Dynamo or synchronize to cloud projects.
-- **Self-Healing Code Pipeline:** Automated closed-loop telemetry from the Revit client returning execution tracebacks to the server so QA Reviewer agents can auto-correct exceptions without user intervention.
-- **Knowledge Versioning & Rollback:** Diff and instant rollback mechanisms for ChromaDB vector embeddings and corporate Markdown rules to guard against regression.
-- **Semantic Caching Layer:** High-speed vector similarity cache on FastAPI to return verified answers instantly (sub-50ms) for recurrent engineering prompts.
-- **Element Dependency Graph Analysis:** Pre-processing topological and geometric relationships (walls-to-columns, slabs-to-levels) to prevent physical model collisions and orphan elements.
+#### ۱. در حال توسعه و مسیرهای ارتقاء معماری (Active Development & Expansion)
+
+* **پیش‌نمایش تعاملی و سد تأیید انسانی (Interactive Code Preview & Human-in-the-Loop):**
+  * **شرح اقدام:** طراحی یک لایه ایمنی اجباری برای تمامی اسکریپت‌ها و تغییرات متادیتا پیش از اعمال در نرم‌افزار هدف.
+  * **عملکرد:** کدها یا تغییرات پیشنهادی ابتدا به صورت Diff بصری و جدول مقایسه‌ای در پنل کلاینت نمایش داده شده و تزریق یا اجرای نهایی منوط به تأیید صریح مهندس مسئول خواهد بود.
+
+* **خط‌لوله خودترمیم کدهای ناموفق (Self-Healing Code Pipeline):**
+  * **شرح اقدام:** تعبیه‌سازی یک حلقه بازخورد بسته (Closed-Loop Feedback) میان کلاینت رویت و سرور هوش مصنوعی.
+  * **عملکرد:** در صورت بروز خطای زمان اجرا (Runtime Exception) در محیط Revit، پشته خطا (Traceback) همراه با کد اولیه مستقیماً به سرور ارسال می‌شود تا ایجنت ممیز خطا را ریشه‌یابی کرده و نسخه اصلاح‌شده را بدون دخالت مجدد کاربر تولید و بازگرداند.
+
+* **مدیریت نسخه و تاریخچه‌گذاری قوانین دانشی (Knowledge Versioning & Rollback):**
+  * **شرح اقدام:** راه‌اندازی سیستم نسخه‌گذاری برای بلوک‌های متنی دیتابیس برداری (ChromaDB) و اسناد استانداردهای داخلی.
+  * **عملکرد:** امکان ردیابی تغییرات قوانین (Diff قوانین)، آرشیو نسخه‌ها و قابلیت بازگشت آنی (Rollback) به نسخه پایدار قبلی در صورت افت کیفیت خروجی مدل.
+
+* **کشینگ معنایی و بهینه‌سازی سرعت پاسخ (Semantic Caching Layer):**
+  * **شرح اقدام:** پیاده‌سازی لایه حافظه موقت هوشمند در سرور FastAPI با استفاده از شباهت برداری امبدینگ‌ها.
+  * **عملکرد:** درخواست‌های پرتکرار مهندسی (مانند ساخت فیلترهای استاندارد یا خواندن متراژ) بدون نیاز به استنتاج مجدد توسط Ollama، به صورت آنی و در کمتر از ۵۰ میلی‌ثانیه از کش معنایی پاسخ داده می‌شوند.
+
+* **تحلیل گراف وابستگی هندسی و توپولوژیک عناصر (Element Dependency Graph Analysis):**
+  * **شرح اقدام:** توسعه ماژول پیش‌پردازش محلی در کلاینت برای استخراج روابط والد-فرزندی و اتصال فیزیکی عناصر انتخابی (اتصال دیوار به ستون، کف به سقف).
+  * **عملکرد:** تزریق این روابط ساختاری به پرامپت هوش مصنوعی تا اسکریپت‌های تولیدی دچار خطاهای تداخل فیزیکی، حذف عناصر وابسته یا برهم‌خوردگی اتصال هندسی نشوند.
+
+---
+
+#### ۲. اقدامات معوقه (نیازمند استقرار و تست نهایی)
+
+* **اعتبارسنجی محیط واقعی (End-to-End Live Validation):**
+  * **شرح اقدام:** نصب و راه‌اندازی تولبار `pyBIM.extension` و افزونه دات‌نت روی لپ‌تاپ کلاینت (لپ‌تاپ سوم) متصل به Autodesk Revit واقعی.
+  * **هدف:** اجرای تست زنده‌ی سناریوهای رایج (فیلتر دیوارها، تغییر پارامترهای حریق، نامگذاری ISO 19650) روی مدل‌های ساختمانی حجیم در بستر شبکه محلی و تونل رمزنگاری‌شده.
+
+* **کالیبراسیون داده‌های RAG و رفع خطاهای پرامپت (RAG Error Calibration):**
+  * **شرح اقدام:** استخراج لاگ‌ها و استثنائات ناشی از اجرای اسکریپت‌ها در محیط زنده Revit و بازنگری در ساختار تقطیع (Chunking) مستندات.
+  * **هدف:** ارتقای دقت بازیابی معنایی و حذف خطاهای سینتکسی ناشی از تفاوت نسخه‌های Revit API (۲۰۲۳ تا ۲۰۲۶).
+
+* **کپسوله‌سازی و استقرار داکر (Containerization & Docker Orchestration):**
+  * **شرح اقدام:** تدوین فایل‌های `Dockerfile` و `docker-compose.yml` برای یکپارچه‌سازی سرویس FastAPI، دیتابیس ChromaDB و وابستگی‌ها.
+  * **هدف:** تضمین پایداری، اجرای ایزوله و راه‌اندازی خودکار سرور با یک دستور در هر محیط مهندسی.
+
 
 ---
 
