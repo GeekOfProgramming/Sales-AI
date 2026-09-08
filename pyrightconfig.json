@@ -1,0 +1,11 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    ".",
+    "backend",
+    "ai_engine",
+    ".venv/Lib/site-packages"
+  ],
+  "reportMissingImports": "none"
+}

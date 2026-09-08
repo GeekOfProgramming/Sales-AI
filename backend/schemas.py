@@ -214,4 +214,22 @@ class CloudSyncApprovalRequest(BaseModel):
     reviewer_notes: Optional[str] = Field(default=None, description="Human reviewer justification.")
 
 
+class ACCConfigRequest(BaseModel):
+    """Request to update Autodesk Platform Services (APS) cloud credentials."""
+    client_id: Optional[str] = Field(default=None, description="Autodesk Developer Client ID.")
+    client_secret: Optional[str] = Field(default=None, description="Autodesk Developer Client Secret.")
+    force_mock: bool = Field(default=False, description="Set True to revert back to Offline Simulation / Mock mode.")
+    skip_verification: bool = Field(default=False, description="Save without verifying against Autodesk API.")
+
+
+class ACCConfigStatusResponse(BaseModel):
+    """Current connection and configuration status of Autodesk Construction Cloud."""
+    status: Literal["CONNECTED_LIVE", "SIMULATED_MOCK"] = Field(..., description="Active operational mode.")
+    mode_description: str = Field(..., description="Human-readable description of current state.")
+    client_id_masked: Optional[str] = Field(default=None, description="Masked client ID (e.g. 'b89d...4f2a') for security.")
+    is_live: bool = Field(..., description="Whether system is connected to live Autodesk servers.")
+    message: str = Field(..., description="Status feedback message.")
+
+
+
 

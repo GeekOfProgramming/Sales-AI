@@ -20,19 +20,16 @@ except ImportError:
     # Python 2 (pyRevit IronPython engine)
     from urllib2 import Request, urlopen, URLError  # type: ignore
 
-# Autodesk Revit API namespaces (available inside Revit environment)
+# Autodesk Revit & pyRevit API namespaces (available inside Revit runtime)
 try:
-    from Autodesk.Revit.DB import (
-        Transaction,
-        FilteredElementCollector,
-        BuiltInCategory,
-        ElementId,
-    )
-    from Autodesk.Revit.UI import TaskDialog, TaskDialogCommonButtons, TaskDialogResult
-    from pyrevit import forms, script
+    from Autodesk.Revit.DB import Transaction  # type: ignore # noqa: F401
+    from pyrevit import forms, script  # type: ignore # noqa: F401
     IN_REVIT = True
 except ImportError:
     IN_REVIT = False
+    Transaction = None
+    forms = None
+    script = None
 
 # Backend Gateway URL
 GATEWAY_URL = "http://localhost:8000/generate-script"
@@ -51,8 +48,9 @@ def get_selected_elements_metadata(uidoc):
         elem = doc.GetElement(elem_id)
         if elem:
             cat_name = elem.Category.Name if elem.Category else "Unknown"
+            raw_id = getattr(elem_id, "Value", getattr(elem_id, "IntegerValue", None))
             elem_info = {
-                "element_id": elem_id.IntegerValue if hasattr(elem_id, "IntegerValue") else int(str(elem_id)),
+                "element_id": raw_id if raw_id is not None else int(str(elem_id)),
                 "category": cat_name,
                 "name": getattr(elem, "Name", ""),
             }
@@ -110,12 +108,16 @@ def execute_generated_code(doc, code_str):
 
 
 def main():
-    if not IN_REVIT:
+    if not IN_REVIT or script is None or forms is None:
         print("This script is designed to run inside Autodesk Revit with pyRevit.")
         return
 
     try:
-        uidoc = __revit__.ActiveUIDocument  # type: ignore
+        # __revit__ is injected globally by pyRevit during execution
+        revit_app = globals().get("__revit__", None)
+        if revit_app is None:
+            revit_app = __revit__  # type: ignore # noqa: F821
+        uidoc = revit_app.ActiveUIDocument
         doc = uidoc.Document
     except (NameError, AttributeError):
         print("Error: __revit__ is not accessible outside active Revit session.")
@@ -148,8 +150,9 @@ def main():
     rag_sources = response.get("retrieved_sources", [])
     exec_time = response.get("execution_time_seconds", 0)
 
+    sources_str = ", ".join(rag_sources) if rag_sources else "None"
     output.print_md("**⏱️ AI Inference Time:** `%.2fs`" % exec_time)
-    output.print_md("**📚 Knowledge Rules Consulted:** `%s`" % ", ".join(rag_sources) if rag_sources else "None")
+    output.print_md("**📚 Knowledge Rules Consulted:** `%s`" % sources_str)
     output.print_md("```python\n%s\n```" % code)
 
     # 4. Confirm before execution

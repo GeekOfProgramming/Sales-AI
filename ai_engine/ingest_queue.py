@@ -111,6 +111,16 @@ class IngestQueueManager:
                 return True
             return False
 
+    def clear_processed(self) -> int:
+        """Remove all approved or rejected historical items, keeping pending ones."""
+        with _lock:
+            items = self._read_all()
+            pending_items = [it for it in items if it.get("status") in ("pending", "processing")]
+            removed_count = len(items) - len(pending_items)
+            if removed_count > 0:
+                self._write_all(pending_items)
+            return removed_count
+
 
 # Global default instance
 ingest_queue = IngestQueueManager()

@@ -12,14 +12,16 @@ except ImportError:
     from urllib2 import urlopen, Request, URLError  # type: ignore
 
 try:
-    from pyrevit import forms, script
+    from pyrevit import forms, script  # type: ignore # noqa: F401
     IN_REVIT = True
 except ImportError:
     IN_REVIT = False
+    forms = None
+    script = None
 
 
 def main():
-    if not IN_REVIT:
+    if not IN_REVIT or script is None or forms is None:
         print("This tool is designed to run inside Autodesk Revit with pyRevit.")
         return
 
@@ -46,6 +48,7 @@ def main():
 
         if data.get("status") == "healthy":
             cfg.set_option("server_url", new_url)
+            models_list = data.get("available_models") or []
             forms.alert(
                 "✅ Connection Successful!\n\n"
                 "Server Status: Healthy\n"
@@ -54,7 +57,7 @@ def main():
                 "Models: {}".format(
                     data.get("ollama_connected"),
                     data.get("indexed_rules_count"),
-                    ", ".join(data.get("available_models", [])),
+                    ", ".join(models_list),
                 ),
                 title="Configuration Saved",
             )

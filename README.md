@@ -84,20 +84,29 @@ The platform operates as a distributed system across a 3-laptop / multi-workstat
 
 ### 3. Enterprise Admin-Gate Ingestion (Anti-Poisoning Architecture)
 - Prevents malicious or unverified documentation from corrupting the vector database.
-- **Stage 1 (Submission):** Users submit documentation links; the server assigns a unique **Tracking ID** (`req_xxxx`) and isolates the request in `data/pending_ingestions.json` with status `pending`.
-- **Public User Tracking:** Users query `GET /api/ingest/status/{tracking_id}` in real-time to see their request status (`Pending` 🟡, `Approved` 🟢, `Rejected` 🔴).
-- **Stage 2 (Admin Cartable):** Administrators log in via JWT and review the **Knowledge Queue** in Web Studio. Clicking **Approve** triggers background Scrapling, chunking, and ChromaDB vector indexing. Clicking **Reject** archives the request with an audit justification.
+- **Stage 1 (Submission & Smart Slugging):** Users submit documentation links with optional custom slugs or automatic smart title slugification (with UUID fallback). The server assigns a unique **Tracking ID** (`req_xxxx`) and isolates the request in `data/pending_ingestions.json` with status `pending`.
+- **Public User Tracking:** Users query `GET /api/ingest/status/{tracking_id}` in real-time to track lifecycle progression (`Pending` 🟡, `Processing` ⚙️, `Approved` 🟢, `Rejected` 🔴).
+- **Stage 2 (Admin Review Cartable & Collapsible History):**
+  - **Active Queue Cartable:** Displays only actionable, pending items with batch and individual **Approve** / **Reject** controls to avoid visual clutter.
+  - **Expandable History Archive:** Collapsible log with real-time text search and status filters (`All`, `Approved`, `Rejected`).
+  - **One-Click History Purge:** Admins can purge legacy logs via `POST /api/ingest/queue/clear-history` without affecting pending items.
+- **Self-Healing Vectorization Auto-Recovery:** On server startup (`lifespan`), pyBIM-LLM inspects the queue for items stranded in `processing` (e.g. from an unexpected restart). If the scraped `.md` exists, it automatically vectorizes and chunks into ChromaDB and promotes the item to `approved`; if missing, it safely reverts status to `pending`.
 
 ### 4. JWT Authentication & Security Layer
 - Module `backend/auth.py` utilizes **PBKDF2-HMAC-SHA256** password hashing with random salt and **PyJWT** (`HS256`).
-- Admin endpoints (`/api/ingest/queue`, `/api/ingest/approve`, `/api/ingest/reject`, `/api/acc/apply-changes`) strictly enforce `Bearer` token verification.
+- Admin endpoints (`/api/ingest/queue`, `/api/ingest/approve`, `/api/ingest/reject`, `/api/ingest/queue/clear-history`, `/api/acc/config`, `/api/acc/apply-changes`) strictly enforce `Bearer` token verification.
 
 ### 5. Autodesk Construction Cloud (ACC) & Cloud BIM Integration
 - Module `ai_engine/acc_client.py` and `ai_engine/cloud_auditor.py` connect to **Autodesk Platform Services (APS)** without downloading heavy `.rvt` files or running desktop Revit.
+- **In-App APS Credential Manager:** Web Studio includes an administrative modal to configure `APS_CLIENT_ID`, `APS_CLIENT_SECRET`, and toggle Simulation Mode with **zero-downtime hot reloading** and automatic `.env` persistence.
 - **Strict Read-Only Mode:** Extracts Model Derivative parameter trees and evaluates:
   - **ISO 19650 Information Container Naming** (e.g. `PRJ-ZZ-00-M3-A-0001`).
   - **Mandatory BIM Parameters:** Verifies `FireRating` on Walls/Doors and classification codes (`OmniClass` / `UniFormat`).
 - **Human-in-the-Loop Safety Gate:** The AI only generates non-destructive recommendations. Synchronization to cloud models requires explicit administrator confirmation via `POST /api/acc/apply-changes`.
+
+### 6. Developer Experience & Type Checking (Pyrefly / Pyright)
+- Includes root `pyrefly.toml` and `pyrightconfig.json` configurations bound directly to `.venv/Lib/site-packages`.
+- Resolves IronPython / CPython hybrid imports for pyRevit extensions and provides zero-configuration type checking in modern IDEs.
 
 ---
 
@@ -146,10 +155,13 @@ python start_server.py
 | `POST` | `/generate-script` | Public | Primary endpoint generating Revit code (pyRevit, C#, Dynamo) via Multi-Agent pipeline. |
 | `POST` | `/api/auth/login` | Public | Authenticates administrator credentials and returns signed JWT access token. |
 | `POST` | `/api/ingest` | Public | **Stage 1:** Submits a documentation URL to the Admin Review Queue (returns Tracking ID). |
-| `GET` | `/api/ingest/status/{id}`| Public | Queries real-time status (`pending`, `approved`, `rejected`) of a submitted item. |
+| `GET` | `/api/ingest/status/{id}`| Public | Queries real-time status (`pending`, `processing`, `approved`, `rejected`) of a submitted item. |
 | `GET` | `/api/ingest/queue` | **Admin JWT** | Retrieves list of all pending or archived submissions in Knowledge Queue. |
 | `POST` | `/api/ingest/approve` | **Admin JWT** | **Stage 2:** Approves item, launches background Scrapling, and injects vectors into ChromaDB. |
 | `POST` | `/api/ingest/reject` | **Admin JWT** | Rejects unverified item without vector store modification. |
+| `POST` | `/api/ingest/queue/clear-history` | **Admin JWT** | Clears completed/rejected archive history while preserving pending items. |
+| `GET` | `/api/acc/config` | Public | Retrieves current ACC / APS configuration state and active mode (Live vs Simulation). |
+| `POST` | `/api/acc/config` | **Admin JWT** | Updates APS credentials, toggles simulation mode, and hot-reloads client with `.env` persistence. |
 | `GET` | `/api/acc/hubs` | Public | Lists accessible Autodesk Construction Cloud hubs. |
 | `GET` | `/api/acc/projects/{hub}`| Public | Lists active cloud projects inside an ACC Hub. |
 | `GET` | `/api/acc/models/{proj}` | Public | Lists Revit models (`.rvt`) in cloud project without downloading. |
@@ -176,19 +188,23 @@ pytest tests/test_admin_gate.py -v        # JWT Security & 2-Stage Queue tests
 - ✅ `test_unauthenticated_queue_access_blocked`: Enforces 401 Unauthorized on unauthenticated queue operations.
 - ✅ `test_admin_authentication_and_rejection_flow`: Full login, token verification, and rejection workflow.
 - ✅ `test_admin_approval_triggers_processing`: Full approval lifecycle and vector indexing trigger.
+- ✅ `test_smart_slug_generation_and_guid_upgrade`: Validates intelligent URL title slugification and collision-proof GUID fallbacks.
 - ✅ `test_acc_hubs_and_projects_discovery`: Navigation of ACC Hubs, Projects, and Models.
 - ✅ `test_cloud_model_read_only_rag_audit`: Read-Only audit validation (ISO 19650, FireRating, OmniClass).
 - ✅ `test_human_in_the_loop_write_back_protection`: Blocks unauthorized cloud write-backs.
+- ✅ `test_acc_config_status_public_query`: Verifies public visibility of APS configuration mode (Live vs Simulation).
+- ✅ `test_acc_config_save_requires_admin_token`: Enforces JWT security on APS credential modification.
+- ✅ `test_acc_config_lifecycle_with_admin`: End-to-end hot-reloading lifecycle and `.env` persistence.
 
 ---
 
 ## 🗺️ Project Status & Roadmap
 
-Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file:///c:/Projects/Roadmap-LLMs.md)):
+Based on the master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file:///c:/Projects/Roadmap-LLMs.md)):
 
 ### ✅ Completed & Active Milestones
 1. **Local Inference Engine:** Ollama integration with `qwen2.5-coder:1.5b` and dynamic model routing.
-2. **Persistent Vector RAG:** ChromaDB with `nomic-embed-text` and 308 verified BIM rule chunks.
+2. **Persistent Vector RAG:** ChromaDB with `nomic-embed-text` and 308+ verified BIM rule chunks.
 3. **Scrapling Web Extraction:** Automated extraction and Markdown sanitization of online docs.
 4. **FastAPI Gateway & Web Studio:** Dark-mode glassmorphism interface at `/ui` with element simulation.
 5. **Revit Client Integration:** Native C# Add-in (`Commands.cs`) and complete `pyBIM.extension` toolbar.
@@ -197,8 +213,10 @@ Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file://
 8. **Compliance Auto-Remediation:** Automated patching of missing transactions, namespaces, and Dynamo contracts.
 9. **Authentication & Access Control (JWT):** PBKDF2 password encryption and protected admin endpoints.
 10. **Admin-Gate Ingestion Workflow:** 2-stage verification queue preventing corporate Data Poisoning.
-11. **Offline Document Parsing Foundation:** Direct multi-format extraction capabilities.
-12. **Cloud BIM Integration (Autodesk Construction Cloud - ACC):** Read-Only metadata audit and Human-in-the-loop controls.
+11. **Self-Healing Vectorization Recovery:** Auto-detection and recovery of interrupted ingestion jobs on startup.
+12. **In-App APS/ACC Credential Hot-Reload:** Dynamic configuration modal with live testing and `.env` persistence.
+13. **Cloud BIM Integration (Autodesk Construction Cloud - ACC):** Read-Only metadata audit and Human-in-the-loop controls.
+14. **Type Checking & Tooling Suite:** Seamless IDE support via `pyrefly.toml` and `pyrightconfig.json`.
 
 ---
 
@@ -240,8 +258,6 @@ Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file://
   * **Scope:** Authoring production `Dockerfile` and `docker-compose.yml` configurations for unified deployment of the FastAPI gateway, ChromaDB vector store, and dependencies.
   * **Objective:** Ensuring deployment reproducibility, process isolation, and single-command startup across corporate server environments.
 
-
-
 ---
 
 ## 📁 Repository Structure
@@ -278,6 +294,8 @@ pyBIM-LLM/
 ├── tests/
 │   ├── test_acc_integration.py # ACC Cloud BIM & Read-Only audit tests
 │   └── test_admin_gate.py     # JWT & Admin-Gate queue unit tests
+├── pyrefly.toml              # Pyrefly type checker path resolution config
+├── pyrightconfig.json        # Pyright / VS Code virtualenv environment config
 ├── requirements.txt          # Python dependencies
 ├── run_pybim.bat             # 1-click server & browser launcher
 ├── start_server.py           # Unified multi-laptop launcher & tunnel helper

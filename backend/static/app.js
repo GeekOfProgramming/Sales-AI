@@ -407,65 +407,102 @@ async function loadKnowledgeQueue() {
   }
 }
 
-function filterQueue(status) {
-  currentQueueFilter = status;
-  ['all', 'pending', 'approved', 'rejected'].forEach(s => {
-    const btn = document.getElementById(`qfilter-${s}`);
+let currentArchiveFilter = 'all';
+let isArchiveOpen = false;
+
+function toggleArchiveView() {
+  const panel = document.getElementById('archive-panel');
+  const btn = document.getElementById('btn-toggle-archive');
+  if (!panel || !btn) return;
+  isArchiveOpen = !isArchiveOpen;
+  panel.style.display = isArchiveOpen ? 'block' : 'none';
+  const approvedCount = cachedQueueItems.filter(it => it.status === 'approved').length;
+  btn.innerHTML = isArchiveOpen 
+    ? `📦 Approved &amp; History Archive (${approvedCount}) ▴` 
+    : `📦 Approved &amp; History Archive (${approvedCount}) ▾`;
+  if (isArchiveOpen) {
+    renderArchiveTable();
+  }
+}
+
+function filterArchive(status) {
+  currentArchiveFilter = status;
+  ['all', 'approved', 'rejected'].forEach(s => {
+    const btn = document.getElementById(`afilter-${s}`);
     if (btn) btn.classList.toggle('active', s === status);
   });
-  renderQueueTable();
+  renderArchiveTable();
 }
 
 function renderQueueTable() {
+  renderActiveQueueTable();
+  renderArchiveTable();
+}
+
+function renderActiveQueueTable() {
   const tbody = document.getElementById('queue-table-body');
   const countBadge = document.getElementById('queue-count-badge');
+  const archiveBadge = document.getElementById('archive-count-badge');
   if (!tbody) return;
 
-  let items = cachedQueueItems;
-  if (currentQueueFilter !== 'all') {
-    items = items.filter(it => it.status === currentQueueFilter);
-  }
+  const activeItems = cachedQueueItems.filter(it => it.status === 'pending' || it.status === 'processing');
+  const approvedCount = cachedQueueItems.filter(it => it.status === 'approved').length;
+  const rejectedCount = cachedQueueItems.filter(it => it.status === 'rejected').length;
+  const historicalTotal = approvedCount + rejectedCount;
 
   if (countBadge) {
-    const pendingCount = cachedQueueItems.filter(it => it.status === 'pending').length;
-    countBadge.innerText = `${pendingCount} Pending Approval`;
+    countBadge.innerText = `${activeItems.length} Pending Action`;
+    countBadge.style.color = activeItems.length > 0 ? '#fbbf24' : '#34d399';
   }
 
-  if (items.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">No submissions found in this category.</td></tr>`;
+  if (archiveBadge) {
+    archiveBadge.innerText = approvedCount;
+  }
+
+  const acntAll = document.getElementById('acnt-all');
+  const acntApp = document.getElementById('acnt-app');
+  const acntRej = document.getElementById('acnt-rej');
+  if (acntAll) acntAll.innerText = historicalTotal;
+  if (acntApp) acntApp.innerText = approvedCount;
+  if (acntRej) acntRej.innerText = rejectedCount;
+
+  if (activeItems.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 28px 20px; color: var(--text-muted);">
+          <div style="font-size: 1.6rem; margin-bottom: 6px;">🎉</div>
+          <div style="font-weight: 600; color: #34d399; margin-bottom: 4px;">All caught up! No pending submissions.</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">
+            All previous items have been processed and archived. 
+            <a href="javascript:void(0)" onclick="toggleArchiveView()" style="color: var(--accent-purple); text-decoration: underline;">Open Approved Archive (${approvedCount} items)</a>
+          </div>
+        </td>
+      </tr>
+    `;
     return;
   }
 
-  tbody.innerHTML = items.map(item => {
-    let badgeClass = 'status-pending';
-    if (item.status === 'approved') badgeClass = 'status-approved';
-    else if (item.status === 'rejected') badgeClass = 'status-rejected';
-    else if (item.status === 'processing') badgeClass = 'status-processing';
-
-    const dateStr = item.submitted_at ? new Date(item.submitted_at).toLocaleDateString() : '-';
-
-    let actions = '<span style="color: var(--text-muted); font-size: 0.75rem;">Archived</span>';
+  tbody.innerHTML = activeItems.map(item => {
+    let badgeClass = item.status === 'processing' ? 'status-processing' : 'status-pending';
+    const dateStr = item.submitted_at ? new Date(item.submitted_at).toLocaleString() : '-';
+    let actions = '';
     if (item.status === 'pending') {
       actions = `
         <button class="btn-queue-action btn-approve" onclick="approveQueueItem('${item.request_id}')">✅ Approve</button>
         <button class="btn-queue-action btn-reject" onclick="rejectQueueItem('${item.request_id}')">❌ Reject</button>
       `;
     } else if (item.status === 'processing') {
-      actions = '<span style="color: var(--accent-cyan); font-size: 0.75rem;">Processing...</span>';
-    } else if (item.status === 'approved') {
-      actions = '<span style="color: #34d399; font-size: 0.75rem;">Indexed ✓</span>';
+      actions = '<span style="color: var(--accent-cyan); font-size: 0.78rem; font-weight: 600;">Scraping &amp; Indexing...</span>';
     }
 
     const slugBadge = item.slug ? `<div style="font-size: 0.76rem; color: #a78bfa; margin-top: 4px; font-weight: 500;">🏷️ <code>${item.slug}</code></div>` : '';
-    const noteMsg = (item.message && item.status !== 'pending') ? `<div style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px; line-height: 1.3;">${item.message}</div>` : '';
 
     return `
       <tr>
-        <td><code style="color: var(--accent-cyan);">${item.request_id}</code></td>
-        <td style="max-width: 320px; word-break: break-all;">
+        <td><code style="color: var(--accent-cyan); font-weight: bold;">${item.request_id}</code></td>
+        <td style="max-width: 340px; word-break: break-all;">
           <a href="${item.url}" target="_blank" style="color: #cbd5e1; text-decoration: underline;">${item.url}</a>
           ${slugBadge}
-          ${noteMsg}
         </td>
         <td>${item.submitter || 'Revit Client'}</td>
         <td style="white-space: nowrap; color: var(--text-muted); font-size: 0.8rem;">${dateStr}</td>
@@ -474,6 +511,73 @@ function renderQueueTable() {
       </tr>
     `;
   }).join('');
+}
+
+function renderArchiveTable() {
+  const tbody = document.getElementById('archive-table-body');
+  if (!tbody) return;
+
+  const searchInput = document.getElementById('archive-search-input');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  let items = cachedQueueItems.filter(it => it.status === 'approved' || it.status === 'rejected');
+
+  if (currentArchiveFilter !== 'all') {
+    items = items.filter(it => it.status === currentArchiveFilter);
+  }
+
+  if (query) {
+    items = items.filter(it => 
+      (it.request_id && it.request_id.toLowerCase().includes(query)) ||
+      (it.url && it.url.toLowerCase().includes(query)) ||
+      (it.slug && it.slug.toLowerCase().includes(query)) ||
+      (it.submitter && it.submitter.toLowerCase().includes(query))
+    );
+  }
+
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">No archived items found matching criteria.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map(item => {
+    let badgeClass = item.status === 'approved' ? 'status-approved' : 'status-rejected';
+    const dateStr = item.processed_at ? new Date(item.processed_at).toLocaleString() : (item.submitted_at ? new Date(item.submitted_at).toLocaleDateString() : '-');
+    const slugBadge = item.slug ? `<div style="font-size: 0.76rem; color: #a78bfa; margin-top: 3px;">🏷️ <code>${item.slug}</code></div>` : '';
+    const noteMsg = item.message ? `<div style="font-size: 0.74rem; color: #94a3b8; margin-top: 2px;">${item.message}</div>` : '';
+
+    return `
+      <tr>
+        <td><code style="color: var(--text-muted);">${item.request_id}</code></td>
+        <td style="max-width: 320px; word-break: break-all;">
+          <a href="${item.url}" target="_blank" style="color: #94a3b8; text-decoration: underline;">${item.url}</a>
+          ${slugBadge}
+        </td>
+        <td style="color: var(--text-muted); font-size: 0.8rem;">${item.submitter || 'Revit Client'}</td>
+        <td style="white-space: nowrap; color: var(--text-muted); font-size: 0.78rem;">${dateStr}</td>
+        <td><span class="status-badge ${badgeClass}">${item.status}</span></td>
+        <td style="font-size: 0.76rem; max-width: 240px; color: ${item.status === 'approved' ? '#34d399' : '#f87171'};">
+          ${noteMsg || (item.status === 'approved' ? 'Indexed in ChromaDB' : 'Rejected')}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function clearQueueHistory() {
+  if (!confirm("Are you sure you want to purge all approved and rejected historical logs?\\n\\nActive pending requests will be preserved.")) return;
+  try {
+    const res = await fetch('/api/ingest/queue/clear-history', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${currentAdminToken}` }
+    });
+    if (!res.ok) throw new Error("Failed to clear history");
+    const data = await res.json();
+    alert(`Archive purged successfully: ${data.removed_count} records removed.`);
+    await loadKnowledgeQueue();
+  } catch (err) {
+    alert("Error clearing history: " + err.message);
+  }
 }
 
 async function approveQueueItem(requestId) {
@@ -738,11 +842,270 @@ async function applyCloudCorrections() {
 }
 
 
+// --- Autodesk Construction Cloud (ACC / APS) Configuration Handlers ---
+
+function openACCConfigModal() {
+  document.getElementById('acc-config-modal').style.display = 'flex';
+  const alertEl = document.getElementById('acc-config-alert');
+  if (alertEl) alertEl.style.display = 'none';
+  loadACCConfigStatus();
+}
+
+function closeACCConfigModal() {
+  document.getElementById('acc-config-modal').style.display = 'none';
+}
+
+function toggleSecretVisibility() {
+  const secretInput = document.getElementById('aps-client-secret');
+  if (!secretInput) return;
+  secretInput.type = secretInput.type === 'password' ? 'text' : 'password';
+}
+
+async function loadACCConfigStatus() {
+  const badge = document.getElementById('acc-status-badge');
+  const title = document.getElementById('acc-modal-mode-title');
+  const desc = document.getElementById('acc-modal-mode-desc');
+  const maskedId = document.getElementById('acc-modal-masked-id');
+
+  try {
+    const res = await fetch('/api/acc/config');
+    if (!res.ok) throw new Error('Failed to fetch ACC status');
+    const data = await res.json();
+
+    if (data.is_live) {
+      if (badge) {
+        badge.className = 'status-badge status-approved';
+        badge.innerText = '🟢 Live ACC Connected';
+      }
+      if (title) {
+        title.style.color = '#34d399';
+        title.innerText = '🟢 Live Autodesk Platform Services Connected';
+      }
+      if (desc) desc.innerText = data.mode_description;
+      if (maskedId) {
+        maskedId.style.display = 'block';
+        maskedId.innerText = `Active Client ID: ${data.client_id_masked || 'Configured'}`;
+      }
+    } else {
+      if (badge) {
+        badge.className = 'status-badge status-pending';
+        badge.innerText = '🟡 Simulation Mode';
+      }
+      if (title) {
+        title.style.color = '#f59e0b';
+        title.innerText = '🟡 Offline Simulation Mode';
+      }
+      if (desc) desc.innerText = data.mode_description;
+      if (maskedId) {
+        maskedId.style.display = 'none';
+      }
+    }
+    return data;
+  } catch (err) {
+    if (badge) {
+      badge.className = 'status-badge status-rejected';
+      badge.innerText = '🔴 Cloud API Offline';
+    }
+  }
+}
+
+async function testACCConnection() {
+  if (!isAdminLoggedIn()) {
+    alert('Administrative privileges required. Please sign in as Admin first.');
+    openLoginModal();
+    return;
+  }
+
+  const clientId = document.getElementById('aps-client-id').value.trim();
+  const clientSecret = document.getElementById('aps-client-secret').value.trim();
+  const alertEl = document.getElementById('acc-config-alert');
+  const spinner = document.getElementById('acc-test-spinner');
+  const btnLabel = document.getElementById('btn-test-acc-label');
+  const btn = document.getElementById('btn-test-acc');
+
+  if (!clientId || !clientSecret) {
+    alertEl.style.display = 'block';
+    alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+    alertEl.style.color = '#f87171';
+    alertEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+    alertEl.innerText = '⚠️ Please provide both Client ID and Client Secret to test connection.';
+    return;
+  }
+
+  btn.disabled = true;
+  if (spinner) spinner.style.display = 'inline-block';
+  btnLabel.innerText = 'Verifying with Autodesk...';
+  alertEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/acc/config/test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAdminToken}`
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret
+      })
+    });
+
+    const data = await res.json();
+    alertEl.style.display = 'block';
+
+    if (res.ok && data.success) {
+      alertEl.style.background = 'rgba(16, 185, 129, 0.15)';
+      alertEl.style.color = '#34d399';
+      alertEl.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+      alertEl.innerText = `✅ Success: ${data.message}`;
+    } else {
+      alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+      alertEl.style.color = '#f87171';
+      alertEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      alertEl.innerText = `❌ Verification Failed: ${data.message || 'Invalid credentials'}`;
+    }
+  } catch (err) {
+    alertEl.style.display = 'block';
+    alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+    alertEl.style.color = '#f87171';
+    alertEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+    alertEl.innerText = `❌ Network Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+    btnLabel.innerText = '🧪 Test Connection';
+  }
+}
+
+async function handleACCConfigSubmit(e) {
+  e.preventDefault();
+
+  if (!isAdminLoggedIn()) {
+    alert('Administrative privileges required. Please sign in as Admin first.');
+    openLoginModal();
+    return;
+  }
+
+  const clientId = document.getElementById('aps-client-id').value.trim();
+  const clientSecret = document.getElementById('aps-client-secret').value.trim();
+  const alertEl = document.getElementById('acc-config-alert');
+  const spinner = document.getElementById('acc-save-spinner');
+  const btnLabel = document.getElementById('btn-save-acc-label');
+  const btn = document.getElementById('btn-save-acc');
+
+  if (!clientId || !clientSecret) {
+    alertEl.style.display = 'block';
+    alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+    alertEl.style.color = '#f87171';
+    alertEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+    alertEl.innerText = '⚠️ Both Client ID and Client Secret are required.';
+    return;
+  }
+
+  btn.disabled = true;
+  if (spinner) spinner.style.display = 'inline-block';
+  btnLabel.innerText = 'Saving & Activating...';
+  alertEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/acc/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAdminToken}`
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        force_mock: false
+      })
+    });
+
+    const data = await res.json();
+    alertEl.style.display = 'block';
+
+    if (!res.ok) {
+      alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+      alertEl.style.color = '#f87171';
+      alertEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      alertEl.innerText = `❌ ${data.detail || 'Failed to save configuration'}`;
+      return;
+    }
+
+    alertEl.style.background = 'rgba(16, 185, 129, 0.15)';
+    alertEl.style.color = '#34d399';
+    alertEl.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+    alertEl.innerText = `✅ ${data.message || 'Autodesk Cloud credentials activated and saved to .env!'}`;
+
+    // Update status display
+    loadACCConfigStatus();
+    // Refresh Hubs dropdown
+    loadACCHubs();
+
+    // Clear secret input for safety
+    document.getElementById('aps-client-secret').value = '';
+  } catch (err) {
+    alertEl.style.display = 'block';
+    alertEl.style.background = 'rgba(239, 68, 68, 0.15)';
+    alertEl.style.color = '#f87171';
+    alertEl.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+    alertEl.innerText = `❌ Error: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+    btnLabel.innerText = '💾 Save & Connect Live';
+  }
+}
+
+async function revertACCToMock() {
+  if (!isAdminLoggedIn()) {
+    alert('Administrative privileges required. Please sign in as Admin first.');
+    openLoginModal();
+    return;
+  }
+
+  if (!confirm('Revert to Offline Simulation / Mock Mode? This will clear active credentials from memory and .env.')) {
+    return;
+  }
+
+  const alertEl = document.getElementById('acc-config-alert');
+
+  try {
+    const res = await fetch('/api/acc/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAdminToken}`
+      },
+      body: JSON.stringify({
+        force_mock: true
+      })
+    });
+
+    const data = await res.json();
+    document.getElementById('aps-client-id').value = '';
+    document.getElementById('aps-client-secret').value = '';
+
+    alertEl.style.display = 'block';
+    alertEl.style.background = 'rgba(245, 158, 11, 0.15)';
+    alertEl.style.color = '#fbbf24';
+    alertEl.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+    alertEl.innerText = `ℹ️ ${data.message || 'Switched back to safe Simulation Mode.'}`;
+
+    loadACCConfigStatus();
+    loadACCHubs();
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+
 // --- Initialize ---
 checkHealth();
 updateAuthUI();
 loadKnowledgeQueue();
 loadACCHubs();
+loadACCConfigStatus();
 
 
 

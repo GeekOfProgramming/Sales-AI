@@ -1,7 +1,8 @@
+from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 import chromadb
 from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 import ollama
@@ -115,7 +116,7 @@ class BIMRAGRetriever:
 
         return chunks
 
-    def index_markdown_file(self, file_path: str | Path) -> int:
+    def index_markdown_file(self, file_path: Union[str, Path]) -> int:
         """Read and index a single markdown file into ChromaDB."""
         path = Path(file_path)
         if not path.exists():
@@ -139,7 +140,9 @@ class BIMRAGRetriever:
         )
         return len(chunks)
 
-    index_file = index_markdown_file
+    def index_file(self, file_path: Union[str, Path]) -> int:
+        """Alias for index_markdown_file to support universal file indexing."""
+        return self.index_markdown_file(file_path)
 
     def delete_source(self, source_name: str) -> int:
         """Remove all chunks associated with a specific file/source from ChromaDB."""
@@ -153,7 +156,7 @@ class BIMRAGRetriever:
             pass
         return 0
 
-    def index_directory(self, directory_path: str | Path) -> int:
+    def index_directory(self, directory_path: Union[str, Path]) -> int:
         """Index all markdown files found in the given directory."""
         dir_path = Path(directory_path)
         if not dir_path.exists():

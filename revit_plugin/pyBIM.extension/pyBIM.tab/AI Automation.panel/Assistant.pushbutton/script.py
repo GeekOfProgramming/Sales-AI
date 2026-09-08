@@ -15,17 +15,23 @@ except ImportError:
     from urllib2 import Request, urlopen, URLError  # type: ignore
 
 try:
-    from Autodesk.Revit.DB import Transaction, FilteredElementCollector, BuiltInCategory
-    from pyrevit import forms, script
+    from Autodesk.Revit.DB import Transaction, FilteredElementCollector, BuiltInCategory  # type: ignore # noqa: F401
+    from pyrevit import forms, script  # type: ignore # noqa: F401
     IN_REVIT = True
 except ImportError:
     IN_REVIT = False
+    Transaction = None
+    forms = None
+    script = None
 
 
 def get_gateway_url():
     """Retrieve configured gateway endpoint or use default LAN IP."""
-    cfg = script.get_config("pyBIM")
-    base_url = cfg.get_option("server_url", "http://10.120.24.34:8000")
+    if script is not None:
+        cfg = script.get_config("pyBIM")
+        base_url = cfg.get_option("server_url", "http://10.120.24.34:8000")
+    else:
+        base_url = "http://10.120.24.34:8000"
     base_url = base_url.rstrip("/")
     return "{}/generate-script".format(base_url)
 
@@ -98,15 +104,21 @@ def execute_generated_code(doc, code_str):
 
 
 def main():
-    if not IN_REVIT:
+    if not IN_REVIT or script is None or forms is None:
         print("This tool is designed to run inside Autodesk Revit with pyRevit.")
         return
 
     try:
-        uidoc = __revit__.ActiveUIDocument  # type: ignore
+        revit_app = globals().get("__revit__", None)
+        if revit_app is None:
+            revit_app = __revit__  # type: ignore # noqa: F821
+        uidoc = revit_app.ActiveUIDocument
         doc = uidoc.Document
     except Exception:
-        forms.alert("Active Revit document could not be detected.", title="pyBIM Error", warn_icon=True)
+        if forms is not None:
+            forms.alert("Active Revit document could not be detected.", title="pyBIM Error", warn_icon=True)
+        else:
+            print("Active Revit document could not be detected.")
         return
 
     # 1. Gather Selected Elements

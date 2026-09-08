@@ -88,3 +88,67 @@ def test_human_in_the_loop_write_back_protection():
     assert result["status"] == "authorized"
     assert result["approved_elements_count"] == 2
     assert result["authorized_by"] == ADMIN_USERNAME
+
+
+def test_acc_config_status_public_query():
+    """Verify that clients can inspect ACC operational status (live vs simulation) without token."""
+    resp = client.get("/api/acc/config")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "status" in data
+    assert "mode_description" in data
+    assert "is_live" in data
+    assert isinstance(data["is_live"], bool)
+
+
+def test_acc_config_save_requires_admin_token():
+    """Verify that unauthenticated users cannot tamper with cloud credentials."""
+    unauth_resp = client.post(
+        "/api/acc/config",
+        json={"client_id": "test_id", "client_secret": "test_secret"},
+    )
+    assert unauth_resp.status_code == 401
+
+
+def test_acc_config_lifecycle_with_admin():
+    """Verify that administrators can configure keys and switch between Live and Mock seamlessly."""
+    # 1. Login
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"username": ADMIN_USERNAME, "password": ADMIN_PASSWORD},
+    )
+    assert login_resp.status_code == 200
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Update credentials with skip_verification=True (sandbox test keys)
+    save_resp = client.post(
+        "/api/acc/config",
+        headers=headers,
+        json={
+            "client_id": "aps_demo_client_id_12345",
+            "client_secret": "aps_demo_client_secret_67890",
+            "skip_verification": True,
+        },
+    )
+    assert save_resp.status_code == 200
+    save_data = save_resp.json()
+    assert save_data["status"] == "CONNECTED_LIVE"
+    assert save_data["is_live"] is True
+    assert "aps_" in save_data["client_id_masked"]
+
+    # 3. Query status endpoint and check masked output
+    status_resp = client.get("/api/acc/config")
+    assert status_resp.status_code == 200
+    assert status_resp.json()["is_live"] is True
+
+    # 4. Revert to simulation mode
+    revert_resp = client.post(
+        "/api/acc/config",
+        headers=headers,
+        json={"force_mock": True},
+    )
+    assert revert_resp.status_code == 200
+    revert_data = revert_resp.json()
+    assert revert_data["status"] == "SIMULATED_MOCK"
+    assert revert_data["is_live"] is False

@@ -41,6 +41,91 @@ class AutodeskCloudClient:
         self._cached_token: Optional[str] = None
         self._token_expires_at: float = 0.0
 
+    def set_credentials(self, client_id: str, client_secret: str, force_mock: bool = False):
+        """Update active client credentials dynamically in memory."""
+        self.client_id = (client_id or "").strip()
+        self.client_secret = (client_secret or "").strip()
+        self._cached_token = None
+        self._token_expires_at = 0.0
+        
+        if force_mock or not (bool(self.client_id) and bool(self.client_secret)):
+            self.mock_mode = True
+        else:
+            self.mock_mode = False
+
+    def get_masked_client_id(self) -> Optional[str]:
+        """Return masked client ID for safe UI display."""
+        if not self.client_id:
+            return None
+        cid = self.client_id.strip()
+        if len(cid) <= 8:
+            return cid[:2] + "..." + cid[-2:]
+        return cid[:4] + "..." + cid[-4:]
+
+    def get_status_info(self) -> Dict[str, Any]:
+        """Return operational and configuration status summary."""
+        is_live = (not self.mock_mode) and bool(self.client_id) and bool(self.client_secret)
+        return {
+            "status": "CONNECTED_LIVE" if is_live else "SIMULATED_MOCK",
+            "mode_description": (
+                "Live Autodesk Platform Services (ACC/BIM 360)"
+                if is_live
+                else "Offline Simulation / Mock Mode (Safe Sandbox)"
+            ),
+            "client_id_masked": self.get_masked_client_id(),
+            "is_live": is_live,
+            "message": (
+                "Connected to Autodesk Cloud APIs."
+                if is_live
+                else "Operating in safe offline simulation mode. No live cloud credentials configured."
+            ),
+        }
+
+    async def test_connection(
+        self,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Test authentication against Autodesk Platform Services OAuth endpoint."""
+        cid = (client_id or self.client_id or "").strip()
+        sec = (client_secret or self.client_secret or "").strip()
+        if not cid or not sec:
+            return {
+                "success": False,
+                "message": "Client ID and Client Secret are required to test connection.",
+            }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    self.AUTH_ENDPOINT,
+                    data={
+                        "grant_type": "client_credentials",
+                        "scope": "data:read",
+                    },
+                    auth=(cid, sec),
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                if resp.status_code == 200:
+                    return {
+                        "success": True,
+                        "message": "Autodesk Platform Services authentication successful.",
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"Autodesk authentication failed (HTTP {resp.status_code}): {resp.text[:200]}",
+                    }
+        except httpx.RequestError as exc:
+            return {
+                "success": False,
+                "message": f"Network error contacting Autodesk servers: {str(exc)}",
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "message": f"Unexpected error during authentication test: {str(exc)}",
+            }
+
     async def get_access_token(self) -> str:
         """Fetch or refresh 2-legged OAuth 2.0 access token."""
         if self.mock_mode:

@@ -91,9 +91,9 @@ def verify_admin_token(credentials: Optional[HTTPAuthorizationCredentials] = Dep
     token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        role: str = payload.get("role")
-        if username is None or role != "admin":
+        username: Optional[str] = payload.get("sub")
+        role: Optional[str] = payload.get("role")
+        if not username or role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: Administrative privileges required.",

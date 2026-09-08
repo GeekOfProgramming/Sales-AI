@@ -2,6 +2,7 @@
 Coordinates requests from Revit Addin (C# / pyRevit) with local ChromaDB RAG and Ollama LLM.
 """
 
+import os
 import sys
 import io
 import re
@@ -47,6 +48,8 @@ from backend.schemas import (
     CloudAuditRequest,
     CloudAuditResponse,
     CloudSyncApprovalRequest,
+    ACCConfigRequest,
+    ACCConfigStatusResponse,
 )
 
 
@@ -73,6 +76,27 @@ async def lifespan(app: FastAPI):
         print(f"📥 Indexing initial rules from {rules_dir}...")
         count = app.state.rag_retriever.index_directory(rules_dir)
         print(f"✅ Indexed {count} semantic rule chunks.")
+
+    # Auto-recover any stale 'processing' items if server was restarted during background indexing
+    try:
+        stale_processing = ingest_queue.list_items(status_filter="processing")
+        for item in stale_processing:
+            slug = item.get("slug")
+            if slug:
+                rule_file = project_root / "data" / "rules" / f"{slug}.md"
+                if rule_file.exists():
+                    indexed_count = app.state.rag_retriever.index_markdown_file(rule_file)
+                    ingest_queue.update_status(
+                        item["request_id"],
+                        "approved",
+                        message=f"Successfully indexed as '{slug}' ({indexed_count} chunks).",
+                        slug=slug,
+                    )
+                    print(f"🔄 [Auto-Recovery] Re-indexed stale item {item['request_id']} -> {slug} ({indexed_count} chunks)")
+                else:
+                    ingest_queue.update_status(item["request_id"], "pending", message="Reset to pending review after server restart.")
+    except Exception as e:
+        print(f"⚠️ [Auto-Recovery Warning]: {e}")
     
     print("🎉 pyBIM-LLM Gateway is ready to serve requests.")
     yield
@@ -115,11 +139,31 @@ def ui_endpoint():
     return FileResponse(static_path / "index.html")
 
 
+def get_llm_client() -> BIMLLMClient:
+    """Safely get or lazy-initialize the LLM client."""
+    if not hasattr(app.state, "llm_client") or app.state.llm_client is None:
+        app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
+    return app.state.llm_client
+
+
+def get_rag_retriever() -> BIMRAGRetriever:
+    """Safely get or lazy-initialize the ChromaDB RAG retriever."""
+    if not hasattr(app.state, "rag_retriever") or app.state.rag_retriever is None:
+        project_root = Path(__file__).parent.parent
+        persist_dir = str(project_root / "chroma_db")
+        app.state.rag_retriever = BIMRAGRetriever(
+            persist_dir=persist_dir,
+            collection_name="bim_rules",
+            embedding_model="nomic-embed-text",
+        )
+    return app.state.rag_retriever
+
+
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check():
     """Verify connectivity to local Ollama LLM and ChromaDB vector store."""
-    llm_client: BIMLLMClient = app.state.llm_client
-    rag_retriever: BIMRAGRetriever = app.state.rag_retriever
+    llm_client: BIMLLMClient = get_llm_client()
+    rag_retriever: BIMRAGRetriever = get_rag_retriever()
 
     ollama_ok = llm_client.is_healthy()
     models = []
@@ -216,8 +260,8 @@ def intent_router(prompt: str) -> str:
 async def generate_script(request: ScriptGenerationRequest):
     """Receive a prompt and optional selected Revit elements, retrieve rules via RAG, and generate code."""
     start_time = time.perf_counter()
-    llm_client: BIMLLMClient = app.state.llm_client
-    rag_retriever: BIMRAGRetriever = app.state.rag_retriever
+    llm_client: BIMLLMClient = get_llm_client()
+    rag_retriever: BIMRAGRetriever = get_rag_retriever()
 
     if not request.user_prompt.strip():
         raise HTTPException(
@@ -547,6 +591,22 @@ async def reject_knowledge_request(
     }
 
 
+@app.post(
+    "/api/ingest/queue/clear-history",
+    summary="Purge processed items (approved/rejected) from knowledge queue history (Admin Only)",
+    description="Removes historical approved and rejected records to keep the database and UI clean. Pending items are retained.",
+    tags=["Knowledge Ingestion Queue"],
+)
+async def clear_queue_history(admin_user: dict = Depends(verify_admin_token)):
+    """Admin endpoint: Clear approved/rejected historical logs."""
+    removed_count = ingest_queue.clear_processed()
+    return {
+        "status": "success",
+        "message": f"Purged {removed_count} historical records from queue.",
+        "removed_count": removed_count,
+    }
+
+
 @app.get(
     "/api/ingest/status/{request_id}",
     response_model=QueueItemResponse,
@@ -663,6 +723,123 @@ async def apply_cloud_model_changes(
         "authorized_by": admin_user.get("sub", "admin"),
         "message": f"Human-in-the-loop approval recorded for {len(req.approved_elements)} element corrections. Ready for staged synchronization.",
     }
+
+
+def update_env_credentials(client_id: Optional[str], client_secret: Optional[str], force_mock: bool = False):
+    """Safely updates or removes APS credentials in .env file."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    lines = []
+    if env_path.exists():
+        try:
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            lines = []
+
+    new_lines = []
+    seen_id = False
+    seen_secret = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("APS_CLIENT_ID="):
+            if not force_mock and client_id is not None:
+                new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
+            seen_id = True
+        elif stripped.startswith("APS_CLIENT_SECRET="):
+            if not force_mock and client_secret is not None:
+                new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
+            seen_secret = True
+        else:
+            new_lines.append(line)
+
+    if not force_mock and client_id is not None and not seen_id:
+        new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
+    if not force_mock and client_secret is not None and not seen_secret:
+        new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
+
+    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+    if force_mock:
+        os.environ.pop("APS_CLIENT_ID", None)
+        os.environ.pop("APS_CLIENT_SECRET", None)
+    else:
+        if client_id is not None:
+            os.environ["APS_CLIENT_ID"] = client_id.strip()
+        if client_secret is not None:
+            os.environ["APS_CLIENT_SECRET"] = client_secret.strip()
+
+
+@app.get(
+    "/api/acc/config",
+    response_model=ACCConfigStatusResponse,
+    summary="Get Autodesk Construction Cloud configuration & connection status",
+    tags=["Cloud BIM (ACC)"],
+)
+async def get_acc_config():
+    """Returns current operational status (Live vs Simulation) and masked client ID."""
+    info = cloud_client.get_status_info()
+    return ACCConfigStatusResponse(**info)
+
+
+@app.post(
+    "/api/acc/config/test",
+    summary="Test Autodesk Platform Services credentials without saving (Admin Only)",
+    tags=["Cloud BIM (ACC)"],
+)
+async def test_acc_credentials(
+    req: ACCConfigRequest,
+    admin_user: dict = Depends(verify_admin_token),
+):
+    """Verifies client ID and client secret against Autodesk's OAuth 2.0 authentication service."""
+    result = await cloud_client.test_connection(client_id=req.client_id, client_secret=req.client_secret)
+    return result
+
+
+@app.post(
+    "/api/acc/config",
+    response_model=ACCConfigStatusResponse,
+    summary="Save Autodesk Platform Services cloud credentials (Admin Only)",
+    description="Updates .env persistence and reconfigures active cloud client in memory without restart.",
+    tags=["Cloud BIM (ACC)"],
+)
+async def configure_acc_credentials(
+    req: ACCConfigRequest,
+    admin_user: dict = Depends(verify_admin_token),
+):
+    """Admin configuration: writes keys to .env and switches cloud_client dynamically between Live and Mock."""
+    if req.force_mock or (not req.client_id and not req.client_secret):
+        # Switch to Mock Mode
+        cloud_client.set_credentials("", "", force_mock=True)
+        update_env_credentials("", "", force_mock=True)
+        info = cloud_client.get_status_info()
+        info["message"] = "Switched to offline simulation / mock mode. Credentials cleared from active session."
+        return ACCConfigStatusResponse(**info)
+
+    cid = (req.client_id or "").strip()
+    sec = (req.client_secret or "").strip()
+
+    if not cid or not sec:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both Client ID and Client Secret are required for live cloud connectivity.",
+        )
+
+    # Unless explicitly bypassed, test connection with Autodesk servers
+    if not req.skip_verification:
+        test_res = await cloud_client.test_connection(client_id=cid, client_secret=sec)
+        if not test_res.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=test_res.get("message", "Autodesk Platform Services credentials failed validation."),
+            )
+
+    # Credentials valid: configure in-memory client and persist to .env
+    cloud_client.set_credentials(cid, sec, force_mock=False)
+    update_env_credentials(cid, sec, force_mock=False)
+
+    info = cloud_client.get_status_info()
+    info["message"] = "Autodesk Platform Services credentials successfully saved and activated!"
+    return ACCConfigStatusResponse(**info)
 
 
 

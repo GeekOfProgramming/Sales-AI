@@ -163,48 +163,99 @@
     <!-- Admin Knowledge Queue Card -->
     <div class="card" style="grid-column: 1 / -1;">
       <div class="card-title">
-        <span>🛡️ Knowledge Queue Management (Admin Cartable)</span>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <button class="btn-copy" onclick="loadKnowledgeQueue()" style="display: flex; align-items: center; gap: 4px;">🔄 Refresh Queue</button>
-          <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-purple);" id="queue-count-badge">Admin Verification</span>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span>🛡️ Knowledge Review Queue (Admin Cartable)</span>
+          <span style="font-size: 0.78rem; font-weight: normal; color: #fbbf24; background: rgba(245, 158, 11, 0.15); padding: 3px 10px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.3);" id="queue-count-badge">0 Pending Action</span>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <button type="button" class="btn-copy" id="btn-toggle-archive" onclick="toggleArchiveView()" style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--accent-purple);">
+            📦 Approved &amp; History Archive (<span id="archive-count-badge">0</span>) ▾
+          </button>
+          <button class="btn-copy" onclick="loadKnowledgeQueue()" style="display: flex; align-items: center; gap: 4px;">🔄 Refresh</button>
         </div>
       </div>
 
-      <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-        <button type="button" class="btn-copy active" id="qfilter-all" onclick="filterQueue('all')">All Submissions</button>
-        <button type="button" class="btn-copy" id="qfilter-pending" onclick="filterQueue('pending')">🟡 Pending Review</button>
-        <button type="button" class="btn-copy" id="qfilter-approved" onclick="filterQueue('approved')">🟢 Approved</button>
-        <button type="button" class="btn-copy" id="qfilter-rejected" onclick="filterQueue('rejected')">🔴 Rejected</button>
+      <!-- Section 1: Active Review Queue (Pending & In-Progress items) -->
+      <div style="margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">⚡ Active Submissions Awaiting Decision</span>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="queue-table">
+            <thead>
+              <tr>
+                <th>Tracking ID</th>
+                <th>Documentation URL</th>
+                <th>Submitter</th>
+                <th>Submitted Date</th>
+                <th>Status</th>
+                <th>Admin Action</th>
+              </tr>
+            </thead>
+            <tbody id="queue-table-body">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                  Loading Knowledge Queue items...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div style="overflow-x: auto;">
-        <table class="queue-table">
-          <thead>
-            <tr>
-              <th>Tracking ID</th>
-              <th>Documentation URL</th>
-              <th>Submitter</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Admin Action</th>
-            </tr>
-          </thead>
-          <tbody id="queue-table-body">
-            <tr>
-              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                Loading Knowledge Queue items...
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Section 2: Collapsible History Archive (Approved / Processed / Rejected items) -->
+      <div id="archive-panel" style="display: none; margin-top: 18px; padding-top: 16px; border-top: 1px dashed rgba(255,255,255,0.12);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.9rem; font-weight: 600; color: var(--accent-purple);">📦 Approved &amp; Historical Archive</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Historical logs safely isolated from active workflow</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="archive-search-input" oninput="renderArchiveTable()" placeholder="🔍 Filter archive (URL, Slug, ID)..." style="padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: white; width: 220px;" />
+            <button type="button" class="btn-copy active" id="afilter-all" onclick="filterArchive('all')">All (<span id="acnt-all">0</span>)</button>
+            <button type="button" class="btn-copy" id="afilter-approved" onclick="filterArchive('approved')">🟢 Approved (<span id="acnt-app">0</span>)</button>
+            <button type="button" class="btn-copy" id="afilter-rejected" onclick="filterArchive('rejected')">🔴 Rejected (<span id="acnt-rej">0</span>)</button>
+            <button type="button" class="btn-copy" onclick="clearQueueHistory()" title="Purge historical logs from archive" style="color: #f87171; border-color: rgba(239, 68, 68, 0.3);">🧹 Purge History</button>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto; max-height: 420px; overflow-y: auto;">
+          <table class="queue-table">
+            <thead>
+              <tr>
+                <th>Tracking ID</th>
+                <th>Documentation URL / Slug</th>
+                <th>Submitter</th>
+                <th>Processed Date</th>
+                <th>Status</th>
+                <th>Indexing Result</th>
+              </tr>
+            </thead>
+            <tbody id="archive-table-body">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                  Click 'Show Approved Archive' to view history.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
     <!-- Cloud BIM (Autodesk Construction Cloud - ACC) Card -->
     <div class="card" style="grid-column: 1 / -1;">
       <div class="card-title">
-        <span>☁️ Autodesk Construction Cloud (ACC) Hub &amp; Model Auditor</span>
-        <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-cyan);">Read-Only AI Audit • Human-in-the-Loop</span>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span>☁️ Autodesk Construction Cloud (ACC) Hub &amp; Model Auditor</span>
+          <span id="acc-status-badge" class="status-badge status-pending" style="font-size: 0.75rem; cursor: pointer;" onclick="openACCConfigModal()" title="Click to configure APS credentials">🟡 Simulation Mode</span>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn-copy" onclick="openACCConfigModal()" style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.8rem; padding: 6px 12px;">
+            ⚙️ Cloud Settings &amp; Keys
+          </button>
+          <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-cyan);">Read-Only AI Audit • Human-in-the-Loop</span>
+        </div>
       </div>
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 14px;">
         Directly audit cloud-hosted Revit models without opening desktop Revit or downloading heavy files. AI analyzes parameter trees in <strong>Read-Only Mode</strong>; zero cloud writes occur without explicit human verification.
@@ -311,6 +362,71 @@
           <span>Sign In as Admin</span>
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- Autodesk Platform Services (ACC) Configuration Modal -->
+  <div class="modal-backdrop" id="acc-config-modal">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">⚙️</span>
+          <h3 style="font-size: 1.1rem; font-weight: 700;">Autodesk Cloud (APS / ACC) Setup</h3>
+        </div>
+        <button class="modal-close" onclick="closeACCConfigModal()">&times;</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 4px;">
+        <!-- Status Banner -->
+        <div id="acc-modal-status-banner" style="padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: rgba(15, 23, 42, 0.7); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <div>
+            <div id="acc-modal-mode-title" style="font-weight: 600; font-size: 0.9rem; color: #f59e0b;">🟡 Offline Simulation Mode</div>
+            <div id="acc-modal-mode-desc" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Operating in safe simulation mode. No external API keys configured.</div>
+            <div id="acc-modal-masked-id" style="font-size: 0.75rem; color: var(--accent-cyan); font-family: var(--font-code); margin-top: 4px; display: none;"></div>
+          </div>
+          <button type="button" class="btn-copy" onclick="loadACCConfigStatus()" title="Refresh Status" style="padding: 6px 10px; font-size: 0.75rem;">🔄 Refresh</button>
+        </div>
+
+        <form id="acc-config-form" onsubmit="handleACCConfigSubmit(event)" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="form-group">
+            <label for="aps-client-id" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>APS Client ID:</span>
+              <a href="https://aps.autodesk.com/myapps" target="_blank" rel="noopener noreferrer" style="color: var(--accent-cyan); font-size: 0.78rem; text-decoration: none;">Get Keys on Autodesk Portal ↗</a>
+            </label>
+            <input type="text" id="aps-client-id" placeholder="Paste Autodesk Client ID here..." style="font-family: var(--font-code); font-size: 0.85rem;" />
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="aps-client-secret" style="margin-bottom: 0;">APS Client Secret:</label>
+              <button type="button" onclick="toggleSecretVisibility()" style="background: none; border: none; color: var(--accent-cyan); cursor: pointer; font-size: 0.75rem; padding: 0;">👁️ Show/Hide</button>
+            </div>
+            <input type="password" id="aps-client-secret" placeholder="Paste Autodesk Client Secret here..." style="font-family: var(--font-code); font-size: 0.85rem;" />
+          </div>
+
+          <!-- Alert / Feedback Area -->
+          <div id="acc-config-alert" style="display: none; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 0.82rem; font-family: var(--font-code); line-height: 1.4;"></div>
+
+          <div style="display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap;">
+            <button type="button" class="btn-copy" id="btn-test-acc" onclick="testACCConnection()" style="flex: 1; padding: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="spinner" id="acc-test-spinner" style="display: none; width: 14px; height: 14px;"></span>
+              <span id="btn-test-acc-label">🧪 Test Connection</span>
+            </button>
+
+            <button type="submit" class="btn-submit" id="btn-save-acc" style="flex: 1.3; margin-top: 0; padding: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="spinner" id="acc-save-spinner" style="display: none; width: 14px; height: 14px;"></span>
+              <span id="btn-save-acc-label">💾 Save &amp; Connect Live</span>
+            </button>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--border-color); margin-top: 4px;">
+            <button type="button" class="btn-queue-action btn-reject" onclick="revertACCToMock()" style="font-size: 0.78rem; padding: 6px 12px; margin-left: 0;">
+              ⏪ Reset to Simulation Mode
+            </button>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Admin privileges required</span>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 

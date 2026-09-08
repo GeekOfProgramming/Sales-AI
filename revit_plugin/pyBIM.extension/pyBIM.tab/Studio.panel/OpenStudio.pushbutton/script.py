@@ -6,14 +6,15 @@ Opens the pyBIM-LLM Web Studio dashboard in the default web browser.
 import webbrowser
 
 try:
-    from pyrevit import script
+    from pyrevit import script  # type: ignore # noqa: F401
     IN_REVIT = True
 except ImportError:
     IN_REVIT = False
+    script = None
 
 
 def main():
-    if IN_REVIT:
+    if IN_REVIT and script is not None:
         cfg = script.get_config("pyBIM")
         base_url = cfg.get_option("server_url", "http://10.120.24.34:8000")
     else:
