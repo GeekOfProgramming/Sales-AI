@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C# / .NET build outputs
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Vector DB & Local Storage
+chroma_data/
+chroma_db/
+*.db
+*.sqlite3
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary & Log files
+*.log
+scratch/
+.system_generated/
+PUBLIC_URL.txt
+
+# Large binaries
+cloudflared.exe
+*.exe

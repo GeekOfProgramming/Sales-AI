@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Name>pyBIM-LLM AI Assistant</Name>
+    <Assembly>pyBIM.RevitPlugin.dll</Assembly>
+    <FullClassName>pyBIM.RevitPlugin.AIBIMCommand</FullClassName>
+    <ClientId>c3a88a4e-1289-4a49-9f7e-d30922881b29</ClientId>
+    <VendorId>PYBIM</VendorId>
+    <VendorDescription>pyBIM-LLM, Privacy-First Local AI BIM Assistant</VendorDescription>
+    <Text>AI-BIM Assistant</Text>
+    <Description>Trigger AI code generation and RAG execution for selected Revit elements</Description>
+    <VisibilityMode>AlwaysVisible</VisibilityMode>
+  </AddIn>
+</RevitAddIns>

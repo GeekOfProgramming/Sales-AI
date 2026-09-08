@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pyBIM-LLM Gateway | Local AI &amp; RAG Assistant for Revit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header>
+    <div class="brand">
+      <div class="logo-badge">🏛️</div>
+      <div class="brand-text">
+        <h1>pyBIM-LLM Studio</h1>
+        <p>Local AI &amp; ISO 19650 RAG Gateway for Revit</p>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="status-pill">
+        <span class="dot" id="health-dot"></span>
+        <span id="health-text">Checking Core Services...</span>
+      </div>
+      <div class="status-pill" id="rules-pill" style="color: var(--accent-cyan);">
+        📚 20 BIM Rules Active
+      </div>
+      <div class="status-pill" style="color: var(--text-muted);" id="model-pill">
+        🧠 qwen2.5-coder:1.5b
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Left Column: Input and Parameters -->
+    <div class="card">
+      <div class="card-title">
+        <span>💬 Prompt &amp; Revit Context</span>
+        <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">Multi-Laptop Server</span>
+      </div>
+
+      <!-- Quick Presets -->
+      <div class="form-group">
+        <label>Quick BIM Automation Presets:</label>
+        <div class="presets">
+          <span class="preset-chip" onclick="setPreset(1)">🔥 Set FireRating to 2 Hours</span>
+          <span class="preset-chip" onclick="setPreset(2)">🏷️ ISO 19650 Model Naming</span>
+          <span class="preset-chip" onclick="setPreset(3)">🚪 Count Door Instances</span>
+          <span class="preset-chip" onclick="setPreset(4)">📐 Read Wall Length &amp; Volume</span>
+        </div>
+      </div>
+
+      <!-- Language Selector -->
+      <div class="form-group">
+        <label>Target Revit Programming Environment:</label>
+        <div class="lang-tabs">
+          <button type="button" class="lang-btn active" id="btn-py" onclick="setEnvironment('pyrevit')">🐍 pyRevit</button>
+          <button type="button" class="lang-btn" id="btn-cs" onclick="setEnvironment('csharp')">⚡ Native C#</button>
+          <button type="button" class="lang-btn" id="btn-dyn" onclick="setEnvironment('dynamo')">⚙️ Dynamo Python</button>
+        </div>
+      </div>
+
+      <!-- User Prompt -->
+      <div class="form-group">
+        <label for="user-prompt">Natural Language Instruction:</label>
+        <textarea id="user-prompt" placeholder="e.g. Filter all selected walls, check if FireRating is writable, and update to '2 Hours' inside an active transaction..."></textarea>
+      </div>
+
+      <!-- Simulated Selected Elements -->
+      <div class="form-group">
+        <label for="elem-context">
+          <span>Revit Selected Elements (Simulated or Real):</span>
+          <span style="color: var(--accent-cyan); cursor: pointer;" onclick="addSampleElements()">+ Load Sample Walls</span>
+        </label>
+        <textarea id="elem-context" style="min-height: 80px; font-family: var(--font-code); font-size: 0.8rem;" placeholder='[{"element_id": 105234, "category": "OST_Walls", "name": "Basic Wall"}]'></textarea>
+      </div>
+
+      <button class="btn-submit" id="btn-generate" onclick="generateCode()">
+        <span class="spinner" id="spinner"></span>
+        <span id="btn-label">✨ Generate Revit Code</span>
+      </button>
+    </div>
+
+    <!-- Right Column: AI Output & RAG Audit -->
+    <div class="card">
+      <div class="card-title">
+        <span>⚡ Generated Code &amp; RAG Inspector</span>
+        <span id="exec-timer" style="font-size: 0.8rem; font-family: var(--font-code); color: var(--accent-cyan);">Ready</span>
+      </div>
+
+      <!-- Code Box -->
+      <div class="code-container">
+        <div class="code-header">
+          <span id="code-lang-label">Python Script</span>
+          <button class="btn-copy" onclick="copyCode()">📋 Copy Code</button>
+        </div>
+        <pre><code id="output-code"># Code will appear here when generated...
+# You can paste this code directly into pyRevit or compile into your C# Revit Addin.</code></pre>
+      </div>
+
+      <!-- RAG Knowledge Audit Trail -->
+      <div class="form-group">
+        <label>Knowledge Rules &amp; Standards Consulted (ChromaDB RAG):</label>
+        <div class="rag-panel" id="rag-panel">
+          <span style="color: var(--text-muted); font-size: 0.82rem;">No query run yet. Relevant ISO 19650 and Revit API guidelines will be dynamically listed here.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Knowledge Ingestion Section -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="card-title">
+        <span>🕸️ Online Knowledge Ingestion (Scrapling &amp; RAG)</span>
+        <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-cyan);">Admin Hub</span>
+      </div>
+      <form id="ingest-form" onsubmit="handleIngestSubmit(event)" style="display: flex; flex-direction: column; gap: 12px;">
+        <label for="ingest-url">Enter Documentation / Standard URL to Ingest:</label>
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <input type="url" id="ingest-url" required placeholder="https://docs.pyrevitlabs.io/... or https://www.revitapidocs.com/..." style="flex: 1; min-width: 280px;" />
+          <button type="submit" class="btn-submit" id="btn-ingest" style="margin-top: 0; width: auto; padding: 10px 24px; white-space: nowrap;">
+            <span class="spinner" id="ingest-spinner" style="display: none;"></span>
+            <span id="btn-ingest-label">Ingest Knowledge</span>
+          </button>
+        </div>
+        <div id="ingest-status" style="display: none; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; font-family: var(--font-code); transition: all 0.2s ease;"></div>
+      </form>
+    </div>
+  </main>
+
+  <footer>
+    pyBIM-LLM Gateway • Connected across Samsung AI Workstation &amp; Client Laptops • Offline Local Inference
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

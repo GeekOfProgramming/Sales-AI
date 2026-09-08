@@ -1,0 +1,4 @@
+title: AI Assistant
+tooltip: Generate Revit automation scripts using local Ollama LLM and ChromaDB RAG.
+author: pyBIM-LLM
+highlight: new
