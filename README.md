@@ -186,7 +186,7 @@ pytest tests/test_admin_gate.py -v        # JWT Security & 2-Stage Queue tests
 
 Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file:///c:/Projects/Roadmap-LLMs.md)):
 
-### ✅ Completed Milestones (تکمیل‌شده و فعال)
+### ✅ Completed & Active Milestones
 1. **Local Inference Engine:** Ollama integration with `qwen2.5-coder:1.5b` and dynamic model routing.
 2. **Persistent Vector RAG:** ChromaDB with `nomic-embed-text` and 308 verified BIM rule chunks.
 3. **Scrapling Web Extraction:** Automated extraction and Markdown sanitization of online docs.
@@ -200,45 +200,46 @@ Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file://
 11. **Offline Document Parsing Foundation:** Direct multi-format extraction capabilities.
 12. **Cloud BIM Integration (Autodesk Construction Cloud - ACC):** Read-Only metadata audit and Human-in-the-loop controls.
 
-### وضعیت و اولویت‌بندی اقدامات آتی
+---
 
-#### ۱. در حال توسعه و مسیرهای ارتقاء معماری (Active Development & Expansion)
+### 🔮 Under Active Development & Architectural Expansion
 
-* **پیش‌نمایش تعاملی و سد تأیید انسانی (Interactive Code Preview & Human-in-the-Loop):**
-  * **شرح اقدام:** طراحی یک لایه ایمنی اجباری برای تمامی اسکریپت‌ها و تغییرات متادیتا پیش از اعمال در نرم‌افزار هدف.
-  * **عملکرد:** کدها یا تغییرات پیشنهادی ابتدا به صورت Diff بصری و جدول مقایسه‌ای در پنل کلاینت نمایش داده شده و تزریق یا اجرای نهایی منوط به تأیید صریح مهندس مسئول خواهد بود.
+* **Interactive Code Preview & Human-in-the-Loop:**
+  * **Scope:** Implementation of a mandatory safety gate for all AI-generated scripts and metadata updates prior to execution in the target software.
+  * **Mechanism:** Proposed code or parameter adjustments are rendered as visual diffs and comparison tables in the client interface, requiring explicit engineer authorization before execution.
 
-* **خط‌لوله خودترمیم کدهای ناموفق (Self-Healing Code Pipeline):**
-  * **شرح اقدام:** تعبیه‌سازی یک حلقه بازخورد بسته (Closed-Loop Feedback) میان کلاینت رویت و سرور هوش مصنوعی.
-  * **عملکرد:** در صورت بروز خطای زمان اجرا (Runtime Exception) در محیط Revit، پشته خطا (Traceback) همراه با کد اولیه مستقیماً به سرور ارسال می‌شود تا ایجنت ممیز خطا را ریشه‌یابی کرده و نسخه اصلاح‌شده را بدون دخالت مجدد کاربر تولید و بازگرداند.
+* **Self-Healing Code Pipeline:**
+  * **Scope:** Establishment of a closed-loop feedback mechanism between the Revit client and the AI server.
+  * **Mechanism:** When a runtime exception occurs in Revit, the complete exception traceback and offending code are returned to the server, enabling QA Reviewer agents to diagnose the root cause and generate a rectified script without requiring manual user intervention.
 
-* **مدیریت نسخه و تاریخچه‌گذاری قوانین دانشی (Knowledge Versioning & Rollback):**
-  * **شرح اقدام:** راه‌اندازی سیستم نسخه‌گذاری برای بلوک‌های متنی دیتابیس برداری (ChromaDB) و اسناد استانداردهای داخلی.
-  * **عملکرد:** امکان ردیابی تغییرات قوانین (Diff قوانین)، آرشیو نسخه‌ها و قابلیت بازگشت آنی (Rollback) به نسخه پایدار قبلی در صورت افت کیفیت خروجی مدل.
+* **Knowledge Versioning & Rollback:**
+  * **Scope:** Implementation of a version control layer for ChromaDB vector embeddings and corporate Markdown documentation.
+  * **Mechanism:** Enables visual rule diffing, version archiving, and instant rollback to previous stable knowledge baselines if regression or output degradation is detected.
 
-* **کشینگ معنایی و بهینه‌سازی سرعت پاسخ (Semantic Caching Layer):**
-  * **شرح اقدام:** پیاده‌سازی لایه حافظه موقت هوشمند در سرور FastAPI با استفاده از شباهت برداری امبدینگ‌ها.
-  * **عملکرد:** درخواست‌های پرتکرار مهندسی (مانند ساخت فیلترهای استاندارد یا خواندن متراژ) بدون نیاز به استنتاج مجدد توسط Ollama، به صورت آنی و در کمتر از ۵۰ میلی‌ثانیه از کش معنایی پاسخ داده می‌شوند.
+* **Semantic Caching Layer:**
+  * **Scope:** Deployment of an intelligent vector-similarity caching layer within the FastAPI gateway.
+  * **Mechanism:** Recurrent engineering prompts (such as standard category filters or area schedules) are served from cache in under 50ms without invoking redundant Ollama inference.
 
-* **تحلیل گراف وابستگی هندسی و توپولوژیک عناصر (Element Dependency Graph Analysis):**
-  * **شرح اقدام:** توسعه ماژول پیش‌پردازش محلی در کلاینت برای استخراج روابط والد-فرزندی و اتصال فیزیکی عناصر انتخابی (اتصال دیوار به ستون، کف به سقف).
-  * **عملکرد:** تزریق این روابط ساختاری به پرامپت هوش مصنوعی تا اسکریپت‌های تولیدی دچار خطاهای تداخل فیزیکی، حذف عناصر وابسته یا برهم‌خوردگی اتصال هندسی نشوند.
+* **Element Dependency Graph Analysis:**
+  * **Scope:** Development of a local client-side preprocessor to extract hierarchical and topological relationships of selected Revit elements (e.g., wall-to-column or slab-to-level attachments).
+  * **Mechanism:** Injects physical connectivity context directly into AI prompts to prevent geometric disconnects, collision errors, or inadvertent deletion of dependent elements.
 
 ---
 
-#### ۲. اقدامات معوقه (نیازمند استقرار و تست نهایی)
+### ⏳ Pending Actions & Live Validation
 
-* **اعتبارسنجی محیط واقعی (End-to-End Live Validation):**
-  * **شرح اقدام:** نصب و راه‌اندازی تولبار `pyBIM.extension` و افزونه دات‌نت روی لپ‌تاپ کلاینت (لپ‌تاپ سوم) متصل به Autodesk Revit واقعی.
-  * **هدف:** اجرای تست زنده‌ی سناریوهای رایج (فیلتر دیوارها، تغییر پارامترهای حریق، نامگذاری ISO 19650) روی مدل‌های ساختمانی حجیم در بستر شبکه محلی و تونل رمزنگاری‌شده.
+* **End-to-End Live Validation:**
+  * **Scope:** Deployment of the `pyBIM.extension` toolbar and native .NET add-in onto the production client workstation (Laptop 3) connected to live Autodesk Revit models.
+  * **Objective:** Validation of real-world automation scenarios (parameter modification, fire rating enforcement, ISO 19650 container verification) on complex architectural and structural models over local network and encrypted tunnels.
 
-* **کالیبراسیون داده‌های RAG و رفع خطاهای پرامپت (RAG Error Calibration):**
-  * **شرح اقدام:** استخراج لاگ‌ها و استثنائات ناشی از اجرای اسکریپت‌ها در محیط زنده Revit و بازنگری در ساختار تقطیع (Chunking) مستندات.
-  * **هدف:** ارتقای دقت بازیابی معنایی و حذف خطاهای سینتکسی ناشی از تفاوت نسخه‌های Revit API (۲۰۲۳ تا ۲۰۲۶).
+* **RAG Error Calibration:**
+  * **Scope:** Extraction of execution logs and tracebacks from live Revit sessions to refine semantic chunking parameters and retrieval boundaries.
+  * **Objective:** Optimization of semantic retrieval precision and elimination of syntax incompatibilities across Revit API versions (2023 through 2026).
 
-* **کپسوله‌سازی و استقرار داکر (Containerization & Docker Orchestration):**
-  * **شرح اقدام:** تدوین فایل‌های `Dockerfile` و `docker-compose.yml` برای یکپارچه‌سازی سرویس FastAPI، دیتابیس ChromaDB و وابستگی‌ها.
-  * **هدف:** تضمین پایداری، اجرای ایزوله و راه‌اندازی خودکار سرور با یک دستور در هر محیط مهندسی.
+* **Containerization & Docker Orchestration:**
+  * **Scope:** Authoring production `Dockerfile` and `docker-compose.yml` configurations for unified deployment of the FastAPI gateway, ChromaDB vector store, and dependencies.
+  * **Objective:** Ensuring deployment reproducibility, process isolation, and single-command startup across corporate server environments.
+
 
 
 ---
