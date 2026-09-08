@@ -31,6 +31,9 @@
       <div class="status-pill" style="color: var(--text-muted);" id="model-pill">
         🧠 qwen2.5-coder:1.5b
       </div>
+      <div id="auth-header-container">
+        <button class="btn-auth" id="btn-auth-action" onclick="handleAuthButtonClick()">🔐 Admin Login</button>
+      </div>
     </div>
   </header>
 
@@ -111,28 +114,119 @@
       </div>
     </div>
 
-    <!-- Admin Knowledge Ingestion Section -->
+    <!-- Knowledge Ingestion & Admin-Gate Section -->
     <div class="card" style="grid-column: 1 / -1;">
       <div class="card-title">
-        <span>🕸️ Online Knowledge Ingestion (Scrapling &amp; RAG)</span>
-        <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-cyan);">Admin Hub</span>
+        <span>🕸️ Submit Documentation (Admin-Gate Anti-Poisoning Queue)</span>
+        <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-cyan);">Stage 1: User Submission</span>
       </div>
-      <form id="ingest-form" onsubmit="handleIngestSubmit(event)" style="display: flex; flex-direction: column; gap: 12px;">
-        <label for="ingest-url">Enter Documentation / Standard URL to Ingest:</label>
-        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-          <input type="url" id="ingest-url" required placeholder="https://docs.pyrevitlabs.io/... or https://www.revitapidocs.com/..." style="flex: 1; min-width: 280px;" />
-          <button type="submit" class="btn-submit" id="btn-ingest" style="margin-top: 0; width: auto; padding: 10px 24px; white-space: nowrap;">
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+        To prevent data poisoning in the corporate network, all submitted URLs are quarantined in a pending queue. Knowledge is only indexed into ChromaDB after administrator approval.
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+        <!-- Submission Form -->
+        <form id="ingest-form" onsubmit="handleIngestSubmit(event)" style="display: flex; flex-direction: column; gap: 10px;">
+          <label for="ingest-url">Documentation / Standard URL:</label>
+          <input type="url" id="ingest-url" required placeholder="https://docs.pyrevitlabs.io/... or https://www.revitapidocs.com/..." />
+          
+          <label for="ingest-submitter">Submitter Name / Station:</label>
+          <input type="text" id="ingest-submitter" placeholder="e.g. Revit Modeler Laptop 2" />
+
+          <button type="submit" class="btn-submit" id="btn-ingest" style="margin-top: 6px; width: 100%;">
             <span class="spinner" id="ingest-spinner" style="display: none;"></span>
-            <span id="btn-ingest-label">Ingest Knowledge</span>
+            <span id="btn-ingest-label">📥 Submit for Admin Review</span>
           </button>
+          <div id="ingest-status" style="display: none; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; font-family: var(--font-code); transition: all 0.2s ease;"></div>
+        </form>
+
+        <!-- User Tracking Widget -->
+        <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-weight: 600; font-size: 0.9rem; color: #cbd5e1; display: flex; align-items: center; gap: 6px;">
+            <span>🔍 Track Submission Status</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted);">
+            Check real-time status of your submitted documentation using your Tracking ID.
+          </p>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="track-id-input" placeholder="e.g. req_a1b2c3d4" style="flex: 1; font-family: var(--font-code); font-size: 0.85rem;" />
+            <button type="button" class="btn-copy" onclick="trackSubmissionStatus()" style="padding: 8px 16px; font-weight: 600;">Check</button>
+          </div>
+          <div id="track-result" style="display: none; font-size: 0.83rem; padding: 10px; border-radius: var(--radius-sm); font-family: var(--font-code);"></div>
         </div>
-        <div id="ingest-status" style="display: none; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; font-family: var(--font-code); transition: all 0.2s ease;"></div>
-      </form>
+      </div>
+    </div>
+
+    <!-- Admin Knowledge Queue Card -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="card-title">
+        <span>🛡️ Knowledge Queue Management (Admin Cartable)</span>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="btn-copy" onclick="loadKnowledgeQueue()" style="display: flex; align-items: center; gap: 4px;">🔄 Refresh Queue</button>
+          <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-purple);" id="queue-count-badge">Admin Verification</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+        <button type="button" class="btn-copy active" id="qfilter-all" onclick="filterQueue('all')">All Submissions</button>
+        <button type="button" class="btn-copy" id="qfilter-pending" onclick="filterQueue('pending')">🟡 Pending Review</button>
+        <button type="button" class="btn-copy" id="qfilter-approved" onclick="filterQueue('approved')">🟢 Approved</button>
+        <button type="button" class="btn-copy" id="qfilter-rejected" onclick="filterQueue('rejected')">🔴 Rejected</button>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table class="queue-table">
+          <thead>
+            <tr>
+              <th>Tracking ID</th>
+              <th>Documentation URL</th>
+              <th>Submitter</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Admin Action</th>
+            </tr>
+          </thead>
+          <tbody id="queue-table-body">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                Loading Knowledge Queue items...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </main>
 
+  <!-- Admin Login Modal -->
+  <div class="modal-backdrop" id="login-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🔐 Admin Authentication</h3>
+        <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+      </div>
+      <form onsubmit="handleLoginSubmit(event)" style="display: flex; flex-direction: column; gap: 14px;">
+        <p style="font-size: 0.82rem; color: var(--text-muted);">
+          Enter administrator credentials to approve or reject items in the Knowledge Queue and configure vector embeddings.
+        </p>
+        <div class="form-group">
+          <label for="login-username">Username:</label>
+          <input type="text" id="login-username" value="admin" required />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password:</label>
+          <input type="password" id="login-password" placeholder="••••••••••••" required />
+        </div>
+        <div id="login-error" style="display: none; color: #ef4444; font-size: 0.82rem; padding: 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.1);"></div>
+        <button type="submit" class="btn-submit" id="btn-login-submit" style="margin-top: 6px;">
+          <span>Sign In as Admin</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
   <footer>
-    pyBIM-LLM Gateway • Connected across Samsung AI Workstation &amp; Client Laptops • Offline Local Inference
+    pyBIM-LLM Gateway • Admin-Gate Ingestion &amp; JWT Security Enabled • Offline Local Inference
   </footer>
 
   <script src="/static/app.js"></script>

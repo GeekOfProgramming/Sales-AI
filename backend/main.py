@@ -17,7 +17,7 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
-from fastapi import FastAPI, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, HTTPException, status, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -26,12 +26,19 @@ from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 from ai_engine.rag_retriever import BIMRAGRetriever
 from ai_engine.data_ingestor import BIMDataIngestor
 from ai_engine.crew_orchestrator import BIMCrewOrchestrator
+from ai_engine.ingest_queue import ingest_queue
+from backend.auth import authenticate_admin, create_access_token, verify_admin_token
 from backend.schemas import (
     ScriptGenerationRequest,
     ScriptGenerationResponse,
     HealthResponse,
     IngestRequest,
     IngestResponse,
+    LoginRequest,
+    TokenResponse,
+    QueueItemResponse,
+    ApprovalRequest,
+    RejectionRequest,
 )
 
 
@@ -369,30 +376,59 @@ async def generate_script(request: ScriptGenerationRequest):
     )
 
 
-def _run_background_ingest(url: str, slug: Optional[str] = None):
-    """Worker function executed in background thread to scrape and index documentation."""
+def _run_approved_ingest(request_id: str, url: str, slug: Optional[str] = None):
+    """Worker executed when administrator approves an item from the knowledge queue."""
     try:
-        print(f"🕸️ [Background Ingest] Starting ingestion for: {url}")
+        print(f"🕸️ [Admin-Gate Ingest] Processing approved URL: {url} (ID: {request_id})")
+        ingest_queue.update_status(request_id, "processing", message="Scraping and vectorizing documentation...")
         ingestor = BIMDataIngestor()
         result = ingestor.ingest_url(url, slug=slug)
-        print(
-            f"✅ [Background Ingest] Completed {url} -> "
-            f"{result.get('file_path')} ({result.get('indexed_chunks')} chunks indexed)"
-        )
+        chunk_count = result.get("indexed_chunks", 0)
+        file_path = result.get("file_path", "")
+        success_msg = f"Successfully scraped & indexed {chunk_count} chunks into ChromaDB."
+        ingest_queue.update_status(request_id, "approved", message=success_msg)
+        print(f"✅ [Admin-Gate Ingest] Approved & Indexed {url} -> {file_path} ({chunk_count} chunks)")
     except Exception as e:
-        print(f"❌ [Background Ingest] Error ingesting {url}: {e}")
+        err_msg = f"Ingestion error: {str(e)}"
+        ingest_queue.update_status(request_id, "rejected", message=err_msg)
+        print(f"❌ [Admin-Gate Ingest] Error ingesting {url}: {e}")
+
+
+@app.post(
+    "/api/auth/login",
+    response_model=TokenResponse,
+    summary="Admin Login to obtain JWT Bearer Token",
+    description="Authenticates administrator to authorize Knowledge Queue approvals and vector DB changes.",
+    tags=["Authentication"],
+)
+async def login_admin(credentials: LoginRequest):
+    """Authenticate administrator and issue signed JWT bearer token."""
+    if not authenticate_admin(credentials.username, credentials.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid administrative username or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = create_access_token({"sub": credentials.username, "role": "admin"})
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        role="admin",
+        username=credentials.username,
+        expires_in_minutes=1440,
+    )
 
 
 @app.post(
     "/api/ingest",
     response_model=IngestResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Ingest online documentation into knowledge base",
-    description="Admin endpoint: Scrapes, sanitizes into Markdown, and injects knowledge into ChromaDB in background.",
-    tags=["Admin / Knowledge Ingestion"],
+    summary="Submit documentation into Admin-Gate Review Queue",
+    description="Stage 1: Enqueues URL for admin review to prevent Data Poisoning. Does not modify ChromaDB directly.",
+    tags=["Knowledge Ingestion Queue"],
 )
-async def ingest_documentation(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Queue an online documentation URL for scraping and vector store ingestion."""
+async def submit_ingest_request(request: IngestRequest):
+    """Register an online documentation URL into the review queue."""
     target_url = str(request.url).strip()
     if not target_url.startswith("http://") and not target_url.startswith("https://"):
         raise HTTPException(
@@ -400,10 +436,110 @@ async def ingest_documentation(request: IngestRequest, background_tasks: Backgro
             detail="Invalid URL scheme. Only http:// and https:// URLs are supported.",
         )
 
-    background_tasks.add_task(_run_background_ingest, target_url, request.slug)
-    return IngestResponse(
-        status="accepted",
-        message=f"Ingestion started in background for: {target_url}",
+    item = ingest_queue.enqueue(
         url=target_url,
+        slug=request.slug,
+        submitter=request.submitter or "Revit Client / Web User",
     )
+    return IngestResponse(
+        status="pending",
+        message="Documentation request queued for administrator review. Use request_id to track approval status.",
+        url=target_url,
+        request_id=item["request_id"],
+        current_state="pending",
+    )
+
+
+@app.get(
+    "/api/ingest/queue",
+    response_model=List[QueueItemResponse],
+    summary="List all items in the Knowledge Ingestion Queue (Admin Only)",
+    description="Retrieves pending, approved, or rejected knowledge submissions. Requires Bearer JWT token.",
+    tags=["Knowledge Ingestion Queue"],
+)
+async def list_knowledge_queue(
+    status_filter: Optional[str] = None,
+    admin_user: dict = Depends(verify_admin_token),
+):
+    """Admin endpoint: Fetch pending or history queue items."""
+    items = ingest_queue.list_items(status_filter=status_filter)
+    return [QueueItemResponse(**item) for item in items]
+
+
+@app.post(
+    "/api/ingest/approve",
+    summary="Approve pending request and trigger ChromaDB indexing (Admin Only)",
+    description="Stage 2: Scrapes, sanitizes into Markdown, and injects into vector store in background.",
+    tags=["Knowledge Ingestion Queue"],
+)
+async def approve_knowledge_request(
+    request: ApprovalRequest,
+    background_tasks: BackgroundTasks,
+    admin_user: dict = Depends(verify_admin_token),
+):
+    """Admin endpoint: Approve queue item and launch scraper/vectorizer in background."""
+    item = ingest_queue.get(request.request_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Queue item '{request.request_id}' not found.",
+        )
+    if item.get("status") == "approved":
+        return {"status": "approved", "message": "Item is already approved and indexed.", "item": item}
+
+    ingest_queue.update_status(request.request_id, "processing", message="Approved by admin. Processing...")
+    background_tasks.add_task(_run_approved_ingest, request.request_id, item["url"], item.get("slug"))
+    return {
+        "status": "processing",
+        "message": f"Request '{request.request_id}' approved. Background scraping and ChromaDB injection launched.",
+        "request_id": request.request_id,
+    }
+
+
+@app.post(
+    "/api/ingest/reject",
+    summary="Reject pending request without vector store modification (Admin Only)",
+    description="Blocks link from entering ChromaDB and archives request as rejected.",
+    tags=["Knowledge Ingestion Queue"],
+)
+async def reject_knowledge_request(
+    request: RejectionRequest,
+    admin_user: dict = Depends(verify_admin_token),
+):
+    """Admin endpoint: Reject and archive unverified link."""
+    item = ingest_queue.get(request.request_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Queue item '{request.request_id}' not found.",
+        )
+    updated = ingest_queue.update_status(
+        request.request_id,
+        "rejected",
+        message=request.reason or "Rejected by administrator due to compliance standards.",
+    )
+    return {
+        "status": "rejected",
+        "message": f"Request '{request.request_id}' rejected. No data added to ChromaDB.",
+        "item": updated,
+    }
+
+
+@app.get(
+    "/api/ingest/status/{request_id}",
+    response_model=QueueItemResponse,
+    summary="Query submission status by tracking ID (Public)",
+    description="Allows clients or users to track real-time workflow status (pending, processing, approved, rejected).",
+    tags=["Knowledge Ingestion Queue"],
+)
+async def get_submission_status(request_id: str):
+    """Public endpoint: Query real-time workflow status by tracking ID."""
+    item = ingest_queue.get(request_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tracking ID '{request_id}' not found in knowledge queue.",
+        )
+    return QueueItemResponse(**item)
+
 
