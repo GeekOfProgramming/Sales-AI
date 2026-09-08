@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse
 from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 from ai_engine.rag_retriever import BIMRAGRetriever
 from ai_engine.data_ingestor import BIMDataIngestor
+from ai_engine.crew_orchestrator import BIMCrewOrchestrator
 from backend.schemas import (
     ScriptGenerationRequest,
     ScriptGenerationResponse,
@@ -278,49 +279,86 @@ async def generate_script(request: ScriptGenerationRequest):
         coder_variant = next((m for m in available_models if "qwen2.5-coder" in m.lower()), None)
         selected_model = coder_variant or "qwen2.5-coder:1.5b"
 
-    # 4. Determine Execution Environment and Target Language
+    # 4. Multi-Agent Execution (Code) vs Linear Direct Execution (Text)
     target_env = getattr(request, "environment", "pyrevit")
     target_lang = getattr(request, "language", "python") or "python"
 
-    if detected_intent == "text_generation" and target_env not in ("dynamo", "csharp"):
+    if detected_intent == "code_generation":
+        # Determine language & environment contracts
+        if target_env == "dynamo" or target_lang.lower() == "dynamo":
+            target_env = "dynamo"
+            target_lang = "python"
+        elif target_env == "csharp" or target_lang.lower() in ("csharp", "cs", "c#"):
+            target_env = "csharp"
+            target_lang = "csharp"
+        else:
+            target_env = "pyrevit"
+            target_lang = "python"
+
+        try:
+            orchestrator = BIMCrewOrchestrator(
+                llm_client=llm_client,
+                model_name=selected_model,
+                max_feedback_cycles=2,
+            )
+            crew_result = await orchestrator.run(
+                user_prompt=effective_prompt,
+                environment=target_env,
+                language=target_lang,
+                context_rules=combined_context,
+                temperature=request.temperature,
+            )
+            generated_code = crew_result.code
+            model_used = crew_result.model_used
+            qa_passed = crew_result.audit_passed
+            qa_cycles = crew_result.feedback_cycles
+            qa_checklist = crew_result.checklist
+            validation_note = crew_result.audit_notes
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"CrewAI Multi-Agent orchestrator error: {str(e)}",
+            )
+
+    else:
+        # Linear Direct NLP execution for text inquiries
         target_env = "text"
         target_lang = "markdown"
-    elif target_env == "dynamo" or target_lang.lower() == "dynamo":
-        target_env = "dynamo"
-        target_lang = "python"
-    elif target_env == "csharp" or target_lang.lower() in ("csharp", "cs", "c#"):
-        target_env = "csharp"
-        target_lang = "csharp"
-    else:
-        target_env = "pyrevit"
-        target_lang = "python"
 
-    llm_req = CodeGenerationRequest(
-        user_prompt=effective_prompt,
-        environment=target_env,
-        language=target_lang,
-        context_rules=combined_context,
-        model=selected_model,
-        temperature=request.temperature,
-    )
-
-    try:
-        llm_resp = await llm_client.generate_code_async(llm_req, model_name=selected_model)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Inference engine error: {str(e)}",
+        llm_req = CodeGenerationRequest(
+            user_prompt=effective_prompt,
+            environment=target_env,
+            language=target_lang,
+            context_rules=combined_context,
+            model=selected_model,
+            temperature=request.temperature,
         )
 
+        try:
+            llm_resp = await llm_client.generate_code_async(llm_req, model_name=selected_model)
+            generated_code = llm_resp.extracted_code
+            model_used = llm_resp.model
+            qa_passed = True
+            qa_cycles = 1
+            qa_checklist = None
+            validation_note = "Direct NLP explanation generated without multi-agent overhead."
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Inference engine error: {str(e)}",
+            )
+
     total_duration = round(time.perf_counter() - start_time, 3)
-    validation_note = _validate_code(llm_resp.extracted_code, target_lang)
 
     return ScriptGenerationResponse(
         success=True,
-        code=llm_resp.extracted_code,
+        code=generated_code,
         language=f"{target_lang} ({target_env})",
-        model_used=llm_resp.model,
+        model_used=model_used,
         intent=detected_intent,
+        qa_audit_passed=qa_passed,
+        qa_feedback_cycles=qa_cycles,
+        qa_checklist=qa_checklist,
         retrieved_rules_count=len(rag_context_parts),
         retrieved_sources=retrieved_sources,
         execution_time_seconds=total_duration,
