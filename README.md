@@ -200,18 +200,17 @@ Based on the centralized master roadmap ([`C:\Projects\Roadmap-LLMs.md`](file://
 11. **Offline Document Parsing Foundation:** Direct multi-format extraction capabilities.
 12. **Cloud BIM Integration (Autodesk Construction Cloud - ACC):** Read-Only metadata audit and Human-in-the-loop controls.
 
-### ⏳ Pending Actions (معوقه / نیازمند اقدام)
-1. **End-to-End Live Validation:** Deploying the plugin onto Laptop 3 and executing AI scripts on live Revit models.
-2. **RAG Error Calibration:** Extracting Revit execution logs to fine-tune semantic chunking boundaries.
-3. **Containerization:** Finalizing `docker-compose.yml` for unified deployment.
-4. **Git Version Control:** Final staging, committing, and authorized repository synchronization.
+### ⏳ Pending Actions (معوقه - نیازمند استقرار و تست نهایی)
+1. **End-to-End Live Validation:** Deploying the plugin onto the client workstation (Laptop 3) and executing AI-generated commands on live, complex Autodesk Revit models.
+2. **RAG Error Calibration:** Analyzing live runtime execution logs to calibrate semantic chunking boundaries and eliminate version-specific Revit API discrepancies (Revit 2023–2026).
+3. **Containerization & Docker Orchestration:** Crafting production `Dockerfile` and `docker-compose.yml` for unified, single-command server deployment across corporate environments.
 
-### 🔮 Expansion Roadmap (مسیرهای توسعه و ارتقاء معماری)
-- **Interactive Code Preview & Human-in-the-Loop:** Mandatory visual diff and parameter preview before code executes in Revit or synchronizes to the cloud.
-- **Self-Healing Code Pipeline:** Automated feedback loop catching Revit execution exceptions, sending tracebacks to the server, and auto-correcting code without user intervention.
-- **Knowledge Versioning & Rollback:** Diff and instant rollback mechanisms for ChromaDB and Markdown rules.
-- **Semantic Caching:** High-speed vector similarity cache on FastAPI to return verified answers instantly for common queries.
-- **Element Dependency Graph Analysis:** Pre-processing topological and geometric relationships (walls, columns, levels) to prevent physical model collisions.
+### 🔮 Under Active Development & Architectural Expansion (در حال توسعه و مسیرهای ارتقاء معماری)
+- **Interactive Code Preview & Human-in-the-Loop:** Mandatory visual code diff and parameter preview gate before scripts execute in Revit/Dynamo or synchronize to cloud projects.
+- **Self-Healing Code Pipeline:** Automated closed-loop telemetry from the Revit client returning execution tracebacks to the server so QA Reviewer agents can auto-correct exceptions without user intervention.
+- **Knowledge Versioning & Rollback:** Diff and instant rollback mechanisms for ChromaDB vector embeddings and corporate Markdown rules to guard against regression.
+- **Semantic Caching Layer:** High-speed vector similarity cache on FastAPI to return verified answers instantly (sub-50ms) for recurrent engineering prompts.
+- **Element Dependency Graph Analysis:** Pre-processing topological and geometric relationships (walls-to-columns, slabs-to-levels) to prevent physical model collisions and orphan elements.
 
 ---
 
