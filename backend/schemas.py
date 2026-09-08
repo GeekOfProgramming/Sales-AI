@@ -141,3 +141,77 @@ class RejectionRequest(BaseModel):
     reason: Optional[str] = Field(default="Rejected by administrator due to compliance standards.", description="Audit reason for rejection.")
 
 
+# --- Autodesk Construction Cloud (ACC) Schemas ---
+
+class ACCHubItem(BaseModel):
+    """Hub representation in Autodesk Construction Cloud / BIM 360."""
+    hub_id: str = Field(..., description="Unique APS Hub ID.")
+    name: str = Field(..., description="Name of the corporate hub.")
+    region: str = Field(default="US", description="Data residency region (US/EMEA).")
+    extension_type: str = Field(default="Account", description="Hub account extension type.")
+
+
+class ACCProjectItem(BaseModel):
+    """Project representation inside an ACC Hub."""
+    project_id: str = Field(..., description="Unique APS Project ID.")
+    hub_id: str = Field(..., description="Parent Hub ID.")
+    name: str = Field(..., description="Project name.")
+    project_type: str = Field(default="ACC", description="Project type (ACC or BIM360).")
+    status: str = Field(default="Active", description="Project state.")
+
+
+class ACCModelItem(BaseModel):
+    """Revit model item (.rvt) stored in Autodesk Construction Cloud."""
+    model_id: str = Field(..., description="APS item or version ID.")
+    project_id: str = Field(..., description="Parent project ID.")
+    name: str = Field(..., description="Model filename (e.g. PRJ-ZZ-00-M3-A-0001.rvt).")
+    version: int = Field(default=1, description="Version index of the model.")
+    last_modified: str = Field(..., description="ISO timestamp of last modification.")
+    file_size_mb: float = Field(..., description="Model size in Megabytes.")
+    urn: str = Field(..., description="Base64 encoded Model Derivative URN.")
+
+
+class CloudAuditRequest(BaseModel):
+    """Request payload to initiate a read-only metadata audit on a cloud model."""
+    urn: str = Field(..., description="Target model URN.")
+    project_id: Optional[str] = Field(default=None, description="Parent project ID.")
+    check_iso19650: bool = Field(default=True, description="Enforce ISO 19650 information container naming.")
+    check_fire_rating: bool = Field(default=True, description="Verify mandatory fire protection parameters.")
+    check_classifications: bool = Field(default=True, description="Verify OmniClass/UniFormat classifications.")
+
+
+class CloudComplianceIssue(BaseModel):
+    """Specific parameter or naming non-compliance issue discovered during audit."""
+    element_id: Optional[int] = Field(default=None, description="Element integer ID, or null if container level.")
+    category: str = Field(..., description="Revit Category or Container type.")
+    parameter: str = Field(..., description="Parameter name or property key.")
+    issue_type: str = Field(..., description="Classification of the issue.")
+    current_value: str = Field(..., description="Current value found in cloud model.")
+    proposed_value: str = Field(..., description="Proposed standardized value recommended by AI.")
+    severity: Literal["HIGH", "MEDIUM", "LOW"] = Field(default="MEDIUM", description="Severity level.")
+    description: str = Field(..., description="Detailed explanation of the non-compliance.")
+
+
+class CloudAuditResponse(BaseModel):
+    """Result of a Read-Only Cloud BIM Audit."""
+    model_name: str = Field(..., description="Audited model filename.")
+    urn: str = Field(..., description="Audited model URN.")
+    total_elements_audited: int = Field(..., description="Count of elements evaluated.")
+    total_checks_evaluated: int = Field(..., description="Number of validation checkpoints checked.")
+    compliance_score: float = Field(..., description="Compliance percentage (0.0 to 100.0).")
+    status: Literal["COMPLIANT", "NEEDS_REVIEW", "NON_COMPLIANT"] = Field(..., description="Health status.")
+    audit_mode: Literal["READ_ONLY"] = Field(default="READ_ONLY", description="Guarantees non-destructive evaluation.")
+    requires_human_approval: bool = Field(default=True, description="Enforces Human-in-the-Loop before write-back.")
+    issues: List[CloudComplianceIssue] = Field(default=[], description="List of discovered issues.")
+    audited_at: str = Field(..., description="ISO timestamp of audit execution.")
+    summary_notes: str = Field(..., description="Executive audit summary.")
+
+
+class CloudSyncApprovalRequest(BaseModel):
+    """Payload to authorize controlled write-back of approved parameter corrections."""
+    urn: str = Field(..., description="Model URN.")
+    approved_elements: List[int] = Field(default=[], description="List of element IDs approved for synchronization.")
+    reviewer_notes: Optional[str] = Field(default=None, description="Human reviewer justification.")
+
+
+

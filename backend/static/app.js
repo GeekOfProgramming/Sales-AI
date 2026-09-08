@@ -518,9 +518,222 @@ async function rejectQueueItem(requestId) {
 }
 
 
+// --- Cloud BIM (Autodesk Construction Cloud - ACC) Handlers ---
+let currentAuditData = null;
+
+async function loadACCHubs() {
+  const hubSelect = document.getElementById('acc-hub-select');
+  if (!hubSelect) return;
+
+  try {
+    const res = await fetch('/api/acc/hubs');
+    if (!res.ok) throw new Error('Failed to load hubs');
+    const hubs = await res.json();
+
+    hubSelect.innerHTML = '<option value="">-- Choose Corporate Hub --</option>' +
+      hubs.map(h => `<option value="${h.hub_id}">${h.name} (${h.region})</option>`).join('');
+    
+    // Auto-select first hub for convenience
+    if (hubs.length > 0) {
+      hubSelect.value = hubs[0].hub_id;
+      handleHubChange();
+    }
+  } catch (err) {
+    hubSelect.innerHTML = `<option value="">Error: ${err.message}</option>`;
+  }
+}
+
+async function handleHubChange() {
+  const hubSelect = document.getElementById('acc-hub-select');
+  const projSelect = document.getElementById('acc-project-select');
+  const modSelect = document.getElementById('acc-model-select');
+  const hubId = hubSelect.value;
+
+  projSelect.innerHTML = '<option value="">Loading Projects...</option>';
+  modSelect.innerHTML = '<option value="">Select a Project first</option>';
+
+  if (!hubId) return;
+
+  try {
+    const res = await fetch(`/api/acc/projects/${encodeURIComponent(hubId)}`);
+    if (!res.ok) throw new Error('Failed to load projects');
+    const projects = await res.json();
+
+    projSelect.innerHTML = '<option value="">-- Choose Project --</option>' +
+      projects.map(p => `<option value="${p.project_id}">${p.name} [${p.project_type}]</option>`).join('');
+
+    if (projects.length > 0) {
+      projSelect.value = projects[0].project_id;
+      handleProjectChange();
+    }
+  } catch (err) {
+    projSelect.innerHTML = `<option value="">Error: ${err.message}</option>`;
+  }
+}
+
+async function handleProjectChange() {
+  const projSelect = document.getElementById('acc-project-select');
+  const modSelect = document.getElementById('acc-model-select');
+  const projectId = projSelect.value;
+
+  modSelect.innerHTML = '<option value="">Loading Models...</option>';
+  if (!projectId) return;
+
+  try {
+    const res = await fetch(`/api/acc/models/${encodeURIComponent(projectId)}`);
+    if (!res.ok) throw new Error('Failed to load models');
+    const models = await res.json();
+
+    modSelect.innerHTML = '<option value="">-- Choose Cloud Model (.rvt) --</option>' +
+      models.map(m => `<option value="${m.urn}" data-name="${m.name}">${m.name} (v${m.version} • ${m.file_size_mb} MB)</option>`).join('');
+
+    if (models.length > 0) {
+      modSelect.value = models[0].urn;
+    }
+  } catch (err) {
+    modSelect.innerHTML = `<option value="">Error: ${err.message}</option>`;
+  }
+}
+
+async function runCloudModelAudit() {
+  const modSelect = document.getElementById('acc-model-select');
+  const urn = modSelect.value;
+  const btn = document.getElementById('btn-run-audit');
+  const btnLabel = document.getElementById('audit-btn-label');
+  const spinner = document.getElementById('audit-spinner');
+  const resultsCard = document.getElementById('cloud-audit-results');
+
+  if (!urn) {
+    alert('Please select a Cloud Model (.rvt) first.');
+    return;
+  }
+
+  btn.disabled = true;
+  if (spinner) spinner.style.display = 'inline-block';
+  btnLabel.innerText = 'Extracting Metadata & Auditing...';
+
+  try {
+    const res = await fetch('/api/acc/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urn: urn })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Audit failed' }));
+      throw new Error(err.detail || 'Audit execution error');
+    }
+
+    currentAuditData = await res.json();
+    renderCloudAuditResults(currentAuditData);
+  } catch (err) {
+    alert(`Audit Error: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+    btnLabel.innerText = '🔍 Run Read-Only Cloud Audit';
+  }
+}
+
+function renderCloudAuditResults(data) {
+  const resultsCard = document.getElementById('cloud-audit-results');
+  const titleEl = document.getElementById('audit-model-title');
+  const metaEl = document.getElementById('audit-model-meta');
+  const scoreBadge = document.getElementById('audit-score-badge');
+  const tbody = document.getElementById('cloud-issues-table-body');
+
+  resultsCard.style.display = 'block';
+  titleEl.innerText = `📄 ${data.model_name}`;
+  metaEl.innerText = `Elements Audited: ${data.total_elements_audited} | Checks: ${data.total_checks_evaluated} | Time: ${new Date(data.audited_at).toLocaleTimeString()}`;
+
+  let scoreClass = 'status-approved';
+  if (data.compliance_score < 70) scoreClass = 'status-rejected';
+  else if (data.compliance_score < 90) scoreClass = 'status-pending';
+
+  scoreBadge.className = `status-badge ${scoreClass}`;
+  scoreBadge.innerText = `Compliance Score: ${data.compliance_score}% (${data.status})`;
+
+  if (data.issues.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #10b981; padding: 20px;">✅ All parameter checks passed with 100% compliance! No issues detected.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.issues.map((iss, idx) => {
+    let sevColor = '#94a3b8';
+    if (iss.severity === 'HIGH') sevColor = '#f87171';
+    else if (iss.severity === 'MEDIUM') sevColor = '#fbbf24';
+
+    const elemIdStr = iss.element_id ? `#${iss.element_id}` : 'Container';
+
+    return `
+      <tr>
+        <td>
+          <input type="checkbox" class="cloud-issue-chk" data-elem-id="${iss.element_id || 0}" checked style="cursor: pointer;" />
+        </td>
+        <td><code style="color: var(--accent-cyan); font-size: 0.8rem;">${elemIdStr}</code></td>
+        <td>${iss.category}</td>
+        <td><strong>${iss.parameter}</strong></td>
+        <td><span style="color: #f87171; text-decoration: line-through;">${iss.current_value}</span></td>
+        <td><span style="color: #34d399; font-weight: 600;">${iss.proposed_value}</span></td>
+        <td><span style="color: ${sevColor}; font-weight: 600; font-size: 0.75rem;">${iss.severity}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function applyCloudCorrections() {
+  if (!currentAuditData) return;
+
+  if (!isAdminLoggedIn()) {
+    alert('Administrative privileges required. Please sign in as Admin.');
+    openLoginModal();
+    return;
+  }
+
+  const checkboxes = document.querySelectorAll('.cloud-issue-chk:checked');
+  const approvedElementIds = Array.from(checkboxes).map(c => parseInt(c.getAttribute('data-elem-id'))).filter(id => id > 0);
+
+  if (approvedElementIds.length === 0) {
+    alert('Please select at least one element correction to authorize.');
+    return;
+  }
+
+  if (!confirm(`Authorize ${approvedElementIds.length} element corrections for synchronization to Autodesk Construction Cloud?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/acc/apply-changes', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentAdminToken}`
+      },
+      body: JSON.stringify({
+        urn: currentAuditData.urn,
+        approved_elements: approvedElementIds,
+        reviewer_notes: 'Human-in-the-Loop review confirmed by Administrator.'
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to authorize' }));
+      throw new Error(err.detail || 'Authorization failed');
+    }
+
+    const data = await res.json();
+    alert(`✅ ${data.message}`);
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+
 // --- Initialize ---
 checkHealth();
 updateAuthUI();
 loadKnowledgeQueue();
+loadACCHubs();
+
 
 

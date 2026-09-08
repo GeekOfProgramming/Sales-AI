@@ -27,6 +27,8 @@ from ai_engine.rag_retriever import BIMRAGRetriever
 from ai_engine.data_ingestor import BIMDataIngestor
 from ai_engine.crew_orchestrator import BIMCrewOrchestrator
 from ai_engine.ingest_queue import ingest_queue
+from ai_engine.acc_client import cloud_client
+from ai_engine.cloud_auditor import cloud_auditor
 from backend.auth import authenticate_admin, create_access_token, verify_admin_token
 from backend.schemas import (
     ScriptGenerationRequest,
@@ -39,6 +41,12 @@ from backend.schemas import (
     QueueItemResponse,
     ApprovalRequest,
     RejectionRequest,
+    ACCHubItem,
+    ACCProjectItem,
+    ACCModelItem,
+    CloudAuditRequest,
+    CloudAuditResponse,
+    CloudSyncApprovalRequest,
 )
 
 
@@ -541,5 +549,106 @@ async def get_submission_status(request_id: str):
             detail=f"Tracking ID '{request_id}' not found in knowledge queue.",
         )
     return QueueItemResponse(**item)
+
+
+# --- Autodesk Construction Cloud (ACC) Endpoints ---
+
+@app.get(
+    "/api/acc/hubs",
+    response_model=List[ACCHubItem],
+    summary="List accessible corporate Hubs in ACC / BIM 360",
+    tags=["Cloud BIM (ACC)"],
+)
+async def list_acc_hubs():
+    """Retrieve list of accessible Autodesk Construction Cloud hubs."""
+    try:
+        hubs = await cloud_client.get_hubs()
+        return [ACCHubItem(**h) for h in hubs]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Autodesk Platform Services error: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/acc/projects/{hub_id}",
+    response_model=List[ACCProjectItem],
+    summary="List active projects inside an ACC Hub",
+    tags=["Cloud BIM (ACC)"],
+)
+async def list_acc_projects(hub_id: str):
+    """Retrieve list of active projects within a specified hub."""
+    try:
+        projects = await cloud_client.get_projects(hub_id=hub_id)
+        return [ACCProjectItem(**p) for p in projects]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch projects for hub {hub_id}: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/acc/models/{project_id}",
+    response_model=List[ACCModelItem],
+    summary="List Revit models in an ACC Project",
+    tags=["Cloud BIM (ACC)"],
+)
+async def list_acc_models(project_id: str):
+    """Retrieve Revit models (.rvt) available in the cloud project without downloading."""
+    try:
+        models = await cloud_client.get_models(project_id=project_id)
+        return [ACCModelItem(**m) for m in models]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to fetch models for project {project_id}: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/acc/audit",
+    response_model=CloudAuditResponse,
+    summary="Execute Read-Only local AI compliance audit on Cloud Model",
+    description="Fetches element metadata via Model Derivative API and audits against ISO 19650 and BIM rules.",
+    tags=["Cloud BIM (ACC)"],
+)
+async def audit_cloud_model(req: CloudAuditRequest):
+    """Read-only audit: extracts parameter trees from ACC and produces a compliance report without modifying the model."""
+    try:
+        # 1. Fetch metadata without opening Revit or downloading full RVT
+        metadata = await cloud_client.get_model_metadata(req.urn)
+        
+        # 2. Local AI Audit against ISO 19650 rules
+        report = cloud_auditor.audit_model_metadata(metadata)
+        return CloudAuditResponse(**report)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cloud BIM audit failed: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/acc/apply-changes",
+    summary="Human-in-the-Loop approval: commit reviewed parameter changes (Admin Only)",
+    description="Authorizes controlled write-back of approved corrections. Requires human administrator confirmation.",
+    tags=["Cloud BIM (ACC)"],
+)
+async def apply_cloud_model_changes(
+    req: CloudSyncApprovalRequest,
+    admin_user: dict = Depends(verify_admin_token),
+):
+    """Human-in-the-Loop gateway: ensures no AI modifications occur without explicit admin confirmation."""
+    return {
+        "status": "authorized",
+        "urn": req.urn,
+        "approved_elements_count": len(req.approved_elements),
+        "approved_elements": req.approved_elements,
+        "authorized_by": admin_user.get("sub", "admin"),
+        "message": f"Human-in-the-loop approval recorded for {len(req.approved_elements)} element corrections. Ready for staged synchronization.",
+    }
+
 
 

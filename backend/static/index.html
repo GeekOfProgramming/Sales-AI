@@ -196,6 +196,92 @@
         </table>
       </div>
     </div>
+
+    <!-- Cloud BIM (Autodesk Construction Cloud - ACC) Card -->
+    <div class="card" style="grid-column: 1 / -1;">
+      <div class="card-title">
+        <span>☁️ Autodesk Construction Cloud (ACC) Hub &amp; Model Auditor</span>
+        <span style="font-size: 0.8rem; font-weight: normal; color: var(--accent-cyan);">Read-Only AI Audit • Human-in-the-Loop</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 14px;">
+        Directly audit cloud-hosted Revit models without opening desktop Revit or downloading heavy files. AI analyzes parameter trees in <strong>Read-Only Mode</strong>; zero cloud writes occur without explicit human verification.
+      </p>
+
+      <!-- Cloud Model Selectors -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 14px;">
+        <div class="form-group">
+          <label for="acc-hub-select">1. Select ACC / BIM 360 Hub:</label>
+          <select id="acc-hub-select" onchange="handleHubChange()" style="width: 100%; padding: 8px 12px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm);">
+            <option value="">Loading Hubs...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="acc-project-select">2. Select Project:</label>
+          <select id="acc-project-select" onchange="handleProjectChange()" style="width: 100%; padding: 8px 12px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm);">
+            <option value="">Select a Hub first</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="acc-model-select">3. Select Cloud Model (.rvt):</label>
+          <select id="acc-model-select" style="width: 100%; padding: 8px 12px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: var(--radius-sm);">
+            <option value="">Select a Project first</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+        <button class="btn-submit" id="btn-run-audit" onclick="runCloudModelAudit()" style="width: auto; margin-top: 0; padding: 10px 24px;">
+          <span class="spinner" id="audit-spinner" style="display: none;"></span>
+          <span id="audit-btn-label">🔍 Run Read-Only Cloud Audit</span>
+        </button>
+        <span style="font-size: 0.8rem; color: #10b981; display: flex; align-items: center; gap: 6px;">
+          🛡️ Mode: Strict Read-Only (Zero-Risk)
+        </span>
+      </div>
+
+      <!-- Cloud Audit Results Panel -->
+      <div id="cloud-audit-results" style="display: none; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h4 id="audit-model-title" style="font-size: 1.05rem; font-weight: 700; color: #fff;">Model Name</h4>
+            <div id="audit-model-meta" style="font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-code);">URN: ...</div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <span class="status-badge" id="audit-score-badge" style="font-size: 0.85rem; padding: 6px 12px;">Score: --</span>
+            <span class="status-badge status-approved" style="font-size: 0.78rem;">🔒 Read-Only</span>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="queue-table" style="margin-top: 0;">
+            <thead>
+              <tr>
+                <th style="width: 30px;">Select</th>
+                <th>Element ID</th>
+                <th>Category</th>
+                <th>Parameter</th>
+                <th>Current (Cloud)</th>
+                <th>Proposed (AI RAG)</th>
+                <th>Severity</th>
+              </tr>
+            </thead>
+            <tbody id="cloud-issues-table-body">
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+          <span style="font-size: 0.82rem; color: var(--text-muted);">
+            ⚠️ Human-in-the-Loop Gateway: Only selected parameter corrections will be staged for administrator synchronization.
+          </span>
+          <button class="btn-queue-action btn-approve" onclick="applyCloudCorrections()" style="padding: 8px 18px; font-size: 0.82rem;">
+            🛡️ Authorize Selected Corrections
+          </button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- Admin Login Modal -->
