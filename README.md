@@ -11,7 +11,12 @@
 3. [System Architecture & Multi-Agent Pipeline](#-system-architecture--multi-agent-pipeline)
 4. [Enterprise Security & Admin-Gate Ingestion](#-enterprise-security--admin-gate-ingestion)
 5. [Autodesk Construction Cloud (ACC) Integration](#-autodesk-construction-cloud-acc-integration)
-6. [Quick Start & Deployment](#-quick-start--deployment)
+6. [Quick Start & Dual Execution Guide](#-quick-start--dual-execution-guide)
+   - [Scenario 1: Client-Server Model (Recommended & Seamless Delivery)](#-scenario-1-client-server-model-recommended--seamless-delivery)
+   - [Scenario 2: Standalone Full Setup (100% Offline Local Machine)](#-scenario-2-standalone-full-setup-100-offline-local-machine)
+   - [Web Studio UI Guide](#-web-studio-ui-guide)
+   - [Revit Extension Ribbon Guide](#-revit-extension-ribbon-guide)
+   - [Troubleshooting & Quick Utilities](#️-troubleshooting--quick-utilities)
 7. [API Gateway Reference](#-api-gateway-reference)
 8. [Comprehensive Test Suite](#-comprehensive-test-suite)
 9. [Project Status & Roadmap](#-project-status--roadmap)
@@ -110,39 +115,149 @@ The platform operates as a distributed system across a 3-laptop / multi-workstat
 
 ---
 
-## 🚀 Quick Start & Deployment
+## 🚀 Quick Start & Dual Execution Guide
 
-### 1. Prerequisites
-- Python 3.10 to 3.12 (Tested on Python 3.12.4 x64).
-- [Ollama](https://ollama.com/) running locally.
-- Pull the primary models:
-  ```bash
-  ollama pull qwen2.5-coder:1.5b
-  ollama pull nomic-embed-text
-  ollama pull llama3:latest   # Optional: for explanatory text queries
-  ```
+To run and experience pyBIM-LLM across both the **Autodesk Revit Extension** and the **Web Studio Dashboard (`/ui`)**, two operational deployment models are supported. Choose the scenario that matches your deployment workflow:
 
-### 2. Installation
-Clone the repository and install dependencies in a virtual environment:
+---
+
+### 🎯 Scenario 1: Client-Server Model (Recommended & Seamless Delivery)
+> **Concept:** In this scenario, the AI inference server (FastAPI + Ollama + ChromaDB) runs on your primary workstation (or company server). Your colleague, client, or team member **only acts as a Revit Client**. They **do NOT need to install Python, Ollama, CUDA, or heavy AI dependencies**.
+
+```text
+┌──────────────────────────────────────┐          Wi-Fi / LAN / Cloudflare          ┌──────────────────────────────────────┐
+│       AI Server Workstation          │ ─────────────────────────────────────────► │       Revit Client Workstation       │
+│  • Ollama (qwen2.5-coder & nomic)    │          Port 8000 or HTTPS                │  • Autodesk Revit                    │
+│  • ChromaDB Vector Store             │                                            │  • pyRevit Free CLI / Installer      │
+│  • FastAPI Gateway (run_pybim.bat)   │                                            │  • pyBIM.extension Toolbar           │
+└──────────────────────────────────────┘                                            └──────────────────────────────────────┘
+```
+
+#### 1. Server Side (AI Workstation):
+1. Double-click **[`run_pybim.bat`](file:///c:/Projects/pyBIM-LLM/run_pybim.bat)** in the repository root. This automated launcher will:
+   - Verify the Ollama AI daemon on port 11434 (starts it in the background if offline).
+   - Terminate any orphaned processes holding port 8000.
+   - Start the FastAPI gateway bound to `0.0.0.0:8000`.
+   - Automatically launch a secure **Cloudflare Public HTTPS Tunnel** if internet access is detected, save the shareable link to **`PUBLIC_URL.txt`**, and copy it directly to your Windows clipboard!
+2. **Obtain the Server Address:**
+   - **LAN / Local Wi-Fi:** Run `ipconfig` in Command Prompt and note your IPv4 address (e.g., `http://192.168.1.50:8000` or `http://10.120.24.34:8000`).
+   - **Remote / External Access:** Use the public HTTPS tunnel URL provided in the console, copied to your clipboard, and saved in `PUBLIC_URL.txt`.
+
+#### 2. Client Side (Revit User Machine):
+1. **Prerequisites:**
+   - **Autodesk Revit** (Versions 2020 through 2026).
+   - Free [pyRevit CLI / Installer](https://github.com/pyrevitlabs/pyRevit/releases).
+2. **Install the pyBIM Extension:**
+   Transfer the [`revit_plugin/pyBIM.extension/`](file:///c:/Projects/pyBIM-LLM/revit_plugin/pyBIM.extension) directory to the client machine (or zip and send it). Install using any of the following methods:
+   - **1-Click Batch Installer (Fastest):** Run [`revit_plugin/install_pyrevit_extension.bat`](file:///c:/Projects/pyBIM-LLM/revit_plugin/install_pyrevit_extension.bat). It mirrors the extension into `%APPDATA%\pyRevit\Extensions\` and reloads pyRevit automatically.
+   - **pyRevit CLI:** Open Command Prompt and run:
+     ```cmd
+     pyrevit extend ui pyBIM "C:\Path\To\pyBIM.extension"
+     ```
+   - **Manual Copy:** Copy the `pyBIM.extension` folder directly into `%APPDATA%\pyRevit\Extensions\`.
+3. **Connect to the AI Server from Revit:**
+   - Open Autodesk Revit; the dedicated **pyBIM** tab will appear in the top Ribbon.
+   - In the **AI Automation** panel, click **Config**.
+   - Enter your server address (e.g., `http://192.168.1.50:8000` or the Cloudflare HTTPS URL).
+   - Click **Test & Save**. A green notification (`✅ Connection Successful`) confirms the connection and displays active models and knowledge vector counts.
+4. **Execute Prompts with AI Assistant:**
+   - Select one or more elements in the active Revit view (walls, doors, pipes, columns, etc.).
+   - Click the **Assistant** button in the **AI Automation** panel.
+   - Enter your instruction in plain English (e.g., `Change Unconnected Height of selected walls to 4000mm`).
+   - Review the generated script and RAG standards cited in the Revit output window.
+   - Click **Yes** to authorize dynamic execution inside an isolated `DB.Transaction`. All modifications support standard Revit Undo (`Ctrl+Z`).
+5. **Open Web Studio directly from Revit:**
+   - Click the **OpenStudio** button in the **Studio** panel to immediately launch the Web Studio dashboard in your default browser.
+
+---
+
+### 💻 Scenario 2: Standalone Full Setup (100% Offline Local Machine)
+> **Concept:** All components (local LLM inference, vector database, FastAPI gateway, and Revit extension) run locally on a single workstation without external network requirements.
+
+#### Step 1: Install System Prerequisites (One-Time)
+1. **Python:** Install [Python 3.11 or 3.12](https://www.python.org/downloads/) (ensure *Add python.exe to PATH* is checked during installation).
+2. **Ollama:** Install [Ollama](https://ollama.com/) and pull the necessary models:
+   ```bash
+   ollama pull qwen2.5-coder:1.5b
+   ollama pull nomic-embed-text
+   ollama pull llama3:latest
+   ```
+3. **pyRevit:** Install [pyRevit](https://github.com/pyrevitlabs/pyRevit/releases).
+
+#### Step 2: Set Up Virtual Environment & Dependencies
+Open a terminal in the project root `C:\Projects\pyBIM-LLM` and run:
 ```powershell
-cd C:\Projects\pyBIM-LLM
+# Create virtual environment
 python -m venv .venv
+
+# Activate virtual environment
 .\.venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Server Startup (1-Click or Manual)
-**Option A — 1-Click Launcher (`run_pybim.bat`):**
-Double-click `run_pybim.bat` in the project root. It will:
-- Pre-kill any orphaned processes on port 8000.
-- Verify Ollama and local models.
-- Start the server on `0.0.0.0:8000`.
-- Automatically launch the browser to `http://localhost:8000/ui`.
+#### Step 3: Launch Gateway Server & Web Studio
+Double-click **[`run_pybim.bat`](file:///c:/Projects/pyBIM-LLM/run_pybim.bat)** (or run `python start_server.py`).
+The server will initialize and automatically open the Web Studio in your default browser at `http://localhost:8000/ui`.
 
-**Option B — Python Launcher:**
-```powershell
-python start_server.py
+#### Step 4: Register Extension with Revit
+Double-click [`revit_plugin/install_pyrevit_extension.bat`](file:///c:/Projects/pyBIM-LLM/revit_plugin/install_pyrevit_extension.bat) or execute:
+```cmd
+pyrevit extend ui pyBIM "C:\Projects\pyBIM-LLM\revit_plugin\pyBIM.extension"
 ```
+The **Assistant** button in Revit will now connect directly to `http://localhost:8000` on the same workstation.
+
+---
+
+### 🌐 Web Studio UI Guide
+
+The Web Studio enables interactive testing of AI code generation, RAG knowledge retrieval, and parameter auditing without opening Autodesk Revit:
+
+* **Local Access:** `http://localhost:8000/ui`
+* **LAN / Wi-Fi Access:** `http://<SERVER-IP>:8000/ui`
+* **Interactive Swagger API Docs:** `http://localhost:8000/docs`
+
+#### Key Web Studio Modules:
+1. **Script Generator & Revit Element Simulator:**
+   - Select the target environment: **pyRevit (Python)**, **Native C# (.NET)**, or **Dynamo Python Node**.
+   - Input your engineering prompt and simulate selected Revit elements (Category, Element ID, parameters).
+   - Click **Generate Script** to inspect multi-agent validated code and RAG citation sources in seconds.
+2. **Admin-Gate Documentation Ingestion & Review Queue:**
+   - Submit Revit documentation URLs with custom slugs for Scrapling extraction and vectorization.
+   - Track processing progression with public Tracking IDs (`req_xxxx`).
+   - Administrator authentication via JWT token to Approve or Reject staged items, preventing Data Poisoning.
+3. **Autodesk Construction Cloud (ACC) & Cloud BIM Dashboard:**
+   - In-app APS credential manager with zero-downtime hot reloading.
+   - Toggle between Simulation Mode and Live Autodesk Platform Services connections.
+   - Read-only audit of cloud model parameters against ISO 19650 standards and fire rating requirements.
+
+---
+
+### 🧩 Revit Extension Ribbon Guide
+
+Upon installing the extension, the **pyBIM** tab appears in the top Revit Ribbon with two functional panels:
+
+| Panel | Button | Description & Operational Flow |
+| :--- | :--- | :--- |
+| **AI Automation** | **`Assistant`** | Reads selected elements from the active document view, collects your natural language prompt, sends metadata to the gateway, displays the generated script for review, and executes inside a `DB.Transaction` upon approval. |
+| **AI Automation** | **`Config`** | Tests live server health (`/health`), displays active Ollama models and indexed ChromaDB rule chunks, and persists the server URL in local pyRevit configuration. |
+| **Studio** | **`OpenStudio`** | Instantly opens the browser to the Web Studio (`/ui`) with a single click from inside Revit. |
+
+> [!TIP]
+> **Human-in-the-Loop Safety:** Scripts are never executed blindly. Generated code is displayed in the Revit output window for inspection. Execution requires an explicit **Yes** confirmation and runs inside a rollback-protected transaction that supports full Undo (`Ctrl+Z`).
+
+---
+
+### 🛠️ Troubleshooting & Quick Utilities
+
+| Task | Command / Tool | Description |
+| :--- | :--- | :--- |
+| **Stop Server Cleanly** | Double-click [`stop_pybim.bat`](file:///c:/Projects/pyBIM-LLM/stop_pybim.bat) | Kills any running processes listening on port 8000. |
+| **Reload Revit Toolbar** | Run `pyrevit reload` in Command Prompt | Reloads pyBIM buttons without closing or restarting Revit. |
+| **Server Health Check** | Open `http://localhost:8000/health` | Returns real-time status of Ollama, active model, and vector chunk counts. |
+| **Run Test Suite** | Run `pytest tests/ -v` | Executes complete test matrix covering JWT security, queue cartable, and ACC integration. |
+| **Revit Connection Issues** | Check port 8000 and Windows Firewall | Ensure Windows Defender / Firewall allows inbound connections on port 8000 for LAN clients. |
 
 ---
 
