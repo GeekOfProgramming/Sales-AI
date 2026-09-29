@@ -14,11 +14,9 @@ class AshbySource(BaseJobSource):
             
             # Try to parse JSON-LD structured data first (Ashby often provides this)
             generic_fetcher = GenericJobPage()
-            # We mock the get method inside GenericJobPage by overriding its behavior, 
-            # or just call our own json-ld extraction. Since GenericJobPage does its own request,
-            # let's just let it do it or copy the logic. 
+            
             try:
-                job_data = await generic_fetcher.fetch_job(url)
+                job_data = generic_fetcher.extract_from_html(url, html)
                 if job_data and job_data.get("title") and job_data.get("company"):
                     job_data["source"] = "ashby"
                     return job_data

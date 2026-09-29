@@ -202,3 +202,73 @@ async def test_ats_domain_not_used_as_company_domain(mock_analyze, mock_lever_fe
     assert response2.processed == 1
     assert response2.jobs[0].company_domain is None # Should NOT be lever.co
 
+@pytest.mark.asyncio
+async def test_lever_api_success_and_failure():
+    from sales_engine.sources.lever_source import LeverSource
+    import httpx
+    
+    # Success mock
+    api_resp = httpx.Response(200, json={"text": "BIM Manager", "categories": {"location": "Remote"}, "descriptionPlain": "Desc"})
+    with patch('httpx.AsyncClient.get', return_value=api_resp):
+        fetcher = LeverSource()
+        job = await fetcher.fetch_job("https://jobs.lever.co/acme/123")
+        assert job["title"] == "BIM Manager"
+        assert job["company"] == ""  # Company shouldn't be guessed from slug in API
+        assert job["raw_metadata"]["source_company_key"] == "acme"
+        assert job["location"] == "Remote"
+        
+    # Failure mock -> fallback to HTML
+    html_resp = httpx.Response(200, text='<html><div class="posting-headline"><h2>BIM Manager HTML</h2></div></html>', request=httpx.Request("GET", "url"))
+    with patch('httpx.AsyncClient.get', side_effect=[Exception("API Error"), html_resp]):
+        fetcher = LeverSource()
+        job = await fetcher.fetch_job("https://jobs.lever.co/acme/123")
+        assert job["title"] == "BIM Manager HTML"
+
+@pytest.mark.asyncio
+async def test_greenhouse_api_success_and_failure():
+    from sales_engine.sources.greenhouse_source import GreenhouseSource
+    import httpx
+    
+    # Success mock
+    api_resp = httpx.Response(200, json={"title": "Revit Tech", "location": {"name": "NY"}, "content": "<b>Desc</b>"})
+    with patch('httpx.AsyncClient.get', return_value=api_resp):
+        fetcher = GreenhouseSource()
+        job = await fetcher.fetch_job("https://boards.greenhouse.io/acme/jobs/123")
+        assert job["title"] == "Revit Tech"
+        assert job["company"] == ""
+        assert job["raw_metadata"]["source_company_key"] == "acme"
+        assert job["description"] == "Desc"
+        
+    # Failure mock -> fallback to HTML
+    html_resp = httpx.Response(200, text='<html><h1 class="app-title">Revit Tech HTML</h1><span class="company-name">at Acme Corp</span></html>', request=httpx.Request("GET", "url"))
+    with patch('httpx.AsyncClient.get', side_effect=[Exception("API Error"), html_resp]):
+        fetcher = GreenhouseSource()
+        job = await fetcher.fetch_job("https://boards.greenhouse.io/acme/jobs/123")
+        assert job["title"] == "Revit Tech HTML"
+        assert job["company"] == "Acme Corp"
+
+@pytest.mark.asyncio
+async def test_ashby_structured_extraction():
+    from sales_engine.sources.ashby_source import AshbySource
+    from sales_engine.sources.generic_job_page import GenericJobPage
+    import httpx
+    
+    html = """
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {"@type": "JobPosting", "title": "Ashby Job", "hiringOrganization": {"@type": "Organization", "name": "Ashby Corp"}}
+        </script>
+      </head>
+      <body><h1>HTML Fallback Title</h1></body>
+    </html>
+    """
+    html_resp = httpx.Response(200, text=html, request=httpx.Request("GET", "url"))
+    
+    with patch('httpx.AsyncClient.get', return_value=html_resp):
+        fetcher = AshbySource()
+        job = await fetcher.fetch_job("https://jobs.ashbyhq.com/acme/123")
+        assert job["title"] == "Ashby Job"
+        assert job["company"] == "Ashby Corp"
+        assert job["source"] == "ashby"
+

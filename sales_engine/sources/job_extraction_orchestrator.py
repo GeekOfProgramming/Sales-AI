@@ -32,8 +32,9 @@ class JobExtractionOrchestrator:
                 
                 # 2. Fetch Job
                 try:
+                    import httpx
                     raw_job = await fetcher.fetch_job(url)
-                except TimeoutError as e:
+                except httpx.TimeoutException as e:
                     errors.append(JobExtractionError(url=url, error_type="timeout", message=str(e)))
                     continue
                 except Exception as e:

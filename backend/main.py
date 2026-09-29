@@ -70,42 +70,9 @@ async def lifespan(app: FastAPI):
     # 1. Initialize LLM Client
     app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
     
-    # 2. Initialize RAG Retriever
-    project_root = Path(__file__).parent.parent
-    persist_dir = str(project_root / "chroma_db")
-    app.state.rag_retriever = BIMRAGRetriever(
-        persist_dir=persist_dir,
-        collection_name="bim_rules",
-        embedding_model="nomic-embed-text",
-    )
+    # 1. Initialize LLM Client
+    app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
     
-    # Ensure rules directory is indexed if collection is empty
-    rules_dir = project_root / "data" / "rules"
-    if rules_dir.exists() and app.state.rag_retriever.count() == 0:
-        print(f"📥 Indexing initial rules from {rules_dir}...")
-        count = app.state.rag_retriever.index_directory(rules_dir)
-        print(f"✅ Indexed {count} semantic rule chunks.")
-
-    # Auto-recover any stale 'processing' items if server was restarted during background indexing
-    try:
-        stale_processing = ingest_queue.list_items(status_filter="processing")
-        for item in stale_processing:
-            slug = item.get("slug")
-            if slug:
-                rule_file = project_root / "data" / "rules" / f"{slug}.md"
-                if rule_file.exists():
-                    indexed_count = app.state.rag_retriever.index_markdown_file(rule_file)
-                    ingest_queue.update_status(
-                        item["request_id"],
-                        "approved",
-                        message=f"Successfully indexed as '{slug}' ({indexed_count} chunks).",
-                        slug=slug,
-                    )
-                    print(f"🔄 [Auto-Recovery] Re-indexed stale item {item['request_id']} -> {slug} ({indexed_count} chunks)")
-                else:
-                    ingest_queue.update_status(item["request_id"], "pending", message="Reset to pending review after server restart.")
-    except Exception as e:
-        print(f"⚠️ [Auto-Recovery Warning]: {e}")
     
     print("🎉 pyBIM-LLM Gateway is ready to serve requests.")
     yield

@@ -13,9 +13,9 @@ class LeverSource(BaseJobSource):
         
         api_data = None
         if len(path_parts) >= 2:
-            company = path_parts[0]
+            company_slug = path_parts[0]
             job_id = path_parts[1]
-            api_url = f"https://api.lever.co/v0/postings/{company}/{job_id}"
+            api_url = f"https://api.lever.co/v0/postings/{company_slug}/{job_id}"
             
             try:
                 async with httpx.AsyncClient(timeout=15.0) as client:
@@ -31,12 +31,12 @@ class LeverSource(BaseJobSource):
                 "url": url,
                 "source": "lever",
                 "title": api_data.get("text", ""),
-                "company": company,
+                "company": "",  # Real name not available in this endpoint, will be resolved later
                 "location": api_data.get("categories", {}).get("location", ""),
                 "employment_type": api_data.get("categories", {}).get("commitment", ""),
                 "department": api_data.get("categories", {}).get("department", ""),
                 "description": api_data.get("descriptionPlain", "")[:10000],
-                "raw_metadata": {"api_data": api_data}
+                "raw_metadata": {"api_data": api_data, "source_company_key": company_slug}
             }
             
         # Fallback to HTML

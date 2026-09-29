@@ -14,9 +14,9 @@ class GreenhouseSource(BaseJobSource):
         
         api_data = None
         if len(path_parts) >= 3 and path_parts[1] == "jobs":
-            company = path_parts[0]
+            company_slug = path_parts[0]
             job_id = path_parts[2]
-            api_url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs/{job_id}"
+            api_url = f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs/{job_id}"
             
             try:
                 async with httpx.AsyncClient(timeout=15.0) as client:
@@ -36,10 +36,10 @@ class GreenhouseSource(BaseJobSource):
                 "url": url,
                 "source": "greenhouse",
                 "title": api_data.get("title", ""),
-                "company": company,
+                "company": "",  # Real name not available in this endpoint
                 "location": api_data.get("location", {}).get("name", ""),
                 "description": description[:10000],
-                "raw_metadata": {"api_data": api_data}
+                "raw_metadata": {"api_data": api_data, "source_company_key": company_slug}
             }
             
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
