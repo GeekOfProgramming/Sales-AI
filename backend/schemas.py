@@ -378,6 +378,80 @@ class CompanyLead(BaseModel):
     qualified: bool = False
     scoring_reasons: List[str] = Field(default_factory=list)
 
+# ==========================================
+# PHASE 6: ENRICHMENT SCHEMAS
+# ==========================================
+
+class CompanyEnrichment(BaseModel):
+    company_name: Optional[str] = None
+    company_domain: Optional[str] = None
+    website: Optional[str] = None
+    industry: Optional[str] = None
+    employee_count: Optional[int] = None
+    employee_range: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    linkedin_company_url: Optional[str] = None
+    source: Optional[str] = None
+    confidence: Optional[int] = None
+    domain_status: Optional[str] = "unknown" # existing, provider_resolved, unknown
+
+class ContactCandidate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    full_name: Optional[str] = None
+    job_title: Optional[str] = None
+    seniority: Optional[str] = None
+    department: Optional[str] = None
+    company_name: Optional[str] = None
+    company_domain: Optional[str] = None
+    work_email: Optional[str] = None
+    email_status: Optional[str] = "unknown" # verified, likely, risky, unknown, not_found
+    email_confidence: Optional[int] = 0
+    email_source: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    provider: Optional[str] = None
+    provider_person_id: Optional[str] = None
+    buyer_role_match: Optional[str] = None # exact, strong, relevant, weak, none
+    contact_score: int = 0
+    data_sources: List[str] = Field(default_factory=list)
+
+class ProviderUsageTracker(BaseModel):
+    apollo_company_calls: int = 0
+    apollo_people_search_calls: int = 0
+    apollo_people_enrichment_calls: int = 0
+    hunter_domain_search_calls: int = 0
+    hunter_email_finder_calls: int = 0
+    hunter_email_verifier_calls: int = 0
+
+class EnrichedLead(BaseModel):
+    base_lead: CompanyLead
+    company_enrichment: Optional[CompanyEnrichment] = None
+    buyer_roles_searched: List[str] = Field(default_factory=list)
+    contacts: List[ContactCandidate] = Field(default_factory=list)
+    best_contact: Optional[ContactCandidate] = None
+    enrichment_status: str = "pending" # complete, partial, not_found, provider_error
+    providers_used: List[str] = Field(default_factory=list)
+    enrichment_errors: List[str] = Field(default_factory=list)
+
+class EnrichLeadsRequest(BaseModel):
+    leads: List[CompanyLead]
+    website_profile: Optional[Dict[str, Any]] = None
+    qualified_only: bool = True
+    max_contacts_per_lead: int = 5
+    providers: List[str] = Field(default_factory=lambda: ["apollo", "hunter"])
+
+class EnrichLeadsResponse(BaseModel):
+    status: str
+    leads_received: int
+    leads_attempted: int
+    leads_enriched: int
+    partial: int
+    failed: int
+    provider_usage: ProviderUsageTracker
+    leads: List[EnrichedLead]
+    errors: List[str] = Field(default_factory=list)
+
 
 class BuildLeadsRequest(BaseModel):
     jobs: List[StructuredJob]

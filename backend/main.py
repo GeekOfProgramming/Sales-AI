@@ -61,7 +61,9 @@ from backend.schemas import (
     ExtractJobsRequest,
     ExtractJobsResponse,
     BuildLeadsRequest,
-    BuildLeadsResponse
+    BuildLeadsResponse,
+    EnrichLeadsRequest,
+    EnrichLeadsResponse
 )
 
 @asynccontextmanager
@@ -919,6 +921,20 @@ async def build_leads(request: BuildLeadsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lead building failed: {e}")
 
+@app.post("/api/sales/enrich-leads", tags=["SalesAI"], response_model=EnrichLeadsResponse)
+async def enrich_leads(request: EnrichLeadsRequest):
+    try:
+        from sales_engine.enrichment.enrichment_orchestrator import EnrichmentOrchestrator
+        orchestrator = EnrichmentOrchestrator()
+        return await orchestrator.enrich_leads(
+            leads=request.leads,
+            website_profile=request.website_profile,
+            qualified_only=request.qualified_only,
+            max_contacts_per_lead=request.max_contacts_per_lead,
+            providers=request.providers
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lead enrichment failed: {e}")
 
 
 
