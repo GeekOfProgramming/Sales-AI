@@ -1,0 +1,59 @@
+{
+  "company_name": "pyBIM",
+  "company_summary": "pyBIM provides algorithmic engineering, software development, and sovereign AI infrastructures for the AEC industry. Our solutions automate complex workflows, ensure ISO 19650 compliance, and secure classified data, making our clients' operations more efficient and compliant.",
+  "services": [
+    "Custom Software & Revit Automation",
+    "Sovereign AI & Technical Consultation",
+    "Turnkey BIM Project Delivery"
+  ],
+  "target_industries": [
+    "AEC Firms",
+    "Infrastructure Contractors",
+    "Public Sector BIM Projects"
+  ],
+  "target_company_types": [
+    "Tier-One AEC Firms",
+    "Public Sector Contractors",
+    "Large Infrastructure Projects"
+  ],
+  "pain_points": [
+    "Limited scalability and ROI for BIM execution.",
+    "Manual BIM workflows lead to data entry errors and slow project execution.",
+    "Traditional BIM teams struggle with complex clash detection and public tender compliance."
+  ],
+  "buyer_roles": [
+    "Project Managers",
+    "Engineering Teams",
+    "BIM Coordinators"
+  ],
+  "primary_job_signals": [
+    "Implementing custom automation scripts to reduce manual labor.",
+    "Deploying Sovereign AI infrastructures for secure data processing.",
+    "Optimizing BIM workflows for high-margin billable hours."
+  ],
+  "secondary_job_signals": [
+    "Using pyBIM's API integration for Revit and Navisworks.",
+    "Writing Python and C# scripts for Revit API automation.",
+    "Deploying edge AI appliances for secure, on-premise AI execution."
+  ],
+  "keywords": [
+    "pyBIM",
+    "algorithmic engineering",
+    "BIM execution",
+    "SOVEREIGN AI",
+    "ISO 19650",
+    "UNI 11337",
+    "Revit API",
+    "C#",
+    "Python",
+    "Sovereign Edge AI",
+    "Data Integrity",
+    "Security Compliance",
+    "BIM Automation",
+    "Public Tender Compliance",
+    "Project Delivery"
+  ],
+  "negative_signals": [
+    "No public inquiries or inquiries from public email domains."
+  ]
+}

@@ -80,7 +80,7 @@ class WebsiteFetcher:
             # Ignore some extensions and paths
             ignore_patterns = [
                 r"\.(pdf|png|jpg|jpeg|svg|css|js|zip|tar|gz|mp4|webm)$",
-                r"/(login|signup|signin|privacy|terms|cookie|legal|careers|jobs)",
+                r"/(login|signup|signin|portal|dashboard|account|client|privacy|terms|cookie|legal|careers|jobs)",
                 r"^(mailto|tel|javascript):",
                 r"/(facebook|twitter|linkedin|instagram|youtube)\.com"
             ]
@@ -115,13 +115,16 @@ class WebsiteFetcher:
         if home_clean not in sorted_links:
             sorted_links.insert(0, home_clean)
             
-        urls_to_fetch = sorted_links[:MAX_PAGES]
-        print(f"[SalesAI Web] Pages discovered: {len(internal_links)}. Fetching top {len(urls_to_fetch)} pages.")
+        print(f"[SalesAI Web] Pages discovered: {len(internal_links)}. Crawling candidate queue.")
         
         pages_content = []
+        seen_content_hashes = set()
         total_chars = 0
         
-        for url in urls_to_fetch:
+        for url in sorted_links:
+            if len(pages_content) >= MAX_PAGES:
+                break
+                
             remaining = MAX_TOTAL_CHARS - total_chars
             if remaining <= 0:
                 break
@@ -131,18 +134,35 @@ class WebsiteFetcher:
                 resp = self.fetcher.get(url, timeout=REQUEST_TIMEOUT)
                 html = resp.body.decode("utf-8", errors="replace")
                 
-                clean_text = self._clean_and_convert(html, url)
+                raw_clean_text = self._clean_and_convert(html, url)
                 
-                if len(clean_text) > remaining:
+                # Content deduplication: check text content hash
+                content_hash = hash(raw_clean_text.strip())
+                if content_hash in seen_content_hashes:
+                    print(f"[SalesAI Web] Skipping duplicate content page: {url}")
+                    continue
+                seen_content_hashes.add(content_hash)
+                
+                original_chars = len(raw_clean_text)
+                truncated = False
+                
+                if original_chars > remaining:
                     msg = "... [TRUNCATED DUE TO GLOBAL LIMIT]"
-                    clean_text = clean_text[:max(0, remaining - len(msg))] + msg
-                elif len(clean_text) > MAX_CHARS_PER_PAGE:
+                    clean_text = raw_clean_text[:max(0, remaining - len(msg))] + msg
+                    truncated = True
+                elif original_chars > MAX_CHARS_PER_PAGE:
                     msg = "... [TRUNCATED]"
-                    clean_text = clean_text[:MAX_CHARS_PER_PAGE - len(msg)] + msg
+                    clean_text = raw_clean_text[:MAX_CHARS_PER_PAGE - len(msg)] + msg
+                    truncated = True
+                else:
+                    clean_text = raw_clean_text
                     
                 pages_content.append({
                     "url": url,
-                    "text": clean_text
+                    "text": clean_text,
+                    "original_chars": original_chars,
+                    "captured_chars": len(clean_text),
+                    "truncated": truncated
                 })
                 
                 total_chars += len(clean_text)
@@ -150,7 +170,7 @@ class WebsiteFetcher:
             except Exception as e:
                 print(f"[SalesAI Web] Failed to fetch {url}: {e}")
                 
-        print(f"[SalesAI Web] Pages fetched: {len(pages_content)}, Characters extracted: {total_chars}")
+        print(f"[SalesAI Web] Unique pages fetched: {len(pages_content)}, Characters extracted: {total_chars}")
         
         return {
             "base_url": base_url,

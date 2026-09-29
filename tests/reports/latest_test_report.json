@@ -2,35 +2,177 @@
   {
     "case_id": "P2-WEB-001",
     "phase": "Phase 2",
-    "title": "Placeholder: Architectural Firm Website",
-    "source": "https://example-architects.com",
+    "title": "pyBIM Website Analysis",
+    "source": "https://pybim.com",
     "input": {
-      "url": "https://example-architects.com"
+      "url": "https://pybim.com"
     },
     "expected": {
-      "company_name": "Example Architects",
+      "company_name": "pyBIM",
+      "company_summary": "Advanced engineering and software lab providing BIM execution, custom BIM/Revit automation, and sovereign AI infrastructure for AEC organizations.",
       "services": [
-        "Architecture",
-        "BIM"
+        "Managed / Tech-Enabled BIM Execution",
+        "BIM Modeling and Multidisciplinary Clash Coordination",
+        "ISO 19650 and UNI 11337 Compliance Auditing",
+        "Custom Python and C# BIM Automation",
+        "Revit / Navisworks API Integration",
+        "Automated Parameter and Metadata Processing",
+        "Sovereign / Air-Gapped Enterprise AI Infrastructure"
       ],
       "target_industries": [
-        "Commercial"
+        "AEC",
+        "Architecture",
+        "Engineering",
+        "Construction",
+        "Infrastructure"
+      ],
+      "target_company_types": [
+        "Architecture firms",
+        "Engineering firms",
+        "General contractors",
+        "Growing AEC firms",
+        "Mid-to-large AEC enterprises",
+        "Tier-1 contractors",
+        "Government contractors"
+      ],
+      "pain_points": [
+        "Manual BIM data entry and parameter mapping",
+        "Repetitive BIM workflows",
+        "Slow clash detection and coordination",
+        "High engineering labor costs",
+        "Scaling through additional headcount",
+        "ISO 19650 and UNI 11337 compliance risk",
+        "Public tender compliance risk",
+        "BIM data quality errors",
+        "Sensitive project data exposure to public cloud systems",
+        "Rigid generic software workflows"
       ],
       "buyer_roles": [
         "BIM Manager",
-        "Principal"
+        "Technical Director",
+        "Head of Digital Delivery",
+        "Innovation Lead",
+        "Operations Manager"
       ],
-      "pain_points": [
-        "Coordination",
-        "Clash detection"
+      "primary_job_signals": [
+        "BIM Manager / Head of BIM",
+        "Digital Delivery Manager / Head of Digital Delivery",
+        "BIM Automation Engineer",
+        "Revit API Developer",
+        "BIM Software Developer",
+        "C# / .NET Revit Developer",
+        "Python BIM Automation",
+        "Dynamo / pyRevit Developer",
+        "BIM Information / Data Manager",
+        "ISO 19650 information-management roles",
+        "Digital Construction / BIM technology leadership"
+      ],
+      "secondary_job_signals": [
+        "Navisworks",
+        "Solibri",
+        "IFC / OpenBIM",
+        "COBie",
+        "Autodesk Construction Cloud / CDE",
+        "Computational design",
+        "BIM data / metadata management",
+        "Digital transformation roles in AEC"
       ]
     },
-    "actual": {},
-    "status": "NOT_RUN",
-    "differences": [],
-    "reason": "",
-    "human_notes": "Needs human review of actual snapshot.",
-    "test_timestamp": "2026-09-29T19:34:47.773031Z"
+    "actual": {
+      "company_name": "pyBIM",
+      "company_summary": "pyBIM provides algorithmic engineering, software development, and sovereign AI infrastructures for the AEC industry. Our solutions automate complex workflows, ensure ISO 19650 compliance, and secure classified data, making our clients' operations more efficient and compliant.",
+      "services": [
+        "Custom Software & Revit Automation",
+        "Sovereign AI & Technical Consultation",
+        "Turnkey BIM Project Delivery"
+      ],
+      "target_industries": [
+        "AEC Firms",
+        "Infrastructure Contractors",
+        "Public Sector BIM Projects"
+      ],
+      "target_company_types": [
+        "Tier-One AEC Firms",
+        "Public Sector Contractors",
+        "Large Infrastructure Projects"
+      ],
+      "pain_points": [
+        "Limited scalability and ROI for BIM execution.",
+        "Manual BIM workflows lead to data entry errors and slow project execution.",
+        "Traditional BIM teams struggle with complex clash detection and public tender compliance."
+      ],
+      "buyer_roles": [
+        "Project Managers",
+        "Engineering Teams",
+        "BIM Coordinators"
+      ],
+      "primary_job_signals": [
+        "Implementing custom automation scripts to reduce manual labor.",
+        "Deploying Sovereign AI infrastructures for secure data processing.",
+        "Optimizing BIM workflows for high-margin billable hours."
+      ],
+      "secondary_job_signals": [
+        "Using pyBIM's API integration for Revit and Navisworks.",
+        "Writing Python and C# scripts for Revit API automation.",
+        "Deploying edge AI appliances for secure, on-premise AI execution."
+      ],
+      "keywords": [
+        "pyBIM",
+        "algorithmic engineering",
+        "BIM execution",
+        "SOVEREIGN AI",
+        "ISO 19650",
+        "UNI 11337",
+        "Revit API",
+        "C#",
+        "Python",
+        "Sovereign Edge AI",
+        "Data Integrity",
+        "Security Compliance",
+        "BIM Automation",
+        "Public Tender Compliance",
+        "Project Delivery"
+      ],
+      "negative_signals": [
+        "No public inquiries or inquiries from public email domains."
+      ]
+    },
+    "status": "FAIL",
+    "differences": [
+      "**Missing:**",
+      "- services: 'Managed / Tech-Enabled BIM Execution'",
+      "- services: 'BIM Modeling and Multidisciplinary Clash Coordination'",
+      "- services: 'ISO 19650 and UNI 11337 Compliance Auditing'",
+      "- services: 'Custom Python and C# BIM Automation'",
+      "- services: 'Revit / Navisworks API Integration'",
+      "- services: 'Automated Parameter and Metadata Processing'",
+      "- services: 'Sovereign / Air-Gapped Enterprise AI Infrastructure'",
+      "- target_industries: 'Engineering'",
+      "- target_industries: 'AEC'",
+      "- target_industries: 'Infrastructure'",
+      "- target_industries: 'Architecture'",
+      "- target_industries: 'Construction'",
+      "- buyer_roles: 'Innovation Lead'",
+      "- buyer_roles: 'Operations Manager'",
+      "- buyer_roles: 'Head of Digital Delivery'",
+      "- buyer_roles: 'Technical Director'",
+      "- buyer_roles: 'BIM Manager'",
+      "**Extra:**",
+      "- services: 'Custom Software & Revit Automation'",
+      "- services: 'Sovereign AI & Technical Consultation'",
+      "- services: 'Turnkey BIM Project Delivery'",
+      "- target_industries: 'Public Sector BIM Projects'",
+      "- target_industries: 'Infrastructure Contractors'",
+      "- target_industries: 'AEC Firms'",
+      "- buyer_roles: 'Engineering Teams'",
+      "- buyer_roles: 'BIM Coordinators'",
+      "- buyer_roles: 'Project Managers'",
+      "**Needs semantic review:**",
+      "- primary_job_signals: Model extracted business activities/goals instead of job titles (e.g. 'Implementing custom automation scripts...' vs 'BIM Manager')."
+    ],
+    "reason": "Critical semantic failure: primary_job_signals contains business activities/goals instead of job titles, which will corrupt downstream Phase 3 Discovery.",
+    "human_notes": "Ground Truth verified by human review from real pybim.com crawl snapshot. Deployed services vs In-Development offerings (Cloud Connect & Sovereign Edge AI) serves as semantic accuracy trap.",
+    "test_timestamp": "2026-09-29T20:37:56.221683+00:00"
   },
   {
     "case_id": "P3-DISC-001",
@@ -62,7 +204,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Needs live results verification or snapshot",
-    "test_timestamp": "2026-09-29T19:34:47.775494Z"
+    "test_timestamp": "2026-09-29T20:37:56.225506+00:00"
   },
   {
     "case_id": "P4-JOB-001",
@@ -90,7 +232,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Needs human verification.",
-    "test_timestamp": "2026-09-29T19:34:47.776848Z"
+    "test_timestamp": "2026-09-29T20:37:56.228843+00:00"
   },
   {
     "case_id": "P5-LEAD-001",
@@ -121,7 +263,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Needs review.",
-    "test_timestamp": "2026-09-29T19:34:47.777993Z"
+    "test_timestamp": "2026-09-29T20:37:56.230716+00:00"
   },
   {
     "case_id": "P6-ENRICH-001",
@@ -142,6 +284,6 @@
     "differences": [],
     "reason": "",
     "human_notes": "Mock provider response needed.",
-    "test_timestamp": "2026-09-29T19:34:47.779112Z"
+    "test_timestamp": "2026-09-29T20:37:56.232072+00:00"
   }
 ]

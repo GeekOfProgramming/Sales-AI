@@ -1,7 +1,55 @@
 import json
 import os
-from datetime import datetime
+import sys
+import subprocess
+import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
+
+def get_git_commit(project_root: Path) -> str:
+    try:
+        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=project_root)
+        return out.decode().strip()
+    except Exception:
+        return "Unknown"
+
+def get_ollama_version() -> str:
+    try:
+        req = urllib.request.Request("http://localhost:11434/api/version", headers={"User-Agent": "SalesAI-QA"})
+        with urllib.request.urlopen(req, timeout=1) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("version", "running")
+    except Exception:
+        return "Not detected / unreachable"
+
+def compute_differences(expected, actual):
+    """Compute basic differences between expected and actual dicts if not provided."""
+    diffs = []
+    if not isinstance(expected, dict) or not isinstance(actual, dict):
+        if expected != actual:
+            diffs.append(f"Expected `{expected}` but got `{actual}`")
+        return diffs
+        
+    for k, v in expected.items():
+        if k not in actual:
+            diffs.append(f"Missing key in actual: `{k}`")
+        elif actual[k] != v:
+            # Special check for lists
+            if isinstance(v, list) and isinstance(actual[k], list):
+                missing = [item for item in v if item not in actual[k]]
+                extra = [item for item in actual[k] if item not in v]
+                if missing:
+                    diffs.append(f"Field `{k}` missing expected items: {missing}")
+                if extra:
+                    diffs.append(f"Field `{k}` contains extra items: {extra}")
+            else:
+                diffs.append(f"Field `{k}` mismatch: expected `{v}`, got `{actual[k]}`")
+                
+    for k in actual:
+        if k not in expected:
+            diffs.append(f"Extra key in actual: `{k}`")
+            
+    return diffs
 
 def generate_report():
     project_root = Path(__file__).parent.parent
@@ -15,6 +63,12 @@ def generate_report():
     with open(report_file, "r", encoding="utf-8") as f:
         results = json.load(f)
         
+    now = datetime.now(timezone.utc)
+    git_commit = get_git_commit(project_root)
+    ollama_ver = get_ollama_version()
+    llm_model = os.environ.get("SALES_LLM_MODEL", "qwen2.5:1.5b (default)")
+    has_live = any(str(r.get("source", "")).startswith("http") and r.get("status") != "NOT_RUN" for r in results)
+    
     # Gather stats
     total = len(results)
     passed = sum(1 for r in results if r.get("status") == "PASS")
@@ -39,8 +93,16 @@ def generate_report():
         "# SalesAI QA / Acceptance Test Report",
         "",
         "## Run Information",
-        f"- **Date:** {datetime.utcnow().isoformat()[:10]}",
-        f"- **Time:** {datetime.utcnow().isoformat()[11:19]} UTC",
+        f"- **Date:** {now.strftime('%Y-%m-%d')}",
+        f"- **Time:** {now.strftime('%H:%M:%S')} UTC",
+        f"- **Git Commit:** `{git_commit}`",
+        f"- **Python Version:** `{sys.version.split()[0]}`",
+        f"- **SALES_LLM_MODEL:** `{llm_model}`",
+        f"- **Ollama Version:** `{ollama_ver}`",
+        f"- **Brave enabled?** {'Yes' if os.environ.get('BRAVE_API_KEY') else 'No'}",
+        f"- **Apollo enabled?** {'Yes' if os.environ.get('APOLLO_API_KEY') else 'No'}",
+        f"- **Hunter enabled?** {'Yes' if os.environ.get('HUNTER_API_KEY') else 'No'}",
+        f"- **Live Tests:** {'Yes' if has_live else 'No'}",
         "",
         "## Summary",
         f"- **Total Cases:** {total}",
@@ -112,21 +174,39 @@ def format_case(r):
     ]
     
     lines.append("\n**Input:**")
-    lines.append("```json\n" + json.dumps(r.get("input", {}), indent=2) + "\n```")
+    lines.append("```json\n" + json.dumps(r.get("input", {}), indent=2, ensure_ascii=False) + "\n```")
     
     lines.append("**Expected:**")
-    lines.append("```json\n" + json.dumps(r.get("expected", {}), indent=2) + "\n```")
+    lines.append("```json\n" + json.dumps(r.get("expected", {}), indent=2, ensure_ascii=False) + "\n```")
     
-    if status != "NOT_RUN":
-        lines.append("**Actual:**")
-        lines.append("```json\n" + json.dumps(r.get("actual", {}), indent=2) + "\n```")
+    lines.append("**Actual:**")
+    actual = r.get("actual")
+    if actual and status != "NOT_RUN":
+        lines.append("```json\n" + json.dumps(actual, indent=2, ensure_ascii=False) + "\n```")
+    else:
+        lines.append("_(Not executed yet)_\n")
         
-    lines.append(f"\n**Result:** {status}")
+    lines.append(f"**Result:** {status}")
     
-    if r.get("differences"):
-        lines.append("\n**Differences / Reason:**")
-        for diff in r.get("differences"):
-            lines.append(f"- {diff}")
+    # Calculate or retrieve differences
+    diffs = r.get("differences", [])
+    if not diffs and status not in ["NOT_RUN"] and actual:
+        diffs = compute_differences(r.get("expected", {}), actual)
+        
+    lines.append("\n**Differences:**")
+    if diffs:
+        for diff in diffs:
+            if diff.startswith("**") and diff.endswith("**"):
+                lines.append(f"\n{diff}")
+            elif diff.startswith("- "):
+                lines.append(diff)
+            else:
+                lines.append(f"- {diff}")
+    else:
+        if status == "NOT_RUN":
+            lines.append("_(Pending execution)_")
+        else:
+            lines.append("_(None / In sync)_")
             
     if r.get("reason"):
         lines.append(f"\n**Reason:** {r.get('reason')}")

@@ -1,7 +1,7 @@
 import os
 import json
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Store results across test runs
@@ -45,7 +45,7 @@ def pytest_runtest_makereport(item, call):
                 "differences": qa_data.get("differences", []),
                 "reason": reason,
                 "human_notes": qa_data.get("human_notes", ""),
-                "test_timestamp": datetime.utcnow().isoformat() + "Z"
+                "test_timestamp": datetime.now(timezone.utc).isoformat()
             })
 
 def pytest_sessionfinish(session, exitstatus):
