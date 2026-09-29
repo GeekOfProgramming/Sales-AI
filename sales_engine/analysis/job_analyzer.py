@@ -7,7 +7,7 @@ from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 class JobAnalyzer:
     def __init__(self):
         self.llm_client = BIMLLMClient()
-        self.model_name = os.getenv("SALES_LLM_MODEL", "llama3")
+        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5-coder:1.5b")
         
     async def analyze_job(self, raw_job: Dict[str, Any], profile: WebsiteProfile = None) -> StructuredJob:
         system_prompt = """You are a B2B sales intelligence analyst.
