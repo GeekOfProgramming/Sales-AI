@@ -905,7 +905,7 @@ async def extract_jobs(request: ExtractJobsRequest):
         orchestrator = JobExtractionOrchestrator()
         
         url_strings = [str(url) for url in request.urls]
-        return await orchestrator.extract_jobs(url_strings)
+        return await orchestrator.extract_jobs(url_strings, profile=request.profile)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
 

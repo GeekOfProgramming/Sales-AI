@@ -13,6 +13,28 @@ class WebsiteFetcher:
     def __init__(self):
         self.fetcher = Fetcher()
 
+    def _is_safe_url(self, url: str) -> bool:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                return False
+            
+            hostname = parsed.hostname or ""
+            hostname = hostname.lower()
+            
+            if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+                return False
+            if hostname.endswith(".localhost") or hostname.endswith(".local"):
+                return False
+                
+            # Basic check for IPv4 private blocks (not exhaustive for all formats, but catches common SSRF attempts)
+            if re.match(r"^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.)", hostname):
+                return False
+                
+            return True
+        except Exception:
+            return False
+
     def fetch_website_content(self, base_url: str) -> Dict[str, Any]:
         """Fetch and extract clean text from a website, starting from the homepage and prioritizing specific pages."""
         print(f"[SalesAI Web] Website fetch started for {base_url}")
@@ -20,6 +42,9 @@ class WebsiteFetcher:
         # Ensure base URL has scheme
         if not base_url.startswith("http"):
             base_url = "https://" + base_url
+            
+        if not self._is_safe_url(base_url):
+            raise ValueError(f"URL is not allowed: {base_url}")
             
         try:
             home_resp = self.fetcher.get(base_url, timeout=REQUEST_TIMEOUT)
@@ -109,9 +134,11 @@ class WebsiteFetcher:
                 clean_text = self._clean_and_convert(html, url)
                 
                 if len(clean_text) > remaining:
-                    clean_text = clean_text[:remaining] + "... [TRUNCATED DUE TO GLOBAL LIMIT]"
+                    msg = "... [TRUNCATED DUE TO GLOBAL LIMIT]"
+                    clean_text = clean_text[:max(0, remaining - len(msg))] + msg
                 elif len(clean_text) > MAX_CHARS_PER_PAGE:
-                    clean_text = clean_text[:MAX_CHARS_PER_PAGE] + "... [TRUNCATED]"
+                    msg = "... [TRUNCATED]"
+                    clean_text = clean_text[:MAX_CHARS_PER_PAGE - len(msg)] + msg
                     
                 pages_content.append({
                     "url": url,

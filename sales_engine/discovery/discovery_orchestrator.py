@@ -23,9 +23,7 @@ class DiscoveryOrchestrator:
             # Limit exactly to max_queries in case LLM generated more
             queries = sorted_queries[:max_queries]
         except Exception as e:
-            print(f"[DiscoveryOrchestrator] Query generation failed: {e}")
-            queries = []
-            
+            raise Exception(f"Query generation failed: {e}")
         # 2. Execute Searches
         raw_results = []
         for q in queries:

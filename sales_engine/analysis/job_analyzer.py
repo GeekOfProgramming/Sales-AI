@@ -73,10 +73,12 @@ Return JSON ONLY matching the following schema exactly:
              analysis_result = JobAnalysisResult()
              
         # Combine extracted data with structured basic data
+        raw_metadata = raw_job.get("raw_metadata", {})
         return StructuredJob(
             company_name=raw_job.get("company"),
             company_name_normalized="", # Will be set by orchestrator
             company_domain="", # Might need URL parsing or extraction later
+            source_company_key=raw_metadata.get("source_company_key"),
             job_title=raw_job.get("title"),
             location=raw_job.get("location"),
             employment_type=raw_job.get("employment_type"),
@@ -87,6 +89,6 @@ Return JSON ONLY matching the following schema exactly:
             requirements=analysis_result.requirements,
             technologies=analysis_result.technologies,
             seniority=analysis_result.seniority,
-            remote_status=analysis_result.remote_status,
+            remote_status=raw_job.get("remote_status") or analysis_result.remote_status,
             relevant_signals=analysis_result.relevant_signals
         )

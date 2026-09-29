@@ -33,6 +33,7 @@ class LeverSource(BaseJobSource):
                 "title": api_data.get("text", ""),
                 "company": "",  # Real name not available in this endpoint, will be resolved later
                 "location": api_data.get("categories", {}).get("location", ""),
+                "remote_status": api_data.get("workplaceType", ""),
                 "employment_type": api_data.get("categories", {}).get("commitment", ""),
                 "department": api_data.get("categories", {}).get("department", ""),
                 "description": api_data.get("descriptionPlain", "")[:10000],

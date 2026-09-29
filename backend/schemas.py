@@ -307,6 +307,7 @@ class StructuredJob(BaseModel):
     company_name: Optional[str] = None
     company_name_normalized: Optional[str] = None
     company_domain: Optional[str] = None
+    source_company_key: Optional[str] = None
     job_title: Optional[str] = None
     location: Optional[str] = None
     employment_type: Optional[str] = None
@@ -329,6 +330,7 @@ class JobAnalysisResult(BaseModel):
 
 class ExtractJobsRequest(BaseModel):
     urls: List[HttpUrl] = Field(..., max_length=50)
+    profile: Optional[WebsiteProfile] = None
 
 class JobExtractionError(BaseModel):
     url: str

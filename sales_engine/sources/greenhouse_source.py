@@ -36,7 +36,8 @@ class GreenhouseSource(BaseJobSource):
                 "url": url,
                 "source": "greenhouse",
                 "title": api_data.get("title", ""),
-                "company": "",  # Real name not available in this endpoint
+                "company": api_data.get("company_name", ""),
+                "posted_date": api_data.get("first_published", api_data.get("updated_at", "")),
                 "location": api_data.get("location", {}).get("name", ""),
                 "description": description[:10000],
                 "raw_metadata": {"api_data": api_data, "source_company_key": company_slug}
