@@ -59,7 +59,9 @@ from backend.schemas import (
     DiscoveryRequest,
     DiscoveryResponse,
     ExtractJobsRequest,
-    ExtractJobsResponse
+    ExtractJobsResponse,
+    BuildLeadsRequest,
+    BuildLeadsResponse
 )
 
 @asynccontextmanager
@@ -908,6 +910,14 @@ async def extract_jobs(request: ExtractJobsRequest):
         return await orchestrator.extract_jobs(url_strings, profile=request.profile)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
+
+@app.post("/api/sales/build-leads", tags=["SalesAI"], response_model=BuildLeadsResponse)
+async def build_leads(request: BuildLeadsRequest):
+    try:
+        from sales_engine.leads.lead_orchestrator import process_leads
+        return process_leads(request.jobs, min_qualified_score=60)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lead building failed: {e}")
 
 
 

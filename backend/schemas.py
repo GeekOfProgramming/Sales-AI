@@ -345,3 +345,46 @@ class ExtractJobsResponse(BaseModel):
     jobs: List[StructuredJob]
     errors: List[JobExtractionError]
 
+
+class CompanyLead(BaseModel):
+    company_name: Optional[str] = None
+    company_name_normalized: Optional[str] = None
+    company_domain: Optional[str] = None
+    source_company_keys: List[str] = Field(default_factory=list)
+
+    job_count: int = 0
+    relevant_job_count: int = 0
+
+    job_titles: List[str] = Field(default_factory=list)
+    locations: List[str] = Field(default_factory=list)
+    technologies: List[str] = Field(default_factory=list)
+
+    signals: List[Dict[str, Any]] = Field(default_factory=list)
+    evidence: List[str] = Field(default_factory=list)
+
+    newest_job_date: Optional[str] = None
+    oldest_job_date: Optional[str] = None
+
+    recent_jobs_7d: int = 0
+    recent_jobs_30d: int = 0
+
+    fit_score: int = 0
+    intent_score: int = 0
+    recency_score: int = 0
+    evidence_score: int = 0
+    lead_score: int = 0
+
+    qualified: bool = False
+    scoring_reasons: List[str] = Field(default_factory=list)
+
+
+class BuildLeadsRequest(BaseModel):
+    jobs: List[StructuredJob]
+
+
+class BuildLeadsResponse(BaseModel):
+    status: str
+    jobs_received: int
+    companies_found: int
+    qualified_leads: int
+    leads: List[CompanyLead]

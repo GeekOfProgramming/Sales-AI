@@ -7,7 +7,7 @@ from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 class WebsiteAnalyzer:
     def __init__(self):
         self.llm_client = BIMLLMClient()
-        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5-coder:1.5b")
+        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
         
     async def analyze_website(self, fetch_result: Dict[str, Any]) -> WebsiteProfile:
         print("[SalesAI Analysis] LLM analysis started")

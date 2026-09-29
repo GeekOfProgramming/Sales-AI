@@ -8,7 +8,7 @@ class QueryGenerator:
     def __init__(self, max_queries: int = 20):
         self.llm_client = BIMLLMClient()
         self.max_queries = max_queries
-        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5-coder:1.5b")
+        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
         
     async def generate_queries(self, profile: WebsiteProfile, countries: List[str]) -> GeneratedQueriesResponse:
         system_prompt = f"""You are a B2B sales discovery engine.

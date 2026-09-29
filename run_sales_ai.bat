@@ -24,7 +24,7 @@ echo [OK] Ollama running on :11434
 
 :: 2. Check models
 echo [2] Checking Sales model...
-set SALES_MODEL=qwen2.5-coder:1.5b
+set SALES_MODEL=qwen2.5:1.5b
 if exist .env (
     for /f "tokens=1,2 delims==" %%A in (.env) do (
         if "%%A"=="SALES_LLM_MODEL" set SALES_MODEL=%%B
@@ -36,7 +36,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo [NOT FOUND]
     echo [*] Auto-pulling %SALES_MODEL%...
     ollama pull %SALES_MODEL%
-    if %ERRORLEVEL% NEQ 0 (
+    if errorlevel 1 (
         echo [ERROR] Failed to pull %SALES_MODEL%. Please check your connection.
         pause
         exit /b 1
