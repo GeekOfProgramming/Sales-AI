@@ -74,12 +74,14 @@ def test_deduplication_and_relevance():
 def test_recency_and_future_dates():
     now = datetime.datetime.now()
     
-    job_7d = StructuredJob(job_url="1", source="test", company_domain="7d.com", technologies=["T1"], posted_date=(now - datetime.timedelta(days=5)).isoformat())
-    job_14d = StructuredJob(job_url="2", source="test", company_domain="14d.com", technologies=["T1"], posted_date=(now - datetime.timedelta(days=12)).isoformat())
-    job_30d = StructuredJob(job_url="3", source="test", company_domain="30d.com", technologies=["T1"], posted_date=(now - datetime.timedelta(days=25)).isoformat())
-    job_old = StructuredJob(job_url="4", source="test", company_domain="old.com", technologies=["T1"], posted_date=(now - datetime.timedelta(days=100)).isoformat())
-    job_unk = StructuredJob(job_url="5", source="test", company_domain="unk.com", technologies=["T1"])
-    job_future = StructuredJob(job_url="6", source="test", company_domain="fut.com", technologies=["T1"], posted_date=(now + datetime.timedelta(days=10)).isoformat())
+    # Adding relevant_signals so they are considered relevant
+    sig = [JobSignal(signal="A", evidence="E")]
+    job_7d = StructuredJob(job_url="1", source="test", company_domain="7d.com", relevant_signals=sig, posted_date=(now - datetime.timedelta(days=5)).isoformat())
+    job_14d = StructuredJob(job_url="2", source="test", company_domain="14d.com", relevant_signals=sig, posted_date=(now - datetime.timedelta(days=12)).isoformat())
+    job_30d = StructuredJob(job_url="3", source="test", company_domain="30d.com", relevant_signals=sig, posted_date=(now - datetime.timedelta(days=25)).isoformat())
+    job_old = StructuredJob(job_url="4", source="test", company_domain="old.com", relevant_signals=sig, posted_date=(now - datetime.timedelta(days=100)).isoformat())
+    job_unk = StructuredJob(job_url="5", source="test", company_domain="unk.com", relevant_signals=sig)
+    job_future = StructuredJob(job_url="6", source="test", company_domain="fut.com", relevant_signals=sig, posted_date=(now + datetime.timedelta(days=10)).isoformat())
     
     res = process_leads([job_7d, job_14d, job_30d, job_old, job_unk, job_future])
     
@@ -131,3 +133,67 @@ def test_qualification_threshold():
     assert len(res.leads) == 1
     assert not res.leads[0].qualified
     assert res.leads[0].lead_score < 60
+
+def test_domain_conflict_prevents_merge():
+    # Both have the same normalized name, but different explicit domains
+    job1 = StructuredJob(job_url="1", source="test", company_domain="a.com", company_name_normalized="acme")
+    job2 = StructuredJob(job_url="2", source="test", company_domain="b.com", company_name_normalized="acme")
+    
+    # This one has no domain, so it CAN merge with one of them if it shares a key (e.g., name_norm)
+    # The current Union-Find resolves this by merging it with the first one it encounters.
+    job3 = StructuredJob(job_url="3", source="test", company_name_normalized="acme")
+    
+    res = process_leads([job1, job2, job3])
+    
+    # a.com and b.com must remain separate!
+    domains_found = set(l.company_domain for l in res.leads if l.company_domain)
+    assert "a.com" in domains_found
+    assert "b.com" in domains_found
+    assert len(res.leads) >= 2
+    
+def test_irrelevant_jobs_do_not_inflate_scores():
+    now = datetime.datetime.now()
+    
+    # Relevant old job
+    job1 = StructuredJob(
+        job_url="1", source="test", company_domain="x.com", 
+        job_title="Standard",
+        relevant_signals=[JobSignal(signal="A", evidence="E1")],
+        posted_date=(now - datetime.timedelta(days=100)).isoformat()
+    )
+    
+    # Irrelevant recent leadership job with lots of tech
+    job2 = StructuredJob(
+        job_url="2", source="test", company_domain="x.com", 
+        job_title="Principal Janitor", # Leadership keyword!
+        technologies=["T1", "T2", "T3", "T4", "T5"], # Lots of tech!
+        relevant_signals=[], # Irrelevant!
+        posted_date=(now - datetime.timedelta(days=1)).isoformat() # Very recent!
+    )
+    
+    res = process_leads([job1, job2])
+    lead = res.leads[0]
+    
+    # Since job2 is irrelevant, it should NOT contribute to:
+    # 1. Tech score (lead.technologies should be empty)
+    assert len(lead.technologies) == 0
+    # 2. Leadership intent (intent should only be 10 for the first relevant job)
+    assert lead.intent_score == 10
+    # 3. Recency (recency should be 5 because the relevant job is 100 days old)
+    assert lead.recency_score == 5
+    # 4. Relevant count
+    assert lead.relevant_job_count == 1
+    assert lead.job_count == 2
+    
+def test_url_normalization_dedupe():
+    job1 = StructuredJob(job_url="http://x.com/job/1?utm_source=a", source="test", company_domain="x.com", relevant_signals=[JobSignal(signal="A", evidence="e")])
+    job2 = StructuredJob(job_url="http://x.com/job/1?utm_medium=b", source="test", company_domain="x.com", relevant_signals=[JobSignal(signal="A", evidence="e")])
+    job3 = StructuredJob(job_url="http://x.com/job/1#apply", source="test", company_domain="x.com", relevant_signals=[JobSignal(signal="A", evidence="e")])
+    job4 = StructuredJob(job_url="http://x.com/job/1/", source="test", company_domain="x.com", relevant_signals=[JobSignal(signal="A", evidence="e")])
+    
+    res = process_leads([job1, job2, job3, job4])
+    lead = res.leads[0]
+    
+    # All 4 URLs normalize to "http://x.com/job/1", so they should deduplicate to exactly 1 job!
+    assert lead.job_count == 1
+    assert lead.relevant_job_count == 1

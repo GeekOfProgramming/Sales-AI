@@ -42,43 +42,44 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
     now = datetime.now().replace(tzinfo=None)
     
     for job in jobs:
-        # A job is considered relevant only if it has signals or targeted technologies
-        is_relevant = False
-        if job.relevant_signals or job.technologies:
-            is_relevant = True
+        # A job is considered relevant ONLY if it has relevant_signals (or an explicit relevance flag if available)
+        is_relevant = bool(job.relevant_signals)
         
         if is_relevant:
             relevant_count += 1
             
-        if job.job_title:
-            job_titles.add(job.job_title)
-        if job.location:
-            locations.add(job.location)
-        for tech in job.technologies:
-            technologies.add(tech)
-            
-        for signal_obj in job.relevant_signals:
-            sig = signal_obj.signal
-            ev = signal_obj.evidence
-            if sig not in signals_dict:
-                signals_dict[sig] = 0
-            signals_dict[sig] += 1
-            if ev:
-                evidence_set.add(ev)
+            # Only relevant jobs contribute to titles, locations, and technologies
+            if job.job_title:
+                job_titles.add(job.job_title)
+            if job.location:
+                locations.add(job.location)
+            for tech in job.technologies:
+                technologies.add(tech)
                 
-        dt = parse_date(job.posted_date)
-        if dt:
-            dt_naive = dt.replace(tzinfo=None)
-            days_ago = (now - dt_naive).days
-            # Guard against future dates (days_ago < 0)
-            if days_ago >= 0:
-                dates.append(dt)
-                if days_ago <= 7:
-                    lead.recent_jobs_7d += 1
-                if days_ago <= 14:
-                    lead.recent_jobs_14d += 1
-                if days_ago <= 30:
-                    lead.recent_jobs_30d += 1
+            # Only relevant jobs contribute to signals and evidence
+            for signal_obj in job.relevant_signals:
+                sig = signal_obj.signal
+                ev = signal_obj.evidence
+                if sig not in signals_dict:
+                    signals_dict[sig] = 0
+                signals_dict[sig] += 1
+                if ev:
+                    evidence_set.add(ev)
+                    
+            # Only relevant jobs contribute to recency scoring
+            dt = parse_date(job.posted_date)
+            if dt:
+                dt_naive = dt.replace(tzinfo=None)
+                days_ago = (now - dt_naive).days
+                # Guard against future dates (days_ago < 0)
+                if days_ago >= 0:
+                    dates.append(dt)
+                    if days_ago <= 7:
+                        lead.recent_jobs_7d += 1
+                    if days_ago <= 14:
+                        lead.recent_jobs_14d += 1
+                    if days_ago <= 30:
+                        lead.recent_jobs_30d += 1
                 
     lead.relevant_job_count = relevant_count
     lead.job_titles = sorted(list(job_titles))
