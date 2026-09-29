@@ -158,7 +158,10 @@ class BIMLLMClient:
 
         # Inject RAG / BIM context if available
         if request.context_rules and request.context_rules.strip():
-            system_prompt = f"{base_system}\n\n[BIM & ISO 19650 CONTEXT RULES]:\n{request.context_rules.strip()}"
+            if env in ("sales", "sales_analysis"):
+                system_prompt = f"{base_system}\n\n[SALES KNOWLEDGE CONTEXT]:\n{request.context_rules.strip()}"
+            else:
+                system_prompt = f"{base_system}\n\n[BIM & ISO 19650 CONTEXT RULES]:\n{request.context_rules.strip()}"
         else:
             system_prompt = base_system
 

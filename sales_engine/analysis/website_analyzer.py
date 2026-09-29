@@ -46,6 +46,28 @@ Return valid JSON only matching the schema exactly.
         
         for attempt in range(2):
             try:
+                if attempt == 1:
+                    req.user_prompt += """
+                    
+IMPORTANT JSON REPAIR:
+Return ONLY one valid JSON object.
+No markdown.
+No ```json fences.
+No explanation.
+
+Required keys:
+company_name
+company_summary
+services
+target_industries
+target_company_types
+pain_points
+buyer_roles
+primary_job_signals
+secondary_job_signals
+keywords
+negative_signals
+"""
                 response = await self.llm_client.generate_code_async(req, model_name="llama3")
                 json_text = response.extracted_code.strip()
                 

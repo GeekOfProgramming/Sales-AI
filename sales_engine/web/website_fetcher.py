@@ -32,12 +32,14 @@ class WebsiteFetcher:
         
         # Extract links
         page = Selector(home_html)
-        links = page.css("a::attr(href)").getall()
+        link_elements = page.css("a")
         
-        internal_links = set()
-        for link in links:
+        internal_links = {}
+        for el in link_elements:
+            link = el.attrib.get("href")
             if not link:
                 continue
+            anchor = el.text.strip() if el.text else ""
                 
             # Normalize link
             link = urllib.parse.urljoin(base_url, link)
@@ -61,22 +63,28 @@ class WebsiteFetcher:
             if any(re.search(pat, clean_link, re.IGNORECASE) for pat in ignore_patterns):
                 continue
                 
-            internal_links.add(clean_link)
+            if clean_link not in internal_links:
+                internal_links[clean_link] = anchor
+            else:
+                internal_links[clean_link] = internal_links[clean_link] + " " + anchor
             
         # Prioritize URLs
         priority_terms = ["services", "solutions", "about", "industries", "capabilities", "expertise", "case-studies", "projects", "what-we-do", "products"]
         
-        def link_score(l: str) -> int:
+        def link_score(item) -> int:
+            l, anchor = item
             score = 0
-            l_lower = l.lower()
-            if l_lower.rstrip('/') == base_url.rstrip('/'):
+            score_text = f"{l} {anchor}".lower()
+            if l.rstrip('/').lower() == base_url.rstrip('/').lower():
                 score += 100 # Home page first
             for term in priority_terms:
-                if term in l_lower:
+                if term in score_text:
                     score += 10
             return score
             
-        sorted_links = sorted(list(internal_links), key=link_score, reverse=True)
+        sorted_items = sorted(internal_links.items(), key=link_score, reverse=True)
+        sorted_links = [item[0] for item in sorted_items]
+        
         # Always make sure homepage is there
         home_clean = urllib.parse.urlunparse(urllib.parse.urlparse(base_url)._replace(query='', fragment=''))
         if home_clean not in sorted_links:
@@ -89,7 +97,8 @@ class WebsiteFetcher:
         total_chars = 0
         
         for url in urls_to_fetch:
-            if total_chars >= MAX_TOTAL_CHARS:
+            remaining = MAX_TOTAL_CHARS - total_chars
+            if remaining <= 0:
                 break
                 
             print(f"[SalesAI Web] Fetching page: {url}")
@@ -99,7 +108,9 @@ class WebsiteFetcher:
                 
                 clean_text = self._clean_and_convert(html, url)
                 
-                if len(clean_text) > MAX_CHARS_PER_PAGE:
+                if len(clean_text) > remaining:
+                    clean_text = clean_text[:remaining] + "... [TRUNCATED DUE TO GLOBAL LIMIT]"
+                elif len(clean_text) > MAX_CHARS_PER_PAGE:
                     clean_text = clean_text[:MAX_CHARS_PER_PAGE] + "... [TRUNCATED]"
                     
                 pages_content.append({
