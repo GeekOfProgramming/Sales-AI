@@ -262,7 +262,39 @@ class WebsiteAnalyzeResponse(BaseModel):
     pages_analyzed: int
     profile: WebsiteProfile
 
+class DiscoveryRequest(BaseModel):
+    website_url: HttpUrl
+    countries: List[str] = []
+    max_queries: int = Field(default=20)
+    results_per_query: int = Field(default=10)
 
+class DiscoveryResultItem(BaseModel):
+    title: str
+    url: str
+    classification: str
+    query_type: str
 
+class DiscoveryResponse(BaseModel):
+    status: str
+    website: str
+    queries_generated: int
+    raw_results: int
+    unique_results: int
+    candidate_job_urls: int
+    results: List[DiscoveryResultItem]
 
+class GeneratedQuery(BaseModel):
+    query: str
+    type: Literal["general_job", "company_career", "ats_targeted", "keyword_signal"]
+    priority: int
 
+class GeneratedQueriesResponse(BaseModel):
+    queries: List[GeneratedQuery]
+
+class NormalizedSearchResult(BaseModel):
+    query: str
+    title: str
+    url: str
+    snippet: str
+    source: str
+    rank: int

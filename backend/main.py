@@ -56,6 +56,8 @@ from backend.schemas import (
     SalesLLMTestResponse,
     WebsiteAnalyzeRequest,
     WebsiteAnalyzeResponse,
+    DiscoveryRequest,
+    DiscoveryResponse
 )
 
 @asynccontextmanager
@@ -896,6 +898,36 @@ async def analyze_website(request: WebsiteAnalyzeRequest):
         pages_analyzed=len(fetch_result.get("pages", [])),
         profile=profile
     )
+
+@app.post("/api/sales/discover", tags=["SalesAI"], response_model=DiscoveryResponse)
+async def discover_jobs(request: DiscoveryRequest):
+    fetcher = WebsiteFetcher()
+    analyzer = WebsiteAnalyzer()
+    
+    # Reuse Phase 2 Website Analyzer
+    try:
+        fetch_result = fetcher.fetch_website_content(str(request.website_url))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Website fetch failed: {e}")
+        
+    try:
+        profile = await analyzer.analyze_website(fetch_result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Website analysis failed: {e}")
+        
+    # Phase 3: Discovery Orchestrator
+    try:
+        from sales_engine.discovery.discovery_orchestrator import DiscoveryOrchestrator
+        orchestrator = DiscoveryOrchestrator()
+        return await orchestrator.discover(
+            website_url=str(request.website_url),
+            profile=profile,
+            countries=request.countries,
+            max_queries=request.max_queries,
+            results_per_query=request.results_per_query
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Discovery failed: {e}")
 
 
 
