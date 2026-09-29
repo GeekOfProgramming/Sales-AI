@@ -16,6 +16,8 @@ langchain-chroma>=0.1.4
 scrapling>=0.4.0
 markdownify>=1.2.0
 curl_cffi>=0.16.0
+playwright>=1.47.0
+patchright>=1.47.0
 
 # Testing & Quality
 pytest>=8.2.0

@@ -1,11 +1,11 @@
 import json
 from typing import Dict, Any
 from backend.schemas import WebsiteProfile
-from ai_engine.llm_client import get_llm_client, CodeGenerationRequest
+from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 
 class WebsiteAnalyzer:
     def __init__(self):
-        self.llm_client = get_llm_client()
+        self.llm_client = BIMLLMClient()
         
     async def analyze_website(self, fetch_result: Dict[str, Any]) -> WebsiteProfile:
         print("[SalesAI Analysis] LLM analysis started")
