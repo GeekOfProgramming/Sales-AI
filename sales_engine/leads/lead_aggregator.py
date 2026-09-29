@@ -6,7 +6,6 @@ def parse_date(date_str: str) -> datetime | None:
     if not date_str:
         return None
     try:
-        # Assuming format like "2023-10-25" or similar ISO
         return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
     except Exception:
         return None
@@ -15,10 +14,8 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
     if not jobs:
         return CompanyLead()
 
-    # Base identity from first job (or most complete)
     lead = CompanyLead()
     
-    # We will pick the most complete identity fields across jobs
     for job in jobs:
         if not lead.company_name and job.company_name:
             lead.company_name = job.company_name
@@ -30,8 +27,8 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
         if job.source_company_key and job.source_company_key not in lead.source_company_keys:
             lead.source_company_keys.append(job.source_company_key)
             
+    lead.source_company_keys.sort()
     lead.job_count = len(jobs)
-    lead.relevant_job_count = len(jobs) # Currently all provided are deemed relevant
     
     job_titles = set()
     locations = set()
@@ -40,10 +37,19 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
     evidence_set = set()
     
     dates = []
+    relevant_count = 0
     
-    now = datetime.now()
+    now = datetime.now().replace(tzinfo=None)
     
     for job in jobs:
+        # A job is considered relevant only if it has signals or targeted technologies
+        is_relevant = False
+        if job.relevant_signals or job.technologies:
+            is_relevant = True
+        
+        if is_relevant:
+            relevant_count += 1
+            
         if job.job_title:
             job_titles.add(job.job_title)
         if job.location:
@@ -62,19 +68,27 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
                 
         dt = parse_date(job.posted_date)
         if dt:
-            dates.append(dt)
-            days_ago = (now.replace(tzinfo=None) - dt.replace(tzinfo=None)).days
-            if days_ago <= 7:
-                lead.recent_jobs_7d += 1
-            if days_ago <= 30:
-                lead.recent_jobs_30d += 1
+            dt_naive = dt.replace(tzinfo=None)
+            days_ago = (now - dt_naive).days
+            # Guard against future dates (days_ago < 0)
+            if days_ago >= 0:
+                dates.append(dt)
+                if days_ago <= 7:
+                    lead.recent_jobs_7d += 1
+                if days_ago <= 14:
+                    lead.recent_jobs_14d += 1
+                if days_ago <= 30:
+                    lead.recent_jobs_30d += 1
                 
-    lead.job_titles = list(job_titles)
-    lead.locations = list(locations)
-    lead.technologies = list(technologies)
-    lead.evidence = list(evidence_set)
+    lead.relevant_job_count = relevant_count
+    lead.job_titles = sorted(list(job_titles))
+    lead.locations = sorted(list(locations))
+    lead.technologies = sorted(list(technologies))
+    lead.evidence = sorted(list(evidence_set))
     
-    lead.signals = [{"signal": k, "evidence_count": v} for k, v in signals_dict.items()]
+    signals_list = [{"signal": k, "evidence_count": v} for k, v in signals_dict.items()]
+    signals_list.sort(key=lambda x: (-x["evidence_count"], x["signal"]))
+    lead.signals = signals_list
     
     if dates:
         dates.sort()

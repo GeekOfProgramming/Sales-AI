@@ -1,9 +1,9 @@
 from backend.schemas import CompanyLead
 
 SCORING_CONFIG = {
-    "primary_job": 10,
-    "secondary_job": 5,
-    "additional_jobs": 5,
+    "first_relevant_job": 10,
+    "second_relevant_job": 5,
+    "additional_relevant_jobs": 5,
     "leadership_role": 10,
     "technology_match": 5,
     "max_technology_score": 15,
@@ -40,15 +40,15 @@ def score_lead(lead: CompanyLead, min_qualified_score: int = 60) -> CompanyLead:
     # 2. Intent Score (0-30)
     intent_score = 0
     if lead.relevant_job_count >= 1:
-        intent_score += SCORING_CONFIG["primary_job"]
-        reasons.append("Primary hiring signal detected (+10)")
+        intent_score += SCORING_CONFIG["first_relevant_job"]
+        reasons.append("First relevant hiring signal detected (+10)")
     if lead.relevant_job_count >= 2:
-        intent_score += SCORING_CONFIG["secondary_job"]
-        reasons.append("Secondary hiring signal detected (+5)")
+        intent_score += SCORING_CONFIG["second_relevant_job"]
+        reasons.append("Second relevant hiring signal detected (+5)")
     if lead.relevant_job_count >= 3:
-        bonus = min((lead.relevant_job_count - 2) * SCORING_CONFIG["additional_jobs"], 5)
+        bonus = min((lead.relevant_job_count - 2) * SCORING_CONFIG["additional_relevant_jobs"], 5)
         intent_score += bonus
-        reasons.append(f"Multiple hiring signals detected (+{bonus})")
+        reasons.append(f"Multiple relevant hiring signals detected (+{bonus})")
         
     leadership_keywords = ["manager", "lead", "director", "head", "principal"]
     has_leadership = any(any(kw in title.lower() for kw in leadership_keywords) for title in lead.job_titles)
@@ -64,6 +64,9 @@ def score_lead(lead: CompanyLead, min_qualified_score: int = 60) -> CompanyLead:
     if lead.recent_jobs_7d > 0:
         recency_score = SCORING_CONFIG["recent_7_days"]
         reasons.append(f"Relevant jobs posted within 7 days (+{recency_score})")
+    elif lead.recent_jobs_14d > 0:
+        recency_score = SCORING_CONFIG["recent_14_days"]
+        reasons.append(f"Relevant jobs posted within 14 days (+{recency_score})")
     elif lead.recent_jobs_30d > 0:
         recency_score = SCORING_CONFIG["recent_30_days"]
         reasons.append(f"Relevant jobs posted within 30 days (+{recency_score})")

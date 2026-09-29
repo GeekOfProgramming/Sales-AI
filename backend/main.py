@@ -915,7 +915,7 @@ async def extract_jobs(request: ExtractJobsRequest):
 async def build_leads(request: BuildLeadsRequest):
     try:
         from sales_engine.leads.lead_orchestrator import process_leads
-        return process_leads(request.jobs, min_qualified_score=60)
+        return process_leads(request.jobs)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lead building failed: {e}")
 

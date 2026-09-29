@@ -366,6 +366,7 @@ class CompanyLead(BaseModel):
     oldest_job_date: Optional[str] = None
 
     recent_jobs_7d: int = 0
+    recent_jobs_14d: int = 0
     recent_jobs_30d: int = 0
 
     fit_score: int = 0

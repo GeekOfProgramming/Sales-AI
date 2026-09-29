@@ -1,10 +1,14 @@
 from typing import List
+import os
 from backend.schemas import StructuredJob, CompanyLead, BuildLeadsResponse
 from .company_identity import group_jobs_by_company
 from .lead_aggregator import aggregate_jobs
 from .lead_scorer import score_lead
 
-def process_leads(jobs: List[StructuredJob], min_qualified_score: int = 60) -> BuildLeadsResponse:
+def process_leads(jobs: List[StructuredJob], min_qualified_score: int = None) -> BuildLeadsResponse:
+    if min_qualified_score is None:
+        min_qualified_score = int(os.getenv("MIN_QUALIFIED_SCORE", "60"))
+        
     # 1. Group Jobs
     grouped_jobs = group_jobs_by_company(jobs)
     
