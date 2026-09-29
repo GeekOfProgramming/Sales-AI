@@ -231,5 +231,15 @@ class ACCConfigStatusResponse(BaseModel):
     message: str = Field(..., description="Status feedback message.")
 
 
+class SalesLLMTestRequest(BaseModel):
+    text: str
+
+
+class SalesLLMTestResponse(BaseModel):
+    status: str
+    model: str
+    response: str
+
+
 
 

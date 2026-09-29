@@ -50,6 +50,8 @@ from backend.schemas import (
     CloudSyncApprovalRequest,
     ACCConfigRequest,
     ACCConfigStatusResponse,
+    SalesLLMTestRequest,
+    SalesLLMTestResponse,
 )
 
 
@@ -104,8 +106,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="pyBIM-LLM Gateway",
-    description="Local, privacy-first AI Core & RAG Bridge for Autodesk Revit Automation.",
+    title="SalesAI Lead Intelligence API",
+    description="SalesAI Backend with Local Ollama Integration",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -627,219 +629,250 @@ async def get_submission_status(request_id: str):
 
 # --- Autodesk Construction Cloud (ACC) Endpoints ---
 
-@app.get(
-    "/api/acc/hubs",
-    response_model=List[ACCHubItem],
-    summary="List accessible corporate Hubs in ACC / BIM 360",
-    tags=["Cloud BIM (ACC)"],
-)
-async def list_acc_hubs():
-    """Retrieve list of accessible Autodesk Construction Cloud hubs."""
+# @app.get(
+#     "/api/acc/hubs",
+#     response_model=List[ACCHubItem],
+#     summary="List accessible corporate Hubs in ACC / BIM 360",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def list_acc_hubs():
+#     """Retrieve list of accessible Autodesk Construction Cloud hubs."""
+#     try:
+#         hubs = await cloud_client.get_hubs()
+#         return [ACCHubItem(**h) for h in hubs]
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_502_BAD_GATEWAY,
+#             detail=f"Autodesk Platform Services error: {str(e)}",
+#         )
+# 
+# 
+# @app.get(
+#     "/api/acc/projects/{hub_id}",
+#     response_model=List[ACCProjectItem],
+#     summary="List active projects inside an ACC Hub",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def list_acc_projects(hub_id: str):
+#     """Retrieve list of active projects within a specified hub."""
+#     try:
+#         projects = await cloud_client.get_projects(hub_id=hub_id)
+#         return [ACCProjectItem(**p) for p in projects]
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_502_BAD_GATEWAY,
+#             detail=f"Failed to fetch projects for hub {hub_id}: {str(e)}",
+#         )
+# 
+# 
+# @app.get(
+#     "/api/acc/models/{project_id}",
+#     response_model=List[ACCModelItem],
+#     summary="List Revit models in an ACC Project",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def list_acc_models(project_id: str):
+#     """Retrieve Revit models (.rvt) available in the cloud project without downloading."""
+#     try:
+#         models = await cloud_client.get_models(project_id=project_id)
+#         return [ACCModelItem(**m) for m in models]
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_502_BAD_GATEWAY,
+#             detail=f"Failed to fetch models for project {project_id}: {str(e)}",
+#         )
+# 
+# 
+# @app.post(
+#     "/api/acc/audit",
+#     response_model=CloudAuditResponse,
+#     summary="Execute Read-Only local AI compliance audit on Cloud Model",
+#     description="Fetches element metadata via Model Derivative API and audits against ISO 19650 and BIM rules.",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def audit_cloud_model(req: CloudAuditRequest):
+#     """Read-only audit: extracts parameter trees from ACC and produces a compliance report without modifying the model."""
+#     try:
+#         # 1. Fetch metadata without opening Revit or downloading full RVT
+#         metadata = await cloud_client.get_model_metadata(req.urn)
+#         
+#         # 2. Local AI Audit against ISO 19650 rules
+#         report = cloud_auditor.audit_model_metadata(metadata)
+#         return CloudAuditResponse(**report)
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Cloud BIM audit failed: {str(e)}",
+#         )
+# 
+# 
+# @app.post(
+#     "/api/acc/apply-changes",
+#     summary="Human-in-the-Loop approval: commit reviewed parameter changes (Admin Only)",
+#     description="Authorizes controlled write-back of approved corrections. Requires human administrator confirmation.",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def apply_cloud_model_changes(
+#     req: CloudSyncApprovalRequest,
+#     admin_user: dict = Depends(verify_admin_token),
+# ):
+#     """Human-in-the-Loop gateway: ensures no AI modifications occur without explicit admin confirmation."""
+#     return {
+#         "status": "authorized",
+#         "urn": req.urn,
+#         "approved_elements_count": len(req.approved_elements),
+#         "approved_elements": req.approved_elements,
+#         "authorized_by": admin_user.get("sub", "admin"),
+#         "message": f"Human-in-the-loop approval recorded for {len(req.approved_elements)} element corrections. Ready for staged synchronization.",
+#     }
+# 
+# 
+# def update_env_credentials(client_id: Optional[str], client_secret: Optional[str], force_mock: bool = False):
+#     """Safely updates or removes APS credentials in .env file."""
+#     env_path = Path(__file__).resolve().parent.parent / ".env"
+#     lines = []
+#     if env_path.exists():
+#         try:
+#             lines = env_path.read_text(encoding="utf-8").splitlines()
+#         except Exception:
+#             lines = []
+# 
+#     new_lines = []
+#     seen_id = False
+#     seen_secret = False
+# 
+#     for line in lines:
+#         stripped = line.strip()
+#         if stripped.startswith("APS_CLIENT_ID="):
+#             if not force_mock and client_id is not None:
+#                 new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
+#             seen_id = True
+#         elif stripped.startswith("APS_CLIENT_SECRET="):
+#             if not force_mock and client_secret is not None:
+#                 new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
+#             seen_secret = True
+#         else:
+#             new_lines.append(line)
+# 
+#     if not force_mock and client_id is not None and not seen_id:
+#         new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
+#     if not force_mock and client_secret is not None and not seen_secret:
+#         new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
+# 
+#     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+# 
+#     if force_mock:
+#         os.environ.pop("APS_CLIENT_ID", None)
+#         os.environ.pop("APS_CLIENT_SECRET", None)
+#     else:
+#         if client_id is not None:
+#             os.environ["APS_CLIENT_ID"] = client_id.strip()
+#         if client_secret is not None:
+#             os.environ["APS_CLIENT_SECRET"] = client_secret.strip()
+# 
+# 
+# @app.get(
+#     "/api/acc/config",
+#     response_model=ACCConfigStatusResponse,
+#     summary="Get Autodesk Construction Cloud configuration & connection status",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def get_acc_config():
+#     """Returns current operational status (Live vs Simulation) and masked client ID."""
+#     info = cloud_client.get_status_info()
+#     return ACCConfigStatusResponse(**info)
+# 
+# 
+# @app.post(
+#     "/api/acc/config/test",
+#     summary="Test Autodesk Platform Services credentials without saving (Admin Only)",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def test_acc_credentials(
+#     req: ACCConfigRequest,
+#     admin_user: dict = Depends(verify_admin_token),
+# ):
+#     """Verifies client ID and client secret against Autodesk's OAuth 2.0 au#     summary="Save Autodesk Platform Services cloud credentials (Admin Only)",
+#     description="Updates .env persistence and reconfigures active cloud client in memory without restart.",
+#     tags=["Cloud BIM (ACC)"],
+# )
+# async def configure_acc_credentials(
+#     req: ACCConfigRequest,
+#     admin_user: dict = Depends(verify_admin_token),
+# ):
+#     """Admin configuration: writes keys to .env and switches cloud_client dynamically between Live and Mock."""
+#     if req.force_mock or (not req.client_id and not req.client_secret):
+#         # Switch to Mock Mode
+#         cloud_client.set_credentials("", "", force_mock=True)
+#         update_env_credentials("", "", force_mock=True)
+#         info = cloud_client.get_status_info()
+#         info["message"] = "Switched to offline simulation / mock mode. Credentials cleared from active session."
+#         return ACCConfigStatusResponse(**info)
+# 
+#     cid = (req.client_id or "").strip()
+#     sec = (req.client_secret or "").strip()
+# 
+#     if not cid or not sec:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Both Client ID and Client Secret are required for live cloud connectivity.",
+#         )
+# 
+#     # Unless explicitly bypassed, test connection with Autodesk servers
+#     if not req.skip_verification:
+#         test_res = await cloud_client.test_connection(client_id=cid, client_secret=sec)
+#         if not test_res.get("success"):
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail=test_res.get("message", "Autodesk Platform Services credentials failed validation."),
+#             )
+# 
+#     # Credentials valid: configure in-memory client and persist to .env
+#     cloud_client.set_credentials(cid, sec, force_mock=False)
+#     update_env_credentials(cid, sec, force_mock=False)
+# 
+#     info = cloud_client.get_status_info()
+#     info["message"] = "Autodesk Platform Services credentials successfully saved and activated!"
+#     return ACCConfigStatusResponse(**info)
+
+
+@app.post("/api/sales/test-llm", tags=["SalesAI"])
+async def test_sales_llm(request: SalesLLMTestRequest):
+    prompt = f"""
+You are a B2B sales research assistant.
+
+Analyze the following business description:
+
+{request.text}
+
+Return a concise explanation of:
+- what the business sells
+- who its likely customers are
+- what problems it solves
+"""
+
+    llm_client = get_llm_client()
+    llm_req = CodeGenerationRequest(
+        user_prompt=prompt,
+        environment="nlp",
+        language="text"
+    )
+
     try:
-        hubs = await cloud_client.get_hubs()
-        return [ACCHubItem(**h) for h in hubs]
+        response = await llm_client.generate_code_async(llm_req, model_name="llama3")
+        return {
+            "status": "ok",
+            "model": "llama3",
+            "response": response.extracted_code
+        }
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Autodesk Platform Services error: {str(e)}",
-        )
+        return {
+            "status": "error",
+            "model": "llama3",
+            "response": str(e)
+        }
 
 
-@app.get(
-    "/api/acc/projects/{hub_id}",
-    response_model=List[ACCProjectItem],
-    summary="List active projects inside an ACC Hub",
-    tags=["Cloud BIM (ACC)"],
-)
-async def list_acc_projects(hub_id: str):
-    """Retrieve list of active projects within a specified hub."""
-    try:
-        projects = await cloud_client.get_projects(hub_id=hub_id)
-        return [ACCProjectItem(**p) for p in projects]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch projects for hub {hub_id}: {str(e)}",
-        )
-
-
-@app.get(
-    "/api/acc/models/{project_id}",
-    response_model=List[ACCModelItem],
-    summary="List Revit models in an ACC Project",
-    tags=["Cloud BIM (ACC)"],
-)
-async def list_acc_models(project_id: str):
-    """Retrieve Revit models (.rvt) available in the cloud project without downloading."""
-    try:
-        models = await cloud_client.get_models(project_id=project_id)
-        return [ACCModelItem(**m) for m in models]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch models for project {project_id}: {str(e)}",
-        )
-
-
-@app.post(
-    "/api/acc/audit",
-    response_model=CloudAuditResponse,
-    summary="Execute Read-Only local AI compliance audit on Cloud Model",
-    description="Fetches element metadata via Model Derivative API and audits against ISO 19650 and BIM rules.",
-    tags=["Cloud BIM (ACC)"],
-)
-async def audit_cloud_model(req: CloudAuditRequest):
-    """Read-only audit: extracts parameter trees from ACC and produces a compliance report without modifying the model."""
-    try:
-        # 1. Fetch metadata without opening Revit or downloading full RVT
-        metadata = await cloud_client.get_model_metadata(req.urn)
-        
-        # 2. Local AI Audit against ISO 19650 rules
-        report = cloud_auditor.audit_model_metadata(metadata)
-        return CloudAuditResponse(**report)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cloud BIM audit failed: {str(e)}",
-        )
-
-
-@app.post(
-    "/api/acc/apply-changes",
-    summary="Human-in-the-Loop approval: commit reviewed parameter changes (Admin Only)",
-    description="Authorizes controlled write-back of approved corrections. Requires human administrator confirmation.",
-    tags=["Cloud BIM (ACC)"],
-)
-async def apply_cloud_model_changes(
-    req: CloudSyncApprovalRequest,
-    admin_user: dict = Depends(verify_admin_token),
-):
-    """Human-in-the-Loop gateway: ensures no AI modifications occur without explicit admin confirmation."""
-    return {
-        "status": "authorized",
-        "urn": req.urn,
-        "approved_elements_count": len(req.approved_elements),
-        "approved_elements": req.approved_elements,
-        "authorized_by": admin_user.get("sub", "admin"),
-        "message": f"Human-in-the-loop approval recorded for {len(req.approved_elements)} element corrections. Ready for staged synchronization.",
-    }
-
-
-def update_env_credentials(client_id: Optional[str], client_secret: Optional[str], force_mock: bool = False):
-    """Safely updates or removes APS credentials in .env file."""
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    lines = []
-    if env_path.exists():
-        try:
-            lines = env_path.read_text(encoding="utf-8").splitlines()
-        except Exception:
-            lines = []
-
-    new_lines = []
-    seen_id = False
-    seen_secret = False
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("APS_CLIENT_ID="):
-            if not force_mock and client_id is not None:
-                new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
-            seen_id = True
-        elif stripped.startswith("APS_CLIENT_SECRET="):
-            if not force_mock and client_secret is not None:
-                new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
-            seen_secret = True
-        else:
-            new_lines.append(line)
-
-    if not force_mock and client_id is not None and not seen_id:
-        new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
-    if not force_mock and client_secret is not None and not seen_secret:
-        new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
-
-    env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-
-    if force_mock:
-        os.environ.pop("APS_CLIENT_ID", None)
-        os.environ.pop("APS_CLIENT_SECRET", None)
-    else:
-        if client_id is not None:
-            os.environ["APS_CLIENT_ID"] = client_id.strip()
-        if client_secret is not None:
-            os.environ["APS_CLIENT_SECRET"] = client_secret.strip()
-
-
-@app.get(
-    "/api/acc/config",
-    response_model=ACCConfigStatusResponse,
-    summary="Get Autodesk Construction Cloud configuration & connection status",
-    tags=["Cloud BIM (ACC)"],
-)
-async def get_acc_config():
-    """Returns current operational status (Live vs Simulation) and masked client ID."""
-    info = cloud_client.get_status_info()
-    return ACCConfigStatusResponse(**info)
-
-
-@app.post(
-    "/api/acc/config/test",
-    summary="Test Autodesk Platform Services credentials without saving (Admin Only)",
-    tags=["Cloud BIM (ACC)"],
-)
-async def test_acc_credentials(
-    req: ACCConfigRequest,
-    admin_user: dict = Depends(verify_admin_token),
-):
-    """Verifies client ID and client secret against Autodesk's OAuth 2.0 authentication service."""
-    result = await cloud_client.test_connection(client_id=req.client_id, client_secret=req.client_secret)
-    return result
-
-
-@app.post(
-    "/api/acc/config",
-    response_model=ACCConfigStatusResponse,
-    summary="Save Autodesk Platform Services cloud credentials (Admin Only)",
-    description="Updates .env persistence and reconfigures active cloud client in memory without restart.",
-    tags=["Cloud BIM (ACC)"],
-)
-async def configure_acc_credentials(
-    req: ACCConfigRequest,
-    admin_user: dict = Depends(verify_admin_token),
-):
-    """Admin configuration: writes keys to .env and switches cloud_client dynamically between Live and Mock."""
-    if req.force_mock or (not req.client_id and not req.client_secret):
-        # Switch to Mock Mode
-        cloud_client.set_credentials("", "", force_mock=True)
-        update_env_credentials("", "", force_mock=True)
-        info = cloud_client.get_status_info()
-        info["message"] = "Switched to offline simulation / mock mode. Credentials cleared from active session."
-        return ACCConfigStatusResponse(**info)
-
-    cid = (req.client_id or "").strip()
-    sec = (req.client_secret or "").strip()
-
-    if not cid or not sec:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Both Client ID and Client Secret are required for live cloud connectivity.",
-        )
-
-    # Unless explicitly bypassed, test connection with Autodesk servers
-    if not req.skip_verification:
-        test_res = await cloud_client.test_connection(client_id=cid, client_secret=sec)
-        if not test_res.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=test_res.get("message", "Autodesk Platform Services credentials failed validation."),
-            )
-
-    # Credentials valid: configure in-memory client and persist to .env
-    cloud_client.set_credentials(cid, sec, force_mock=False)
-    update_env_credentials(cid, sec, force_mock=False)
-
-    info = cloud_client.get_status_info()
-    info["message"] = "Autodesk Platform Services credentials successfully saved and activated!"
-    return ACCConfigStatusResponse(**info)
 
 
 
