@@ -68,7 +68,7 @@ secondary_job_signals
 keywords
 negative_signals
 """
-                response = await self.llm_client.generate_code_async(req, model_name="llama3")
+                response = await self.llm_client.generate_code_async(req)
                 json_text = response.extracted_code.strip()
                 
                 # Attempt to parse json from markdown block if necessary
