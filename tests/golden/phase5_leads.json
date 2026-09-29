@@ -1,0 +1,27 @@
+[
+  {
+    "case_id": "P5-LEAD-001",
+    "phase": "Phase 5",
+    "title": "Placeholder: Strong Lead Aggregation",
+    "source_type": "internal",
+    "source_url": null,
+    "snapshot_path": null,
+    "captured_at": "2026-09-29T00:00:00Z",
+    "input": {
+      "jobs": [
+        {
+          "company": "ABC Engineering",
+          "url": "https://example.com/job/1",
+          "relevant_signals": ["Revit"]
+        }
+      ]
+    },
+    "expected": {
+      "expected_company_grouping": 1,
+      "expected_qualified_state": true,
+      "expected_score_range": [50, 100]
+    },
+    "human_notes": "Needs review.",
+    "status": "NOT_RUN"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "case_id": "P2-WEB-001",
+    "phase": "Phase 2",
+    "title": "Placeholder: Architectural Firm Website",
+    "source_type": "website",
+    "source_url": "https://example-architects.com",
+    "snapshot_path": "tests/golden/snapshots/websites/P2-WEB-001.html",
+    "captured_at": "2026-09-29T00:00:00Z",
+    "input": {
+      "url": "https://example-architects.com"
+    },
+    "expected": {
+      "company_name": "Example Architects",
+      "services": ["Architecture", "BIM"],
+      "target_industries": ["Commercial"],
+      "buyer_roles": ["BIM Manager", "Principal"],
+      "pain_points": ["Coordination", "Clash detection"]
+    },
+    "human_notes": "Needs human review of actual snapshot.",
+    "status": "NOT_RUN"
+  }
+]

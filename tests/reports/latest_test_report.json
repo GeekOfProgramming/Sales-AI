@@ -1,0 +1,147 @@
+[
+  {
+    "case_id": "P2-WEB-001",
+    "phase": "Phase 2",
+    "title": "Placeholder: Architectural Firm Website",
+    "source": "https://example-architects.com",
+    "input": {
+      "url": "https://example-architects.com"
+    },
+    "expected": {
+      "company_name": "Example Architects",
+      "services": [
+        "Architecture",
+        "BIM"
+      ],
+      "target_industries": [
+        "Commercial"
+      ],
+      "buyer_roles": [
+        "BIM Manager",
+        "Principal"
+      ],
+      "pain_points": [
+        "Coordination",
+        "Clash detection"
+      ]
+    },
+    "actual": {},
+    "status": "NOT_RUN",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Needs human review of actual snapshot.",
+    "test_timestamp": "2026-09-29T19:34:47.773031Z"
+  },
+  {
+    "case_id": "P3-DISC-001",
+    "phase": "Phase 3",
+    "title": "Placeholder: Discovery Query Generation",
+    "source": "internal",
+    "input": {
+      "website_profile": {
+        "company_name": "ABC BIM",
+        "target_industries": [
+          "Construction"
+        ]
+      },
+      "countries": [
+        "US",
+        "UK"
+      ]
+    },
+    "expected": {
+      "generated_queries": [
+        "Construction companies hiring BIM Manager in US"
+      ],
+      "expected_query_intents": [
+        "Find construction companies hiring BIM professionals"
+      ]
+    },
+    "actual": {},
+    "status": "NOT_RUN",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Needs live results verification or snapshot",
+    "test_timestamp": "2026-09-29T19:34:47.775494Z"
+  },
+  {
+    "case_id": "P4-JOB-001",
+    "phase": "Phase 4",
+    "title": "Placeholder: Greenhouse BIM Manager",
+    "source": "https://example.com/job/123",
+    "input": {
+      "html": "<html><body>BIM Manager at ABC Engineering. Requires Revit.</body></html>",
+      "url": "https://example.com/job/123"
+    },
+    "expected": {
+      "company": "ABC Engineering",
+      "job_title": "BIM Manager",
+      "technologies": [
+        "Revit"
+      ],
+      "relevant_signals": [
+        "BIM Manager",
+        "Revit"
+      ],
+      "evidence": "Requires Revit"
+    },
+    "actual": {},
+    "status": "NOT_RUN",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Needs human verification.",
+    "test_timestamp": "2026-09-29T19:34:47.776848Z"
+  },
+  {
+    "case_id": "P5-LEAD-001",
+    "phase": "Phase 5",
+    "title": "Placeholder: Strong Lead Aggregation",
+    "source": null,
+    "input": {
+      "jobs": [
+        {
+          "company": "ABC Engineering",
+          "url": "https://example.com/job/1",
+          "relevant_signals": [
+            "Revit"
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "expected_company_grouping": 1,
+      "expected_qualified_state": true,
+      "expected_score_range": [
+        50,
+        100
+      ]
+    },
+    "actual": {},
+    "status": "NOT_RUN",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Needs review.",
+    "test_timestamp": "2026-09-29T19:34:47.777993Z"
+  },
+  {
+    "case_id": "P6-ENRICH-001",
+    "phase": "Phase 6",
+    "title": "Placeholder: Company and Contact Enrichment",
+    "source": null,
+    "input": {
+      "company_domain": "acme.com",
+      "company_name": "Acme Corp"
+    },
+    "expected": {
+      "company_domain": "acme.com",
+      "expected_contact_role": "BIM Manager",
+      "expected_email_status": "verified"
+    },
+    "actual": {},
+    "status": "NOT_RUN",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Mock provider response needed.",
+    "test_timestamp": "2026-09-29T19:34:47.779112Z"
+  }
+]

@@ -1,0 +1,24 @@
+[
+  {
+    "case_id": "P4-JOB-001",
+    "phase": "Phase 4",
+    "title": "Placeholder: Greenhouse BIM Manager",
+    "source_type": "job_page",
+    "source_url": "https://example.com/job/123",
+    "snapshot_path": "tests/golden/snapshots/job_pages/P4-JOB-001.json",
+    "captured_at": "2026-09-29T00:00:00Z",
+    "input": {
+      "html": "<html><body>BIM Manager at ABC Engineering. Requires Revit.</body></html>",
+      "url": "https://example.com/job/123"
+    },
+    "expected": {
+      "company": "ABC Engineering",
+      "job_title": "BIM Manager",
+      "technologies": ["Revit"],
+      "relevant_signals": ["BIM Manager", "Revit"],
+      "evidence": "Requires Revit"
+    },
+    "human_notes": "Needs human verification.",
+    "status": "NOT_RUN"
+  }
+]

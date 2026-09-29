@@ -1,0 +1,22 @@
+[
+  {
+    "case_id": "P6-ENRICH-001",
+    "phase": "Phase 6",
+    "title": "Placeholder: Company and Contact Enrichment",
+    "source_type": "provider",
+    "source_url": null,
+    "snapshot_path": "tests/golden/snapshots/provider_responses/P6-ENRICH-001.json",
+    "captured_at": "2026-09-29T00:00:00Z",
+    "input": {
+      "company_domain": "acme.com",
+      "company_name": "Acme Corp"
+    },
+    "expected": {
+      "company_domain": "acme.com",
+      "expected_contact_role": "BIM Manager",
+      "expected_email_status": "verified"
+    },
+    "human_notes": "Mock provider response needed.",
+    "status": "NOT_RUN"
+  }
+]

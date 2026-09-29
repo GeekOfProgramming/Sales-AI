@@ -1,0 +1,24 @@
+[
+  {
+    "case_id": "P3-DISC-001",
+    "phase": "Phase 3",
+    "title": "Placeholder: Discovery Query Generation",
+    "source_type": "website_profile",
+    "source_url": "internal",
+    "snapshot_path": null,
+    "captured_at": "2026-09-29T00:00:00Z",
+    "input": {
+      "website_profile": {
+        "company_name": "ABC BIM",
+        "target_industries": ["Construction"]
+      },
+      "countries": ["US", "UK"]
+    },
+    "expected": {
+      "generated_queries": ["Construction companies hiring BIM Manager in US"],
+      "expected_query_intents": ["Find construction companies hiring BIM professionals"]
+    },
+    "human_notes": "Needs live results verification or snapshot",
+    "status": "NOT_RUN"
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "version": "1.0",
+  "description": "SalesAI Golden Test Dataset",
+  "phases": ["phase2", "phase3", "phase4", "phase5", "phase6"]
+}
