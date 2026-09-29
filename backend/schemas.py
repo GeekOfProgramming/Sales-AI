@@ -298,3 +298,41 @@ class NormalizedSearchResult(BaseModel):
     snippet: str
     source: str
     rank: int
+
+class JobSignal(BaseModel):
+    signal: str
+    evidence: str
+
+class StructuredJob(BaseModel):
+    company_name: Optional[str] = None
+    company_name_normalized: Optional[str] = None
+    company_domain: Optional[str] = None
+    job_title: Optional[str] = None
+    location: Optional[str] = None
+    employment_type: Optional[str] = None
+    posted_date: Optional[str] = None
+    job_url: str
+    source: str
+    description: Optional[str] = None
+    requirements: List[str] = []
+    technologies: List[str] = []
+    seniority: Optional[str] = None
+    remote_status: Optional[str] = None
+    relevant_signals: List[JobSignal] = []
+
+class ExtractJobsRequest(BaseModel):
+    urls: List[HttpUrl] = Field(..., max_length=50)
+
+class JobExtractionError(BaseModel):
+    url: str
+    error_type: str
+    message: str
+
+class ExtractJobsResponse(BaseModel):
+    status: str
+    requested: int
+    processed: int
+    failed: int
+    jobs: List[StructuredJob]
+    errors: List[JobExtractionError]
+

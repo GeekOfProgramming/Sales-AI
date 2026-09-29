@@ -1,5 +1,35 @@
 [
   {
+    "request_id": "req_333d1053",
+    "url": "https://docs.pyrevitlabs.io/official-api",
+    "slug": "pyrevit_official_api",
+    "status": "rejected",
+    "submitter": "BIM Manager",
+    "submitted_at": "2026-09-29T15:29:05.459604+00:00",
+    "processed_at": "2026-09-29T15:29:06.270445+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/official-api. HTTP Status: 404"
+  },
+  {
+    "request_id": "req_c970d2b5",
+    "url": "https://unverified-blog.com/bad-script",
+    "slug": "bim_bad_script",
+    "status": "rejected",
+    "submitter": "Untrusted User",
+    "submitted_at": "2026-09-29T15:29:05.334856+00:00",
+    "processed_at": "2026-09-29T15:29:05.366698+00:00",
+    "message": "Failed ISO compliance check."
+  },
+  {
+    "request_id": "req_8dfca757",
+    "url": "https://docs.pyrevitlabs.io/sample-docs/",
+    "slug": "sample_docs_test",
+    "status": "pending",
+    "submitter": "Revit User Laptop 2",
+    "submitted_at": "2026-09-29T15:29:05.215006+00:00",
+    "processed_at": null,
+    "message": "Awaiting administrator approval before indexing into ChromaDB."
+  },
+  {
     "request_id": "req_74f40584",
     "url": "https://docs.pyrevitlabs.io/official-api",
     "slug": "pyrevit_official_api",

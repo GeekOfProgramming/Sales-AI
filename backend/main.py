@@ -57,7 +57,9 @@ from backend.schemas import (
     WebsiteAnalyzeRequest,
     WebsiteAnalyzeResponse,
     DiscoveryRequest,
-    DiscoveryResponse
+    DiscoveryResponse,
+    ExtractJobsRequest,
+    ExtractJobsResponse
 )
 
 @asynccontextmanager
@@ -928,6 +930,17 @@ async def discover_jobs(request: DiscoveryRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Discovery failed: {e}")
+
+@app.post("/api/sales/extract-jobs", tags=["SalesAI"], response_model=ExtractJobsResponse)
+async def extract_jobs(request: ExtractJobsRequest):
+    try:
+        from sales_engine.sources.job_extraction_orchestrator import JobExtractionOrchestrator
+        orchestrator = JobExtractionOrchestrator()
+        
+        url_strings = [str(url) for url in request.urls]
+        return await orchestrator.extract_jobs(url_strings)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
 
 
 
