@@ -94,8 +94,13 @@ Your task is to provide comprehensive, clear, and technically precise explanatio
 Use clear headings, bullet points, and clean formatting.
 """
 
+SYSTEM_PROMPT_SALES = """You are a B2B sales intelligence and company research assistant.
+Your job is to analyze companies, services, industries, customer profiles, business pain points, buying signals, hiring signals, and potential buyer roles.
 
-
+Use only the evidence supplied in the request.
+Do not invent company facts.
+Return structured output when requested.
+"""
 class BIMLLMClient:
     """Client for local AI inference using Ollama with specialization for BIM and Revit workflows."""
 
@@ -140,7 +145,9 @@ class BIMLLMClient:
         env = getattr(request, "environment", "").lower()
         lang = getattr(request, "language", "").lower()
 
-        if env in ("text", "chat", "advisory", "nlp") or lang in ("text", "markdown", "nlp"):
+        if env in ("sales", "sales_analysis"):
+            base_system = SYSTEM_PROMPT_SALES
+        elif env in ("text", "chat", "advisory", "nlp") or lang in ("text", "markdown", "nlp"):
             base_system = SYSTEM_PROMPT_BIM_ADVISOR
         elif env == "dynamo" or lang == "dynamo":
             base_system = SYSTEM_PROMPT_REVIT_DYNAMO
@@ -148,7 +155,6 @@ class BIMLLMClient:
             base_system = SYSTEM_PROMPT_REVIT_CSHARP
         else:
             base_system = SYSTEM_PROMPT_REVIT_PYTHON
-
 
         # Inject RAG / BIM context if available
         if request.context_rules and request.context_rules.strip():

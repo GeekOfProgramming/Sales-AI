@@ -24,6 +24,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from sales_engine.web.website_fetcher import WebsiteFetcher
+from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
 from ai_engine.rag_retriever import BIMRAGRetriever
 from ai_engine.data_ingestor import BIMDataIngestor
 from ai_engine.crew_orchestrator import BIMCrewOrchestrator
@@ -52,8 +54,9 @@ from backend.schemas import (
     ACCConfigStatusResponse,
     SalesLLMTestRequest,
     SalesLLMTestResponse,
+    WebsiteAnalyzeRequest,
+    WebsiteAnalyzeResponse,
 )
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -854,7 +857,7 @@ Return a concise explanation of:
     llm_client = get_llm_client()
     llm_req = CodeGenerationRequest(
         user_prompt=prompt,
-        environment="nlp",
+        environment="sales",
         language="text"
     )
 
@@ -871,6 +874,29 @@ Return a concise explanation of:
             "model": "llama3",
             "response": str(e)
         }
+
+@app.post("/api/sales/analyze-website", tags=["SalesAI"], response_model=WebsiteAnalyzeResponse)
+async def analyze_website(request: WebsiteAnalyzeRequest):
+    fetcher = WebsiteFetcher()
+    analyzer = WebsiteAnalyzer()
+    
+    try:
+        fetch_result = fetcher.fetch_website_content(str(request.url))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    try:
+        profile = await analyzer.analyze_website(fetch_result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    return WebsiteAnalyzeResponse(
+        status="ok",
+        url=str(request.url),
+        pages_analyzed=len(fetch_result.get("pages", [])),
+        profile=profile
+    )
+
 
 
 

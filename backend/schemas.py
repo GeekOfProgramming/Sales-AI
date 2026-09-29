@@ -3,7 +3,7 @@ Defines contracts between Revit Client (C# / pyRevit) and Python Backend.
 """
 
 from typing import List, Dict, Any, Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class ElementMetadata(BaseModel):
@@ -239,6 +239,29 @@ class SalesLLMTestResponse(BaseModel):
     status: str
     model: str
     response: str
+
+class WebsiteAnalyzeRequest(BaseModel):
+    url: HttpUrl
+
+class WebsiteProfile(BaseModel):
+    company_name: Optional[str] = None
+    company_summary: Optional[str] = None
+    services: List[str] = []
+    target_industries: List[str] = []
+    target_company_types: List[str] = []
+    pain_points: List[str] = []
+    buyer_roles: List[str] = []
+    primary_job_signals: List[str] = []
+    secondary_job_signals: List[str] = []
+    keywords: List[str] = []
+    negative_signals: List[str] = []
+
+class WebsiteAnalyzeResponse(BaseModel):
+    status: str
+    url: str
+    pages_analyzed: int
+    profile: WebsiteProfile
+
 
 
 
