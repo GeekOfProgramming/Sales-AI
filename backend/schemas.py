@@ -246,15 +246,15 @@ class WebsiteAnalyzeRequest(BaseModel):
 class WebsiteProfile(BaseModel):
     company_name: Optional[str] = None
     company_summary: Optional[str] = None
-    services: List[str] = []
-    target_industries: List[str] = []
-    target_company_types: List[str] = []
-    pain_points: List[str] = []
-    buyer_roles: List[str] = []
-    primary_job_signals: List[str] = []
-    secondary_job_signals: List[str] = []
-    keywords: List[str] = []
-    negative_signals: List[str] = []
+    services: List[str] = Field(default_factory=list)
+    target_industries: List[str] = Field(default_factory=list)
+    target_company_types: List[str] = Field(default_factory=list)
+    pain_points: List[str] = Field(default_factory=list)
+    buyer_roles: List[str] = Field(default_factory=list)
+    primary_job_signals: List[str] = Field(default_factory=list)
+    secondary_job_signals: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    negative_signals: List[str] = Field(default_factory=list)
 
 class WebsiteAnalyzeResponse(BaseModel):
     status: str
@@ -264,7 +264,7 @@ class WebsiteAnalyzeResponse(BaseModel):
 
 class DiscoveryRequest(BaseModel):
     website_url: HttpUrl
-    countries: List[str] = []
+    countries: List[str] = Field(default_factory=list)
     max_queries: int = Field(default=20, ge=1, le=20)
     results_per_query: int = Field(default=10, ge=1, le=10)
 
@@ -314,11 +314,18 @@ class StructuredJob(BaseModel):
     job_url: str
     source: str
     description: Optional[str] = None
-    requirements: List[str] = []
-    technologies: List[str] = []
+    requirements: List[str] = Field(default_factory=list)
+    technologies: List[str] = Field(default_factory=list)
     seniority: Optional[str] = None
     remote_status: Optional[str] = None
-    relevant_signals: List[JobSignal] = []
+    relevant_signals: List[JobSignal] = Field(default_factory=list)
+
+class JobAnalysisResult(BaseModel):
+    technologies: List[str] = Field(default_factory=list)
+    requirements: List[str] = Field(default_factory=list)
+    seniority: Optional[str] = None
+    remote_status: Optional[str] = None
+    relevant_signals: List[JobSignal] = Field(default_factory=list)
 
 class ExtractJobsRequest(BaseModel):
     urls: List[HttpUrl] = Field(..., max_length=50)

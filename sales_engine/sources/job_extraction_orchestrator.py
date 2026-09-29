@@ -33,8 +33,15 @@ class JobExtractionOrchestrator:
                 # 2. Fetch Job
                 try:
                     raw_job = await fetcher.fetch_job(url)
+                except TimeoutError as e:
+                    errors.append(JobExtractionError(url=url, error_type="timeout", message=str(e)))
+                    continue
                 except Exception as e:
                     errors.append(JobExtractionError(url=url, error_type="fetch_failed", message=str(e)))
+                    continue
+                    
+                if not raw_job.get("description"):
+                    errors.append(JobExtractionError(url=url, error_type="parse_failed", message="No description extracted"))
                     continue
                     
                 # 3. Analyze Job
@@ -50,11 +57,25 @@ class JobExtractionOrchestrator:
                     
                 # Extract domain safely if company domain is empty
                 if not structured_job.company_domain and structured_job.job_url:
-                    parsed = urlparse(structured_job.job_url)
-                    # Very simple fallback: use the domain of the job URL if generic, or try to find it.
-                    # For ATS, it's often better to leave it empty or extract from URL path if possible.
-                    if source_type == "generic":
-                        structured_job.company_domain = parsed.netloc.lower()
+                    company_same_as = raw_job.get("company_same_as")
+                    if company_same_as:
+                        try:
+                            parsed_same_as = urlparse(company_same_as)
+                            if parsed_same_as.netloc:
+                                structured_job.company_domain = parsed_same_as.netloc.lower()
+                        except Exception:
+                            pass
+                            
+                    if not structured_job.company_domain and source_type == "generic":
+                        parsed = urlparse(structured_job.job_url)
+                        domain = parsed.netloc.lower()
+                        # Very simple fallback: use the domain of the job URL if generic.
+                        # Exclude known ATS and job boards if they somehow got classified as generic.
+                        invalid_domains = ["lever.co", "greenhouse.io", "ashbyhq.com", "workable.com", "breezy.hr", "applytojob.com", "indeed.com", "linkedin.com"]
+                        if not any(d in domain for d in invalid_domains):
+                            structured_job.company_domain = domain
+                            
+                    # For ATS URLs, do NOT set company_domain to lever.co, etc. It remains null.
                 
                 jobs.append(structured_job)
                 

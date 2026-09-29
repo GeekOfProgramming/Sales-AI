@@ -61,7 +61,7 @@ async def test_job_analyzer_failure():
 @patch('sales_engine.sources.generic_job_page.GenericJobPage.fetch_job')
 @patch('sales_engine.analysis.job_analyzer.JobAnalyzer.analyze_job')
 async def test_extraction_orchestrator(mock_analyze, mock_generic_fetch, mock_lever_fetch):
-    mock_lever_fetch.return_value = {"company": "Test LLC", "title": "BIM Manager", "url": "https://jobs.lever.co/test/1"}
+    mock_lever_fetch.return_value = {"company": "Test LLC", "title": "BIM Manager", "url": "https://jobs.lever.co/test/1", "description": "Test description"}
     mock_generic_fetch.side_effect = Exception("Timeout")
     
     mock_analyze.return_value = StructuredJob(
@@ -133,3 +133,72 @@ async def test_generic_job_page_json_ld():
         assert job["company"] == "Tech Corp"
         assert job["posted_date"] == "2023-01-01"
         assert job["description"] == "Great job"
+
+@pytest.mark.asyncio
+async def test_generic_job_page_json_ld_graph_and_employment():
+    from sales_engine.sources.generic_job_page import GenericJobPage
+    import httpx
+    
+    html = """
+    <html>
+      <head>
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org/",
+            "@graph": [
+                {
+                    "@type": "JobPosting",
+                    "title": "BIM Manager",
+                    "employmentType": "FULL_TIME",
+                    "hiringOrganization": {
+                        "@type": "Organization",
+                        "name": "Design Firm",
+                        "sameAs": "https://designfirm.com"
+                    },
+                    "description": "<p>Looking for BIM expert.</p>"
+                }
+            ]
+        }
+        </script>
+      </head>
+      <body></body>
+    </html>
+    """
+    
+    mock_resp = httpx.Response(200, text=html, request=httpx.Request("GET", "url"))
+    
+    with patch('httpx.AsyncClient.get', return_value=mock_resp):
+        fetcher = GenericJobPage()
+        job = await fetcher.fetch_job("https://careers.designfirm.com/job/1")
+        assert job["title"] == "BIM Manager"
+        assert job["employment_type"] == "FULL_TIME"
+        assert job["company_same_as"] == "https://designfirm.com"
+        
+@pytest.mark.asyncio
+@patch('sales_engine.sources.lever_source.LeverSource.fetch_job')
+@patch('sales_engine.analysis.job_analyzer.JobAnalyzer.analyze_job')
+async def test_ats_domain_not_used_as_company_domain(mock_analyze, mock_lever_fetch):
+    from sales_engine.sources.job_extraction_orchestrator import JobExtractionOrchestrator
+    
+    # Mock successful fetch without description -> parse_failed
+    mock_lever_fetch.return_value = {"company": "Test LLC", "title": "BIM Manager", "url": "https://jobs.lever.co/test/1", "description": ""}
+    
+    orchestrator = JobExtractionOrchestrator()
+    response = await orchestrator.extract_jobs(["https://jobs.lever.co/test/1"])
+    
+    assert response.failed == 1
+    assert response.errors[0].error_type == "parse_failed"
+    
+    # Now mock with description to test domain
+    mock_lever_fetch.return_value = {"company": "Test LLC", "title": "BIM Manager", "url": "https://jobs.lever.co/test/1", "description": "Good job", "source": "lever"}
+    mock_analyze.return_value = StructuredJob(
+        company_name="Test LLC",
+        job_title="BIM Manager",
+        job_url="https://jobs.lever.co/test/1",
+        source="lever"
+    )
+    
+    response2 = await orchestrator.extract_jobs(["https://jobs.lever.co/test/1"])
+    assert response2.processed == 1
+    assert response2.jobs[0].company_domain is None # Should NOT be lever.co
+

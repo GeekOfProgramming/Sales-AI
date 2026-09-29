@@ -20,6 +20,10 @@ class GenericJobPage(BaseJobSource):
             for script in json_ld_scripts:
                 try:
                     data = json.loads(script.string)
+                    # Handle @graph
+                    if isinstance(data, dict) and "@graph" in data:
+                        data = data["@graph"]
+                        
                     # Handle both list and dict formats
                     if isinstance(data, list):
                         for item in data:
@@ -38,12 +42,34 @@ class GenericJobPage(BaseJobSource):
             if job_posting:
                 # Extract from structured data
                 company_name = ""
+                company_same_as = ""
                 org = job_posting.get("hiringOrganization")
                 if isinstance(org, dict):
                     company_name = org.get("name", "")
+                    company_same_as = org.get("sameAs", "")
                     
                 title = job_posting.get("title", "")
                 posted_date = job_posting.get("datePosted", "")
+                employment_type = job_posting.get("employmentType", "")
+                
+                # location logic
+                location = ""
+                job_loc = job_posting.get("jobLocation")
+                if isinstance(job_loc, dict):
+                    address = job_loc.get("address", {})
+                    if isinstance(address, dict):
+                        loc_parts = [address.get("addressLocality"), address.get("addressRegion"), address.get("addressCountry")]
+                        location = ", ".join([p for p in loc_parts if p])
+                elif isinstance(job_loc, list) and len(job_loc) > 0 and isinstance(job_loc[0], dict):
+                    address = job_loc[0].get("address", {})
+                    if isinstance(address, dict):
+                        loc_parts = [address.get("addressLocality"), address.get("addressRegion"), address.get("addressCountry")]
+                        location = ", ".join([p for p in loc_parts if p])
+                        
+                app_req = job_posting.get("applicantLocationRequirements")
+                if isinstance(app_req, dict) and app_req.get("name"):
+                    if location: location += f" (Remote: {app_req.get('name')})"
+                    else: location = f"Remote: {app_req.get('name')}"
                 
                 # Try to get plain text description from HTML description field if available
                 desc_html = job_posting.get("description", "")
@@ -55,7 +81,9 @@ class GenericJobPage(BaseJobSource):
                     "source": "generic",
                     "title": title,
                     "company": company_name,
-                    "location": "", # Location in JSON-LD can be complex, skip for simplicity unless needed
+                    "company_same_as": company_same_as,
+                    "location": location,
+                    "employment_type": employment_type if isinstance(employment_type, str) else str(employment_type),
                     "posted_date": posted_date,
                     "description": description[:10000],
                     "raw_metadata": {"json_ld": job_posting}

@@ -5,11 +5,27 @@ from sales_engine.sources.base_job_source import BaseJobSource
 
 class AshbySource(BaseJobSource):
     async def fetch_job(self, url: str) -> Dict[str, Any]:
+        from sales_engine.sources.generic_job_page import GenericJobPage
+        
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
             html = response.text
             
+            # Try to parse JSON-LD structured data first (Ashby often provides this)
+            generic_fetcher = GenericJobPage()
+            # We mock the get method inside GenericJobPage by overriding its behavior, 
+            # or just call our own json-ld extraction. Since GenericJobPage does its own request,
+            # let's just let it do it or copy the logic. 
+            try:
+                job_data = await generic_fetcher.fetch_job(url)
+                if job_data and job_data.get("title") and job_data.get("company"):
+                    job_data["source"] = "ashby"
+                    return job_data
+            except Exception:
+                pass
+            
+            # Fallback to HTML
             soup = BeautifulSoup(html, "html.parser")
             
             title = ""

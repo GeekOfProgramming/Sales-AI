@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Dict, Any
-from backend.schemas import StructuredJob, JobSignal, WebsiteProfile
+from backend.schemas import StructuredJob, JobSignal, WebsiteProfile, JobAnalysisResult
 from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 
 class JobAnalyzer:
@@ -52,22 +52,26 @@ Return JSON ONLY matching the following schema exactly:
             language="json"
         )
         
-        data = {}
+        analysis_result = None
         for attempt in range(2):
             try:
                 if attempt == 1:
-                    req.user_prompt += "\n\nIMPORTANT JSON REPAIR: Return ONLY valid JSON matching the schema."
+                    req.user_prompt += "\n\nIMPORTANT JSON REPAIR: Return ONLY valid JSON matching the exact schema."
                     
                 response = await self.llm_client.generate_code_async(req, model_name=self.model_name)
                 json_text = response.extracted_code.strip()
                 data = json.loads(json_text)
+                
+                # Validate with Pydantic model
+                analysis_result = JobAnalysisResult(**data)
                 break
             except Exception as e:
                 if attempt == 1:
                     raise Exception(f"Failed to analyze job via LLM: {e}")
                     
-        signals = [JobSignal(**s) for s in data.get("relevant_signals", []) if isinstance(s, dict) and "signal" in s and "evidence" in s]
-        
+        if not analysis_result:
+             analysis_result = JobAnalysisResult()
+             
         # Combine extracted data with structured basic data
         return StructuredJob(
             company_name=raw_job.get("company"),
@@ -80,9 +84,9 @@ Return JSON ONLY matching the following schema exactly:
             job_url=raw_job.get("url"),
             source=raw_job.get("source"),
             description=raw_job.get("description"),
-            requirements=data.get("requirements", []),
-            technologies=data.get("technologies", []),
-            seniority=data.get("seniority"),
-            remote_status=data.get("remote_status"),
-            relevant_signals=signals
+            requirements=analysis_result.requirements,
+            technologies=analysis_result.technologies,
+            seniority=analysis_result.seniority,
+            remote_status=analysis_result.remote_status,
+            relevant_signals=analysis_result.relevant_signals
         )

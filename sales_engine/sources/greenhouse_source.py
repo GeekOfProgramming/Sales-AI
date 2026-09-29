@@ -5,6 +5,43 @@ from sales_engine.sources.base_job_source import BaseJobSource
 
 class GreenhouseSource(BaseJobSource):
     async def fetch_job(self, url: str) -> Dict[str, Any]:
+        from urllib.parse import urlparse
+        import re
+        
+        # Extact company and job_id from URL: https://boards.greenhouse.io/company/jobs/123
+        # or https://boards.greenhouse.io/embed/job_app?for=company&token=123
+        path_parts = [p for p in urlparse(url).path.split('/') if p]
+        
+        api_data = None
+        if len(path_parts) >= 3 and path_parts[1] == "jobs":
+            company = path_parts[0]
+            job_id = path_parts[2]
+            api_url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs/{job_id}"
+            
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    api_resp = await client.get(api_url)
+                    if api_resp.status_code == 200:
+                        api_data = api_resp.json()
+            except Exception:
+                pass
+                
+        if api_data:
+            # Strip html tags from description
+            desc_html = api_data.get("content", "")
+            desc_soup = BeautifulSoup(desc_html, "html.parser")
+            description = desc_soup.get_text(separator="\n", strip=True)
+            
+            return {
+                "url": url,
+                "source": "greenhouse",
+                "title": api_data.get("title", ""),
+                "company": company,
+                "location": api_data.get("location", {}).get("name", ""),
+                "description": description[:10000],
+                "raw_metadata": {"api_data": api_data}
+            }
+            
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()

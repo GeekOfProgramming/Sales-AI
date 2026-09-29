@@ -6,6 +6,40 @@ from sales_engine.sources.base_job_source import BaseJobSource
 
 class LeverSource(BaseJobSource):
     async def fetch_job(self, url: str) -> Dict[str, Any]:
+        from urllib.parse import urlparse
+        
+        # Extract company and job_id from URL: https://jobs.lever.co/company/job_id
+        path_parts = [p for p in urlparse(url).path.split('/') if p]
+        
+        api_data = None
+        if len(path_parts) >= 2:
+            company = path_parts[0]
+            job_id = path_parts[1]
+            api_url = f"https://api.lever.co/v0/postings/{company}/{job_id}"
+            
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    api_resp = await client.get(api_url)
+                    if api_resp.status_code == 200:
+                        api_data = api_resp.json()
+            except Exception:
+                pass
+                
+        if api_data:
+            # Prefer structured API data
+            return {
+                "url": url,
+                "source": "lever",
+                "title": api_data.get("text", ""),
+                "company": company,
+                "location": api_data.get("categories", {}).get("location", ""),
+                "employment_type": api_data.get("categories", {}).get("commitment", ""),
+                "department": api_data.get("categories", {}).get("department", ""),
+                "description": api_data.get("descriptionPlain", "")[:10000],
+                "raw_metadata": {"api_data": api_data}
+            }
+            
+        # Fallback to HTML
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
