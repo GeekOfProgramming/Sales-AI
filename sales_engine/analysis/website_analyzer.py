@@ -1,3 +1,4 @@
+import os
 import json
 from typing import Dict, Any
 from backend.schemas import WebsiteProfile
@@ -6,6 +7,7 @@ from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 class WebsiteAnalyzer:
     def __init__(self):
         self.llm_client = BIMLLMClient()
+        self.model_name = os.getenv("SALES_LLM_MODEL", "llama3")
         
     async def analyze_website(self, fetch_result: Dict[str, Any]) -> WebsiteProfile:
         print("[SalesAI Analysis] LLM analysis started")
@@ -68,7 +70,7 @@ secondary_job_signals
 keywords
 negative_signals
 """
-                response = await self.llm_client.generate_code_async(req)
+                response = await self.llm_client.generate_code_async(req, model_name=self.model_name)
                 json_text = response.extracted_code.strip()
                 
                 # Attempt to parse json from markdown block if necessary

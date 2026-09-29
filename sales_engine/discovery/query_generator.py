@@ -1,3 +1,4 @@
+import os
 import json
 from typing import List
 from backend.schemas import WebsiteProfile, GeneratedQueriesResponse
@@ -6,7 +7,8 @@ from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 class QueryGenerator:
     def __init__(self, max_queries: int = 20):
         self.llm_client = BIMLLMClient()
-        self.max_queries = min(max_queries, 20)
+        self.max_queries = max_queries
+        self.model_name = os.getenv("SALES_LLM_MODEL", "llama3")
         
     async def generate_queries(self, profile: WebsiteProfile, countries: List[str]) -> GeneratedQueriesResponse:
         system_prompt = f"""You are a B2B sales discovery engine.
@@ -52,7 +54,7 @@ Do not invent unrelated job titles. Use the signals provided."""
                 if attempt == 1:
                     req.user_prompt += "\n\nIMPORTANT JSON REPAIR: Return ONLY one valid JSON object matching the schema exactly. No markdown fences. No explanation."
                 
-                response = await self.llm_client.generate_code_async(req)
+                response = await self.llm_client.generate_code_async(req, model_name=self.model_name)
                 json_text = response.extracted_code.strip()
                 data = json.loads(json_text)
                 return GeneratedQueriesResponse(**data)

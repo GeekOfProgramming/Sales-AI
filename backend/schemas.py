@@ -265,8 +265,8 @@ class WebsiteAnalyzeResponse(BaseModel):
 class DiscoveryRequest(BaseModel):
     website_url: HttpUrl
     countries: List[str] = []
-    max_queries: int = Field(default=20)
-    results_per_query: int = Field(default=10)
+    max_queries: int = Field(default=20, ge=1, le=20)
+    results_per_query: int = Field(default=10, ge=1, le=10)
 
 class DiscoveryResultItem(BaseModel):
     title: str
@@ -280,13 +280,13 @@ class DiscoveryResponse(BaseModel):
     queries_generated: int
     raw_results: int
     unique_results: int
-    candidate_job_urls: int
+    candidate_urls: int
     results: List[DiscoveryResultItem]
 
 class GeneratedQuery(BaseModel):
     query: str
     type: Literal["general_job", "company_career", "ats_targeted", "keyword_signal"]
-    priority: int
+    priority: int = Field(..., ge=1, le=10)
 
 class GeneratedQueriesResponse(BaseModel):
     queries: List[GeneratedQuery]

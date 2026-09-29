@@ -1,7 +1,10 @@
 import os
 import httpx
 from typing import List
-from sales_engine.discovery.search_provider import SearchProvider
+from sales_engine.discovery.search_provider import (
+    SearchProvider, ConfigurationError, AuthenticationError, 
+    RateLimitError, TimeoutError, SearchProviderError
+)
 from backend.schemas import NormalizedSearchResult
 
 class BraveSearchProvider(SearchProvider):
@@ -11,8 +14,7 @@ class BraveSearchProvider(SearchProvider):
         
     async def search(self, query: str, num_results: int = 10) -> List[NormalizedSearchResult]:
         if not self.api_key:
-            print("[Warning] BRAVE_SEARCH_API_KEY is not set. Returning empty results.")
-            return []
+            raise ConfigurationError("BRAVE_SEARCH_API_KEY is not configured.")
             
         headers = {
             "Accept": "application/json",
@@ -41,9 +43,14 @@ class BraveSearchProvider(SearchProvider):
                         rank=idx + 1
                     ))
                 return results
-        except httpx.HTTPError as e:
-            print(f"[BraveSearchProvider] HTTP error during search: {e}")
-            return []
+        except httpx.TimeoutException as e:
+            raise TimeoutError(f"Brave Search API timeout: {e}")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                raise AuthenticationError(f"Brave Search API authentication failed: {e}")
+            elif e.response.status_code == 429:
+                raise RateLimitError(f"Brave Search API rate limit exceeded: {e}")
+            else:
+                raise SearchProviderError(f"Brave Search API error {e.response.status_code}: {e}")
         except Exception as e:
-            print(f"[BraveSearchProvider] Unexpected error: {e}")
-            return []
+            raise SearchProviderError(f"Unexpected error calling Brave Search API: {e}")

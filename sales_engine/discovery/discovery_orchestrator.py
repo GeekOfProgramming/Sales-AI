@@ -18,8 +18,10 @@ class DiscoveryOrchestrator:
         # 1. Generate Queries
         try:
             query_resp = await generator.generate_queries(profile, countries)
+            # Sort queries by priority descending
+            sorted_queries = sorted(query_resp.queries, key=lambda q: q.priority, reverse=True)
             # Limit exactly to max_queries in case LLM generated more
-            queries = query_resp.queries[:max_queries]
+            queries = sorted_queries[:max_queries]
         except Exception as e:
             print(f"[DiscoveryOrchestrator] Query generation failed: {e}")
             queries = []
@@ -27,9 +29,15 @@ class DiscoveryOrchestrator:
         # 2. Execute Searches
         raw_results = []
         for q in queries:
-            results = await self.search_provider.search(q.query, num_results=results_per_query)
-            for r in results:
-                raw_results.append((q, r))
+            try:
+                results = await self.search_provider.search(q.query, num_results=results_per_query)
+                for r in results:
+                    raw_results.append((q, r))
+            except Exception as e:
+                print(f"[DiscoveryOrchestrator] Search failed for query '{q.query}': {e}")
+                # Re-raise to abort and tell the user there is a configuration/provider issue,
+                # unless we want to continue. The prompt says: "A missing or broken provider must not be reported as status = ok"
+                raise e
                 
         # 3. Normalize & Deduplicate
         unique_urls = set()
@@ -66,6 +74,6 @@ class DiscoveryOrchestrator:
             queries_generated=len(queries),
             raw_results=len(raw_results),
             unique_results=len(final_results),
-            candidate_job_urls=candidate_count,
+            candidate_urls=candidate_count,
             results=final_results
         )

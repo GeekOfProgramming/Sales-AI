@@ -41,8 +41,15 @@ class URLClassifier:
             domain = parsed.netloc.lower()
             path = parsed.path.lower()
             
-            for ats in self.KNOWN_ATS_DOMAINS:
+            STRONG_ATS = ["jobs.lever.co", "boards.greenhouse.io", "jobs.ashbyhq.com", "applytojob.com"]
+            WEAK_ATS = ["workable.com", "breezy.hr"]
+            
+            for ats in STRONG_ATS:
                 if ats in domain:
+                    return "ats_job"
+                    
+            for ats in WEAK_ATS:
+                if ats in domain and ("/j/" in path or "/jobs/" in path or "/job/" in path):
                     return "ats_job"
                     
             for clue in self.JOB_PATH_CLUES:
