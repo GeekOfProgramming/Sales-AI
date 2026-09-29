@@ -22,16 +22,29 @@ class EnrichmentOrchestrator:
         # Init providers
         comp_providers = []
         cont_providers = []
-        if "apollo" in providers:
-            ap = ApolloProvider()
-            comp_providers.append(ap)
-            cont_providers.append(ap)
-        if "hunter" in providers:
-            hp = HunterProvider()
-            comp_providers.append(hp)
-            cont_providers.append(hp)
+        for p in providers:
+            if p == "apollo":
+                ap = ApolloProvider()
+                comp_providers.append(ap)
+                cont_providers.append(ap)
+            elif p == "hunter":
+                hp = HunterProvider()
+                comp_providers.append(hp)
+                cont_providers.append(hp)
+            else:
+                return {
+                    "status": "error",
+                    "leads_received": len(leads),
+                    "leads_attempted": 0,
+                    "leads_enriched": 0,
+                    "partial": 0,
+                    "failed": len(leads),
+                    "provider_usage": tracker,
+                    "leads": [],
+                    "errors": [f"Unknown provider: {p}"]
+                }
             
-        company_enricher = CompanyEnricher(comp_providers)
+        company_enricher = CompanyEnricher(comp_providers, tracker)
         
         buyer_roles = []
         if website_profile and "buyer_roles" in website_profile:
@@ -45,6 +58,7 @@ class EnrichmentOrchestrator:
         enriched = 0
         partial = 0
         failed = 0
+        global_errors = []
         
         for lead in leads:
             if qualified_only and not lead.qualified:
@@ -59,17 +73,19 @@ class EnrichmentOrchestrator:
             
             try:
                 # 1. Company Enrichment
-                comp_enrich = await company_enricher.enrich(lead)
+                comp_enrich, comp_errors = await company_enricher.enrich(lead)
+                enriched_lead.enrichment_errors.extend(comp_errors)
+                
                 if comp_enrich:
                     enriched_lead.company_enrichment = comp_enrich
-                    if comp_enrich.source == "apollo":
-                        tracker.apollo_company_calls += 1
                     
                     # 2. Contact Discovery
                     # Prefer resolved domain if available
                     domain_to_search = comp_enrich.company_domain or lead.company_domain
                     if domain_to_search:
-                        contacts = await contact_enricher.discover_and_enrich(domain_to_search, max_contacts_per_lead)
+                        contacts = await contact_enricher.discover_and_enrich(
+                            domain_to_search, max_contacts_per_lead, enriched_lead.enrichment_errors
+                        )
                         enriched_lead.contacts = contacts
                         if contacts:
                             enriched_lead.best_contact = contacts[0]
@@ -77,9 +93,15 @@ class EnrichmentOrchestrator:
                 # Determine status
                 has_comp = bool(enriched_lead.company_enrichment)
                 has_cont = len(enriched_lead.contacts) > 0
-                has_email = any(c.work_email for c in enriched_lead.contacts)
                 
-                if has_comp and has_cont and has_email:
+                # "complete" should require: company enrichment, at least one suitable contact, 
+                # and a sufficiently verified/usable work email
+                has_verified_email = any(
+                    c.work_email and c.email_status in ["verified", "likely"] 
+                    for c in enriched_lead.contacts
+                )
+                
+                if has_comp and has_cont and has_verified_email:
                     enriched_lead.enrichment_status = "complete"
                     enriched += 1
                 elif has_comp or has_cont:
@@ -91,7 +113,7 @@ class EnrichmentOrchestrator:
                     
             except Exception as e:
                 enriched_lead.enrichment_status = "provider_error"
-                enriched_lead.enrichment_errors.append(str(e))
+                enriched_lead.enrichment_errors.append(f"Unexpected orchestrator error: {str(e)}")
                 failed += 1
                 
             results.append(enriched_lead)
@@ -105,5 +127,5 @@ class EnrichmentOrchestrator:
             "failed": failed,
             "provider_usage": tracker,
             "leads": results,
-            "errors": []
+            "errors": global_errors
         }

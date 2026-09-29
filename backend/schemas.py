@@ -435,10 +435,10 @@ class EnrichedLead(BaseModel):
     enrichment_errors: List[str] = Field(default_factory=list)
 
 class EnrichLeadsRequest(BaseModel):
-    leads: List[CompanyLead]
+    leads: List[CompanyLead] = Field(..., max_length=50)
     website_profile: Optional[Dict[str, Any]] = None
     qualified_only: bool = True
-    max_contacts_per_lead: int = 5
+    max_contacts_per_lead: int = Field(default=5, ge=1, le=5)
     providers: List[str] = Field(default_factory=lambda: ["apollo", "hunter"])
 
 class EnrichLeadsResponse(BaseModel):

@@ -11,7 +11,7 @@ class BaseContactProvider(ABC):
         pass
         
     @abstractmethod
-    async def find_work_email(self, first_name: str, last_name: str, company_domain: str) -> Optional[str]:
+    async def find_work_email(self, first_name: str, last_name: str, company_domain: str, person_id: Optional[str] = None) -> Optional[str]:
         """Find a business email for a specific person."""
         pass
         
