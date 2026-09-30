@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 21:40:09 UTC
-- **Git Commit:** `dae1863`
+- **Time:** 22:10:31 UTC
+- **Git Commit:** `60c580c`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -6458,583 +6458,6 @@ _(None / In sync)_
 Phase 7 Golden Case: Empty CSV Headers
 
 ---
-### P9-REVIEW-001 — Import Pending Draft
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-REVIEW-001"
-}
-```
-**Expected:**
-```json
-{
-  "default_approval_status": "pending_review",
-  "default_send_status": "not_sent",
-  "default_outreach_status": "draft_ready",
-  "evidence_preserved": true,
-  "prompt_version_preserved": true
-}
-```
-**Actual:**
-```json
-{
-  "default_approval_status": "pending_review",
-  "default_send_status": "not_sent",
-  "default_outreach_status": "draft_ready",
-  "evidence_preserved": true,
-  "prompt_version_preserved": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft)
-
----
-### P9-REVIEW-002 — Edit Invalidates Approval
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-REVIEW-002"
-}
-```
-**Expected:**
-```json
-{
-  "edit_creates_new_revision": true,
-  "revision_increment": 1,
-  "resets_approval_status": "pending_review",
-  "clears_approved_fingerprint": true,
-  "prior_revision_immutable": true
-}
-```
-**Actual:**
-```json
-{
-  "edit_creates_new_revision": true,
-  "revision_increment": 1,
-  "resets_approval_status": "pending_review",
-  "clears_approved_fingerprint": true,
-  "prior_revision_immutable": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval)
-
----
-### P9-APPROVE-001 — Explicit Approval
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-APPROVE-001"
-}
-```
-**Expected:**
-```json
-{
-  "explicit_human_action": true,
-  "approval_status": "approved",
-  "outreach_status": "approved",
-  "fingerprint_algorithm": "sha256",
-  "audit_event_recorded": true
-}
-```
-**Actual:**
-```json
-{
-  "explicit_human_action": true,
-  "approval_status": "approved",
-  "outreach_status": "approved",
-  "fingerprint_algorithm": "sha256",
-  "audit_event_recorded": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Explicit Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval)
-
----
-### P9-APPROVE-002 — Approval Does Not Send
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-APPROVE-002"
-}
-```
-**Expected:**
-```json
-{
-  "approval_triggers_send": false,
-  "provider_calls_on_approval": 0,
-  "send_status_after_approval": "not_sent"
-}
-```
-**Actual:**
-```json
-{
-  "approval_triggers_send": false,
-  "provider_calls_on_approval": 0,
-  "send_status_after_approval": "not_sent"
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send)
-
----
-### P9-SEND-001 — Approved Dry Run
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SEND-001"
-}
-```
-**Expected:**
-```json
-{
-  "dry_run_validation_passed": true,
-  "network_messages_transmitted": 0,
-  "send_status": "dry_run",
-  "stored_draft_unmarked": true
-}
-```
-**Actual:**
-```json
-{
-  "dry_run_validation_passed": true,
-  "network_messages_transmitted": 0,
-  "send_status": "dry_run",
-  "stored_draft_unmarked": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run)
-
----
-### P9-SEND-002 — Approved Mock SMTP Send
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SEND-002"
-}
-```
-**Expected:**
-```json
-{
-  "explicit_send_status": "sent",
-  "outreach_status": "sent",
-  "provider_message_id_captured": true,
-  "send_attempt_logged": true
-}
-```
-**Actual:**
-```json
-{
-  "explicit_send_status": "sent",
-  "outreach_status": "sent",
-  "provider_message_id_captured": true,
-  "send_attempt_logged": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send)
-
----
-### P9-SEND-003 — Unapproved Blocked
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SEND-003"
-}
-```
-**Expected:**
-```json
-{
-  "send_blocked": true,
-  "error_type": "not_approved",
-  "provider_calls": 0
-}
-```
-**Actual:**
-```json
-{
-  "send_blocked": true,
-  "error_type": "not_approved",
-  "provider_calls": 0
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)
-
----
-### P9-SEND-004 — Stale Approval Blocked
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SEND-004"
-}
-```
-**Expected:**
-```json
-{
-  "post_approval_tamper_detected": true,
-  "send_blocked": true,
-  "error_type": "approval_stale",
-  "provider_calls": 0
-}
-```
-**Actual:**
-```json
-{
-  "post_approval_tamper_detected": true,
-  "send_blocked": true,
-  "error_type": "approval_stale",
-  "provider_calls": 0
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)
-
----
-### P9-SEND-005 — Already Sent Blocked
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SEND-005"
-}
-```
-**Expected:**
-```json
-{
-  "duplicate_send_blocked": true,
-  "status": "already_sent",
-  "provider_calls": 0
-}
-```
-**Actual:**
-```json
-{
-  "duplicate_send_blocked": true,
-  "status": "already_sent",
-  "provider_calls": 0
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)
-
----
-### P9-SUPPRESS-001 — Suppressed Recipient Blocked
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SUPPRESS-001"
-}
-```
-**Expected:**
-```json
-{
-  "suppressed_recipient_blocked": true,
-  "error_type": "suppressed_recipient",
-  "provider_calls": 0
-}
-```
-**Actual:**
-```json
-{
-  "suppressed_recipient_blocked": true,
-  "error_type": "suppressed_recipient",
-  "provider_calls": 0
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked)
-
----
-### P9-IDEMP-001 — Concurrent Duplicate Prevented
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-IDEMP-001"
-}
-```
-**Expected:**
-```json
-{
-  "concurrent_requests": 2,
-  "provider_messages_delivered": 1,
-  "second_request_blocked": true
-}
-```
-**Actual:**
-```json
-{
-  "concurrent_requests": 2,
-  "provider_messages_delivered": 1,
-  "second_request_blocked": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented)
-
----
-### P9-BATCH-001 — Partial Failure Isolation
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-BATCH-001"
-}
-```
-**Expected:**
-```json
-{
-  "partial_failure_isolated": true,
-  "valid_drafts_sent": 2,
-  "invalid_drafts_blocked": 1,
-  "success_corrupted": false
-}
-```
-**Actual:**
-```json
-{
-  "partial_failure_isolated": true,
-  "valid_drafts_sent": 2,
-  "invalid_drafts_blocked": 1,
-  "success_corrupted": false
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)
-
----
-### P9-SEC-001 — Secrets Never Logged
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-SEC-001"
-}
-```
-**Expected:**
-```json
-{
-  "secrets_in_error_logs": false,
-  "secrets_in_review_events": false,
-  "sanitized_with_asterisks": true
-}
-```
-**Actual:**
-```json
-{
-  "secrets_in_error_logs": false,
-  "secrets_in_review_events": false,
-  "sanitized_with_asterisks": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)
-
----
-### P9-WF-001 — Sent State Projection
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-WF-001"
-}
-```
-**Expected:**
-```json
-{
-  "source_of_truth": "sqlite_db",
-  "queryable_approval_status": true,
-  "queryable_send_status": true,
-  "queryable_outreach_status": true
-}
-```
-**Actual:**
-```json
-{
-  "source_of_truth": "sqlite_db",
-  "queryable_approval_status": true,
-  "queryable_send_status": true,
-  "queryable_outreach_status": true
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection)
-
----
-### P9-NOLLM-001 — Zero LLM Code Path
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-NOLLM-001"
-}
-```
-**Expected:**
-```json
-{
-  "llm_calls_in_phase9": 0,
-  "forbidden_tokens_present": false
-}
-```
-**Actual:**
-```json
-{
-  "llm_calls_in_phase9": 0,
-  "forbidden_tokens_present": false
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)
-
----
-### P9-LIVE-SMTP-001 — Live SMTP Send Guardrail
-**Phase:** Phase 9
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P9-LIVE-SMTP-001"
-}
-```
-**Expected:**
-```json
-{
-  "opt_in_live_guardrail": true,
-  "default_status": "SKIPPED",
-  "safe_in_offline_suite": true
-}
-```
-**Actual:**
-_(Not executed yet)_
-
-**Result:** NOT_RUN
-
-**Differences:**
-- Test skipped: P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
-
-**Reason:** P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
-
-**Human Notes:**
-Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)
-
----
 ### P8-DRAFT-001 — Strong BIM Automation Signal
 **Phase:** Phase 8
 **Source:** internal
@@ -10102,5 +9525,582 @@ _(None / In sync)_
 
 **Human Notes:**
 Phase 8: Structured Service Missing Status Is Not Active (test: tests/test_outreach.py::test_p8_reg_014_structured_service_missing_status_not_active)
+
+---
+### P9-REVIEW-001 — Import Pending Draft
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REVIEW-001"
+}
+```
+**Expected:**
+```json
+{
+  "default_approval_status": "pending_review",
+  "default_send_status": "not_sent",
+  "default_outreach_status": "draft_ready",
+  "evidence_preserved": true,
+  "prompt_version_preserved": true
+}
+```
+**Actual:**
+```json
+{
+  "default_approval_status": "pending_review",
+  "default_send_status": "not_sent",
+  "default_outreach_status": "draft_ready",
+  "evidence_preserved": true,
+  "prompt_version_preserved": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft)
+
+---
+### P9-REVIEW-002 — Edit Invalidates Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REVIEW-002"
+}
+```
+**Expected:**
+```json
+{
+  "edit_creates_new_revision": true,
+  "revision_increment": 1,
+  "resets_approval_status": "pending_review",
+  "clears_approved_fingerprint": true,
+  "prior_revision_immutable": true
+}
+```
+**Actual:**
+```json
+{
+  "edit_creates_new_revision": true,
+  "revision_increment": 1,
+  "resets_approval_status": "pending_review",
+  "clears_approved_fingerprint": true,
+  "prior_revision_immutable": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval)
+
+---
+### P9-APPROVE-001 — Explicit Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-APPROVE-001"
+}
+```
+**Expected:**
+```json
+{
+  "explicit_human_action": true,
+  "approval_status": "approved",
+  "outreach_status": "approved",
+  "fingerprint_algorithm": "sha256",
+  "audit_event_recorded": true
+}
+```
+**Actual:**
+```json
+{
+  "explicit_human_action": true,
+  "approval_status": "approved",
+  "outreach_status": "approved",
+  "fingerprint_algorithm": "sha256",
+  "audit_event_recorded": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Explicit Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval)
+
+---
+### P9-APPROVE-002 — Approval Does Not Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-APPROVE-002"
+}
+```
+**Expected:**
+```json
+{
+  "approval_triggers_send": false,
+  "provider_calls_on_approval": 0,
+  "send_status_after_approval": "not_sent"
+}
+```
+**Actual:**
+```json
+{
+  "approval_triggers_send": false,
+  "provider_calls_on_approval": 0,
+  "send_status_after_approval": "not_sent"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send)
+
+---
+### P9-SEND-001 — Approved Dry Run
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-001"
+}
+```
+**Expected:**
+```json
+{
+  "dry_run_validation_passed": true,
+  "network_messages_transmitted": 0,
+  "send_status": "dry_run",
+  "stored_draft_unmarked": true
+}
+```
+**Actual:**
+```json
+{
+  "dry_run_validation_passed": true,
+  "network_messages_transmitted": 0,
+  "send_status": "dry_run",
+  "stored_draft_unmarked": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run)
+
+---
+### P9-SEND-002 — Approved Mock SMTP Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-002"
+}
+```
+**Expected:**
+```json
+{
+  "explicit_send_status": "sent",
+  "outreach_status": "sent",
+  "provider_message_id_captured": true,
+  "send_attempt_logged": true
+}
+```
+**Actual:**
+```json
+{
+  "explicit_send_status": "sent",
+  "outreach_status": "sent",
+  "provider_message_id_captured": true,
+  "send_attempt_logged": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send)
+
+---
+### P9-SEND-003 — Unapproved Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-003"
+}
+```
+**Expected:**
+```json
+{
+  "send_blocked": true,
+  "error_type": "not_approved",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "send_blocked": true,
+  "error_type": "not_approved",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)
+
+---
+### P9-SEND-004 — Stale Approval Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-004"
+}
+```
+**Expected:**
+```json
+{
+  "post_approval_tamper_detected": true,
+  "send_blocked": true,
+  "error_type": "approval_stale",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "post_approval_tamper_detected": true,
+  "send_blocked": true,
+  "error_type": "approval_stale",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)
+
+---
+### P9-SEND-005 — Already Sent Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-005"
+}
+```
+**Expected:**
+```json
+{
+  "duplicate_send_blocked": true,
+  "status": "already_sent",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "duplicate_send_blocked": true,
+  "status": "already_sent",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)
+
+---
+### P9-SUPPRESS-001 — Suppressed Recipient Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-001"
+}
+```
+**Expected:**
+```json
+{
+  "suppressed_recipient_blocked": true,
+  "error_type": "suppressed_recipient",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "suppressed_recipient_blocked": true,
+  "error_type": "suppressed_recipient",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked)
+
+---
+### P9-IDEMP-001 — Concurrent Duplicate Prevented
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-IDEMP-001"
+}
+```
+**Expected:**
+```json
+{
+  "concurrent_requests": 2,
+  "provider_messages_delivered": 1,
+  "second_request_blocked": true
+}
+```
+**Actual:**
+```json
+{
+  "concurrent_requests": 2,
+  "provider_messages_delivered": 1,
+  "second_request_blocked": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented)
+
+---
+### P9-BATCH-001 — Partial Failure Isolation
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-BATCH-001"
+}
+```
+**Expected:**
+```json
+{
+  "partial_failure_isolated": true,
+  "valid_drafts_sent": 2,
+  "invalid_drafts_blocked": 1,
+  "success_corrupted": false
+}
+```
+**Actual:**
+```json
+{
+  "partial_failure_isolated": true,
+  "valid_drafts_sent": 2,
+  "invalid_drafts_blocked": 1,
+  "success_corrupted": false
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)
+
+---
+### P9-SEC-001 — Secrets Never Logged
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-001"
+}
+```
+**Expected:**
+```json
+{
+  "secrets_in_error_logs": false,
+  "secrets_in_review_events": false,
+  "sanitized_with_asterisks": true
+}
+```
+**Actual:**
+```json
+{
+  "secrets_in_error_logs": false,
+  "secrets_in_review_events": false,
+  "sanitized_with_asterisks": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)
+
+---
+### P9-WF-001 — Sent State Projection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-WF-001"
+}
+```
+**Expected:**
+```json
+{
+  "source_of_truth": "sqlite_db",
+  "queryable_approval_status": true,
+  "queryable_send_status": true,
+  "queryable_outreach_status": true
+}
+```
+**Actual:**
+```json
+{
+  "source_of_truth": "sqlite_db",
+  "queryable_approval_status": true,
+  "queryable_send_status": true,
+  "queryable_outreach_status": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection)
+
+---
+### P9-NOLLM-001 — Zero LLM Code Path
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-NOLLM-001"
+}
+```
+**Expected:**
+```json
+{
+  "llm_calls_in_phase9": 0,
+  "forbidden_tokens_present": false
+}
+```
+**Actual:**
+```json
+{
+  "llm_calls_in_phase9": 0,
+  "forbidden_tokens_present": false
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)
+
+---
+### P9-LIVE-SMTP-001 — Live SMTP Send Guardrail
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-LIVE-SMTP-001"
+}
+```
+**Expected:**
+```json
+{
+  "opt_in_live_guardrail": true,
+  "default_status": "SKIPPED",
+  "safe_in_offline_suite": true
+}
+```
+**Actual:**
+_(Not executed yet)_
+
+**Result:** NOT_RUN
+
+**Differences:**
+- Test skipped: P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
+
+**Reason:** P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
+
+**Human Notes:**
+Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)
 
 ---

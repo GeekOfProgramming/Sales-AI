@@ -1,8 +1,8 @@
 {
   "phase": "Phase 9",
   "description": "Human Review, Approval, Safe Sending & Audit Trail",
-  "generated_at": "2026-09-30T17:08:11.745865+00:00",
-  "git_commit": "dae1863",
+  "generated_at": "2026-09-30T22:10:22.762767+00:00",
+  "git_commit": "60c580c",
   "total_cases": 16,
   "passed": 15,
   "failed": 0,
@@ -67,7 +67,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.096
+      "execution_time_s": 0.099
     },
     {
       "case_id": "P9-APPROVE-001",
@@ -91,7 +91,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.082
+      "execution_time_s": 0.337
     },
     {
       "case_id": "P9-APPROVE-002",
@@ -111,7 +111,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.085
+      "execution_time_s": 0.089
     },
     {
       "case_id": "P9-SEND-001",
@@ -133,7 +133,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.091
+      "execution_time_s": 0.102
     },
     {
       "case_id": "P9-SEND-002",
@@ -155,7 +155,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.199
+      "execution_time_s": 0.143
     },
     {
       "case_id": "P9-SEND-003",
@@ -175,7 +175,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.062
+      "execution_time_s": 0.074
     },
     {
       "case_id": "P9-SEND-004",
@@ -197,7 +197,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.084
+      "execution_time_s": 0.108
     },
     {
       "case_id": "P9-SEND-005",
@@ -217,7 +217,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.096
+      "execution_time_s": 0.148
     },
     {
       "case_id": "P9-SUPPRESS-001",
@@ -237,7 +237,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.084
+      "execution_time_s": 0.11
     },
     {
       "case_id": "P9-IDEMP-001",
@@ -257,7 +257,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.103
+      "execution_time_s": 0.282
     },
     {
       "case_id": "P9-BATCH-001",
@@ -279,7 +279,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.24
+      "execution_time_s": 0.255
     },
     {
       "case_id": "P9-SEC-001",
@@ -299,7 +299,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.05
+      "execution_time_s": 0.057
     },
     {
       "case_id": "P9-WF-001",
@@ -321,7 +321,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.108
+      "execution_time_s": 0.142
     },
     {
       "case_id": "P9-NOLLM-001",
@@ -339,7 +339,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.008
+      "execution_time_s": 0.012
     },
     {
       "case_id": "P9-LIVE-SMTP-001",
