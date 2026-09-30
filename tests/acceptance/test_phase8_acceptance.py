@@ -80,10 +80,20 @@ def test_p8_draft_001_strong_bim_automation_signal(sender, pybim_website_profile
         ),
     )
 
+    matching_job = StructuredJob(
+        company_name="VDC Automation Lab GmbH",
+        company_domain="vdc-autolab.de",
+        job_title="Senior BIM Automation Specialist",
+        location="Munich / Remote",
+        job_url="https://vdc-autolab.de/careers/senior-bim-automation",
+        technologies=["Revit", "Python", "C#"],
+    )
+
     ctx, err = OutreachContextBuilder.build_context(
         lead=lead,
         sender=sender,
         website_profile=pybim_website_profile,
+        jobs=[matching_job],
     )
     assert err is None
     assert ctx is not None

@@ -978,7 +978,7 @@ async def generate_email_drafts(request: dict):
         from sales_engine.outreach.email_generator import EmailGenerator
         gen = EmailGenerator(llm_client=llm)
         orchestrator = OutreachOrchestrator(email_generator=gen)
-        result = orchestrator.generate_drafts(req_obj)
+        result = orchestrator.generate_drafts(req_obj, jobs=req_obj.jobs)
         return result.model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Draft generation failed: {e}")

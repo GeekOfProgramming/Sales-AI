@@ -41,6 +41,7 @@ class OutreachOrchestrator:
         Batch generate email drafts according to Phase 8 specification.
         """
         response = GenerateDraftsResponse()
+        active_jobs = jobs if jobs is not None else getattr(request, "jobs", [])
 
         # Tone and Language validation
         language = request.language if request.language in VALID_LANGUAGES else "en"
@@ -110,7 +111,7 @@ class OutreachOrchestrator:
                 lead=lead,
                 sender=request.sender_profile,
                 website_profile=request.website_profile,
-                jobs=jobs,
+                jobs=active_jobs,
                 target_contact=best_contact,
                 language=language,
                 tone=tone,

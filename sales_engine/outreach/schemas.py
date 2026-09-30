@@ -91,6 +91,7 @@ class OutreachContext(BaseModel):
 class GenerateDraftsRequest(BaseModel):
     """API payload for generating personalized cold email drafts."""
     leads: List[EnrichedLead] = Field(..., max_length=50, description="List of enriched leads.")
+    jobs: List[StructuredJob] = Field(default_factory=list, description="Optional raw structured jobs for high-fidelity grounding.")
     website_profile: Optional[Dict[str, Any]] = Field(default=None, description="Website profile containing active services.")
     sender_profile: SenderProfile = Field(..., description="Sender identity.")
     language: str = Field(default="en", description="Draft language (en, it, de).")

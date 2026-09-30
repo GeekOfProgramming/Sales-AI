@@ -87,16 +87,13 @@ class DraftValidator:
             elif word_count < 20:
                 warnings.append(f"Body is very short ({word_count} words).")
 
-        # 5. Active service validation
+        # 5. Active service validation (Strict Exact Equality)
         normalized_active = {s.strip().lower() for s in context.active_services}
         draft_service = (draft.service_used or "").strip().lower()
         if not draft_service or draft_service not in normalized_active:
-            # Check if any active service is a substring or match
-            matched = any(active in draft_service or draft_service in active for active in normalized_active)
-            if not matched:
-                fatal_errors.append(
-                    f"Pitched service '{draft.service_used}' is not among allowed active services: {context.active_services}."
-                )
+            fatal_errors.append(
+                f"Pitched service '{draft.service_used}' is not among allowed active services: {context.active_services}."
+            )
 
         # 6. Evidence references validation
         context_evidence_ids = {item.id for item in context.evidence_items}

@@ -9,6 +9,8 @@ from sales_engine.outreach.schemas import (
     OutreachEvidenceItem,
 )
 
+from sales_engine.analysis.company_normalizer import CompanyNormalizer
+
 # Standard list of non-active service indicators
 NON_ACTIVE_STATUSES = {"in_development", "cta", "deprecated", "unknown", "planned", "inactive"}
 
@@ -25,6 +27,7 @@ class OutreachContextBuilder:
         """
         Extract ONLY active services from WebsiteProfile.
         Excludes products/services marked in_development, cta, deprecated, or unknown.
+        For offerings dicts, requires status explicitly == "active".
         """
         if not website_profile:
             return []
@@ -39,21 +42,53 @@ class OutreachContextBuilder:
                 if status not in NON_ACTIVE_STATUSES and name:
                     active_services.append(name.strip())
             elif isinstance(svc, str) and svc.strip():
-                # Plain string service name is considered active unless explicitly excluded
+                # Plain string service name is considered active per Phase 2 contract
                 active_services.append(svc.strip())
 
-        # Also check offerings if present
+        # Also check offerings if present (requires status explicitly == "active")
         offerings = website_profile.get("offerings") or []
         for off in offerings:
             if isinstance(off, dict):
                 name = off.get("name") or off.get("title")
-                status = str(off.get("status", "active")).strip().lower()
-                if status not in NON_ACTIVE_STATUSES and name:
+                status = str(off.get("status", "")).strip().lower()
+                if status == "active" and name:
                     clean_name = name.strip()
                     if clean_name not in active_services:
                         active_services.append(clean_name)
 
         return active_services
+
+    @classmethod
+    def _matches_company_identity(cls, base_lead: Any, job: StructuredJob) -> bool:
+        """
+        Strictly verify that job belongs to the target company using company identity priority:
+        1. Canonical company_domain
+        2. Namespaced source identity (source:source_company_key) against base_lead.source_company_identities
+        3. Exact normalized company name
+        NEVER match on job_title alone.
+        """
+        # 1. Canonical domain match
+        lead_domain = CompanyNormalizer.canonicalize_domain(base_lead.company_domain or "")
+        job_domain = CompanyNormalizer.canonicalize_domain(job.company_domain or "")
+        if lead_domain and job_domain:
+            return lead_domain == job_domain
+
+        # 2. Namespaced source identity match
+        lead_identities = set(getattr(base_lead, "source_company_identities", []) or [])
+        job_src = getattr(job, "source", None)
+        job_key = getattr(job, "source_company_key", None)
+        if job_src and job_key:
+            job_ident = f"{job_src}:{job_key}".lower()
+            if any(str(i).lower() == job_ident for i in lead_identities):
+                return True
+
+        # 3. Exact normalized company name fallback
+        lead_name = getattr(base_lead, "company_name_normalized", None) or CompanyNormalizer.normalize(base_lead.company_name or "")
+        job_name = getattr(job, "company_name_normalized", None) or CompanyNormalizer.normalize(job.company_name or "")
+        if lead_name and job_name:
+            return lead_name == job_name
+
+        return False
 
     @classmethod
     def build_context(
@@ -97,7 +132,7 @@ class OutreachContextBuilder:
         company_domain = base_lead.company_domain
 
         evidence_items: List[OutreachEvidenceItem] = []
-        source_job_urls: List[str] = []
+        source_job_urls_set: Set[str] = set()
 
         # 1. Contact evidence
         contact_summary = f"{recipient_name}, {recipient_title or 'Leadership'} at {company_name}"
@@ -110,7 +145,7 @@ class OutreachContextBuilder:
             )
         )
 
-        # 2. Company / Base Lead Evidence
+        # 2. Company Identity Evidence
         if company_domain:
             evidence_items.append(
                 OutreachEvidenceItem(
@@ -121,7 +156,22 @@ class OutreachContextBuilder:
                 )
             )
 
-        # 3. Active Services evidence
+        # 3. Upstream Phase 5 Grounded Evidence (base_lead.evidence)
+        evid_idx = 2
+        for ev_str in (base_lead.evidence or []):
+            if ev_str and str(ev_str).strip():
+                clean_ev = str(ev_str).strip()
+                evidence_items.append(
+                    OutreachEvidenceItem(
+                        id=f"EVID-{evid_idx:03d}",
+                        category="evidence",
+                        title="Verified Upstream Evidence",
+                        content=clean_ev,
+                    )
+                )
+                evid_idx += 1
+
+        # 4. Active Services evidence
         for idx, svc_name in enumerate(active_services, start=1):
             svc_id = f"SERVICE-{idx:03d}"
             evidence_items.append(
@@ -133,70 +183,104 @@ class OutreachContextBuilder:
                 )
             )
 
-        # 4. Relevant Jobs & Job Signals
-        lead_job_titles = set(base_lead.job_titles or [])
-        lead_technologies = set(base_lead.technologies or [])
-
-        job_idx = 1
+        # 5. Relevant Jobs & Job Signals
+        matched_jobs: List[StructuredJob] = []
         if jobs:
             for job in jobs:
-                # Associate job if matches company name, domain, or key
-                matched = False
-                if base_lead.company_name and job.company_name:
-                    if base_lead.company_name.lower() in job.company_name.lower():
-                        matched = True
-                if not matched and job.job_title in lead_job_titles:
-                    matched = True
+                # Strictly match company identity FIRST
+                if cls._matches_company_identity(base_lead, job):
+                    matched_jobs.append(job)
 
-                if matched:
-                    j_id = f"JOB-{job_idx:03d}"
-                    job_url = getattr(job, "job_url", None) or getattr(job, "url", None)
-                    if not job_url and hasattr(job, "source_metadata") and isinstance(job.source_metadata, dict):
-                        job_url = job.source_metadata.get("url")
-                    if job_url:
-                        source_job_urls.append(str(job_url))
+        # Deterministically sort matched jobs by URL/title/location
+        matched_jobs.sort(
+            key=lambda j: (
+                str(getattr(j, "job_url", "") or ""),
+                str(getattr(j, "job_title", "") or ""),
+                str(getattr(j, "location", "") or ""),
+            )
+        )
 
-                    # Create compact grounded snippet
-                    tech_str = ", ".join(job.technologies[:5]) if job.technologies else ""
-                    summary = f"Job Opening: {job.job_title} at {job.location or 'Remote'}."
-                    if tech_str:
-                        summary += f" Tech requirements: {tech_str}."
-                    dept = getattr(job, "department", None)
-                    if dept:
-                        summary += f" Department: {dept}."
+        job_idx = 1
+        for job in matched_jobs[:5]:
+            j_id = f"JOB-{job_idx:03d}"
+            job_url = getattr(job, "job_url", None) or getattr(job, "url", None)
+            if not job_url and hasattr(job, "source_metadata") and isinstance(job.source_metadata, dict):
+                job_url = job.source_metadata.get("url")
+            if job_url:
+                source_job_urls_set.add(str(job_url))
 
-                    evidence_items.append(
-                        OutreachEvidenceItem(
-                            id=j_id,
-                            category="job",
-                            title=f"Hiring Signal: {job.job_title}",
-                            content=summary,
-                            url=job_url,
-                        )
-                    )
-                    job_idx += 1
-                    if job_idx > 5:
-                        break
+            # Create compact grounded snippet without fabrication
+            tech_str = ", ".join(job.technologies[:5]) if job.technologies else ""
+            summary = f"Job Opening: {job.job_title} at {job.location or 'Remote'}."
+            if tech_str:
+                summary += f" Tech requirements: {tech_str}."
+            dept = getattr(job, "department", None)
+            if dept:
+                summary += f" Department: {dept}."
 
-        # Fallback if no raw StructuredJobs matched but base_lead has job titles
-        if job_idx == 1 and base_lead.job_titles:
-            for title in base_lead.job_titles[:3]:
-                j_id = f"JOB-{job_idx:03d}"
+            evidence_items.append(
+                OutreachEvidenceItem(
+                    id=j_id,
+                    category="job",
+                    title=f"Hiring Signal: {job.job_title}",
+                    content=summary,
+                    url=str(job_url) if job_url else None,
+                )
+            )
+
+            # Also include structured job signals if present
+            for rel_sig in (getattr(job, "relevant_signals", []) or []):
+                sig_text = getattr(rel_sig, "signal", None) or getattr(rel_sig, "evidence", None) or str(rel_sig)
                 evidence_items.append(
                     OutreachEvidenceItem(
-                        id=j_id,
-                        category="job",
-                        title=f"Job Role: {title}",
-                        content=f"Open role: {title}. Technologies: {', '.join(base_lead.technologies[:4]) if base_lead.technologies else 'BIM/Revit'}.",
+                        id=f"SIG-JOB-{job_idx:03d}",
+                        category="signal",
+                        title=f"Job Signal: {job.job_title}",
+                        content=str(sig_text),
+                        url=str(job_url) if job_url else None,
+                    )
+                )
+
+            job_idx += 1
+
+        # Fallback if no raw StructuredJobs matched but base_lead has job titles
+        # (NO FABRICATED "Technologies: BIM/Revit")
+        if job_idx == 1 and base_lead.job_titles:
+            for title in base_lead.job_titles[:3]:
+                sig_id = f"SIG-ROLE-{job_idx:03d}"
+                content = f"Aggregated relevant hiring role: {title}."
+                if base_lead.technologies:
+                    content += f" Associated technologies: {', '.join(base_lead.technologies[:4])}."
+                evidence_items.append(
+                    OutreachEvidenceItem(
+                        id=sig_id,
+                        category="signal",
+                        title=f"Hiring Role Signal: {title}",
+                        content=content,
                     )
                 )
                 job_idx += 1
 
-        # 5. Lead Signals
+        # 6. Lead Signals (Support Phase 5 signal schema)
         sig_idx = 1
         for sig in (base_lead.signals or [])[:5]:
-            sig_name = sig.get("name") or sig.get("signal_name") or sig.get("type") or "Signal"
-            sig_val = sig.get("value") or sig.get("evidence") or str(sig)
+            if isinstance(sig, dict):
+                sig_name = (
+                    sig.get("signal")
+                    or sig.get("name")
+                    or sig.get("signal_name")
+                    or sig.get("type")
+                    or "Signal"
+                )
+                sig_val = (
+                    sig.get("value")
+                    or sig.get("evidence")
+                    or f"Detected signal: {sig_name}"
+                )
+            else:
+                sig_name = "Signal"
+                sig_val = str(sig)
+
             evidence_items.append(
                 OutreachEvidenceItem(
                     id=f"SIG-{sig_idx:03d}",
@@ -207,10 +291,13 @@ class OutreachContextBuilder:
             )
             sig_idx += 1
 
-        # Check for sufficient grounding: we need at least 1 job or signal
-        has_job_or_sig = any(item.category in ("job", "signal") for item in evidence_items)
-        if not has_job_or_sig:
+        # Check for sufficient grounding: need at least 1 job, signal, or verified evidence
+        has_grounding = any(item.category in ("job", "signal", "evidence") for item in evidence_items)
+        if not has_grounding:
             return None, "insufficient_grounding"
+
+        # Deterministic sorting of source job urls
+        sorted_job_urls = sorted(source_job_urls_set)
 
         context = OutreachContext(
             lead_id=lead_id,
@@ -223,7 +310,7 @@ class OutreachContextBuilder:
             active_services=active_services,
             evidence_items=evidence_items,
             sender=sender,
-            source_job_urls=list(set(source_job_urls)),
+            source_job_urls=sorted_job_urls,
             language=language,
             tone=tone,
         )

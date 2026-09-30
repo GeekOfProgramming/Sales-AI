@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 15:46:27 UTC
-- **Git Commit:** `550b3ea`
+- **Time:** 15:57:11 UTC
+- **Git Commit:** `11250ba`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,11 +14,11 @@
 - **Live Tests Executed:** No
 
 ## Summary
-- **Total Cases:** 175
-- **Passed:** 165
+- **Total Cases:** 194
+- **Passed:** 183
 - **Failed:** 0
 - **Review Required:** 4
-- **Deferred (Model Limitation):** 2
+- **Deferred (Model Limitation):** 3
 - **Skipped / Not Run:** 4
 - **Source Changed:** 0
 
@@ -31,6 +31,7 @@
 | Phase 5 | 27 | 26 | 0 | 1 | 0 | 0 |
 | Phase 6 | 43 | 40 | 0 | 1 | 0 | 2 |
 | Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
+| Phase 8 | 19 | 18 | 0 | 0 | 1 | 0 |
 
 ## Phase 7 Reconciliation & Case Count Model
 To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
@@ -40,6 +41,13 @@ To ensure 100% auditability across test suites and golden sets, the Phase 7 coun
   - **Review Required:** 1 case (`P7-WF-005` — verifies pre-existing non-default workflow states projecting faithfully without mutation; flagged for human confirmation).
   - **Skipped / Not Run:** 1 case (`P7-GS-LIVE-001` — marked `NOT_RUN` due to real Google Sheets live credentials/adapter not being configured in this offline suite).
 - **Historical 85-count explanation:** Earlier conversational summaries referenced 85 entries by counting parameter boundary sub-variants (e.g. `P7-CONTRACT-003` threshold vs boundary); in the strict repository catalog there are exactly **83 canonical Golden cases** and **83 pytest tests** with **0 false passes**.
+
+## Phase 8 Case Count & Architecture Model
+Phase 8 implements personalized cold email draft generation with strict deterministic isolation:
+- **Total Cases in Catalog (`tests/reports/phase8_latest.json`):** 19 cases
+  - **Deterministic Golden Acceptance Cases (`P8-DRAFT-001` .. `010`):** 10 cases passed
+  - **Deterministic Regression Guardrail Cases (`P8-REG-001` .. `008`):** 8 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, and deterministic ordering).
+  - **Semantic Deferred Quality (`P8-SEM-QUALITY-001`):** 1 case marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, deferred for higher-capacity LLM review).
 
 ## Failures
 _No failures detected._
@@ -457,6 +465,39 @@ _(Pending execution / Deferred)_
 
 **Human Notes:**
 Semantic LLM extraction fixture for API developer role. Deferring execution until higher-tier model deployment.
+
+---
+### P8-SEM-QUALITY-001 — Semantic LLM Email Naturalness & Prose Quality
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SEM-QUALITY-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Actual:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Result:** NOT_RUN_MODEL_LIMITATION
+
+**Differences:**
+_(None / In sync)_
+
+**Reason:** Deferred for higher-capacity model review; deterministic invariants verified
+
+**Human Notes:**
+Phase 8: Semantic LLM Email Naturalness & Prose Quality
 
 ---
 
@@ -6267,5 +6308,563 @@ _(None / In sync)_
 
 **Human Notes:**
 Phase 7 Golden Case: Empty CSV Headers
+
+---
+### P8-DRAFT-001 — Strong BIM automation hiring signal
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Strong BIM automation hiring signal
+
+---
+### P8-DRAFT-002 — BIM Manager hiring signal
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: BIM Manager hiring signal
+
+---
+### P8-DRAFT-003 — Weak / insufficient evidence skip
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Weak / insufficient evidence skip
+
+---
+### P8-DRAFT-004 — No usable email skip
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No usable email skip
+
+---
+### P8-DRAFT-005 — No active service skip
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No active service skip
+
+---
+### P8-DRAFT-006 — In-development service excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: In-development service excluded
+
+---
+### P8-DRAFT-007 — Prompt injection inside job text isolation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt injection inside job text isolation
+
+---
+### P8-DRAFT-008 — Unsupported claim & unknown evidence ref validation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unsupported claim & unknown evidence ref validation
+
+---
+### P8-DRAFT-009 — Unresolved placeholder rejection
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unresolved placeholder rejection
+
+---
+### P8-DRAFT-010 — Batch partial failure isolation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Batch partial failure isolation
+
+---
+### P8-REG-001 — Wrong-company same-title job exclusion
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Wrong-company same-title job exclusion
+
+---
+### P8-REG-002 — Active service substring bypass rejection
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Active service substring bypass rejection
+
+---
+### P8-REG-003 — No fabricated technology fallback
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No fabricated technology fallback
+
+---
+### P8-REG-004 — API raw jobs handoff into OutreachContext
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API raw jobs handoff into OutreachContext
+
+---
+### P8-REG-005 — Phase 5 evidence preservation as EVID-xxx
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Phase 5 evidence preservation as EVID-xxx
+
+---
+### P8-REG-006 — Phase 5 signal schema clean extraction
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Phase 5 signal schema clean extraction
+
+---
+### P8-REG-007 — SOURCE_DATA delimiter injection escaping
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: SOURCE_DATA delimiter injection escaping
+
+---
+### P8-REG-008 — Deterministic evidence ordering
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Deterministic evidence ordering
 
 ---

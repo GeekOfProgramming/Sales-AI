@@ -33,10 +33,13 @@ class EmailPromptBuilder:
         tone_instruction = TONE_INSTRUCTIONS.get(context.tone, TONE_INSTRUCTIONS["professional_concise"])
         language_name = LANGUAGE_NAMES.get(context.language, "English")
 
-        # Format evidence list
+        # Format evidence list with structural delimiter escaping
         evidence_lines = []
         for item in context.evidence_items:
-            evidence_lines.append(f"[{item.id}] ({item.category}) {item.title}: {item.content}")
+            # Escape literal < and > to prevent breaking <SOURCE_DATA> boundary
+            safe_content = item.content.replace("<", "\\u003c").replace(">", "\\u003e")
+            safe_title = item.title.replace("<", "\\u003c").replace(">", "\\u003e")
+            evidence_lines.append(f"[{item.id}] ({item.category}) {safe_title}: {safe_content}")
         evidence_text = "\n".join(evidence_lines)
 
         allowed_services_str = ", ".join([f'"{s}"' for s in context.active_services])

@@ -6,10 +6,12 @@ from sales_engine.outreach.schemas import OutreachContext
 
 class GroundingCheckResult(BaseModel):
     """Result of semantic grounding analysis."""
-    is_supported: bool = True
+    checked: bool = False
+    status: str = "not_run"  # passed, failed, not_run
+    is_supported: Optional[bool] = None
     unsupported_claims: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
-    confidence: float = 1.0
+    confidence: Optional[float] = None
 
 
 class GroundingChecker:
@@ -17,7 +19,7 @@ class GroundingChecker:
     Evaluates whether factual statements in the draft are strictly grounded.
     In Phase 8:
     - Default disabled (OUTREACH_GROUNDING_CHECK=false) for small local models.
-    - Deterministic checks verify evidence references and simple heuristics.
+    - Explicitly reports checked=False, status='not_run'.
     - Can be enabled for high-capacity models without modifying orchestrator architecture.
     - Invariant: MUST NOT rewrite the email, approve the email, or send the email.
     """
@@ -34,10 +36,12 @@ class GroundingChecker:
         """Evaluate grounding of draft against context evidence."""
         if not self.enabled:
             return GroundingCheckResult(
-                is_supported=True,
+                checked=False,
+                status="not_run",
+                is_supported=None,
                 unsupported_claims=[],
                 evidence_refs=evidence_refs,
-                confidence=1.0,
+                confidence=None,
             )
 
         context_ids = {e.id for e in context.evidence_items}
@@ -49,8 +53,10 @@ class GroundingChecker:
 
         is_supported = len(unsupported) == 0
         return GroundingCheckResult(
+            checked=True,
+            status="passed" if is_supported else "failed",
             is_supported=is_supported,
             unsupported_claims=unsupported,
             evidence_refs=evidence_refs,
-            confidence=1.0 if is_supported else 0.5,
+            confidence=1.0 if is_supported else 0.0,
         )

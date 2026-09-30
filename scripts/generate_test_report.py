@@ -120,6 +120,13 @@ def generate_report():
         "  - **Skipped / Not Run:** 1 case (`P7-GS-LIVE-001` — marked `NOT_RUN` due to real Google Sheets live credentials/adapter not being configured in this offline suite).",
         "- **Historical 85-count explanation:** Earlier conversational summaries referenced 85 entries by counting parameter boundary sub-variants (e.g. `P7-CONTRACT-003` threshold vs boundary); in the strict repository catalog there are exactly **83 canonical Golden cases** and **83 pytest tests** with **0 false passes**.",
         "",
+        "## Phase 8 Case Count & Architecture Model",
+        "Phase 8 implements personalized cold email draft generation with strict deterministic isolation:",
+        "- **Total Cases in Catalog (`tests/reports/phase8_latest.json`):** 19 cases",
+        "  - **Deterministic Golden Acceptance Cases (`P8-DRAFT-001` .. `010`):** 10 cases passed",
+        "  - **Deterministic Regression Guardrail Cases (`P8-REG-001` .. `008`):** 8 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, and deterministic ordering).",
+        "  - **Semantic Deferred Quality (`P8-SEM-QUALITY-001`):** 1 case marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, deferred for higher-capacity LLM review).",
+        "",
         "## Failures",
     ])
     

@@ -1,5 +1,65 @@
 [
   {
+    "request_id": "req_827f63e3",
+    "url": "https://docs.pyrevitlabs.io/official-api",
+    "slug": "pyrevit_official_api",
+    "status": "rejected",
+    "submitter": "BIM Manager",
+    "submitted_at": "2026-09-30T15:57:31.101899+00:00",
+    "processed_at": "2026-09-30T15:57:31.553799+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/official-api. HTTP Status: 404"
+  },
+  {
+    "request_id": "req_c17918bb",
+    "url": "https://unverified-blog.com/bad-script",
+    "slug": "bim_bad_script",
+    "status": "rejected",
+    "submitter": "Untrusted User",
+    "submitted_at": "2026-09-30T15:57:30.956565+00:00",
+    "processed_at": "2026-09-30T15:57:31.010810+00:00",
+    "message": "Failed ISO compliance check."
+  },
+  {
+    "request_id": "req_5deeb9ee",
+    "url": "https://docs.pyrevitlabs.io/sample-docs/",
+    "slug": "sample_docs_test",
+    "status": "pending",
+    "submitter": "Revit User Laptop 2",
+    "submitted_at": "2026-09-30T15:57:30.801460+00:00",
+    "processed_at": null,
+    "message": "Awaiting administrator approval before indexing into ChromaDB."
+  },
+  {
+    "request_id": "req_5a09d9f2",
+    "url": "https://docs.pyrevitlabs.io/official-api",
+    "slug": "pyrevit_official_api",
+    "status": "rejected",
+    "submitter": "BIM Manager",
+    "submitted_at": "2026-09-30T15:47:36.541851+00:00",
+    "processed_at": "2026-09-30T15:47:37.075658+00:00",
+    "message": "Ingestion error: Failed to fetch https://docs.pyrevitlabs.io/official-api. HTTP Status: 404"
+  },
+  {
+    "request_id": "req_37fb27b0",
+    "url": "https://unverified-blog.com/bad-script",
+    "slug": "bim_bad_script",
+    "status": "rejected",
+    "submitter": "Untrusted User",
+    "submitted_at": "2026-09-30T15:47:36.334618+00:00",
+    "processed_at": "2026-09-30T15:47:36.401550+00:00",
+    "message": "Failed ISO compliance check."
+  },
+  {
+    "request_id": "req_a6a7d466",
+    "url": "https://docs.pyrevitlabs.io/sample-docs/",
+    "slug": "sample_docs_test",
+    "status": "pending",
+    "submitter": "Revit User Laptop 2",
+    "submitted_at": "2026-09-30T15:47:36.083905+00:00",
+    "processed_at": null,
+    "message": "Awaiting administrator approval before indexing into ChromaDB."
+  },
+  {
     "request_id": "req_f8a1f775",
     "url": "https://docs.pyrevitlabs.io/official-api",
     "slug": "pyrevit_official_api",
