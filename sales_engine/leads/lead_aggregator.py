@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from datetime import datetime
 from backend.schemas import StructuredJob, CompanyLead
+from sales_engine.analysis.company_normalizer import CompanyNormalizer
 
 def parse_date(date_str: str) -> datetime | None:
     if not date_str:
@@ -10,11 +11,44 @@ def parse_date(date_str: str) -> datetime | None:
     except Exception:
         return None
 
-def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
+def is_job_relevant(job: StructuredJob) -> bool:
+    """Determine whether a job represents valid BIM/AEC buying intent."""
+    if not job:
+        return False
+        
+    title_lower = (job.job_title or "").lower().strip()
+    
+    # 1. Obvious BIM / VDC role keywords are relevant without explicit tech list (P5-REL-002)
+    BIM_CORE_KEYWORDS = [
+        "bim", "revit", "vdc", "virtual design", "digital delivery",
+        "computational design", "digital construction", "navisworks", "openbim"
+    ]
+    if title_lower and any(kw in title_lower for kw in BIM_CORE_KEYWORDS):
+        return True
+        
+    # 2. Obvious non-technical administrative/support/sales titles are never relevant,
+    # even if technology happens to be mentioned in description (P5-REL-001, P5-REL-003)
+    IRRELEVANT_TITLES = [
+        "administrator", "admin", "receptionist", "marketing", "sales",
+        "accountant", "accounting", "hr", "human resources", "legal",
+        "driver", "cleaner", "cook", "janitor", "cmo", "chief marketing",
+        "operations director", "sales manager"
+    ]
+    if title_lower and any(ir in title_lower for ir in IRRELEVANT_TITLES):
+        return False
+        
+    # 3. If it has explicit relevant signals
+    return bool(job.relevant_signals)
+
+def aggregate_jobs(jobs: List[StructuredJob], total_jobs: int = None) -> CompanyLead:
     if not jobs:
         return CompanyLead()
 
     lead = CompanyLead()
+    total_raw = getattr(jobs, "raw_count", None) or getattr(jobs, "_raw_count", None) or total_jobs or len(jobs)
+    lead.total_job_count = total_raw
+    lead.unique_job_count = len(jobs)
+    lead.job_count = len(jobs)
     
     for job in jobs:
         if not lead.company_name and job.company_name:
@@ -22,13 +56,12 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
         if not lead.company_name_normalized and job.company_name_normalized:
             lead.company_name_normalized = job.company_name_normalized
         if not lead.company_domain and job.company_domain:
-            lead.company_domain = job.company_domain
+            lead.company_domain = CompanyNormalizer.canonicalize_domain(job.company_domain)
             
         if job.source_company_key and job.source_company_key not in lead.source_company_keys:
             lead.source_company_keys.append(job.source_company_key)
             
     lead.source_company_keys.sort()
-    lead.job_count = len(jobs)
     
     job_titles = set()
     locations = set()
@@ -42,8 +75,8 @@ def aggregate_jobs(jobs: List[StructuredJob]) -> CompanyLead:
     now = datetime.now().replace(tzinfo=None)
     
     for job in jobs:
-        # A job is considered relevant ONLY if it has relevant_signals (or an explicit relevance flag if available)
-        is_relevant = bool(job.relevant_signals)
+        # A job is considered relevant according to is_job_relevant rules
+        is_relevant = is_job_relevant(job)
         
         if is_relevant:
             relevant_count += 1

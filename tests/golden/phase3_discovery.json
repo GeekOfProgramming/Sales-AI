@@ -2,23 +2,133 @@
   {
     "case_id": "P3-DISC-001",
     "phase": "Phase 3",
-    "title": "Placeholder: Discovery Query Generation",
+    "title": "pyBIM Discovery Query Generation",
     "source_type": "website_profile",
-    "source_url": "internal",
-    "snapshot_path": null,
-    "captured_at": "2026-09-29T00:00:00Z",
+    "source_url": "https://pybim.com",
+    "snapshot_path": "tests/golden/snapshots/discovery/pybim_actual_queries.json",
+    "captured_at": "2026-09-30T12:00:00Z",
+    "ground_truth_version": "1.0.0",
+    "ground_truth_policy": "Original human-approved frozen profile. Head of Digital Delivery is exclusively a buyer_role and must never appear in primary_job_signals or hiring queries.",
     "input": {
       "website_profile": {
-        "company_name": "ABC BIM",
-        "target_industries": ["Construction"]
+        "company_name": "pyBIM",
+        "target_industries": [
+          "AEC",
+          "Architecture",
+          "Engineering",
+          "Construction",
+          "Infrastructure"
+        ],
+        "target_company_types": [
+          "Architecture firms",
+          "Engineering firms",
+          "General contractors",
+          "Mid-to-large AEC enterprises",
+          "Tier-1 contractors"
+        ],
+        "buyer_roles": [
+          "BIM Manager",
+          "Technical Director",
+          "Head of Digital Delivery",
+          "Innovation Lead",
+          "Operations Manager"
+        ],
+        "primary_job_signals": [
+          "BIM Manager",
+          "Head of BIM",
+          "Digital Delivery Manager",
+          "BIM Automation Engineer",
+          "Revit API Developer",
+          "BIM Software Developer",
+          "C# Revit Developer",
+          "Python BIM Automation Engineer",
+          "BIM Information Manager",
+          "Digital Construction Manager"
+        ],
+        "secondary_job_signals": [
+          "Navisworks",
+          "Solibri",
+          "IFC",
+          "OpenBIM",
+          "COBie",
+          "Autodesk Construction Cloud",
+          "CDE",
+          "Computational Design",
+          "BIM Data Management"
+        ],
+        "negative_signals": []
       },
-      "countries": ["US", "UK"]
+      "countries": [
+        "Italy",
+        "United Kingdom",
+        "Germany"
+      ]
     },
     "expected": {
-      "generated_queries": ["Construction companies hiring BIM Manager in US"],
-      "expected_query_intents": ["Find construction companies hiring BIM professionals"]
+      "required_intents": [
+        "direct_primary_job_hiring",
+        "company_careers_pages",
+        "ats_discovery",
+        "secondary_technology_support",
+        "requested_geography"
+      ],
+      "min_primary_signals_covered": 3,
+      "min_ats_providers_covered": 2,
+      "required_countries": [
+        "Italy",
+        "United Kingdom",
+        "Germany"
+      ],
+      "career_intent_required": true,
+      "max_duplicates": 0,
+      "max_forbidden_patterns": 0
     },
-    "human_notes": "Needs live results verification or snapshot",
+    "expected_intent_coverage": {
+      "required_intents": [
+        "direct_primary_job_hiring",
+        "company_careers_pages",
+        "ats_discovery",
+        "secondary_technology_support",
+        "requested_geography"
+      ],
+      "min_primary_signals_covered": 3,
+      "min_ats_providers_covered": 2,
+      "required_countries": [
+        "Italy",
+        "United Kingdom",
+        "Germany"
+      ],
+      "career_intent_required": true,
+      "max_duplicates": 0,
+      "max_forbidden_patterns": 0
+    },
+    "human_notes": "Frozen human-approved WebsiteProfile for pyBIM to test Discovery query generation independently of Phase 2 known limitations. Evaluates intent coverage, signal diversity, ATS targeting, geography distribution, and absence of semantic pollution.",
+    "status": "PASS"
+  },
+  {
+    "case_id": "P3-LIVE-001",
+    "phase": "Phase 3",
+    "title": "pyBIM Discovery Live Search Validation",
+    "source_type": "search_provider",
+    "source_url": "https://api.search.brave.com",
+    "snapshot_path": null,
+    "captured_at": "2026-09-30T12:00:00Z",
+    "input": {
+      "queries_sample_count": 3,
+      "results_per_query": 10
+    },
+    "expected": {
+      "min_precision_at_10": 0.5,
+      "target_categories": [
+        "company_career",
+        "lever",
+        "greenhouse",
+        "ashby",
+        "other_ats",
+        "job_board"
+      ]
+    },
+    "human_notes": "Live test validating top 10 search results per query. Evaluates Precision@10 across ATS and career categories. Status remains REVIEW for initial baseline.",
     "status": "NOT_RUN"
   }
 ]

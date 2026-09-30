@@ -51,7 +51,17 @@ def score_lead(lead: CompanyLead, min_qualified_score: int = 60) -> CompanyLead:
         reasons.append(f"Multiple relevant hiring signals detected (+{bonus})")
         
     leadership_keywords = ["manager", "lead", "director", "head", "principal"]
-    has_leadership = any(any(kw in title.lower() for kw in leadership_keywords) for title in lead.job_titles)
+    # P5-REL-003: Only relevant leadership roles award leadership intent bonus!
+    BIM_CONTEXT_KEYWORDS = [
+        "bim", "revit", "vdc", "virtual design", "digital delivery",
+        "computational design", "digital construction", "technology",
+        "engineering", "engineer", "coordination", "automation", "software", "api"
+    ]
+    has_leadership = any(
+        any(kw in title.lower() for kw in leadership_keywords) and
+        any(ctx in title.lower() for ctx in BIM_CONTEXT_KEYWORDS)
+        for title in lead.job_titles
+    )
     if has_leadership:
         intent_score += SCORING_CONFIG["leadership_role"]
         reasons.append("Leadership/manager role found (+10)")

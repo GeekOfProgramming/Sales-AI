@@ -44,6 +44,14 @@ class JobExtractionOrchestrator:
                 if not raw_job.get("description"):
                     errors.append(JobExtractionError(url=url, error_type="parse_failed", message="No description extracted"))
                     continue
+
+                if not raw_job.get("company") or not str(raw_job.get("company")).strip():
+                    errors.append(JobExtractionError(url=url, error_type="parse_failed", message="Missing company name"))
+                    continue
+
+                if not raw_job.get("title") or not str(raw_job.get("title")).strip():
+                    errors.append(JobExtractionError(url=url, error_type="parse_failed", message="Missing job title"))
+                    continue
                     
                 # 3. Analyze Job
                 try:
@@ -60,23 +68,10 @@ class JobExtractionOrchestrator:
                 if not structured_job.company_domain and structured_job.job_url:
                     company_same_as = raw_job.get("company_same_as")
                     if company_same_as:
-                        try:
-                            parsed_same_as = urlparse(company_same_as)
-                            if parsed_same_as.netloc:
-                                structured_job.company_domain = parsed_same_as.netloc.lower()
-                        except Exception:
-                            pass
+                        structured_job.company_domain = self.normalizer.canonicalize_domain(company_same_as)
                             
                     if not structured_job.company_domain and source_type == "generic":
-                        parsed = urlparse(structured_job.job_url)
-                        domain = parsed.netloc.lower()
-                        # Very simple fallback: use the domain of the job URL if generic.
-                        # Exclude known ATS and job boards if they somehow got classified as generic.
-                        invalid_domains = ["lever.co", "greenhouse.io", "ashbyhq.com", "workable.com", "breezy.hr", "applytojob.com", "indeed.com", "linkedin.com"]
-                        if not any(d in domain for d in invalid_domains):
-                            structured_job.company_domain = domain
-                            
-                    # For ATS URLs, do NOT set company_domain to lever.co, etc. It remains null.
+                        structured_job.company_domain = self.normalizer.canonicalize_domain(structured_job.job_url)
                 
                 jobs.append(structured_job)
                 

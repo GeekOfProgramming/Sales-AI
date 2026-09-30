@@ -82,6 +82,7 @@ class LeverSource(BaseJobSource):
                 if len(parts) > 1:
                     company = parts[0].strip()
             
+            company_slug = path_parts[0] if path_parts else ""
             return {
                 "url": url,
                 "source": "lever",
@@ -91,5 +92,5 @@ class LeverSource(BaseJobSource):
                 "employment_type": employment_type,
                 "department": department,
                 "description": description[:10000],
-                "raw_metadata": {}
+                "raw_metadata": {"source_company_key": company_slug}
             }

@@ -1,0 +1,46 @@
+[
+  {
+    "job_url": "https://example.com/jobs/bim-manager",
+    "job_title": "BIM Manager",
+    "company_name": "Example Engineering",
+    "company_domain": "example.com",
+    "description": "Seeking BIM Manager.",
+    "tech_stack": ["Revit"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Management", "evidence": "Seeking BIM Manager."}]
+  },
+  {
+    "job_url": "https://example.com/jobs/bim-manager/",
+    "job_title": "BIM Manager",
+    "company_name": "Example Engineering",
+    "company_domain": "example.com",
+    "description": "Seeking BIM Manager.",
+    "tech_stack": ["Revit"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Management", "evidence": "Seeking BIM Manager."}]
+  },
+  {
+    "job_url": "https://example.com/jobs/bim-manager?utm_source=linkedin",
+    "job_title": "BIM Manager",
+    "company_name": "Example Engineering",
+    "company_domain": "example.com",
+    "description": "Seeking BIM Manager.",
+    "tech_stack": ["Revit"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Management", "evidence": "Seeking BIM Manager."}]
+  },
+  {
+    "job_url": "https://example.com/jobs/bim-manager#apply",
+    "job_title": "BIM Manager",
+    "company_name": "Example Engineering",
+    "company_domain": "example.com",
+    "description": "Seeking BIM Manager.",
+    "tech_stack": ["Revit"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Management", "evidence": "Seeking BIM Manager."}]
+  }
+]

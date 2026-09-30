@@ -1,0 +1,46 @@
+[
+  {
+    "job_url": "https://irrelevant-corp.com/jobs/office-admin",
+    "job_title": "Office Administrator",
+    "company_name": "Irrelevant Corp",
+    "company_domain": "irrelevant-corp.com",
+    "description": "Handle office files, invoices, and occasional Revit model prints requested by architects.",
+    "tech_stack": ["Microsoft Office", "Revit"],
+    "seniority": "Junior",
+    "posted_date": "2026-09-28",
+    "relevant_signals": []
+  },
+  {
+    "job_url": "https://bim-pure-corp.com/jobs/bim-manager",
+    "job_title": "BIM Manager",
+    "company_name": "BIM Pure Corp",
+    "company_domain": "bim-pure-corp.com",
+    "description": "Lead the BIM department and oversee company modeling practices.",
+    "tech_stack": [],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Management", "evidence": "Lead the BIM department"}]
+  },
+  {
+    "job_url": "https://c-level-corp.com/jobs/cmo",
+    "job_title": "Chief Marketing Officer",
+    "company_name": "C-Level Corp",
+    "company_domain": "c-level-corp.com",
+    "description": "Oversee enterprise B2B marketing strategy.",
+    "tech_stack": ["HubSpot"],
+    "seniority": "Executive",
+    "posted_date": "2026-09-28",
+    "relevant_signals": []
+  },
+  {
+    "job_url": "https://c-level-corp.com/jobs/ops-dir",
+    "job_title": "Operations Director",
+    "company_name": "C-Level Corp",
+    "company_domain": "c-level-corp.com",
+    "description": "Direct human resources, supply chain, and office facilities.",
+    "tech_stack": ["SAP"],
+    "seniority": "Director",
+    "posted_date": "2026-09-28",
+    "relevant_signals": []
+  }
+]

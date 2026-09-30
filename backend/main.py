@@ -936,6 +936,31 @@ async def enrich_leads(request: EnrichLeadsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lead enrichment failed: {e}")
 
+@app.post("/api/sales/export", tags=["SalesAI"])
+async def export_leads(request: dict):
+    """
+    Phase 7: Export human-reviewable Excel workbook, CSVs, CRM-ready JSON,
+    and optional Google Sheets sync.
+    """
+    from sales_engine.exports.schemas import ExportRequest
+    from sales_engine.exports.export_orchestrator import ExportOrchestrator
+    try:
+        req_obj = ExportRequest(**request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid export request schema: {e}")
+
+    try:
+        orchestrator = ExportOrchestrator()
+        result = orchestrator.export(req_obj)
+        return result.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}")
+
+
 
 
 

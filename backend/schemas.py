@@ -3,7 +3,7 @@ Defines contracts between Revit Client (C# / pyRevit) and Python Backend.
 """
 
 from typing import List, Dict, Any, Optional, Literal
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 
 class ElementMetadata(BaseModel):
@@ -247,6 +247,7 @@ class WebsiteProfile(BaseModel):
     company_name: Optional[str] = None
     company_summary: Optional[str] = None
     services: List[str] = Field(default_factory=list)
+    offerings: List[Dict[str, str]] = Field(default_factory=list)
     target_industries: List[str] = Field(default_factory=list)
     target_company_types: List[str] = Field(default_factory=list)
     pain_points: List[str] = Field(default_factory=list)
@@ -312,14 +313,26 @@ class StructuredJob(BaseModel):
     location: Optional[str] = None
     employment_type: Optional[str] = None
     posted_date: Optional[str] = None
-    job_url: str
-    source: str
+    job_url: Optional[str] = None
+    source: str = "generic"
     description: Optional[str] = None
     requirements: List[str] = Field(default_factory=list)
     technologies: List[str] = Field(default_factory=list)
     seniority: Optional[str] = None
     remote_status: Optional[str] = None
     relevant_signals: List[JobSignal] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_tech_stack(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "tech_stack" in data and not data.get("technologies"):
+                data["technologies"] = data["tech_stack"]
+        return data
+
+    @property
+    def tech_stack(self) -> List[str]:
+        return self.technologies
 
 class JobAnalysisResult(BaseModel):
     technologies: List[str] = Field(default_factory=list)
@@ -352,7 +365,13 @@ class CompanyLead(BaseModel):
     company_domain: Optional[str] = None
     source_company_keys: List[str] = Field(default_factory=list)
 
+    @property
+    def source_company_key(self) -> Optional[str]:
+        return self.source_company_keys[0] if self.source_company_keys else None
+
     job_count: int = 0
+    total_job_count: int = 0
+    unique_job_count: int = 0
     relevant_job_count: int = 0
 
     job_titles: List[str] = Field(default_factory=list)

@@ -1,0 +1,13 @@
+{
+  "organization": {
+    "id": "org_apollo_acme_123",
+    "name": "Acme Engineering",
+    "primary_domain": "acme.com",
+    "website_url": "https://acme.com",
+    "industry": "Civil Engineering & Architecture",
+    "estimated_num_employees": 450,
+    "country": "United Kingdom",
+    "city": "London",
+    "linkedin_url": "https://linkedin.com/company/acme-engineering"
+  }
+}

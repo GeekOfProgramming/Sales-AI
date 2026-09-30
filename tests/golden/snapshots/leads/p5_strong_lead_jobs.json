@@ -1,0 +1,50 @@
+[
+  {
+    "job_url": "https://acme-engineering.com/careers/bim-manager",
+    "job_title": "BIM Manager",
+    "company_name": "Acme Engineering",
+    "company_domain": "acme-engineering.com",
+    "description": "We are seeking an experienced BIM Manager to lead digital project delivery across our EMEA structural and MEP projects using Revit, Navisworks, and ISO 19650 workflows.",
+    "tech_stack": ["Revit", "Navisworks", "ISO 19650", "BIM 360"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [
+      {
+        "signal": "Hiring BIM Manager",
+        "evidence": "Seeking an experienced BIM Manager to lead digital project delivery using Revit and ISO 19650 workflows."
+      }
+    ]
+  },
+  {
+    "job_url": "https://acme-engineering.com/careers/revit-api-developer",
+    "job_title": "Revit API Developer",
+    "company_name": "Acme Engineering",
+    "company_domain": "acme-engineering.com",
+    "description": "Build custom Revit plugins using C# .NET and Python to automate drafting and QA processes.",
+    "tech_stack": ["Revit", "C#", "Python", ".NET", "BIM Automation"],
+    "seniority": "Mid-Senior",
+    "posted_date": "2026-09-27",
+    "relevant_signals": [
+      {
+        "signal": "Developing Revit API Plugins",
+        "evidence": "Build custom Revit plugins using C# .NET and Python to automate drafting and QA processes."
+      }
+    ]
+  },
+  {
+    "job_url": "https://acme-engineering.com/careers/digital-delivery-manager",
+    "job_title": "Digital Delivery Manager",
+    "company_name": "Acme Engineering",
+    "company_domain": "acme-engineering.com",
+    "description": "Oversee enterprise digital delivery, automation pipelines, and BIM standards adherence across major infrastructure programs.",
+    "tech_stack": ["BIM", "Revit", "Python", "ISO 19650"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-26",
+    "relevant_signals": [
+      {
+        "signal": "Overseeing Digital Delivery & BIM Standards",
+        "evidence": "Oversee enterprise digital delivery, automation pipelines, and BIM standards adherence."
+      }
+    ]
+  }
+]

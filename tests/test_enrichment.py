@@ -196,10 +196,9 @@ async def test_no_api_keys_configured():
     orchestrator = EnrichmentOrchestrator()
     res = await orchestrator.enrich_leads([lead], providers=["apollo", "hunter"])
     
-    # Both fail with ProviderConfigError.
-    # Because CompanyEnricher falls back to internal stub, it's considered 'partial'.
-    assert res["leads"][0].enrichment_status == "partial"
-    assert any("not configured" in e for e in res["leads"][0].enrichment_errors)
+    # Both fail with ProviderConfigError -> status is provider_error.
+    assert res["leads"][0].enrichment_status in ["provider_error", "failed"]
+    assert any("not configured" in e or "no_provider_configured" in e for e in res["leads"][0].enrichment_errors)
 
 @pytest.mark.asyncio
 async def test_unknown_provider_rejected():

@@ -1,0 +1,177 @@
+[
+  {
+    "company": {
+      "name": "VDC Automation Lab GmbH",
+      "domain": "vdc-autolab.de",
+      "industry": "Architecture & Planning",
+      "country": "Germany",
+      "employee_count": 120
+    },
+    "lead": {
+      "export_run_id": "run_20260930_125019",
+      "lead_id": "domain:vdc-autolab.de",
+      "lead_score": 94,
+      "qualified": true,
+      "fit_score": 38,
+      "intent_score": 36,
+      "recency_score": 10,
+      "evidence_score": 10,
+      "qualification_threshold": 70,
+      "relevant_job_count": 3,
+      "total_job_count": 4,
+      "reasons": [
+        "High fit BIM role",
+        "Active Revit automation hiring"
+      ],
+      "evidence": [
+        "Develop Revit C# addins",
+        "Automate QA with Dynamo"
+      ],
+      "enrichment_status": "complete",
+      "providers_used": [
+        "apollo",
+        "hunter"
+      ],
+      "outreach_status": "not_started",
+      "approval_status": "pending_review",
+      "send_status": "not_sent",
+      "owner": "",
+      "notes": "",
+      "created_at": "2026-09-30T12:50:19.259065+00:00",
+      "updated_at": "2026-09-30T12:50:19.259065+00:00"
+    },
+    "best_contact": {
+      "contact_id": "email:m.bauer@vdc-autolab.de",
+      "full_name": "Maximilian Bauer",
+      "job_title": "Head of BIM & Digital Delivery",
+      "work_email": "m.bauer@vdc-autolab.de",
+      "email_status": "verified",
+      "email_confidence": 98,
+      "linkedin_url": "https://linkedin.com/in/max-bauer-bim",
+      "contact_score": 95,
+      "buyer_role_match": "exact"
+    },
+    "contacts": [
+      {
+        "contact_id": "email:m.bauer@vdc-autolab.de",
+        "first_name": "Maximilian",
+        "last_name": "Bauer",
+        "full_name": "Maximilian Bauer",
+        "job_title": "Head of BIM & Digital Delivery",
+        "seniority": "Head",
+        "department": "Digital Practice",
+        "work_email": "m.bauer@vdc-autolab.de",
+        "email_status": "verified",
+        "email_confidence": 98,
+        "linkedin_url": "https://linkedin.com/in/max-bauer-bim",
+        "buyer_role_match": "exact",
+        "contact_score": 95,
+        "data_sources": [
+          "apollo"
+        ],
+        "is_best_contact": true,
+        "contact_rank": 1
+      },
+      {
+        "contact_id": "email:a.schmidt@vdc-autolab.de",
+        "first_name": "Anna",
+        "last_name": "Schmidt",
+        "full_name": "Anna Schmidt",
+        "job_title": "Lead BIM Software Engineer",
+        "seniority": "Lead",
+        "department": "Software",
+        "work_email": "a.schmidt@vdc-autolab.de",
+        "email_status": "likely",
+        "email_confidence": 80,
+        "linkedin_url": "https://linkedin.com/in/anna-schmidt-eng",
+        "buyer_role_match": "strong",
+        "contact_score": 85,
+        "data_sources": [
+          "hunter"
+        ],
+        "is_best_contact": false,
+        "contact_rank": 2
+      }
+    ],
+    "jobs": [
+      {
+        "job_title": "Head of Digital Practice",
+        "job_url": "",
+        "source": "generic",
+        "source_company_key": "",
+        "location": "Munich, Germany | Remote",
+        "employment_type": "",
+        "posted_date": null,
+        "seniority": "",
+        "remote_status": "",
+        "technologies": [
+          "Revit",
+          "Dynamo",
+          "C#",
+          "Python"
+        ],
+        "relevant_signals": [
+          "revit_api:3"
+        ],
+        "signal_evidence": [
+          "Develop Revit C# addins",
+          "Automate QA with Dynamo"
+        ],
+        "is_relevant": true
+      },
+      {
+        "job_title": "Revit API Developer",
+        "job_url": "",
+        "source": "generic",
+        "source_company_key": "",
+        "location": "Munich, Germany | Remote",
+        "employment_type": "",
+        "posted_date": null,
+        "seniority": "",
+        "remote_status": "",
+        "technologies": [
+          "Revit",
+          "Dynamo",
+          "C#",
+          "Python"
+        ],
+        "relevant_signals": [
+          "revit_api:3"
+        ],
+        "signal_evidence": [
+          "Develop Revit C# addins",
+          "Automate QA with Dynamo"
+        ],
+        "is_relevant": true
+      },
+      {
+        "job_title": "Dynamo Specialist",
+        "job_url": "",
+        "source": "generic",
+        "source_company_key": "",
+        "location": "Munich, Germany | Remote",
+        "employment_type": "",
+        "posted_date": null,
+        "seniority": "",
+        "remote_status": "",
+        "technologies": [
+          "Revit",
+          "Dynamo",
+          "C#",
+          "Python"
+        ],
+        "relevant_signals": [
+          "revit_api:3"
+        ],
+        "signal_evidence": [
+          "Develop Revit C# addins",
+          "Automate QA with Dynamo"
+        ],
+        "is_relevant": true
+      }
+    ],
+    "audit": {
+      "errors": []
+    }
+  }
+]

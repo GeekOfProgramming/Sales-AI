@@ -1,0 +1,15 @@
+{
+  "company_name": "Generic AEC Corp",
+  "company_domain": "generic-aec.com",
+  "qualified": false,
+  "lead_score": 15,
+  "scoring_reasons": [
+    "Administrative job only"
+  ],
+  "job_count": 1,
+  "relevant_job_count": 0,
+  "fit_score": 0,
+  "intent_score": 0,
+  "recency_score": 5,
+  "evidence_score": 0
+}

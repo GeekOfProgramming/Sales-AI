@@ -1,0 +1,748 @@
+[
+  {
+    "case_id": "P5-STRONG-001",
+    "phase": "Phase 5",
+    "title": "Strong Multi-Job BIM Lead Aggregation",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_strong_lead_jobs.json",
+    "input": {},
+    "expected": {
+      "companies_resolved": 1,
+      "company_name": "Acme Engineering",
+      "company_domain": "acme-engineering.com",
+      "total_job_count": 3,
+      "unique_job_count": 3,
+      "relevant_job_count": 3,
+      "fit_score": 30,
+      "intent_score": 30,
+      "recency_score": 20,
+      "evidence_score": 6,
+      "total_score": 86,
+      "qualified": true,
+      "min_qualified_threshold": 60
+    },
+    "actual": {
+      "companies_resolved": 1,
+      "company_name": "Acme Engineering",
+      "company_domain": "acme-engineering.com",
+      "identity_method": "domain",
+      "total_jobs": 3,
+      "unique_jobs": 3,
+      "relevant_jobs": 3,
+      "total_job_count": 3,
+      "unique_job_count": 3,
+      "relevant_job_count": 3,
+      "min_qualified_threshold": 60,
+      "ignored_jobs": 0,
+      "fit_score": 30,
+      "intent_score": 30,
+      "recency_score": 20,
+      "evidence_score": 6,
+      "total_score": 86,
+      "qualification_threshold": 60,
+      "qualified": true,
+      "reasons_count": 9,
+      "scoring_reasons": [
+        "Has relevant job postings (+10)",
+        "9 relevant technologies detected (+15)",
+        "Company has strong signals (+5)",
+        "First relevant hiring signal detected (+10)",
+        "Second relevant hiring signal detected (+5)",
+        "Multiple relevant hiring signals detected (+5)",
+        "Leadership/manager role found (+10)",
+        "Relevant jobs posted within 7 days (+20)",
+        "3 unique pieces of evidence (+6)"
+      ],
+      "evidence_count": 3,
+      "evidence": [
+        "Build custom Revit plugins using C# .NET and Python to automate drafting and QA processes.",
+        "Oversee enterprise digital delivery, automation pipelines, and BIM standards adherence.",
+        "Seeking an experienced BIM Manager to lead digital project delivery using Revit and ISO 19650 workflows."
+      ]
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Multiple strong relevant jobs yield high intent, top recency, rich grounded evidence, and qualification.",
+    "test_timestamp": "2026-09-30T12:50:00.014333+00:00"
+  },
+  {
+    "case_id": "P5-WEAK-001",
+    "phase": "Phase 5",
+    "title": "Generic AEC Non-BIM Company (Low Score & Unqualified)",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_weak_lead_jobs.json",
+    "input": {},
+    "expected": {
+      "companies_resolved": 1,
+      "company_name": "General AEC Corp",
+      "company_domain": "general-aec-corp.com",
+      "total_job_count": 1,
+      "unique_job_count": 1,
+      "relevant_job_count": 0,
+      "fit_score": 0,
+      "intent_score": 0,
+      "recency_score": 5,
+      "evidence_score": 0,
+      "total_score": 5,
+      "qualified": false,
+      "min_qualified_threshold": 60
+    },
+    "actual": {
+      "companies_resolved": 1,
+      "company_name": "General AEC Corp",
+      "company_domain": "general-aec-corp.com",
+      "identity_method": "domain",
+      "total_jobs": 1,
+      "unique_jobs": 1,
+      "relevant_jobs": 0,
+      "total_job_count": 1,
+      "unique_job_count": 1,
+      "relevant_job_count": 0,
+      "min_qualified_threshold": 60,
+      "ignored_jobs": 1,
+      "fit_score": 0,
+      "intent_score": 0,
+      "recency_score": 5,
+      "evidence_score": 0,
+      "total_score": 5,
+      "qualification_threshold": 60,
+      "qualified": false,
+      "reasons_count": 1,
+      "evidence_count": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Generic administrative job must not invent BIM relevance or intent; lead is disqualified.",
+    "test_timestamp": "2026-09-30T12:50:00.020493+00:00"
+  },
+  {
+    "case_id": "P5-ID-001",
+    "phase": "Phase 5",
+    "title": "Same Name, Different Domains (No Collapsing)",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_identity_collision_jobs.json",
+    "input": {},
+    "expected": {
+      "companies_resolved": 2,
+      "domains_must_differ": true,
+      "prevent_name_override_domain": true
+    },
+    "actual": {
+      "companies_resolved": 2,
+      "domains": [
+        "abc-engineering.com",
+        "abc-engineering.de"
+      ],
+      "domains_must_differ": true,
+      "identity_method": "domain",
+      "prevent_name_override_domain": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Normalized company name must NOT override conflicting domains.",
+    "test_timestamp": "2026-09-30T12:50:00.025260+00:00"
+  },
+  {
+    "case_id": "P5-ID-002",
+    "phase": "Phase 5",
+    "title": "Same Domain, Name Variants (Canonical Grouping)",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_identity_collision_jobs.json",
+    "input": {},
+    "expected": {
+      "companies_resolved": 1,
+      "canonical_domain": "acme.com",
+      "total_jobs_grouped": 3
+    },
+    "actual": {
+      "companies_resolved": 1,
+      "canonical_domain": "acme.com",
+      "total_jobs_grouped": 3,
+      "identity_method": "domain"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Different name spellings sharing identical domain must merge into 1 CompanyLead.",
+    "test_timestamp": "2026-09-30T12:50:00.033541+00:00"
+  },
+  {
+    "case_id": "P5-ID-003",
+    "phase": "Phase 5",
+    "title": "Source Key Identity (No Domain)",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "companies_resolved": 1,
+      "source_key_used": "greenhouse:acme-engineering"
+    },
+    "actual": {
+      "companies_resolved": 1,
+      "source_key_used": "greenhouse:acme-engineering",
+      "identity_method": "source_company_key"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "When domain is absent, ATS source + source_company_key correctly identifies the company.",
+    "test_timestamp": "2026-09-30T12:50:00.037252+00:00"
+  },
+  {
+    "case_id": "P5-ID-004",
+    "phase": "Phase 5",
+    "title": "Conflicting Source Keys (Prevent Aggressive Merge)",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_identity_collision_jobs.json",
+    "input": {},
+    "expected": {
+      "companies_resolved": 2,
+      "prevent_aggressive_merge": true
+    },
+    "actual": {
+      "companies_resolved": 2,
+      "source_keys": [
+        "acme-eu",
+        "acme-us"
+      ],
+      "prevent_aggressive_merge": true,
+      "identity_method": "source_conflict_isolation"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Identity priority remains domain -> source+key -> normalized name. Conflicting source keys stay separate.",
+    "test_timestamp": "2026-09-30T12:50:00.041498+00:00"
+  },
+  {
+    "case_id": "P5-DEDUP-001",
+    "phase": "Phase 5",
+    "title": "Duplicate URL Variants Deduplication",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_duplicate_url_jobs.json",
+    "input": {},
+    "expected": {
+      "total_job_count": 4,
+      "unique_job_count": 1,
+      "relevant_job_count": 1,
+      "intent_score_inflated": false,
+      "evidence_score_inflated": false
+    },
+    "actual": {
+      "total_job_count": 4,
+      "unique_job_count": 1,
+      "relevant_job_count": 1,
+      "intent_score": 20,
+      "evidence_score": 2,
+      "intent_score_inflated": false,
+      "evidence_score_inflated": false
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Canonical URL normalization collapses identical job postings without inflating counts or score.",
+    "test_timestamp": "2026-09-30T12:50:00.048532+00:00"
+  },
+  {
+    "case_id": "P5-REL-001",
+    "phase": "Phase 5",
+    "title": "Technology Alone Does Not Create Strong Relevance",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_irrelevant_jobs.json",
+    "input": {},
+    "expected": {
+      "is_relevant": false,
+      "relevant_job_count": 0
+    },
+    "actual": {
+      "job_title": "Office Administrator",
+      "is_relevant": false,
+      "relevant_job_count": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Administrative role does not become relevant merely because Revit is in the text.",
+    "test_timestamp": "2026-09-30T12:50:00.052605+00:00"
+  },
+  {
+    "case_id": "P5-REL-002",
+    "phase": "Phase 5",
+    "title": "Obvious Role Relevance Without Technology List",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_irrelevant_jobs.json",
+    "input": {},
+    "expected": {
+      "is_relevant": true,
+      "relevant_job_count": 1
+    },
+    "actual": {
+      "job_title": "BIM Manager",
+      "technologies": [],
+      "is_relevant": true,
+      "relevant_job_count": 1
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Explicit BIM management title counts as relevant even if tech stack list is empty.",
+    "test_timestamp": "2026-09-30T12:50:00.059544+00:00"
+  },
+  {
+    "case_id": "P5-REL-003",
+    "phase": "Phase 5",
+    "title": "Irrelevant Leadership Does Not Inflate Intent",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_irrelevant_jobs.json",
+    "input": {},
+    "expected": {
+      "leadership_bonus_awarded": false,
+      "intent_score": 0
+    },
+    "actual": {
+      "job_titles": [],
+      "intent_score": 0,
+      "leadership_bonus_awarded": false
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Senior roles outside BIM/digital engineering do NOT receive the +10 leadership intent bonus.",
+    "test_timestamp": "2026-09-30T12:50:00.064335+00:00"
+  },
+  {
+    "case_id": "P5-REC-001",
+    "phase": "Phase 5",
+    "title": "Relevant Recency Only",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_recency_jobs.json",
+    "input": {},
+    "expected": {
+      "recency_score": 5,
+      "fresh_irrelevant_ignored": true
+    },
+    "actual": {
+      "company_name": "Recency Test Corp",
+      "total_jobs": 2,
+      "unique_jobs": 2,
+      "relevant_jobs": 1,
+      "recency_score": 5,
+      "fresh_irrelevant_ignored": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Recent irrelevant job does not boost company recency score; score depends strictly on relevant jobs.",
+    "test_timestamp": "2026-09-30T12:50:00.070254+00:00"
+  },
+  {
+    "case_id": "P5-REC-002",
+    "phase": "Phase 5",
+    "title": "Controlled Fallback for Missing Date",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_recency_jobs.json",
+    "input": {},
+    "expected": {
+      "recency_score": 5,
+      "date_fabricated": false
+    },
+    "actual": {
+      "posted_date": null,
+      "recency_score": 5,
+      "date_fabricated": false
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Missing date gracefully falls back to older_unknown score without fabricating a timestamp.",
+    "test_timestamp": "2026-09-30T12:50:00.076420+00:00"
+  },
+  {
+    "case_id": "P5-REC-003",
+    "phase": "Phase 5",
+    "title": "Future Date Anomaly Handling",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/leads/p5_recency_jobs.json",
+    "input": {},
+    "expected": {
+      "recency_score": 5,
+      "anomaly_handled": true
+    },
+    "actual": {
+      "posted_date": "2099-01-01",
+      "recency_score": 5,
+      "anomaly_handled": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Future date does not yield max recency score through negative age.",
+    "test_timestamp": "2026-09-30T12:50:00.081623+00:00"
+  },
+  {
+    "case_id": "P5-EVID-001",
+    "phase": "Phase 5",
+    "title": "Grounded Evidence Traceability",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "evidence_preserved": true,
+      "grounded_bonus_eligible": true
+    },
+    "actual": {
+      "evidence_preserved": true,
+      "grounded_bonus_eligible": true,
+      "evidence_content": "We automate Revit drawing production using C#.",
+      "evidence_score": 2
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Signals and verifiable snippets survive aggregation and remain traceable to source jobs.",
+    "test_timestamp": "2026-09-30T12:50:00.084006+00:00"
+  },
+  {
+    "case_id": "P5-EVID-002",
+    "phase": "Phase 5",
+    "title": "Missing Evidence Penalization",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "evidence_score": 5,
+      "grounded_bonus_awarded": false,
+      "no_evidence_fabrication": true
+    },
+    "actual": {
+      "evidence_score": 0,
+      "grounded_bonus_awarded": false,
+      "no_evidence_fabrication": true
+    },
+    "status": "REVIEW",
+    "differences": [
+      "Field `evidence_score` mismatch: expected `5`, got `0`"
+    ],
+    "reason": "Expected vs Actual mismatch: Field `evidence_score` mismatch: expected `5`, got `0`",
+    "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: evidence_score=5\n- Actual: evidence_score=0\n- Analysis: Production scoring correctly assigns 0 to empty-string evidence. Golden Ground Truth currently expects 5. Do not modify Golden Ground Truth without explicit human approval.",
+    "test_timestamp": "2026-09-30T12:50:00.086592+00:00"
+  },
+  {
+    "case_id": "P5-SCORE-001",
+    "phase": "Phase 5",
+    "title": "Component Score Bounds Enforcement",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "fit_range": [
+        0,
+        30
+      ],
+      "intent_range": [
+        0,
+        30
+      ],
+      "recency_range": [
+        0,
+        20
+      ],
+      "evidence_range": [
+        0,
+        20
+      ],
+      "total_range": [
+        0,
+        100
+      ]
+    },
+    "actual": {
+      "fit_score": 30,
+      "intent_score": 30,
+      "recency_score": 20,
+      "evidence_score": 20,
+      "total_score": 100
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "All sub-scores strictly respect their defined contractual bounds.",
+    "test_timestamp": "2026-09-30T12:50:00.089118+00:00"
+  },
+  {
+    "case_id": "P5-SCORE-002",
+    "phase": "Phase 5",
+    "title": "Arithmetic Total Integrity",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "exact_sum_matching": true,
+      "hidden_bonuses": 0
+    },
+    "actual": {
+      "fit_score": 20,
+      "intent_score": 15,
+      "recency_score": 20,
+      "evidence_score": 2,
+      "total_score": 57,
+      "component_sum": 57,
+      "exact_sum_matching": true,
+      "hidden_bonuses": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Total score is exactly equal to the mathematical sum of its four constituent sub-scores.",
+    "test_timestamp": "2026-09-30T12:50:00.091515+00:00"
+  },
+  {
+    "case_id": "P5-SCORE-003",
+    "phase": "Phase 5",
+    "title": "Scoring Determinism & Idempotency",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "identical_outputs": true,
+      "stochastic_drift": 0
+    },
+    "actual": {
+      "iterations": 5,
+      "first_run": [
+        25,
+        25,
+        20,
+        4,
+        74,
+        true
+      ],
+      "all_runs_identical": true,
+      "identical_outputs": true,
+      "stochastic_drift": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Scoring contains zero randomness or temperature variance.",
+    "test_timestamp": "2026-09-30T12:50:00.096449+00:00"
+  },
+  {
+    "case_id": "P5-SCORE-004",
+    "phase": "Phase 5",
+    "title": "Code Path Audit: Zero LLM Numeric Scoring",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "deterministic_python_only": true,
+      "llm_score_assignment": false
+    },
+    "actual": {
+      "deterministic_python_only": true,
+      "llm_score_assignment": false,
+      "forbidden_calls_found": []
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Critical fail condition verified: LLM never directly assigns any numeric score.",
+    "test_timestamp": "2026-09-30T12:50:00.106139+00:00"
+  },
+  {
+    "case_id": "P5-QUAL-001",
+    "phase": "Phase 5",
+    "title": "Qualification Threshold Boundary (>= 60)",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "score_59_qualified": false,
+      "score_60_qualified": true,
+      "score_61_qualified": true,
+      "operator": ">="
+    },
+    "actual": {
+      "score_59_qualified": false,
+      "score_60_qualified": true,
+      "score_61_qualified": true,
+      "lead_exact_60_score": 60,
+      "lead_exact_60_qualified": true,
+      "operator": ">="
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Qualification strictly triggers at score >= 60; score of 59 is unqualified.",
+    "test_timestamp": "2026-09-30T12:50:00.110278+00:00"
+  },
+  {
+    "case_id": "P5-AGG-001",
+    "phase": "Phase 5",
+    "title": "Grounded Reasons Alignment",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "reasons_non_empty": true,
+      "no_irrelevant_job_reasons": true
+    },
+    "actual": {
+      "reasons_non_empty": true,
+      "scoring_reasons": [
+        "Has relevant job postings (+10)",
+        "Company has strong signals (+5)",
+        "First relevant hiring signal detected (+10)",
+        "Leadership/manager role found (+10)",
+        "Older/unknown job dates (+5)",
+        "1 unique pieces of evidence (+2)"
+      ],
+      "no_irrelevant_job_reasons": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Reasons explain qualification truthfully and do not cite irrelevant jobs.",
+    "test_timestamp": "2026-09-30T12:50:00.115477+00:00"
+  },
+  {
+    "case_id": "P5-AGG-002",
+    "phase": "Phase 5",
+    "title": "Job Count Metric Separation",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "counts_distinct": true
+    },
+    "actual": {
+      "total_job_count": 3,
+      "unique_job_count": 2,
+      "relevant_job_count": 1,
+      "counts_distinct": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "System tracks raw input jobs, unique deduplicated jobs, and relevant jobs distinctly.",
+    "test_timestamp": "2026-09-30T12:50:00.118069+00:00"
+  },
+  {
+    "case_id": "P5-AGG-003",
+    "phase": "Phase 5",
+    "title": "Partial Malformed Job Robustness",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "aggregation_survives": true,
+      "score_not_corrupted": true
+    },
+    "actual": {
+      "aggregation_survives": true,
+      "score_not_corrupted": true,
+      "unique_jobs": 2,
+      "relevant_jobs": 1
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "A low-quality or malformed job does not crash company aggregation or corrupt scoring.",
+    "test_timestamp": "2026-09-30T12:50:00.120657+00:00"
+  },
+  {
+    "case_id": "P5-ADV-001",
+    "phase": "Phase 5",
+    "title": "Adversarial: Identical Name Collision Across Distinct Entities",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "companies_resolved": 2
+    },
+    "actual": {
+      "companies_resolved": 2,
+      "domains": [
+        "studio-london.co.uk",
+        "studio-ny.com"
+      ]
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Separate legal entities sharing generic names do not collide if domains differ.",
+    "test_timestamp": "2026-09-30T12:50:00.122988+00:00"
+  },
+  {
+    "case_id": "P5-ADV-002",
+    "phase": "Phase 5",
+    "title": "Adversarial: Domain Alias Canonicalization",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "companies_resolved": 1,
+      "canonical_domain": "acme.com"
+    },
+    "actual": {
+      "companies_resolved": 1,
+      "canonical_domain": "acme.com"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Domain variations resolve to a single canonical domain identity.",
+    "test_timestamp": "2026-09-30T12:50:00.125684+00:00"
+  },
+  {
+    "case_id": "P5-ADV-003",
+    "phase": "Phase 5",
+    "title": "Adversarial: High-Volume Irrelevant Noise",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "total_job_count": 21,
+      "unique_job_count": 21,
+      "relevant_job_count": 1,
+      "noise_does_not_dominate": true
+    },
+    "actual": {
+      "total_job_count": 21,
+      "unique_job_count": 21,
+      "relevant_job_count": 1,
+      "intent_score": 10,
+      "noise_does_not_dominate": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "High job count from non-BIM roles does not inflate relevant_job_count or intent.",
+    "test_timestamp": "2026-09-30T12:50:00.131221+00:00"
+  },
+  {
+    "case_id": "P5-ADV-004",
+    "phase": "Phase 5",
+    "title": "Adversarial: Duplicate Evidence De-duplication",
+    "source": "internal",
+    "snapshot_path": null,
+    "input": {},
+    "expected": {
+      "unique_signals_count": 1,
+      "evidence_score_capped": 10
+    },
+    "actual": {
+      "unique_signals_count": 1,
+      "evidence_score": 2,
+      "evidence_score_capped": 2
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Exact duplicate signals do not receive multiple signal count bonuses.",
+    "test_timestamp": "2026-09-30T12:50:00.133963+00:00"
+  }
+]

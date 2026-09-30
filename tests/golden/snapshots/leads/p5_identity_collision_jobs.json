@@ -1,0 +1,78 @@
+[
+  {
+    "job_url": "https://abc-engineering.com/jobs/bim-lead",
+    "job_title": "BIM Lead",
+    "company_name": "ABC Engineering",
+    "company_domain": "abc-engineering.com",
+    "description": "Lead BIM models for UK office.",
+    "tech_stack": ["Revit"],
+    "seniority": "Lead",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Modeling", "evidence": "Lead BIM models for UK office."}]
+  },
+  {
+    "job_url": "https://abc-engineering.de/karriere/bim-manager",
+    "job_title": "BIM Manager",
+    "company_name": "ABC Engineering",
+    "company_domain": "abc-engineering.de",
+    "description": "Leitung von BIM Projekten in Berlin.",
+    "tech_stack": ["Revit", "IFC"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Management", "evidence": "Leitung von BIM Projekten in Berlin."}]
+  },
+  {
+    "job_url": "https://careers.acme.com/jobs/1",
+    "job_title": "BIM Modeler",
+    "company_name": "Acme Engineering GmbH",
+    "company_domain": "acme.com",
+    "description": "Modeling in Revit.",
+    "tech_stack": ["Revit"],
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "Revit Modeling", "evidence": "Modeling in Revit."}]
+  },
+  {
+    "job_url": "https://careers.acme.com/jobs/2",
+    "job_title": "BIM Coordinator",
+    "company_name": "ACME Engineering",
+    "company_domain": "acme.com",
+    "description": "Coordination in Navisworks.",
+    "tech_stack": ["Navisworks"],
+    "posted_date": "2026-09-27",
+    "relevant_signals": [{"signal": "Navisworks Coordination", "evidence": "Coordination in Navisworks."}]
+  },
+  {
+    "job_url": "https://careers.acme.com/jobs/3",
+    "job_title": "Revit Specialist",
+    "company_name": "Acme Engineering Ltd",
+    "company_domain": "acme.com",
+    "description": "Revit template development.",
+    "tech_stack": ["Revit"],
+    "posted_date": "2026-09-26",
+    "relevant_signals": [{"signal": "Revit Templates", "evidence": "Revit template development."}]
+  },
+  {
+    "job_url": "https://greenhouse.io/acme-eu/jobs/101",
+    "job_title": "BIM Engineer",
+    "company_name": "Acme Global",
+    "company_domain": null,
+    "source": "greenhouse",
+    "source_company_key": "acme-eu",
+    "description": "BIM engineering in Europe.",
+    "tech_stack": ["Revit"],
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Engineering", "evidence": "BIM engineering in Europe."}]
+  },
+  {
+    "job_url": "https://greenhouse.io/acme-us/jobs/201",
+    "job_title": "BIM Engineer",
+    "company_name": "Acme Global",
+    "company_domain": null,
+    "source": "greenhouse",
+    "source_company_key": "acme-us",
+    "description": "BIM engineering in United States.",
+    "tech_stack": ["Revit"],
+    "posted_date": "2026-09-28",
+    "relevant_signals": [{"signal": "BIM Engineering", "evidence": "BIM engineering in United States."}]
+  }
+]

@@ -91,7 +91,7 @@ class EnrichmentOrchestrator:
                             enriched_lead.best_contact = contacts[0]
                             
                 # Determine status
-                has_comp = bool(enriched_lead.company_enrichment)
+                has_comp = bool(enriched_lead.company_enrichment and enriched_lead.company_enrichment.source != "internal")
                 has_cont = len(enriched_lead.contacts) > 0
                 
                 # "complete" should require: company enrichment, at least one suitable contact, 
@@ -108,7 +108,13 @@ class EnrichmentOrchestrator:
                     enriched_lead.enrichment_status = "partial"
                     partial += 1
                 else:
-                    enriched_lead.enrichment_status = "not_found"
+                    if enriched_lead.enrichment_errors:
+                        if any("is not configured" in err for err in enriched_lead.enrichment_errors):
+                            if "no_provider_configured" not in enriched_lead.enrichment_errors:
+                                enriched_lead.enrichment_errors.append("no_provider_configured")
+                        enriched_lead.enrichment_status = "provider_error"
+                    else:
+                        enriched_lead.enrichment_status = "not_found"
                     failed += 1
                     
             except Exception as e:

@@ -21,9 +21,10 @@ class URLClassifier:
             # Remove fragment
             parsed = parsed._replace(fragment="")
             
-            # Remove tracking params like utm_
+            # Remove tracking params like utm_, ref, source, etc.
+            tracking_params = ("utm_", "ref", "source", "gclid", "fbclid")
             query_params = parse_qsl(parsed.query)
-            filtered_params = [(k, v) for k, v in query_params if not k.startswith("utm_")]
+            filtered_params = [(k, v) for k, v in query_params if not any(k.lower().startswith(p) for p in tracking_params)]
             parsed = parsed._replace(query=urlencode(filtered_params))
             
             # Remove trailing slash from path for consistency

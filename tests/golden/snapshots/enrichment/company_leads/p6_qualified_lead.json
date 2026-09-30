@@ -1,0 +1,16 @@
+{
+  "company_name": "Acme Engineering",
+  "company_domain": "acme.com",
+  "qualified": true,
+  "lead_score": 84,
+  "scoring_reasons": [
+    "Hiring BIM Manager",
+    "Hiring Revit API Developer"
+  ],
+  "job_count": 3,
+  "relevant_job_count": 3,
+  "fit_score": 30,
+  "intent_score": 28,
+  "recency_score": 20,
+  "evidence_score": 6
+}

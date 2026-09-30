@@ -6,7 +6,9 @@ from sales_engine.sources.base_job_source import BaseJobSource
 class AshbySource(BaseJobSource):
     async def fetch_job(self, url: str) -> Dict[str, Any]:
         from sales_engine.sources.generic_job_page import GenericJobPage
+        from urllib.parse import urlparse
         
+        path_parts = [p for p in urlparse(url).path.split('/') if p]
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -59,6 +61,7 @@ class AshbySource(BaseJobSource):
                     script.decompose()
                 description = soup.get_text(separator="\n", strip=True)
                 
+            company_slug = path_parts[0] if path_parts else ""
             return {
                 "url": url,
                 "source": "ashby",
@@ -66,5 +69,5 @@ class AshbySource(BaseJobSource):
                 "company": company,
                 "location": location,
                 "description": description[:10000],
-                "raw_metadata": {}
+                "raw_metadata": {"source_company_key": company_slug}
             }

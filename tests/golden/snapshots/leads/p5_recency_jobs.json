@@ -1,0 +1,46 @@
+[
+  {
+    "job_url": "https://recency-test-corp.com/jobs/bim-old",
+    "job_title": "BIM Manager",
+    "company_name": "Recency Test Corp",
+    "company_domain": "recency-test-corp.com",
+    "description": "Old BIM job posted 120 days ago.",
+    "tech_stack": ["Revit"],
+    "seniority": "Manager",
+    "posted_date": "2026-05-01",
+    "relevant_signals": [{"signal": "BIM Manager", "evidence": "Old BIM job"}]
+  },
+  {
+    "job_url": "https://recency-test-corp.com/jobs/sales-fresh",
+    "job_title": "Sales Manager",
+    "company_name": "Recency Test Corp",
+    "company_domain": "recency-test-corp.com",
+    "description": "Sales job posted 2 days ago.",
+    "tech_stack": ["Salesforce"],
+    "seniority": "Manager",
+    "posted_date": "2026-09-28",
+    "relevant_signals": []
+  },
+  {
+    "job_url": "https://missing-date-corp.com/jobs/bim-nodate",
+    "job_title": "BIM Coordinator",
+    "company_name": "Missing Date Corp",
+    "company_domain": "missing-date-corp.com",
+    "description": "BIM job with null date.",
+    "tech_stack": ["Revit"],
+    "seniority": "Mid",
+    "posted_date": null,
+    "relevant_signals": [{"signal": "BIM Coordinator", "evidence": "BIM job with null date."}]
+  },
+  {
+    "job_url": "https://future-date-corp.com/jobs/bim-future",
+    "job_title": "BIM Specialist",
+    "company_name": "Future Date Corp",
+    "company_domain": "future-date-corp.com",
+    "description": "BIM job with future date.",
+    "tech_stack": ["Revit"],
+    "seniority": "Mid",
+    "posted_date": "2099-01-01",
+    "relevant_signals": [{"signal": "BIM Specialist", "evidence": "BIM job with future date."}]
+  }
+]

@@ -1,0 +1,128 @@
+{
+  "queries": [
+    {
+      "query": "site:jobs.lever.co \"BIM Manager\"",
+      "type": "ats_targeted",
+      "priority": 10
+    },
+    {
+      "query": "site:boards.greenhouse.io \"Head of BIM\"",
+      "type": "ats_targeted",
+      "priority": 10
+    },
+    {
+      "query": "site:jobs.ashbyhq.com \"Digital Delivery Manager\"",
+      "type": "ats_targeted",
+      "priority": 9
+    },
+    {
+      "query": "\"BIM Manager\" jobs Italy",
+      "type": "general_job",
+      "priority": 9
+    },
+    {
+      "query": "\"Head of BIM\" hiring Italy",
+      "type": "general_job",
+      "priority": 8
+    },
+    {
+      "query": "\"Head of BIM\" jobs United Kingdom",
+      "type": "general_job",
+      "priority": 8
+    },
+    {
+      "query": "\"BIM Manager\" careers AEC",
+      "type": "company_career",
+      "priority": 8
+    },
+    {
+      "query": "\"Head of BIM\" careers Architecture",
+      "type": "company_career",
+      "priority": 8
+    },
+    {
+      "query": "\"Digital Delivery Manager\" hiring United Kingdom",
+      "type": "general_job",
+      "priority": 7
+    },
+    {
+      "query": "\"Digital Delivery Manager\" jobs Germany",
+      "type": "general_job",
+      "priority": 7
+    },
+    {
+      "query": "\"Digital Delivery Manager\" careers AEC Italy",
+      "type": "company_career",
+      "priority": 7
+    },
+    {
+      "query": "\"BIM Manager\" Navisworks Solibri",
+      "type": "keyword_signal",
+      "priority": 7
+    },
+    {
+      "query": "\"Head of BIM\" IFC",
+      "type": "keyword_signal",
+      "priority": 7
+    },
+    {
+      "query": "\"BIM Automation Engineer\" hiring Germany",
+      "type": "general_job",
+      "priority": 6
+    },
+    {
+      "query": "\"BIM Automation Engineer\" Navisworks",
+      "type": "keyword_signal",
+      "priority": 6
+    }
+  ],
+  "metrics": {
+    "total_queries": 15,
+    "unique_queries": 15,
+    "duplicate_queries": 0,
+    "duplicate_list": [],
+    "primary_signals_covered": [
+      "BIM Manager",
+      "Head of BIM",
+      "Digital Delivery Manager",
+      "BIM Automation Engineer"
+    ],
+    "primary_signals_covered_count": 4,
+    "countries_requested": [
+      "Italy",
+      "United Kingdom",
+      "Germany"
+    ],
+    "countries_covered": [
+      "Italy",
+      "United Kingdom",
+      "Germany"
+    ],
+    "ats_providers_covered": [
+      "lever",
+      "greenhouse",
+      "ashby"
+    ],
+    "career_intent_present": true,
+    "secondary_supported_query_count": 3,
+    "forbidden_pattern_count": 0,
+    "forbidden_patterns": []
+  },
+  "required_intents": [
+    "direct_primary_job_hiring",
+    "company_careers_pages",
+    "ats_discovery",
+    "secondary_technology_support",
+    "requested_geography"
+  ],
+  "min_primary_signals_covered": 4,
+  "min_ats_providers_covered": 3,
+  "required_countries": [
+    "Italy",
+    "United Kingdom",
+    "Germany"
+  ],
+  "career_intent_required": true,
+  "max_duplicates": 0,
+  "max_forbidden_patterns": 0
+}

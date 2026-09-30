@@ -1,22 +1,950 @@
 [
   {
-    "case_id": "P6-ENRICH-001",
+    "case_id": "P6-COMPANY-001",
     "phase": "Phase 6",
-    "title": "Placeholder: Company and Contact Enrichment",
-    "source_type": "provider",
-    "source_url": null,
-    "snapshot_path": "tests/golden/snapshots/provider_responses/P6-ENRICH-001.json",
-    "captured_at": "2026-09-29T00:00:00Z",
+    "title": "Company Enrichment Normalization",
+    "category": "company_enrichment",
+    "snapshot_path": "tests/golden/snapshots/enrichment/apollo/apollo_org_acme.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
     "input": {
       "company_domain": "acme.com",
-      "company_name": "Acme Corp"
+      "company_name": "Acme"
     },
     "expected": {
+      "company_name": "Acme Engineering",
       "company_domain": "acme.com",
-      "expected_contact_role": "BIM Manager",
-      "expected_email_status": "verified"
+      "industry": "Civil Engineering & Architecture",
+      "country": "United Kingdom",
+      "employee_count": 450,
+      "source": "apollo",
+      "domain_status": "existing"
     },
-    "human_notes": "Mock provider response needed.",
-    "status": "NOT_RUN"
+    "status": "PASS",
+    "human_notes": "Normalizes external provider company data into internal schema without leaking raw provider wrappers."
+  },
+  {
+    "case_id": "P6-ROLE-001",
+    "phase": "Phase 6",
+    "title": "Buyer Role Ranking & Deterministic Matching",
+    "category": "buyer_roles",
+    "snapshot_path": "tests/golden/snapshots/enrichment/combined/p6_buyer_roles.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "buyer_roles": ["BIM Manager", "Technical Director", "Head of Digital Delivery", "Innovation Lead", "Operations Manager"],
+      "candidate_titles": ["Senior BIM Manager", "Head of Digital Delivery", "Marketing Manager", "HR Specialist"]
+    },
+    "expected": {
+      "top_role": "Head of Digital Delivery",
+      "buyer_relevance_ranks_higher": true,
+      "irrelevant_scores_lower": true
+    },
+    "status": "PASS",
+    "human_notes": "Exact and strong buyer role matches strictly outrank irrelevant administrative titles."
+  },
+  {
+    "case_id": "P6-ROLE-002",
+    "phase": "Phase 6",
+    "title": "Empty Buyer Roles Controlled Fallback",
+    "category": "buyer_roles",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "buyer_roles": []
+    },
+    "expected": {
+      "target_roles_empty": true,
+      "no_invented_bim_roles": true
+    },
+    "status": "PASS",
+    "human_notes": "When buyer_roles is empty, system falls back to neutral generic behavior without hallucinating domain titles."
+  },
+  {
+    "case_id": "P6-CONTACT-001",
+    "phase": "Phase 6",
+    "title": "ContactCandidate Schema Normalization & Robustness",
+    "category": "contact_normalization",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "raw_contact": {
+        "first_name": "Jane",
+        "last_name": "Smith",
+        "title": "BIM Manager",
+        "email": "jane@acme.com"
+      }
+    },
+    "expected": {
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "full_name": "Jane Smith",
+      "job_title": "BIM Manager",
+      "work_email": "jane@acme.com",
+      "missing_fields_do_not_crash": true
+    },
+    "status": "PASS",
+    "human_notes": "All required ContactCandidate fields normalize cleanly, and missing optional fields fall back safely."
+  },
+  {
+    "case_id": "P6-DEDUP-001",
+    "phase": "Phase 6",
+    "title": "Cross-Provider Deduplication: Same Work Email",
+    "category": "deduplication",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "apollo_contact": {
+        "full_name": "Jane Smith",
+        "work_email": "jane.smith@acme.com",
+        "provider": "apollo",
+        "provider_person_id": "apollo_123"
+      },
+      "hunter_contact": {
+        "full_name": "Jane Smith",
+        "work_email": "jane.smith@acme.com",
+        "provider": "hunter",
+        "provider_person_id": "hunter_987"
+      }
+    },
+    "expected": {
+      "unique_contacts_count": 1,
+      "data_sources": ["apollo", "hunter"]
+    },
+    "status": "PASS",
+    "human_notes": "Contacts with identical work email merge into one record with consolidated data sources."
+  },
+  {
+    "case_id": "P6-DEDUP-002",
+    "phase": "Phase 6",
+    "title": "Cross-Provider Deduplication: Same LinkedIn Profile",
+    "category": "deduplication",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "contact_1": {
+        "full_name": "Jane Smith",
+        "linkedin_url": "https://linkedin.com/in/janesmith",
+        "provider": "apollo"
+      },
+      "contact_2": {
+        "full_name": "J. Smith",
+        "linkedin_url": "https://linkedin.com/in/janesmith/",
+        "provider": "hunter"
+      }
+    },
+    "expected": {
+      "unique_contacts_count": 1,
+      "data_sources": ["apollo", "hunter"]
+    },
+    "status": "PASS",
+    "human_notes": "Contacts sharing canonical LinkedIn URL collapse into one logical candidate."
+  },
+  {
+    "case_id": "P6-DEDUP-003",
+    "phase": "Phase 6",
+    "title": "Different Emails Prevent Name-Based Merge",
+    "category": "deduplication",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "contact_1": {
+        "full_name": "Jane Smith",
+        "work_email": "jane@acme.com",
+        "company_domain": "acme.com"
+      },
+      "contact_2": {
+        "full_name": "Jane Smith",
+        "work_email": "jane@other.com",
+        "company_domain": "acme.com"
+      }
+    },
+    "expected": {
+      "unique_contacts_count": 2,
+      "prevent_false_merge": true
+    },
+    "status": "PASS",
+    "human_notes": "Contacts sharing identical names but distinct emails must remain separate entities."
+  },
+  {
+    "case_id": "P6-DEDUP-004",
+    "phase": "Phase 6",
+    "title": "Conservative Deduplication Without Strong Key",
+    "category": "deduplication",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "contact_1": {
+        "full_name": "Alex Smith",
+        "job_title": "Project Lead",
+        "company_domain": "acme.com"
+      },
+      "contact_2": {
+        "full_name": "Alex Smith",
+        "job_title": "Design Director",
+        "company_domain": "acme.com"
+      }
+    },
+    "expected": {
+      "unique_contacts_count": 2,
+      "conservative_handling": true
+    },
+    "status": "PASS",
+    "human_notes": "In the absence of email or LinkedIn, distinct titles at the same firm are not aggressively collapsed."
+  },
+  {
+    "case_id": "P6-EMAIL-001",
+    "phase": "Phase 6",
+    "title": "Hunter Domain Search Confidence Does Not Equal Verified",
+    "category": "email_verification",
+    "snapshot_path": "tests/golden/snapshots/enrichment/hunter/hunter_domain_acme.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "hunter_confidence": 94
+    },
+    "expected": {
+      "email_status": "likely",
+      "not_verified": true
+    },
+    "status": "PASS",
+    "human_notes": "Statistical confidence from Domain Search produces likely, never verified without an SMTP verifier pass."
+  },
+  {
+    "case_id": "P6-EMAIL-002",
+    "phase": "Phase 6",
+    "title": "Email Verifier Status Normalization",
+    "category": "email_verification",
+    "snapshot_path": "tests/golden/snapshots/enrichment/hunter/hunter_verifier_valid.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "statuses": ["valid", "accept_all", "webmail", "disposable", "invalid", "unknown"]
+    },
+    "expected": {
+      "valid_maps_to": "verified",
+      "accept_all_maps_to": "risky",
+      "webmail_maps_to": "risky",
+      "disposable_maps_to": "risky",
+      "invalid_maps_to": "not_valid",
+      "unknown_maps_to": "unknown"
+    },
+    "status": "PASS",
+    "human_notes": "Standardized verifier status mapping ensures cross-provider consistency."
+  },
+  {
+    "case_id": "P6-EMAIL-003",
+    "phase": "Phase 6",
+    "title": "No Email Fallback (Zero Fabrication)",
+    "category": "email_verification",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "contact_without_email": true
+    },
+    "expected": {
+      "email_status": "not_found",
+      "work_email": null,
+      "no_fabricated_email": true
+    },
+    "status": "PASS",
+    "human_notes": "When providers return no email, system never invents or guesses email strings."
+  },
+  {
+    "case_id": "P6-EMAIL-004",
+    "phase": "Phase 6",
+    "title": "Personal/Public Email Rejection",
+    "category": "email_verification",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "email": "john.smith@gmail.com"
+    },
+    "expected": {
+      "rejected_as_work_email": true,
+      "work_email": null
+    },
+    "status": "PASS",
+    "human_notes": "Free public webmail domains (gmail, yahoo, etc.) are rejected as corporate work emails."
+  },
+  {
+    "case_id": "P6-EMAIL-005",
+    "phase": "Phase 6",
+    "title": "Corporate Domain Consistency Credit",
+    "category": "email_verification",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "company_domain": "acme.com",
+      "matching_email": "john@acme.com",
+      "mismatched_email": "john@other.com"
+    },
+    "expected": {
+      "matching_domain_gets_credit": true,
+      "mismatched_domain_no_credit": true
+    },
+    "status": "PASS",
+    "human_notes": "Emails matching the verified company domain receive positive domain consistency weighting."
+  },
+  {
+    "case_id": "P6-SCORE-001",
+    "phase": "Phase 6",
+    "title": "Contact Scoring Determinism & Zero LLM Scoring",
+    "category": "scoring",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "runs": 5
+    },
+    "expected": {
+      "identical_scores_all_runs": true,
+      "deterministic_python_only": true,
+      "zero_llm_numeric_scoring": true
+    },
+    "status": "PASS",
+    "human_notes": "Contact scores derive purely from deterministic rule evaluation without LLM calls or randomness."
+  },
+  {
+    "case_id": "P6-SCORE-002",
+    "phase": "Phase 6",
+    "title": "Contact Score Bounds (0–100)",
+    "category": "scoring",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "extreme_contact": true
+    },
+    "expected": {
+      "score_min": 0,
+      "score_max": 100
+    },
+    "status": "PASS",
+    "human_notes": "All calculated contact scores strictly stay within the 0 to 100 range."
+  },
+  {
+    "case_id": "P6-SCORE-003",
+    "phase": "Phase 6",
+    "title": "Buyer Relevance Precedence Over Irrelevant Verified Contacts",
+    "category": "scoring",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "buyer_contact": {
+        "title": "Head of Digital Delivery",
+        "email_status": "likely"
+      },
+      "irrelevant_contact": {
+        "title": "Office Receptionist",
+        "email_status": "verified"
+      }
+    },
+    "expected": {
+      "buyer_score_higher": true
+    },
+    "status": "PASS",
+    "human_notes": "Strong buyer role relevance combined with usable email outscores irrelevant roles with verified emails."
+  },
+  {
+    "case_id": "P6-BEST-001",
+    "phase": "Phase 6",
+    "title": "Deterministic Best Contact Selection",
+    "category": "best_contact",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "candidates": [
+        {"title": "BIM Manager", "email": "bm@acme.com", "status": "verified"},
+        {"title": "BIM Manager", "email": "bm2@acme.com", "status": "unknown"},
+        {"title": "Marketing Manager", "email": "mm@acme.com", "status": "verified"},
+        {"title": "VP Engineering", "email": null, "status": "not_found"}
+      ]
+    },
+    "expected": {
+      "best_contact_role": "BIM Manager",
+      "best_contact_email_status": "verified",
+      "single_deterministic_winner": true
+    },
+    "status": "PASS",
+    "human_notes": "Top candidate with exact buyer match and verified work email wins best_contact unequivocally."
+  },
+  {
+    "case_id": "P6-STATUS-001",
+    "phase": "Phase 6",
+    "title": "Complete Enrichment Status Criteria",
+    "category": "status_resolution",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "has_company": true,
+      "has_contact": true,
+      "has_verified_email": true
+    },
+    "expected": {
+      "enrichment_status": "complete"
+    },
+    "status": "PASS",
+    "human_notes": "Status 'complete' requires company profile, at least one contact, and a verified/likely work email."
+  },
+  {
+    "case_id": "P6-STATUS-002",
+    "phase": "Phase 6",
+    "title": "Partial Enrichment Status Criteria",
+    "category": "status_resolution",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "has_company": true,
+      "has_contact": false
+    },
+    "expected": {
+      "enrichment_status": "partial"
+    },
+    "status": "PASS",
+    "human_notes": "When only company or contact without verified email is resolved, status reflects partial."
+  },
+  {
+    "case_id": "P6-STATUS-003",
+    "phase": "Phase 6",
+    "title": "Failed / Provider Error Status Criteria",
+    "category": "status_resolution",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "providers_fail": true
+    },
+    "expected": {
+      "enrichment_status": "provider_error",
+      "not_silent_success": true
+    },
+    "status": "PASS",
+    "human_notes": "Provider failures are captured as provider_error rather than masquerading as empty success."
+  },
+  {
+    "case_id": "P6-PROVIDER-001",
+    "phase": "Phase 6",
+    "title": "Missing API Keys Returns Explicit Configuration Error",
+    "category": "provider_errors",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "apollo_key": null,
+      "hunter_key": null
+    },
+    "expected": {
+      "enrichment_errors_contain": "no_provider_configured",
+      "status": "provider_error"
+    },
+    "status": "PASS",
+    "human_notes": "Unconfigured environments return an explicit error and are not presented as zero contacts."
+  },
+  {
+    "case_id": "P6-PROVIDER-002",
+    "phase": "Phase 6",
+    "title": "Authentication Error Classification",
+    "category": "provider_errors",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "http_status": 401
+    },
+    "expected": {
+      "error_type": "authentication_error"
+    },
+    "status": "PASS",
+    "human_notes": "HTTP 401/403 maps directly to ProviderAuthError."
+  },
+  {
+    "case_id": "P6-PROVIDER-003",
+    "phase": "Phase 6",
+    "title": "Rate Limit Error Classification",
+    "category": "provider_errors",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "http_status": 429
+    },
+    "expected": {
+      "error_type": "rate_limit_error"
+    },
+    "status": "PASS",
+    "human_notes": "HTTP 429 maps directly to ProviderRateLimitError."
+  },
+  {
+    "case_id": "P6-PROVIDER-004",
+    "phase": "Phase 6",
+    "title": "Timeout Error Classification",
+    "category": "provider_errors",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "timeout": true
+    },
+    "expected": {
+      "error_type": "timeout_error"
+    },
+    "status": "PASS",
+    "human_notes": "Network timeouts are classified as ProviderTimeoutError."
+  },
+  {
+    "case_id": "P6-PROVIDER-005",
+    "phase": "Phase 6",
+    "title": "Server Error Classification",
+    "category": "provider_errors",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "http_status": 500
+    },
+    "expected": {
+      "error_type": "provider_error"
+    },
+    "status": "PASS",
+    "human_notes": "HTTP 500+ maps to standard ProviderError."
+  },
+  {
+    "case_id": "P6-PROVIDER-006",
+    "phase": "Phase 6",
+    "title": "Empty Result Classification",
+    "category": "provider_errors",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "empty_data": true
+    },
+    "expected": {
+      "error_type": "empty_result"
+    },
+    "status": "PASS",
+    "human_notes": "HTTP 200 with zero records or 404 maps to ProviderEmptyResult without crashing."
+  },
+  {
+    "case_id": "P6-USAGE-001",
+    "phase": "Phase 6",
+    "title": "Actual Provider Call Usage Accounting",
+    "category": "usage_tracking",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "apollo_times_out": true,
+      "hunter_succeeds": true
+    },
+    "expected": {
+      "providers_used": ["apollo", "hunter"],
+      "errors_include_timeout": true
+    },
+    "status": "PASS",
+    "human_notes": "providers_used tracks all invoked providers, including failed calls."
+  },
+  {
+    "case_id": "P6-APOLLO-001",
+    "phase": "Phase 6",
+    "title": "Apollo Organization Request Construction & Normalization",
+    "category": "apollo_contract",
+    "snapshot_path": "tests/golden/snapshots/enrichment/apollo/apollo_org_acme.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "domain": "acme.com"
+    },
+    "expected": {
+      "endpoint": "https://api.apollo.io/api/v1/organizations/enrich",
+      "param_domain": "acme.com",
+      "company_name": "Acme Engineering"
+    },
+    "status": "PASS",
+    "human_notes": "Verifies correct URL and query parameters for Apollo organization enrichment."
+  },
+  {
+    "case_id": "P6-APOLLO-002",
+    "phase": "Phase 6",
+    "title": "Apollo People Search Request Filtering",
+    "category": "apollo_contract",
+    "snapshot_path": "tests/golden/snapshots/enrichment/apollo/apollo_people_acme.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "company_domain": "acme.com",
+      "titles": ["BIM Manager", "Head of Digital Delivery"],
+      "limit": 5
+    },
+    "expected": {
+      "q_organization_domains_list": ["acme.com"],
+      "person_titles": ["BIM Manager", "Head of Digital Delivery"],
+      "per_page": 5
+    },
+    "status": "PASS",
+    "human_notes": "People search payload strictly scopes domain, buyer titles, and page boundaries."
+  },
+  {
+    "case_id": "P6-APOLLO-003",
+    "phase": "Phase 6",
+    "title": "Apollo Personal Data Minimization",
+    "category": "privacy",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "inspect_payload": true
+    },
+    "expected": {
+      "reveal_personal_emails": false,
+      "reveal_phone_number": false
+    },
+    "status": "PASS",
+    "human_notes": "Enforces GDPR data minimization: never requests personal emails or phone numbers."
+  },
+  {
+    "case_id": "P6-HUNTER-001",
+    "phase": "Phase 6",
+    "title": "Hunter Domain Search Contract & Confidence Retention",
+    "category": "hunter_contract",
+    "snapshot_path": "tests/golden/snapshots/enrichment/hunter/hunter_domain_acme.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "domain": "acme.com"
+    },
+    "expected": {
+      "endpoint": "https://api.hunter.io/v2/domain-search",
+      "email_confidence_preserved": true
+    },
+    "status": "PASS",
+    "human_notes": "Domain search extracts candidate names, positions, and confidence scores accurately."
+  },
+  {
+    "case_id": "P6-HUNTER-002",
+    "phase": "Phase 6",
+    "title": "Hunter Email Verifier Endpoint Mapping",
+    "category": "hunter_contract",
+    "snapshot_path": "tests/golden/snapshots/enrichment/hunter/hunter_verifier_valid.json",
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "email": "jane.smith@acme.com"
+    },
+    "expected": {
+      "endpoint": "https://api.hunter.io/v2/email-verifier",
+      "status_verified": true
+    },
+    "status": "PASS",
+    "human_notes": "Email verifier maps valid deliverable state directly to verified status."
+  },
+  {
+    "case_id": "P6-LIMIT-001",
+    "phase": "Phase 6",
+    "title": "Batch Request Bounds: MAX_LEADS_PER_REQUEST = 50",
+    "category": "limits",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "leads_50": 50,
+      "leads_51": 51
+    },
+    "expected": {
+      "leads_50_accepted": true,
+      "leads_51_rejected": true
+    },
+    "status": "PASS",
+    "human_notes": "API contract strictly bounds lead input batches to 50 items."
+  },
+  {
+    "case_id": "P6-LIMIT-002",
+    "phase": "Phase 6",
+    "title": "Output Contact Bounds: MAX_CONTACTS_PER_LEAD = 5",
+    "category": "limits",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "raw_contacts_count": 20
+    },
+    "expected": {
+      "final_contacts_count": 5,
+      "top_scored_preserved": true
+    },
+    "status": "PASS",
+    "human_notes": "Final contact candidate list is deterministically truncated to the top 5 highest-ranking records."
+  },
+  {
+    "case_id": "P6-LIMIT-003",
+    "phase": "Phase 6",
+    "title": "Qualified Only Filtering (Default True)",
+    "category": "limits",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "qualified_lead": true,
+      "unqualified_lead": false
+    },
+    "expected": {
+      "default_enriches_qualified_only": true,
+      "unqualified_skipped": true
+    },
+    "status": "PASS",
+    "human_notes": "Unqualified leads bypass expensive enrichment calls unless qualified_only=false is explicitly requested."
+  },
+  {
+    "case_id": "P6-PARTIAL-001",
+    "phase": "Phase 6",
+    "title": "Partial Provider Survival & Resilience",
+    "category": "resilience",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "apollo_timeout": true,
+      "hunter_success": true
+    },
+    "expected": {
+      "lead_returned": true,
+      "hunter_contacts_preserved": true,
+      "apollo_error_exposed": true
+    },
+    "status": "PASS",
+    "human_notes": "A single provider failure does not abort the entire enrichment pipeline; successful provider data survives."
+  },
+  {
+    "case_id": "P6-PARTIAL-002",
+    "phase": "Phase 6",
+    "title": "Contact Retained When Verifier Fails",
+    "category": "resilience",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "verifier_fails": true
+    },
+    "expected": {
+      "contact_retained": true,
+      "email_status": "unknown",
+      "no_fabricated_verification": true
+    },
+    "status": "PASS",
+    "human_notes": "When SMTP verifier fails, contact remains available with unknown email status rather than being discarded."
+  },
+  {
+    "case_id": "P6-PRIVACY-001",
+    "phase": "Phase 6",
+    "title": "Personal Data Leak Prevention",
+    "category": "privacy",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "contact": {
+        "personal_email": "jane@gmail.com",
+        "personal_phone": "+44123456789"
+      }
+    },
+    "expected": {
+      "no_personal_email_exposed": true,
+      "no_personal_phone_exposed": true
+    },
+    "status": "PASS",
+    "human_notes": "Ensures ContactCandidate model only exposes business work emails and professional contact links."
+  },
+  {
+    "case_id": "P6-EXPLAIN-001",
+    "phase": "Phase 6",
+    "title": "Best Contact Diagnostics & Explainability",
+    "category": "explainability",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "best_contact_selected": true
+    },
+    "expected": {
+      "has_buyer_role_match": true,
+      "has_job_title": true,
+      "has_email_status": true,
+      "has_contact_score": true,
+      "has_data_sources": true
+    },
+    "status": "PASS",
+    "human_notes": "Selected best_contact exposes all underlying attributes necessary to audit why it was chosen."
+  },
+  {
+    "case_id": "P6-CROSS-001",
+    "phase": "Phase 6",
+    "title": "Provider Invocation Order Invariance",
+    "category": "cross_provider",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "order_a": ["apollo", "hunter"],
+      "order_b": ["hunter", "apollo"]
+    },
+    "expected": {
+      "same_deduplicated_count": true,
+      "same_best_contact": true,
+      "same_scores": true
+    },
+    "status": "PASS",
+    "human_notes": "Enrichment results, scoring, and best-contact selection are completely invariant to provider execution order."
+  },
+  {
+    "case_id": "P6-CROSS-002",
+    "phase": "Phase 6",
+    "title": "Email Case-Insensitive Identity Normalization",
+    "category": "cross_provider",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "email_1": "Jane.Smith@Acme.com",
+      "email_2": "jane.smith@acme.com"
+    },
+    "expected": {
+      "same_normalized_identity": true
+    },
+    "status": "PASS",
+    "human_notes": "Mixed casing in email addresses normalizes to identical identity key during deduplication."
+  },
+  {
+    "case_id": "P6-LIVE-APOLLO-001",
+    "phase": "Phase 6",
+    "title": "Live Apollo Integration (Optional / Review)",
+    "category": "live_integration",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "domain": "arup.com"
+    },
+    "expected": {
+      "company_domain": "arup.com"
+    },
+    "status": "REVIEW",
+    "human_notes": "Live integration test executed only when APOLLO_API_KEY is present in the environment."
+  },
+  {
+    "case_id": "P6-LIVE-HUNTER-001",
+    "phase": "Phase 6",
+    "title": "Live Hunter Integration (Optional / Review)",
+    "category": "live_integration",
+    "snapshot_path": null,
+    "ground_truth_version": 1,
+    "enrichment_rules_version": 1,
+    "provider_contract_version": 1,
+    "human_approved": true,
+    "input": {
+      "domain": "arup.com"
+    },
+    "expected": {
+      "company_domain": "arup.com"
+    },
+    "status": "REVIEW",
+    "human_notes": "Live integration test executed only when HUNTER_API_KEY is present in the environment."
   }
 ]

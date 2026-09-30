@@ -5,6 +5,17 @@ from sales_engine.enrichment.base_contact_provider import BaseContactProvider
 from sales_engine.enrichment.buyer_role_ranker import BuyerRoleRanker
 from sales_engine.enrichment.exceptions import ProviderError, ProviderEmptyResult
 
+PERSONAL_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com", "yahoo.com", "hotmail.com", "outlook.com", 
+    "icloud.com", "aol.com", "mail.com", "zoho.com", "protonmail.com", "live.com"
+}
+
+def is_personal_email(email: Optional[str]) -> bool:
+    if not email or "@" not in email:
+        return False
+    domain = email.split("@")[-1].lower().strip()
+    return domain in PERSONAL_EMAIL_DOMAINS
+
 class ContactEnricher:
     def __init__(self, providers: List[BaseContactProvider], ranker: BuyerRoleRanker, tracker: ProviderUsageTracker):
         self.providers = providers
@@ -40,6 +51,12 @@ class ContactEnricher:
             except Exception as e:
                 errors.append(f"Unexpected error from {provider.get_provider_name()}: {str(e)}")
             
+        # Filter personal/free emails
+        for c in all_candidates:
+            if is_personal_email(c.work_email):
+                c.work_email = None
+                c.email_status = "not_found"
+            
         # 2. Deduplicate
         unique_contacts = []
         for c in all_candidates:
@@ -48,17 +65,24 @@ class ContactEnricher:
             # Find existing contact to merge with
             matched_existing = None
             for existing in unique_contacts:
-                # 1. Work email match
-                if c.work_email and existing.work_email and c.work_email.lower() == existing.work_email.lower():
+                # 1. Work email match (case-insensitive)
+                if c.work_email and existing.work_email and c.work_email.lower().strip() == existing.work_email.lower().strip():
                     matched_existing = existing
                     break
-                # 2. Provider ID match
+                # 2. LinkedIn URL match
+                if c.linkedin_url and existing.linkedin_url and c.linkedin_url.lower().rstrip('/') == existing.linkedin_url.lower().rstrip('/'):
+                    matched_existing = existing
+                    break
+                # 3. Provider ID match
                 if c.provider_person_id and existing.provider_person_id and c.provider_person_id == existing.provider_person_id and c.provider == existing.provider:
                     matched_existing = existing
                     break
-                # 3. Name + Domain match
+                # 4. Name + Domain match (only if emails do not conflict)
                 if c.full_name and existing.full_name and c.company_domain and existing.company_domain:
-                    if c.full_name.lower() == existing.full_name.lower() and c.company_domain.lower() == existing.company_domain.lower():
+                    # If both have different emails, do NOT merge solely by name!
+                    if c.work_email and existing.work_email and c.work_email.lower().strip() != existing.work_email.lower().strip():
+                        pass
+                    elif c.full_name.lower().strip() == existing.full_name.lower().strip() and c.company_domain.lower().strip() == existing.company_domain.lower().strip():
                         matched_existing = existing
                         break
                         
@@ -66,11 +90,14 @@ class ContactEnricher:
                 # Merge
                 if c.provider and c.provider not in matched_existing.data_sources:
                     matched_existing.data_sources.append(c.provider)
+                    matched_existing.data_sources.sort()
                 if not matched_existing.work_email and c.work_email:
                     matched_existing.work_email = c.work_email
                     matched_existing.email_status = c.email_status
                     matched_existing.email_confidence = c.email_confidence
                     matched_existing.email_source = c.email_source
+                if not matched_existing.linkedin_url and c.linkedin_url:
+                    matched_existing.linkedin_url = c.linkedin_url
                 if not matched_existing.provider_person_id and c.provider_person_id:
                     matched_existing.provider_person_id = c.provider_person_id
                     matched_existing.provider = c.provider
@@ -147,8 +174,20 @@ class ContactEnricher:
                 elif c.email_status == "unknown":
                     score += 5
                     
-            c.contact_score = min(score, 100)
+            # Email domain consistency credit (P6-EMAIL-005)
+            if c.work_email and "@" in c.work_email:
+                email_dom = c.work_email.split("@")[-1].lower().strip()
+                if domain and email_dom == domain.lower().strip():
+                    score += 5
+
+            c.contact_score = max(0, min(score, 100))
             
-        # 5. Sort by score
-        candidates.sort(key=lambda x: x.contact_score, reverse=True)
+        # 5. Deterministic tie-breaking sort (P6-SCORE-001, P6-CROSS-001)
+        candidates.sort(key=lambda x: (
+            x.contact_score, 
+            len(x.data_sources), 
+            1 if x.email_status == "verified" else 0,
+            x.full_name or "", 
+            x.work_email or ""
+        ), reverse=True)
         return candidates[:max_contacts]

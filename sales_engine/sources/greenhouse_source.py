@@ -77,6 +77,7 @@ class GreenhouseSource(BaseJobSource):
             else:
                 description = soup.get_text(separator=" ", strip=True)
                 
+            company_slug = path_parts[0] if path_parts else ""
             return {
                 "url": url,
                 "source": "greenhouse",
@@ -84,5 +85,5 @@ class GreenhouseSource(BaseJobSource):
                 "company": company,
                 "location": location,
                 "description": description[:10000],
-                "raw_metadata": {}
+                "raw_metadata": {"source_company_key": company_slug}
             }

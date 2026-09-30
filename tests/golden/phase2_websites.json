@@ -81,8 +81,34 @@
         "Digital transformation roles in AEC"
       ]
     },
+    "concept_aliases": {
+      "BIM_EXECUTION": [
+        "Managed / Tech-Enabled BIM Execution",
+        "Managed BIM Execution",
+        "Tech-Enabled BIM Execution",
+        "Turnkey BIM Project Delivery",
+        "BIM Modeling and Multidisciplinary Clash Coordination"
+      ],
+      "BIM_AUTOMATION": [
+        "Custom Python and C# BIM Automation",
+        "Custom BIM Automation",
+        "Custom Software & Revit Automation",
+        "Revit Automation",
+        "Revit / Navisworks API Integration",
+        "Automated Parameter and Metadata Processing"
+      ],
+      "SOVEREIGN_AI": [
+        "Sovereign / Air-Gapped Enterprise AI Infrastructure",
+        "Sovereign AI & Technical Consultation",
+        "Sovereign Enterprise Edge AI"
+      ],
+      "COMPLIANCE_AUDITING": [
+        "ISO 19650 and UNI 11337 Compliance Auditing",
+        "Automated Compliance Auditing"
+      ]
+    },
     "human_approved": true,
-    "human_notes": "Ground Truth verified by human review from real pybim.com crawl snapshot. Deployed services vs In-Development offerings (Cloud Connect & Sovereign Edge AI) serves as semantic accuracy trap.",
+    "human_notes": "Ground Truth verified by human review from real pybim.com crawl snapshot. FLAGGED FOR HUMAN CORRECTION: Expected primary_job_signals contains 3 non-pure job titles: 'Python BIM Automation' (propose 'Python BIM Automation Engineer'), 'ISO 19650 information-management roles' (propose 'BIM Information Manager'), 'Digital Construction / BIM technology leadership' (propose 'Digital Construction Manager').",
     "status": "REVIEW"
   }
 ]

@@ -1,0 +1,32 @@
+{
+  "data": {
+    "domain": "acme.com",
+    "disposable": false,
+    "webmail": false,
+    "accept_all": false,
+    "pattern": "{first}.{last}",
+    "organization": "Acme Engineering",
+    "country": "United Kingdom",
+    "industry": "Engineering",
+    "emails": [
+      {
+        "value": "jane.smith@acme.com",
+        "first_name": "Jane",
+        "last_name": "Smith",
+        "position": "Senior BIM Manager",
+        "department": "engineering",
+        "confidence": 94,
+        "linkedin": "https://linkedin.com/in/janesmith"
+      },
+      {
+        "value": "alex.rivera@acme.com",
+        "first_name": "Alex",
+        "last_name": "Rivera",
+        "position": "Head of Digital Delivery",
+        "department": "technology",
+        "confidence": 91,
+        "linkedin": "https://linkedin.com/in/alexrivera"
+      }
+    ]
+  }
+}

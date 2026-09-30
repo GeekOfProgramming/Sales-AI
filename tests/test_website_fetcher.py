@@ -20,16 +20,22 @@ def test_same_domain_filtering(mock_get):
         def __init__(self, body):
             self.body = body.encode("utf-8")
             
-    html = """
-    <html>
-        <body>
-            <a href="/about">About</a>
-            <a href="https://external.com/services">External</a>
-            <a href="http://example.com/contact">Contact</a>
-        </body>
-    </html>
-    """
-    mock_get.return_value = MockResponse(html)
+    def get_mock(url, **kwargs):
+        if url.endswith("/about"):
+            return MockResponse("<html><body>About Us page content here</body></html>")
+        elif url.endswith("/contact"):
+            return MockResponse("<html><body>Contact Us page content here</body></html>")
+        return MockResponse("""
+        <html>
+            <body>
+                <a href="/about">About</a>
+                <a href="https://external.com/services">External</a>
+                <a href="http://example.com/contact">Contact</a>
+            </body>
+        </html>
+        """)
+        
+    mock_get.side_effect = get_mock
     
     result = fetcher.fetch_website_content("http://example.com")
     pages = result["pages"]
@@ -48,15 +54,21 @@ def test_anchor_text_priority(mock_get):
         def __init__(self, body):
             self.body = body.encode("utf-8")
             
-    html = """
-    <html>
-        <body>
-            <a href="/page1">Random Page</a>
-            <a href="/page2">Our Services</a>
-        </body>
-    </html>
-    """
-    mock_get.return_value = MockResponse(html)
+    def get_mock(url, **kwargs):
+        if url.endswith("/page1"):
+            return MockResponse("<html><body>Page 1 specific text</body></html>")
+        elif url.endswith("/page2"):
+            return MockResponse("<html><body>Page 2 specific services text</body></html>")
+        return MockResponse("""
+        <html>
+            <body>
+                <a href="/page1">Random Page</a>
+                <a href="/page2">Our Services</a>
+            </body>
+        </html>
+        """)
+        
+    mock_get.side_effect = get_mock
     
     result = fetcher.fetch_website_content("http://example.com")
     pages = result["pages"]
