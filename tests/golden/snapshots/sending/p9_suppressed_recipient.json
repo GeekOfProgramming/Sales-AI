@@ -1,0 +1,8 @@
+{
+  "suppression_id": "sup:email:suppressed@acme.com",
+  "email": "suppressed@acme.com",
+  "company_domain": "acme.com",
+  "reason": "opt_out",
+  "source": "manual",
+  "created_at": "2026-10-01T00:00:00Z"
+}

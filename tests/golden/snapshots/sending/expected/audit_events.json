@@ -1,0 +1,9 @@
+{
+  "events": [
+    {"action": "imported", "new_status": "pending_review"},
+    {"action": "edited", "new_status": "pending_review"},
+    {"action": "approved", "new_status": "approved"},
+    {"action": "send_requested", "new_status": "sending"},
+    {"action": "sent", "new_status": "sent"}
+  ]
+}

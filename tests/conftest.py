@@ -1,5 +1,14 @@
 import os
+import sys
+import types
 import pytest
+
+try:
+    import ollama
+except ImportError:
+    mock_ollama = types.ModuleType("ollama")
+    mock_ollama.Client = None
+    sys.modules["ollama"] = mock_ollama
 
 
 @pytest.fixture(autouse=True)

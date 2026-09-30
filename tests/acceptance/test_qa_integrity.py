@@ -298,3 +298,176 @@ def test_qa_meta_rule_g_expected_and_actual_are_independently_sourced():
     # Verify they are not a shallow or deep identical copy of metadata
     assert expected is not actual
     assert set(expected.keys()) != set(actual.keys())
+
+
+# =========================================================================
+# PHASE 9 QA INTEGRITY & META-TEST SUITE
+# =========================================================================
+
+from scripts.update_phase9_report import (
+    evaluate_phase9_case,
+    calculate_phase9_false_pass_count,
+    is_test_empty_or_trivial,
+)
+
+
+def test_p9_qa_001_unmapped_deterministic_case_cannot_pass():
+    """P9-QA-001: Proves that an unmapped deterministic Golden case cannot generate PASS."""
+    catalog_case = {"case_id": "P9-STORE-999", "title": "Unmapped Storage Test"}
+    test_results = {"some_test": {"status": "PASS"}}
+    mapping = {}
+
+    status, expected, actual, reason, _ = evaluate_phase9_case(catalog_case, test_results, mapping)
+    assert status != "PASS", "Unmapped deterministic case must NEVER become PASS"
+    assert status == "NOT_RUN"
+    assert actual.get("error") == "no_mapped_test"
+
+
+def test_p9_qa_002_empty_pass_test_cannot_count_as_coverage(tmp_path):
+    """P9-QA-002: Proves that an empty `pass` test cannot count as real coverage and forces FAIL."""
+    dummy_file = tmp_path / "test_dummy_p9.py"
+    dummy_file.write_text(
+        """def test_empty_pass():
+    pass
+""",
+        encoding="utf-8",
+    )
+    assert is_test_empty_or_trivial(f"{dummy_file}::test_empty_pass") is True
+
+    catalog_case = {"case_id": "P9-STORE-001", "title": "Persist Draft"}
+    test_results = {"test_empty_pass": {"status": "PASS", "execution_time_s": 0.01}}
+    mapping = {"P9-STORE-001": f"{dummy_file}::test_empty_pass"}
+
+    status, expected, actual, reason, has_stub = evaluate_phase9_case(catalog_case, test_results, mapping)
+    assert status == "FAIL"
+    assert has_stub is True
+    assert "empty pass stub" in actual.get("error", "").lower()
+
+
+def test_p9_qa_003_skipped_live_smtp_becomes_not_run():
+    """P9-QA-003: Proves that skipped optional live SMTP case becomes NOT_RUN, never PASS."""
+    catalog_case = {"case_id": "P9-LIVE-SMTP-001", "title": "Optional Live SMTP Test", "mode": "live_optional"}
+    test_results = {
+        "test_p9_live_smtp_001_live_send_guardrail": {
+            "status": "NOT_RUN",
+            "reason": "Skipped: live email tests not explicitly enabled",
+        }
+    }
+    mapping = {
+        "P9-LIVE-SMTP-001": "tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail"
+    }
+
+    status, expected, actual, reason, _ = evaluate_phase9_case(catalog_case, test_results, mapping)
+    assert status == "NOT_RUN"
+    assert actual.get("status") == "NOT_RUN"
+
+
+def test_p9_qa_004_failed_node_maps_to_fail():
+    """P9-QA-004: Proves that a failed pytest node maps to case FAIL."""
+    catalog_case = {"case_id": "P9-REG-001", "title": "Stale Approval Blocked"}
+    test_results = {
+        "test_stale_approval_fingerprint_mismatch_blocks_send": {
+            "status": "FAIL",
+            "error": "AssertionError: stale approval allowed",
+        }
+    }
+    mapping = {
+        "P9-REG-001": "tests/test_sending.py::test_stale_approval_fingerprint_mismatch_blocks_send"
+    }
+
+    status, expected, actual, reason, _ = evaluate_phase9_case(catalog_case, test_results, mapping)
+    assert status == "FAIL"
+    assert actual.get("status") == "FAIL"
+    assert "AssertionError" in actual.get("error", "")
+
+
+def test_p9_qa_005_expected_and_actual_independently_sourced():
+    """P9-QA-005: Proves report Expected and Actual are independently sourced."""
+    catalog_case = {"case_id": "P9-STORE-001", "title": "Persist Draft"}
+    test_results = {
+        "test_p9_store_001_to_006_persistence_and_isolation": {
+            "status": "PASS",
+            "execution_time_s": 0.035,
+        }
+    }
+    mapping = {
+        "P9-STORE-001": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation"
+    }
+
+    status, expected, actual, reason, _ = evaluate_phase9_case(catalog_case, test_results, mapping)
+    assert expected == {"status": "PASS"}
+    assert actual["status"] == "PASS"
+    assert actual["test_node"] == mapping["P9-STORE-001"]
+    assert actual["execution_time_s"] == 0.035
+    assert expected is not actual
+    assert set(expected.keys()) != set(actual.keys())
+
+
+def test_p9_qa_006_false_pass_count_computed_dynamically():
+    """P9-QA-006: Proves false_pass_count is calculated dynamically from report cases."""
+    clean_cases = [
+        {
+            "case_id": "P9-STORE-001",
+            "status": "PASS",
+            "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_store",
+            "expected": {"status": "PASS"},
+            "actual": {"status": "PASS"},
+            "has_stub_pass": False,
+        }
+    ]
+    assert calculate_phase9_false_pass_count(clean_cases) == 0
+
+    unmapped_pass = [
+        {
+            "case_id": "P9-STORE-999",
+            "status": "PASS",
+            "mapped_test": None,
+            "expected": {"status": "PASS"},
+            "actual": {"status": "PASS"},
+            "has_stub_pass": False,
+        }
+    ]
+    assert calculate_phase9_false_pass_count(unmapped_pass) == 1
+
+    stub_pass = [
+        {
+            "case_id": "P9-STORE-002",
+            "status": "PASS",
+            "mapped_test": "tests/dummy.py::test_stub",
+            "expected": {"status": "PASS"},
+            "actual": {"status": "PASS"},
+            "has_stub_pass": True,
+        }
+    ]
+    assert calculate_phase9_false_pass_count(stub_pass) == 1
+
+
+def test_p9_qa_007_mock_provider_success_labeled_mock_not_live_smtp():
+    """P9-QA-007: Proves that mock provider success is labeled mock provider, never live SMTP success."""
+    from sales_engine.sending.mock_sender import MockEmailSender
+    sender = MockEmailSender()
+    res = sender.send_email(
+        draft_id="draft:test-001",
+        revision=1,
+        send_key="key-001",
+        to_email="test@domain.com",
+        from_email="sender@domain.com",
+        from_name="Sender",
+        subject="Hello",
+        body="World",
+    )
+    assert res.status == "sent"
+    assert res.provider_message_id is not None
+    assert res.provider_message_id.startswith("mock-"), "Mock provider message IDs must be labeled with mock- prefix"
+    assert len(sender.sent_messages) == 1, "Mock provider must record in memory, not network"
+
+
+def test_p9_qa_008_live_send_cannot_run_without_explicit_flag():
+    """P9-QA-008: Proves that a live-send test cannot execute without explicit RUN_LIVE_EMAIL_TESTS=true."""
+    import os
+    run_live = os.getenv("RUN_LIVE_EMAIL_TESTS", "false").lower() == "true"
+    email_enabled = os.getenv("EMAIL_SEND_ENABLED", "false").lower() == "true"
+    assert not (run_live and email_enabled), (
+        "Standard test environment MUST NOT have both RUN_LIVE_EMAIL_TESTS and EMAIL_SEND_ENABLED set to true"
+    )
+

@@ -1,0 +1,7 @@
+{
+  "draft_id": "draft:domain:acme.com:email:jane@acme.com:outreach_v1:r1",
+  "revision": 1,
+  "recipient_email": "jane@acme.com",
+  "approved_content_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "tampered_body": "Tampered body that does not match original approved hash."
+}

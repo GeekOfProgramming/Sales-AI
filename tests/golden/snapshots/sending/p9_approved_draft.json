@@ -1,0 +1,19 @@
+{
+  "draft_id": "draft:domain:acme.com:email:jane@acme.com:outreach_v1:r1",
+  "revision": 1,
+  "lead_id": "domain:acme.com",
+  "contact_id": "email:jane@acme.com",
+  "recipient_name": "Jane Smith",
+  "recipient_title": "Head of Digital Delivery",
+  "recipient_email": "jane@acme.com",
+  "sender_name": "pyBIM Solutions",
+  "sender_email": "outreach@pybim.com",
+  "subject": "Streamlining Revit Automation at Acme",
+  "body": "Hi Jane,\n\nWe noticed your team is expanding Revit automation. pyBIM provides Tech-Enabled BIM Services.\n\nOpen to a brief chat?",
+  "service_used": "Tech-Enabled BIM Services",
+  "approval_status": "approved",
+  "send_status": "not_sent",
+  "outreach_status": "approved",
+  "reviewer": "compliance_lead",
+  "approved_at": "2026-10-01T00:00:00Z"
+}

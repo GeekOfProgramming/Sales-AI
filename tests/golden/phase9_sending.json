@@ -1,18 +1,1112 @@
 [
-  {"case_id": "P9-REVIEW-001", "phase": "Phase 9", "title": "Import Pending Draft", "mode": "deterministic"},
-  {"case_id": "P9-REVIEW-002", "phase": "Phase 9", "title": "Edit Invalidates Approval", "mode": "deterministic"},
-  {"case_id": "P9-APPROVE-001", "phase": "Phase 9", "title": "Explicit Approval", "mode": "deterministic"},
-  {"case_id": "P9-APPROVE-002", "phase": "Phase 9", "title": "Approval Does Not Send", "mode": "deterministic"},
-  {"case_id": "P9-SEND-001", "phase": "Phase 9", "title": "Approved Dry Run", "mode": "deterministic"},
-  {"case_id": "P9-SEND-002", "phase": "Phase 9", "title": "Approved Mock SMTP Send", "mode": "deterministic"},
-  {"case_id": "P9-SEND-003", "phase": "Phase 9", "title": "Unapproved Blocked", "mode": "deterministic"},
-  {"case_id": "P9-SEND-004", "phase": "Phase 9", "title": "Stale Approval Blocked", "mode": "deterministic"},
-  {"case_id": "P9-SEND-005", "phase": "Phase 9", "title": "Already Sent Blocked", "mode": "deterministic"},
-  {"case_id": "P9-SUPPRESS-001", "phase": "Phase 9", "title": "Suppressed Recipient Blocked", "mode": "deterministic"},
-  {"case_id": "P9-IDEMP-001", "phase": "Phase 9", "title": "Concurrent Duplicate Prevented", "mode": "deterministic"},
-  {"case_id": "P9-BATCH-001", "phase": "Phase 9", "title": "Partial Failure Isolation", "mode": "deterministic"},
-  {"case_id": "P9-SEC-001", "phase": "Phase 9", "title": "Secrets Never Logged", "mode": "deterministic"},
-  {"case_id": "P9-WF-001", "phase": "Phase 9", "title": "Sent State Projection", "mode": "deterministic"},
-  {"case_id": "P9-NOLLM-001", "phase": "Phase 9", "title": "Zero LLM Code Path", "mode": "deterministic"},
-  {"case_id": "P9-LIVE-SMTP-001", "phase": "Phase 9", "title": "Live SMTP Send Guardrail", "mode": "opt_in_live"}
+  {
+    "case_id": "P9-REVIEW-001",
+    "phase": "Phase 9",
+    "title": "Import Pending Draft",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STORE-001",
+    "phase": "Phase 9",
+    "title": "Persist Draft",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STORE-002",
+    "phase": "Phase 9",
+    "title": "Preserve Lead ID",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STORE-003",
+    "phase": "Phase 9",
+    "title": "Preserve Contact ID",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STORE-004",
+    "phase": "Phase 9",
+    "title": "Preserve Recipient Email",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STORE-005",
+    "phase": "Phase 9",
+    "title": "No Sent-History Overwrite",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STORE-006",
+    "phase": "Phase 9",
+    "title": "Temporary DB Isolation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-001",
+    "phase": "Phase 9",
+    "title": "Pending Review Default",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-002",
+    "phase": "Phase 9",
+    "title": "Filter by Approval Status",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-003",
+    "phase": "Phase 9",
+    "title": "Filter by Send Status",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-004",
+    "phase": "Phase 9",
+    "title": "Filter by Lead ID",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-005",
+    "phase": "Phase 9",
+    "title": "Filter by Contact ID",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-006",
+    "phase": "Phase 9",
+    "title": "Filter by Recipient Email",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QUEUE-007",
+    "phase": "Phase 9",
+    "title": "Deterministic Pagination",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-001",
+    "phase": "Phase 9",
+    "title": "Edit Subject Creates New Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-002",
+    "phase": "Phase 9",
+    "title": "Edit Body Creates New Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-003",
+    "phase": "Phase 9",
+    "title": "Edit Recipient Email Creates New Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-004",
+    "phase": "Phase 9",
+    "title": "Edit Sender-Relevant Identity Invalidates Approval",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-005",
+    "phase": "Phase 9",
+    "title": "Personalization Notes Only",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-006",
+    "phase": "Phase 9",
+    "title": "Sent Revision Immutable",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-EDIT-007",
+    "phase": "Phase 9",
+    "title": "Revision Monotonicity",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-APPROVE-001",
+    "phase": "Phase 9",
+    "title": "Explicit Approval",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-APPROVE-002",
+    "phase": "Phase 9",
+    "title": "Approval Does Not Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-APPROVE-003",
+    "phase": "Phase 9",
+    "title": "Wrong Revision Cannot Approve",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-APPROVE-004",
+    "phase": "Phase 9",
+    "title": "Rejected Draft Cannot Be Approved Implicitly",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-APPROVE-005",
+    "phase": "Phase 9",
+    "title": "Reviewer Required",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-APPROVE-006",
+    "phase": "Phase 9",
+    "title": "Approval Event Recorded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-001",
+    "phase": "Phase 9",
+    "title": "Stable Fingerprint",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-002",
+    "phase": "Phase 9",
+    "title": "Subject Change Changes Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-003",
+    "phase": "Phase 9",
+    "title": "Body Change Changes Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-004",
+    "phase": "Phase 9",
+    "title": "Recipient Change Changes Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-005",
+    "phase": "Phase 9",
+    "title": "Sender Email Change Changes Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-006",
+    "phase": "Phase 9",
+    "title": "Revision Change Changes Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-007",
+    "phase": "Phase 9",
+    "title": "Hash Does Not Include Mutable Non-Send Metadata",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-HASH-008",
+    "phase": "Phase 9",
+    "title": "Approved Hash Stored Exactly",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-001",
+    "phase": "Phase 9",
+    "title": "Stale Approval Blocked",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-002",
+    "phase": "Phase 9",
+    "title": "Pending Review Cannot Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEND-003",
+    "phase": "Phase 9",
+    "title": "Rejected Cannot Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEND-004",
+    "phase": "Phase 9",
+    "title": "Changes Requested Cannot Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEND-005",
+    "phase": "Phase 9",
+    "title": "Missing Approval Hash Cannot Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-003",
+    "phase": "Phase 9",
+    "title": "Dry Run Zero Network Calls",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DRY-002",
+    "phase": "Phase 9",
+    "title": "Dry Run Still Checks Suppression",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DRY-003",
+    "phase": "Phase 9",
+    "title": "Dry Run Still Checks Approval Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DRY-004",
+    "phase": "Phase 9",
+    "title": "Dry Run Still Checks Sender Match",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DRY-005",
+    "phase": "Phase 9",
+    "title": "Dry Run Creates Audit Diagnostic",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-004",
+    "phase": "Phase 9",
+    "title": "EMAIL_SEND_ENABLED=false Blocks Real Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-CONFIG-001",
+    "phase": "Phase 9",
+    "title": "Missing SMTP Config",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-CONFIG-002",
+    "phase": "Phase 9",
+    "title": "Request Body Cannot Supply SMTP Credentials",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SENDER-001",
+    "phase": "Phase 9",
+    "title": "Matching Sender Accepted",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SENDER-002",
+    "phase": "Phase 9",
+    "title": "Mismatch Blocked",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SENDER-003",
+    "phase": "Phase 9",
+    "title": "Trusted Alias",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SENDER-004",
+    "phase": "Phase 9",
+    "title": "From Header Cannot Be LLM/User Arbitrary",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-005",
+    "phase": "Phase 9",
+    "title": "Suppressed Recipient Cannot Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SUPPRESS-002",
+    "phase": "Phase 9",
+    "title": "Case-Insensitive Email Matching",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SUPPRESS-003",
+    "phase": "Phase 9",
+    "title": "Suppression Persists",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SUPPRESS-004",
+    "phase": "Phase 9",
+    "title": "Manual Suppression Audit Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SUPPRESS-005",
+    "phase": "Phase 9",
+    "title": "Suppression Cannot Be Silently Removed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SUPPRESS-006",
+    "phase": "Phase 9",
+    "title": "Opt-Out Reason Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-006",
+    "phase": "Phase 9",
+    "title": "Already Sent Cannot Resend",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-IDEMP-002",
+    "phase": "Phase 9",
+    "title": "Same Draft Different Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-IDEMP-003",
+    "phase": "Phase 9",
+    "title": "Same Recipient Different Draft",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-IDEMP-004",
+    "phase": "Phase 9",
+    "title": "send_key Deterministic",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-IDEMP-005",
+    "phase": "Phase 9",
+    "title": "No force=true Bypass",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-007",
+    "phase": "Phase 9",
+    "title": "Concurrent Duplicate Send Prevented",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-CONC-002",
+    "phase": "Phase 9",
+    "title": "Unique send_key Constraint",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-CONC-003",
+    "phase": "Phase 9",
+    "title": "Atomic State Transition",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-CONC-004",
+    "phase": "Phase 9",
+    "title": "Concurrent Different Drafts Allowed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-001",
+    "phase": "Phase 9",
+    "title": "Explicit Mock Sender Success",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-002",
+    "phase": "Phase 9",
+    "title": "Production Does Not Auto-Mock",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-003",
+    "phase": "Phase 9",
+    "title": "Text/Plain Payload",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-ERR-001",
+    "phase": "Phase 9",
+    "title": "Authentication Failure",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-ERR-002",
+    "phase": "Phase 9",
+    "title": "Connection Failure",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-ERR-003",
+    "phase": "Phase 9",
+    "title": "Timeout",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-ERR-004",
+    "phase": "Phase 9",
+    "title": "Generic Provider Error",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SMTP-ERR-005",
+    "phase": "Phase 9",
+    "title": "Error Sanitization",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-FAIL-001",
+    "phase": "Phase 9",
+    "title": "Failed Send Not Marked Sent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-FAIL-002",
+    "phase": "Phase 9",
+    "title": "Failed Attempt Recorded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-FAIL-003",
+    "phase": "Phase 9",
+    "title": "No Automatic Retry",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-FAIL-004",
+    "phase": "Phase 9",
+    "title": "Explicit Later Retry",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-FAIL-005",
+    "phase": "Phase 9",
+    "title": "Ambiguous Provider Failure",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-RATE-001",
+    "phase": "Phase 9",
+    "title": "Within Per-Minute Limit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-RATE-002",
+    "phase": "Phase 9",
+    "title": "Exceed Per-Minute Limit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-RATE-003",
+    "phase": "Phase 9",
+    "title": "Batch Max Boundary",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-RATE-004",
+    "phase": "Phase 9",
+    "title": "Batch Max + 1 Rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-RATE-005",
+    "phase": "Phase 9",
+    "title": "Rate Limit Deterministic Clock",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-BATCH-001",
+    "phase": "Phase 9",
+    "title": "Mixed Batch Isolation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-BATCH-002",
+    "phase": "Phase 9",
+    "title": "Explicit Draft IDs Required",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-BATCH-003",
+    "phase": "Phase 9",
+    "title": "Duplicate Draft IDs in Request",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-BATCH-004",
+    "phase": "Phase 9",
+    "title": "Missing Draft ID",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-BATCH-005",
+    "phase": "Phase 9",
+    "title": "Stable Result Ordering",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-001",
+    "phase": "Phase 9",
+    "title": "Imported Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-002",
+    "phase": "Phase 9",
+    "title": "Edited Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-003",
+    "phase": "Phase 9",
+    "title": "Approved Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-004",
+    "phase": "Phase 9",
+    "title": "Rejected Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-005",
+    "phase": "Phase 9",
+    "title": "Changes Requested Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-006",
+    "phase": "Phase 9",
+    "title": "Suppressed Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-007",
+    "phase": "Phase 9",
+    "title": "Send Requested Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-008",
+    "phase": "Phase 9",
+    "title": "Sent Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-009",
+    "phase": "Phase 9",
+    "title": "Failed Event",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-010",
+    "phase": "Phase 9",
+    "title": "Append-Only",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-011",
+    "phase": "Phase 9",
+    "title": "Reviewer Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-AUDIT-012",
+    "phase": "Phase 9",
+    "title": "No Secrets In Audit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-ATTEMPT-001",
+    "phase": "Phase 9",
+    "title": "Success Attempt Record",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-ATTEMPT-002",
+    "phase": "Phase 9",
+    "title": "Failure Attempt Record",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-ATTEMPT-003",
+    "phase": "Phase 9",
+    "title": "Dry Run Is Not Successful Provider Attempt",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-ATTEMPT-004",
+    "phase": "Phase 9",
+    "title": "No Credentials Persisted",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STATE-001",
+    "phase": "Phase 9",
+    "title": "Invalid Transition Rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STATE-002",
+    "phase": "Phase 9",
+    "title": "Sent State Terminal For Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STATE-003",
+    "phase": "Phase 9",
+    "title": "New Revision Reopens Review",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-STATE-004",
+    "phase": "Phase 9",
+    "title": "Suppressed Recipient Blocks Regardless of Approval",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P8-001",
+    "phase": "Phase 9",
+    "title": "Placeholder Rejected After Human Edit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P8-002",
+    "phase": "Phase 9",
+    "title": "Empty Subject Rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P8-003",
+    "phase": "Phase 9",
+    "title": "Oversized Subject/Body Rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P8-004",
+    "phase": "Phase 9",
+    "title": "Recipient Identity Revalidated",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P8-005",
+    "phase": "Phase 9",
+    "title": "No Phase 8 LLM Invocation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P7-001",
+    "phase": "Phase 9",
+    "title": "Approved Projection",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P7-002",
+    "phase": "Phase 9",
+    "title": "Sent Projection",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P7-003",
+    "phase": "Phase 9",
+    "title": "Failed Projection",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-P7-004",
+    "phase": "Phase 9",
+    "title": "Suppressed Projection",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-001",
+    "phase": "Phase 9",
+    "title": "SMTP Password Never Returned",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-002",
+    "phase": "Phase 9",
+    "title": "SMTP Password Never Logged",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-003",
+    "phase": "Phase 9",
+    "title": "OAuth/API Secrets Never Stored In DB",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-004",
+    "phase": "Phase 9",
+    "title": "API Cannot Override SMTP Host",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-005",
+    "phase": "Phase 9",
+    "title": "API Cannot Override SMTP Password",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-006",
+    "phase": "Phase 9",
+    "title": "Provider Exception Redaction",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-007",
+    "phase": "Phase 9",
+    "title": "SQL Parameterization",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-008",
+    "phase": "Phase 9",
+    "title": "Header Injection Protection",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-009",
+    "phase": "Phase 9",
+    "title": "Invalid Recipient Email",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-SEC-010",
+    "phase": "Phase 9",
+    "title": "No Personal/Hidden Recipient BCC",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-NOLLM-001",
+    "phase": "Phase 9",
+    "title": "Sending Module Has Zero LLM Imports",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-NOLLM-002",
+    "phase": "Phase 9",
+    "title": "Approve Does Not Call LLM",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-NOLLM-003",
+    "phase": "Phase 9",
+    "title": "Edit Does Not Call LLM",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-NOLLM-004",
+    "phase": "Phase 9",
+    "title": "Send Does Not Call LLM",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-001",
+    "phase": "Phase 9",
+    "title": "Tables Initialize Cleanly",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-002",
+    "phase": "Phase 9",
+    "title": "Reinitialization Idempotent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-003",
+    "phase": "Phase 9",
+    "title": "Unique Draft Revision Constraint",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-004",
+    "phase": "Phase 9",
+    "title": "Unique send_key Constraint",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-005",
+    "phase": "Phase 9",
+    "title": "Foreign/Logical References Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-006",
+    "phase": "Phase 9",
+    "title": "Transaction Rollback On Internal Failure",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-007",
+    "phase": "Phase 9",
+    "title": "Production DB Not Packaged",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-DB-008",
+    "phase": "Phase 9",
+    "title": "Runtime DB Directory Created Safely",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-PACK-001",
+    "phase": "Phase 9",
+    "title": ".env Excluded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-PACK-002",
+    "phase": "Phase 9",
+    "title": "Runtime DB Excluded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-PACK-003",
+    "phase": "Phase 9",
+    "title": "Chroma Runtime DB Excluded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-PACK-004",
+    "phase": "Phase 9",
+    "title": "Private Key Types Excluded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-PACK-005",
+    "phase": "Phase 9",
+    "title": "Source/Test Files Still Included",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-OPTOUT-001",
+    "phase": "Phase 9",
+    "title": "Server-Owned Footer Appended",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-OPTOUT-002",
+    "phase": "Phase 9",
+    "title": "LLM Cannot Control Footer",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-OPTOUT-003",
+    "phase": "Phase 9",
+    "title": "Footer Included In Approval Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-001",
+    "phase": "Phase 9",
+    "title": "Import Success",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-002",
+    "phase": "Phase 9",
+    "title": "Invalid Draft Validation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-003",
+    "phase": "Phase 9",
+    "title": "Review List",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-004",
+    "phase": "Phase 9",
+    "title": "Edit Creates Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-005",
+    "phase": "Phase 9",
+    "title": "Approve",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-006",
+    "phase": "Phase 9",
+    "title": "Approval Does Not Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-007",
+    "phase": "Phase 9",
+    "title": "Send Dry Run",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-008",
+    "phase": "Phase 9",
+    "title": "Real Send Disabled",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-009",
+    "phase": "Phase 9",
+    "title": "Suppression Blocks",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-010",
+    "phase": "Phase 9",
+    "title": "Batch Mixed Response",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-011",
+    "phase": "Phase 9",
+    "title": "Invalid Revision",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-API-012",
+    "phase": "Phase 9",
+    "title": "Missing Draft",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-LIVE-SMTP-001",
+    "phase": "Phase 9",
+    "title": "Optional Live SMTP Test (Gated)",
+    "mode": "live_optional"
+  },
+  {
+    "case_id": "P9-LIVE-SAFE-001",
+    "phase": "Phase 9",
+    "title": "Normal Test Run Zero Live Calls",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-001",
+    "phase": "Phase 9",
+    "title": "Unmapped deterministic case cannot PASS.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-002",
+    "phase": "Phase 9",
+    "title": "Empty `pass` test cannot count as real coverage.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-003",
+    "phase": "Phase 9",
+    "title": "Skipped live SMTP becomes NOT_RUN.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-004",
+    "phase": "Phase 9",
+    "title": "Failed node maps to FAIL.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-005",
+    "phase": "Phase 9",
+    "title": "Expected and Actual independently sourced.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-006",
+    "phase": "Phase 9",
+    "title": "false_pass_count computed dynamically.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-007",
+    "phase": "Phase 9",
+    "title": "A mock provider success is labeled mock, not live SMTP success.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-QA-008",
+    "phase": "Phase 9",
+    "title": "A live-send case cannot run without explicit live flag.",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-008",
+    "phase": "Phase 9",
+    "title": "Approval Action Itself Never Sends",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-009",
+    "phase": "Phase 9",
+    "title": "Recipient Edit Invalidates Approval",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-010",
+    "phase": "Phase 9",
+    "title": "Sender Mismatch Blocks Provider Call",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-011",
+    "phase": "Phase 9",
+    "title": "Provider Secrets Sanitized Across Logs",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-012",
+    "phase": "Phase 9",
+    "title": "Final Sent Payload Hash Equals Approved Payload Hash",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-013",
+    "phase": "Phase 9",
+    "title": "Missing/untrusted server sender cannot self-authorize",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-014",
+    "phase": "Phase 9",
+    "title": "Sent revision cannot be rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-015",
+    "phase": "Phase 9",
+    "title": "Sent revision cannot request changes",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-016",
+    "phase": "Phase 9",
+    "title": "Sent revision cannot transition back to not_sent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-017",
+    "phase": "Phase 9",
+    "title": "Sent revision remains unchanged after invalid transition",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-018",
+    "phase": "Phase 9",
+    "title": "Trusted configured alias can approve and send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-019",
+    "phase": "Phase 9",
+    "title": "Untrusted alias cannot approve or send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-020",
+    "phase": "Phase 9",
+    "title": "Sender display name is fingerprinted",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P9-REG-021",
+    "phase": "Phase 9",
+    "title": "Changing SMTP_FROM_NAME after approval does not mutate provider payload",
+    "mode": "deterministic"
+  }
 ]

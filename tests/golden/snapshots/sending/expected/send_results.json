@@ -1,0 +1,27 @@
+{
+  "dry_run": {
+    "status": "dry_run",
+    "provider": "none",
+    "provider_calls": 0
+  },
+  "mock_send": {
+    "status": "sent",
+    "provider": "mock",
+    "provider_calls": 1
+  },
+  "unapproved": {
+    "status": "blocked",
+    "error_type": "not_approved",
+    "provider_calls": 0
+  },
+  "stale_approval": {
+    "status": "blocked",
+    "error_type": "approval_stale",
+    "provider_calls": 0
+  },
+  "already_sent": {
+    "status": "already_sent",
+    "error_type": "already_sent",
+    "provider_calls": 0
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "batch_requests": [
+    {"draft_id": "draft:batch-01", "expected_status": "sent"},
+    {"draft_id": "draft:batch-02", "expected_status": "blocked", "error_type": "suppressed_recipient"},
+    {"draft_id": "draft:batch-03", "expected_status": "blocked", "error_type": "not_approved"},
+    {"draft_id": "draft:batch-04", "expected_status": "failed", "error_type": "smtp_connection_error"}
+  ]
+}

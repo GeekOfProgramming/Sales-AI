@@ -1,0 +1,5 @@
+{
+  "suppressed_email": "suppressed@acme.com",
+  "is_suppressed": true,
+  "case_insensitive_match": true
+}
