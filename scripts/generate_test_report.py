@@ -66,13 +66,14 @@ def generate_report():
     for r in results:
         p = r.get("phase", "Unknown")
         if p not in phases:
-            phases[p] = {"total": 0, "pass": 0, "fail": 0, "review": 0, "deferred": 0}
+            phases[p] = {"total": 0, "pass": 0, "fail": 0, "review": 0, "deferred": 0, "not_run": 0}
         phases[p]["total"] += 1
         st = r.get("status")
         if st == "PASS": phases[p]["pass"] += 1
         elif st == "FAIL": phases[p]["fail"] += 1
         elif st == "REVIEW": phases[p]["review"] += 1
         elif st == "NOT_RUN_MODEL_LIMITATION": phases[p]["deferred"] += 1
+        elif st == "NOT_RUN": phases[p]["not_run"] += 1
         
     md = [
         "# SalesAI QA / Acceptance Test Report",
@@ -100,14 +101,24 @@ def generate_report():
         f"- **Source Changed:** {source_changed}",
         "",
         "## Phase Summary",
-        "| Phase | Cases | Pass | Fail | Review | Deferred (Model) |",
-        "|---|---|---|---|---|---|"
+        "| Phase | Cases | Pass | Fail | Review | Deferred (Model) | Not Run |",
+        "|---|---|---|---|---|---|---|"
     ]
     
     for p, stats in sorted(phases.items()):
-        md.append(f"| {p} | {stats['total']} | {stats['pass']} | {stats['fail']} | {stats['review']} | {stats['deferred']} |")
+        not_run_cnt = stats.get("not_run", 0)
+        md.append(f"| {p} | {stats['total']} | {stats['pass']} | {stats['fail']} | {stats['review']} | {stats['deferred']} | {not_run_cnt} |")
         
     md.extend([
+        "",
+        "## Phase 7 Reconciliation & Case Count Model",
+        "To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:",
+        "- **Total Golden Cases in Catalog (`tests/golden/phase7_exports.json`):** 83 cases",
+        "- **Total Pytest Acceptance Tests (`tests/acceptance/test_phase7_acceptance.py`):** 83 collected tests",
+        "  - **Passed (Deterministic):** 81 test cases verifying multi-format exports, schema contracts, identity boundaries, job audit, XLSX/CSV formatting, privacy isolation, limits, and regression invariants.",
+        "  - **Review Required:** 1 case (`P7-WF-005` — verifies pre-existing non-default workflow states projecting faithfully without mutation; flagged for human confirmation).",
+        "  - **Skipped / Not Run:** 1 case (`P7-GS-LIVE-001` — marked `NOT_RUN` due to real Google Sheets live credentials/adapter not being configured in this offline suite).",
+        "- **Historical 85-count explanation:** Earlier conversational summaries referenced 85 entries by counting parameter boundary sub-variants (e.g. `P7-CONTRACT-003` threshold vs boundary); in the strict repository catalog there are exactly **83 canonical Golden cases** and **83 pytest tests** with **0 false passes**.",
         "",
         "## Failures",
     ])

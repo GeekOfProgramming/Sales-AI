@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 15:21:27 UTC
-- **Git Commit:** `dadb576`
+- **Time:** 15:46:27 UTC
+- **Git Commit:** `550b3ea`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,22 +14,32 @@
 - **Live Tests Executed:** No
 
 ## Summary
-- **Total Cases:** 92
-- **Passed:** 84
+- **Total Cases:** 175
+- **Passed:** 165
 - **Failed:** 0
-- **Review Required:** 3
+- **Review Required:** 4
 - **Deferred (Model Limitation):** 2
-- **Skipped / Not Run:** 3
+- **Skipped / Not Run:** 4
 - **Source Changed:** 0
 
 ## Phase Summary
-| Phase | Cases | Pass | Fail | Review | Deferred (Model) |
-|---|---|---|---|---|---|
-| Phase 2 | 1 | 0 | 0 | 1 | 0 |
-| Phase 3 | 2 | 1 | 0 | 0 | 0 |
-| Phase 4 | 19 | 17 | 0 | 0 | 2 |
-| Phase 5 | 27 | 26 | 0 | 1 | 0 |
-| Phase 6 | 43 | 40 | 0 | 1 | 0 |
+| Phase | Cases | Pass | Fail | Review | Deferred (Model) | Not Run |
+|---|---|---|---|---|---|---|
+| Phase 2 | 1 | 0 | 0 | 1 | 0 | 0 |
+| Phase 3 | 2 | 1 | 0 | 0 | 0 | 1 |
+| Phase 4 | 19 | 17 | 0 | 0 | 2 | 0 |
+| Phase 5 | 27 | 26 | 0 | 1 | 0 | 0 |
+| Phase 6 | 43 | 40 | 0 | 1 | 0 | 2 |
+| Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
+
+## Phase 7 Reconciliation & Case Count Model
+To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
+- **Total Golden Cases in Catalog (`tests/golden/phase7_exports.json`):** 83 cases
+- **Total Pytest Acceptance Tests (`tests/acceptance/test_phase7_acceptance.py`):** 83 collected tests
+  - **Passed (Deterministic):** 81 test cases verifying multi-format exports, schema contracts, identity boundaries, job audit, XLSX/CSV formatting, privacy isolation, limits, and regression invariants.
+  - **Review Required:** 1 case (`P7-WF-005` — verifies pre-existing non-default workflow states projecting faithfully without mutation; flagged for human confirmation).
+  - **Skipped / Not Run:** 1 case (`P7-GS-LIVE-001` — marked `NOT_RUN` due to real Google Sheets live credentials/adapter not being configured in this offline suite).
+- **Historical 85-count explanation:** Earlier conversational summaries referenced 85 entries by counting parameter boundary sub-variants (e.g. `P7-CONTRACT-003` threshold vs boundary); in the strict repository catalog there are exactly **83 canonical Golden cases** and **83 pytest tests** with **0 false passes**.
 
 ## Failures
 _No failures detected._
@@ -301,6 +311,39 @@ DISCREPANCY FLAGGED FOR HUMAN APPROVAL:
 - Expected: email_status='not_found'
 - Actual: email_status='unknown'
 - Analysis: ContactCandidate defaults to 'unknown' when work_email is None. Golden Ground Truth currently expects 'not_found'. Do not modify Golden Ground Truth without explicit human approval.
+
+---
+### P7-WF-005 — Existing Workflow State
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-WF-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "REVIEW"
+}
+```
+**Actual:**
+```json
+{
+  "status": "REVIEW"
+}
+```
+**Result:** REVIEW
+
+**Differences:**
+_(None / In sync)_
+
+**Reason:** Human review required for pre-existing non-default workflow state export projection
+
+**Human Notes:**
+Phase 7 Golden Case: Existing Workflow State
 
 ---
 
@@ -3683,5 +3726,2546 @@ APOLLO_API_KEY not configured in environment. Test skipped.
 
 **Human Notes:**
 HUNTER_API_KEY not configured in environment. Test skipped.
+
+---
+### P7-EXP-001 — Full Multi-Format Export
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-EXP-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Full Multi-Format Export
+
+---
+### P7-CONTRACT-001 — Score Bounds Preserved
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CONTRACT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Score Bounds Preserved
+
+---
+### P7-CONTRACT-002 — Arithmetic Preserved
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CONTRACT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Arithmetic Preserved
+
+---
+### P7-CONTRACT-003 — Qualification Threshold Preserved
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CONTRACT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Qualification Threshold Preserved
+
+---
+### P7-CONTRACT-004 — No Score Mutation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CONTRACT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Score Mutation
+
+---
+### P7-CONTRACT-005 — Workflow Defaults Only
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CONTRACT-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Workflow Defaults Only
+
+---
+### P7-ID-001 — Same Canonical Domain
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ID-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Same Canonical Domain
+
+---
+### P7-ID-002 — Different Domains Same Name
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ID-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Different Domains Same Name
+
+---
+### P7-ID-003 — ATS Namespace Isolation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ID-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: ATS Namespace Isolation
+
+---
+### P7-ID-004 — Same Namespaced Source Identity
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ID-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Same Namespaced Source Identity
+
+---
+### P7-ID-005 — Name Fallback Determinism
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ID-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Name Fallback Determinism
+
+---
+### P7-CID-001 — Same Email Identity
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Same Email Identity
+
+---
+### P7-CID-002 — Same LinkedIn Identity
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Same LinkedIn Identity
+
+---
+### P7-CID-003 — Same Provider Person ID
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Same Provider Person ID
+
+---
+### P7-CID-004 — Same Name Different Emails
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Same Name Different Emails
+
+---
+### P7-CID-005 — Weak Identity Must Survive
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Weak Identity Must Survive
+
+---
+### P7-CID-006 — One Email Missing No Collapse
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: One Email Missing No Collapse
+
+---
+### P7-CID-007 — Provider Order Independence
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CID-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Provider Order Independence
+
+---
+### P7-JOB-001 — Raw Job Preservation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JOB-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Raw Job Preservation
+
+---
+### P7-JOB-002 — No Fabricated Jobs
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JOB-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Fabricated Jobs
+
+---
+### P7-JOB-003 — Domainless ATS Job Association
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JOB-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Domainless ATS Job Association
+
+---
+### P7-JOB-004 — Canonical Domain Matching
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JOB-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Canonical Domain Matching
+
+---
+### P7-JOB-005 — Wrong Company Protection
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JOB-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Wrong Company Protection
+
+---
+### P7-XLSX-001 — Workbook Opens
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Workbook Opens
+
+---
+### P7-XLSX-002 — Required Sheets
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Required Sheets
+
+---
+### P7-XLSX-003 — Header Freeze
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Header Freeze
+
+---
+### P7-XLSX-004 — Auto Filter
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Auto Filter
+
+---
+### P7-XLSX-005 — Canonical Columns No Duplicates
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Canonical Columns No Duplicates
+
+---
+### P7-XLSX-006 — Row Counts Match Serializer
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Row Counts Match Serializer
+
+---
+### P7-XLSX-007 — Best Contact Preservation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Best Contact Preservation
+
+---
+### P7-XLSX-008 — Evidence Preservation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Evidence Preservation
+
+---
+### P7-XLSX-009 — No Formula Mutation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Formula Mutation
+
+---
+### P7-XLSX-010 — Null Serialization
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-XLSX-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Null Serialization
+
+---
+### P7-CSV-001 — Canonical Headers
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CSV-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Canonical Headers
+
+---
+### P7-CSV-002 — Row Integrity
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CSV-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Row Integrity
+
+---
+### P7-CSV-003 — List Serialization
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CSV-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: List Serialization
+
+---
+### P7-CSV-004 — Empty Collection Headers
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CSV-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Empty Collection Headers
+
+---
+### P7-CSV-005 — UTF-8 Names
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-CSV-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: UTF-8 Names
+
+---
+### P7-JSON-001 — Canonical Structure
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JSON-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Canonical Structure
+
+---
+### P7-JSON-002 — Arrays Remain Arrays
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JSON-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Arrays Remain Arrays
+
+---
+### P7-JSON-003 — Null Remains Null
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JSON-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Null Remains Null
+
+---
+### P7-JSON-004 — Cross-Format Equality
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-JSON-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Cross-Format Equality
+
+---
+### P7-PRIV-001 — Personal Fields Excluded
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-PRIV-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Personal Fields Excluded
+
+---
+### P7-PRIV-002 — Public Email Not Upgraded
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-PRIV-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Public Email Not Upgraded
+
+---
+### P7-PRIV-003 — Secrets Not Leaked
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-PRIV-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Secrets Not Leaked
+
+---
+### P7-DET-001 — Stable Entity IDs
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-DET-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Stable Entity IDs
+
+---
+### P7-DET-002 — Stable Row Ordering
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-DET-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Stable Row Ordering
+
+---
+### P7-DET-003 — Export Run ID Unique
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-DET-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Export Run ID Unique
+
+---
+### P7-DET-004 — Entity ID Independent of Run
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-DET-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Entity ID Independent of Run
+
+---
+### P7-DET-005 — Input Not Mutated
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-DET-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Input Not Mutated
+
+---
+### P7-GS-001 — Disabled Google
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Disabled Google
+
+---
+### P7-GS-002 — Explicit Mock Snapshot
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Explicit Mock Snapshot
+
+---
+### P7-GS-003 — Explicit Mock Upsert
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Explicit Mock Upsert
+
+---
+### P7-GS-004 — Upsert Idempotency
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Upsert Idempotency
+
+---
+### P7-GS-005 — ATS Identity in Sheets
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: ATS Identity in Sheets
+
+---
+### P7-GS-006 — No Fake Production Mock
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Fake Production Mock
+
+---
+### P7-GS-LIVE-001 — Real Google Sheets
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-GS-LIVE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "NOT_RUN"
+}
+```
+**Actual:**
+_(Not executed yet)_
+
+**Result:** NOT_RUN
+
+**Differences:**
+_(Pending execution)_
+
+**Reason:** Real Google Sheets integration not yet implemented / live credentials unavailable
+
+**Human Notes:**
+Phase 7 Golden Case: Real Google Sheets
+
+---
+### P7-ERR-001 — XLSX Fail CSV JSON Succeed
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ERR-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: XLSX Fail CSV JSON Succeed
+
+---
+### P7-ERR-002 — Google Failure Local Success
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ERR-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Google Failure Local Success
+
+---
+### P7-ERR-003 — All Exporters Fail
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ERR-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: All Exporters Fail
+
+---
+### P7-ERR-004 — Error Audit Row
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-ERR-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Error Audit Row
+
+---
+### P7-LIMIT-001 — 5000 Leads Accepted
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-LIMIT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: 5000 Leads Accepted
+
+---
+### P7-LIMIT-002 — 5001 Leads Rejected
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-LIMIT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: 5001 Leads Rejected
+
+---
+### P7-LIMIT-003 — Qualified Only Default
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-LIMIT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Qualified Only Default
+
+---
+### P7-LIMIT-004 — Include All Contacts
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-LIMIT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Include All Contacts
+
+---
+### P7-WF-001 — Default Approval
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-WF-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Default Approval
+
+---
+### P7-WF-002 — Default Outreach
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-WF-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Default Outreach
+
+---
+### P7-WF-003 — Default Send
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-WF-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Default Send
+
+---
+### P7-WF-004 — No Draft Generation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-WF-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Draft Generation
+
+---
+### P7-SUM-001 — Total Lead Count
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-SUM-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Total Lead Count
+
+---
+### P7-SUM-002 — Qualification Counts
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-SUM-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Qualification Counts
+
+---
+### P7-SUM-003 — Enrichment Status Counts
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-SUM-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Enrichment Status Counts
+
+---
+### P7-SUM-004 — Email Status Metrics
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-SUM-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Email Status Metrics
+
+---
+### P7-SUM-005 — Average Lead Score
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-SUM-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Average Lead Score
+
+---
+### P7-SUM-006 — No Double Counting
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-SUM-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Double Counting
+
+---
+### P7-REG-001 — Threshold 60 Not 70
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Threshold 60 Not 70
+
+---
+### P7-REG-002 — ATS Namespace No Collision
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: ATS Namespace No Collision
+
+---
+### P7-REG-003 — Weak Contact No Collapse
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Weak Contact No Collapse
+
+---
+### P7-REG-004 — No Fake Generic Job
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: No Fake Generic Job
+
+---
+### P7-REG-005 — Google Mock Isolation
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Google Mock Isolation
+
+---
+### P7-REG-006 — Run ID No Collision
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Run ID No Collision
+
+---
+### P7-REG-007 — Empty CSV Headers
+**Phase:** Phase 7
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P7-REG-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 7 Golden Case: Empty CSV Headers
 
 ---

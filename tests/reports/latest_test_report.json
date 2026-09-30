@@ -187,7 +187,7 @@
     ],
     "reason": "",
     "human_notes": "Ground Truth verified by human review from real pybim.com crawl snapshot. FLAGGED FOR HUMAN CORRECTION: Expected primary_job_signals contains 3 non-pure job titles: 'Python BIM Automation' (propose 'Python BIM Automation Engineer'), 'ISO 19650 information-management roles' (propose 'BIM Information Manager'), 'Digital Construction / BIM technology leadership' (propose 'Digital Construction Manager').",
-    "test_timestamp": "2026-09-30T15:32:24.292554+00:00"
+    "test_timestamp": "2026-09-30T15:47:19.542341+00:00"
   },
   {
     "case_id": "P3-DISC-001",
@@ -401,7 +401,7 @@
     "differences": [],
     "reason": "All Phase 3 critical requirements and intent coverage targets satisfied.",
     "human_notes": "Frozen human-approved WebsiteProfile for pyBIM to test Discovery query generation independently of Phase 2 known limitations. Evaluates intent coverage, signal diversity, ATS targeting, geography distribution, and absence of semantic pollution.",
-    "test_timestamp": "2026-09-30T15:32:24.328591+00:00"
+    "test_timestamp": "2026-09-30T15:47:19.695144+00:00"
   },
   {
     "case_id": "P3-LIVE-001",
@@ -429,7 +429,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "Live test validating top 10 search results per query. Evaluates Precision@10 across ATS and career categories. Status remains REVIEW for initial baseline.",
-    "test_timestamp": "2026-09-30T15:32:24.334396+00:00"
+    "test_timestamp": "2026-09-30T15:47:19.725860+00:00"
   },
   {
     "case_id": "P4-DET-001",
@@ -465,7 +465,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies accurate detection of ATS providers vs generic career pages from URLs.",
-    "test_timestamp": "2026-09-30T15:32:24.366979+00:00"
+    "test_timestamp": "2026-09-30T15:47:19.785652+00:00"
   },
   {
     "case_id": "P4-DET-002",
@@ -494,7 +494,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts basic structured fields from Greenhouse HTML/API snapshot.",
-    "test_timestamp": "2026-09-30T15:32:24.442723+00:00"
+    "test_timestamp": "2026-09-30T15:47:19.974155+00:00"
   },
   {
     "case_id": "P4-DET-003",
@@ -525,7 +525,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts role title, location, employment type, and source key from Lever snapshot.",
-    "test_timestamp": "2026-09-30T15:32:24.500236+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.107384+00:00"
   },
   {
     "case_id": "P4-DET-004",
@@ -552,7 +552,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts company, title, and location from Ashby job page snapshot.",
-    "test_timestamp": "2026-09-30T15:32:24.547884+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.198821+00:00"
   },
   {
     "case_id": "P4-DET-005",
@@ -583,7 +583,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Parses standard Schema.org JobPosting application/ld+json metadata.",
-    "test_timestamp": "2026-09-30T15:32:24.605684+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.251506+00:00"
   },
   {
     "case_id": "P4-DET-006",
@@ -614,7 +614,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Locates and extracts JobPosting when nested inside @graph schema array.",
-    "test_timestamp": "2026-09-30T15:32:24.640243+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.297535+00:00"
   },
   {
     "case_id": "P4-DET-007",
@@ -653,7 +653,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures company domain canonicalizes www and case while never using the ATS hosting platform.",
-    "test_timestamp": "2026-09-30T15:32:24.673079+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.347010+00:00"
   },
   {
     "case_id": "P4-DET-008",
@@ -698,7 +698,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes corporate legal suffixes, punctuation, and whitespace differences.",
-    "test_timestamp": "2026-09-30T15:32:24.705073+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.388713+00:00"
   },
   {
     "case_id": "P4-DET-009",
@@ -719,7 +719,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies source_company_key survives across raw source, analyzer, and StructuredJob.",
-    "test_timestamp": "2026-09-30T15:32:24.755163+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.509076+00:00"
   },
   {
     "case_id": "P4-DET-010",
@@ -755,7 +755,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Validates distinct error classification without silently converting errors to empty successes.",
-    "test_timestamp": "2026-09-30T15:32:24.806719+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.626481+00:00"
   },
   {
     "case_id": "P4-NEG-001",
@@ -787,7 +787,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing company name is rejected as invalid/parse_failed rather than succeeding as an empty job.",
-    "test_timestamp": "2026-09-30T15:32:24.872576+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.763237+00:00"
   },
   {
     "case_id": "P4-NEG-002",
@@ -819,7 +819,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing job title produces an explicit validation/parse_failed error and is not accepted.",
-    "test_timestamp": "2026-09-30T15:32:24.936093+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.878246+00:00"
   },
   {
     "case_id": "P4-NEG-003",
@@ -841,7 +841,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Gracefully recovers from malformed JSON-LD scripts using DOM fallback.",
-    "test_timestamp": "2026-09-30T15:32:24.963873+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.920132+00:00"
   },
   {
     "case_id": "P4-NEG-004",
@@ -863,7 +863,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Does not fabricate active job postings from expired notices.",
-    "test_timestamp": "2026-09-30T15:32:24.992685+00:00"
+    "test_timestamp": "2026-09-30T15:47:20.964062+00:00"
   },
   {
     "case_id": "P4-NEG-005",
@@ -885,7 +885,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identifies generic career homepages that lack specific job postings.",
-    "test_timestamp": "2026-09-30T15:32:25.019745+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.014652+00:00"
   },
   {
     "case_id": "P4-NEG-006",
@@ -913,7 +913,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes URL tracking query params, fragments, and trailing slashes.",
-    "test_timestamp": "2026-09-30T15:32:25.047404+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.049988+00:00"
   },
   {
     "case_id": "P4-NEG-007",
@@ -946,7 +946,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Guarantees ATS domains never become company_domain on StructuredJob.",
-    "test_timestamp": "2026-09-30T15:32:25.078717+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.099098+00:00"
   },
   {
     "case_id": "P4-SEM-001",
@@ -979,7 +979,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture prepared for future evaluation on larger models (qwen2.5:3b/7b/claude). Contains ground truth technologies and signal evidence.",
-    "test_timestamp": "2026-09-30T15:32:25.082879+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.111462+00:00"
   },
   {
     "case_id": "P4-SEM-002",
@@ -1015,7 +1015,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture for API developer role. Deferring execution until higher-tier model deployment.",
-    "test_timestamp": "2026-09-30T15:32:25.086673+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.122819+00:00"
   },
   {
     "case_id": "P5-STRONG-001",
@@ -1082,7 +1082,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Multiple strong relevant jobs yield high intent, top recency, rich grounded evidence, and qualification.",
-    "test_timestamp": "2026-09-30T15:32:25.088687+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.129808+00:00"
   },
   {
     "case_id": "P5-WEAK-001",
@@ -1133,7 +1133,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Generic administrative job must not invent BIM relevance or intent; lead is disqualified.",
-    "test_timestamp": "2026-09-30T15:32:25.090089+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.134100+00:00"
   },
   {
     "case_id": "P5-ID-001",
@@ -1161,7 +1161,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalized company name must NOT override conflicting domains.",
-    "test_timestamp": "2026-09-30T15:32:25.091936+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.143868+00:00"
   },
   {
     "case_id": "P5-ID-002",
@@ -1185,7 +1185,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Different name spellings sharing identical domain must merge into 1 CompanyLead.",
-    "test_timestamp": "2026-09-30T15:32:25.094058+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.147443+00:00"
   },
   {
     "case_id": "P5-ID-003",
@@ -1207,7 +1207,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When domain is absent, ATS source + source_company_key correctly identifies the company.",
-    "test_timestamp": "2026-09-30T15:32:25.095223+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.150412+00:00"
   },
   {
     "case_id": "P5-ID-004",
@@ -1233,7 +1233,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identity priority remains domain -> source+key -> normalized name. Conflicting source keys stay separate.",
-    "test_timestamp": "2026-09-30T15:32:25.096857+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.154369+00:00"
   },
   {
     "case_id": "P5-DEDUP-001",
@@ -1262,7 +1262,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Canonical URL normalization collapses identical job postings without inflating counts or score.",
-    "test_timestamp": "2026-09-30T15:32:25.099018+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.161301+00:00"
   },
   {
     "case_id": "P5-REL-001",
@@ -1284,7 +1284,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Administrative role does not become relevant merely because Revit is in the text.",
-    "test_timestamp": "2026-09-30T15:32:25.101156+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.165062+00:00"
   },
   {
     "case_id": "P5-REL-002",
@@ -1307,7 +1307,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Explicit BIM management title counts as relevant even if tech stack list is empty.",
-    "test_timestamp": "2026-09-30T15:32:25.103201+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.168910+00:00"
   },
   {
     "case_id": "P5-REL-003",
@@ -1329,7 +1329,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Senior roles outside BIM/digital engineering do NOT receive the +10 leadership intent bonus.",
-    "test_timestamp": "2026-09-30T15:32:25.105186+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.173486+00:00"
   },
   {
     "case_id": "P5-REC-001",
@@ -1354,7 +1354,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Recent irrelevant job does not boost company recency score; score depends strictly on relevant jobs.",
-    "test_timestamp": "2026-09-30T15:32:25.107353+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.177867+00:00"
   },
   {
     "case_id": "P5-REC-002",
@@ -1376,7 +1376,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Missing date gracefully falls back to older_unknown score without fabricating a timestamp.",
-    "test_timestamp": "2026-09-30T15:32:25.109810+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.183911+00:00"
   },
   {
     "case_id": "P5-REC-003",
@@ -1398,7 +1398,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Future date does not yield max recency score through negative age.",
-    "test_timestamp": "2026-09-30T15:32:25.111309+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.190481+00:00"
   },
   {
     "case_id": "P5-EVID-001",
@@ -1421,7 +1421,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Signals and verifiable snippets survive aggregation and remain traceable to source jobs.",
-    "test_timestamp": "2026-09-30T15:32:25.112394+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.194446+00:00"
   },
   {
     "case_id": "P5-EVID-002",
@@ -1446,7 +1446,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `evidence_score` mismatch: expected `5`, got `0`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: evidence_score=5\n- Actual: evidence_score=0\n- Analysis: Production scoring correctly assigns 0 to empty-string evidence. Golden Ground Truth currently expects 5. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T15:32:25.113445+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.198569+00:00"
   },
   {
     "case_id": "P5-SCORE-001",
@@ -1488,7 +1488,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All sub-scores strictly respect their defined contractual bounds.",
-    "test_timestamp": "2026-09-30T15:32:25.114533+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.205030+00:00"
   },
   {
     "case_id": "P5-SCORE-002",
@@ -1515,7 +1515,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Total score is exactly equal to the mathematical sum of its four constituent sub-scores.",
-    "test_timestamp": "2026-09-30T15:32:25.116202+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.209705+00:00"
   },
   {
     "case_id": "P5-SCORE-003",
@@ -1546,7 +1546,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Scoring contains zero randomness or temperature variance.",
-    "test_timestamp": "2026-09-30T15:32:25.117305+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.212564+00:00"
   },
   {
     "case_id": "P5-SCORE-004",
@@ -1568,7 +1568,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Critical fail condition verified: LLM never directly assigns any numeric score.",
-    "test_timestamp": "2026-09-30T15:32:25.122054+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.225511+00:00"
   },
   {
     "case_id": "P5-QUAL-001",
@@ -1595,7 +1595,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Qualification strictly triggers at score >= 60; score of 59 is unqualified.",
-    "test_timestamp": "2026-09-30T15:32:25.123652+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.229736+00:00"
   },
   {
     "case_id": "P5-AGG-001",
@@ -1624,7 +1624,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Reasons explain qualification truthfully and do not cite irrelevant jobs.",
-    "test_timestamp": "2026-09-30T15:32:25.125762+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.233261+00:00"
   },
   {
     "case_id": "P5-AGG-002",
@@ -1646,7 +1646,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "System tracks raw input jobs, unique deduplicated jobs, and relevant jobs distinctly.",
-    "test_timestamp": "2026-09-30T15:32:25.128779+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.240195+00:00"
   },
   {
     "case_id": "P5-AGG-003",
@@ -1669,7 +1669,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A low-quality or malformed job does not crash company aggregation or corrupt scoring.",
-    "test_timestamp": "2026-09-30T15:32:25.130579+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.243674+00:00"
   },
   {
     "case_id": "P5-ADV-001",
@@ -1692,7 +1692,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Separate legal entities sharing generic names do not collide if domains differ.",
-    "test_timestamp": "2026-09-30T15:32:25.132735+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.247958+00:00"
   },
   {
     "case_id": "P5-ADV-002",
@@ -1713,7 +1713,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain variations resolve to a single canonical domain identity.",
-    "test_timestamp": "2026-09-30T15:32:25.134112+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.254946+00:00"
   },
   {
     "case_id": "P5-ADV-003",
@@ -1739,7 +1739,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "High job count from non-BIM roles does not inflate relevant_job_count or intent.",
-    "test_timestamp": "2026-09-30T15:32:25.136883+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.261388+00:00"
   },
   {
     "case_id": "P5-ADV-004",
@@ -1761,7 +1761,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact duplicate signals do not receive multiple signal count bonuses.",
-    "test_timestamp": "2026-09-30T15:32:25.139262+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.268142+00:00"
   },
   {
     "case_id": "P6-COMPANY-001",
@@ -1795,7 +1795,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes external provider company data into internal schema without leaking raw provider wrappers.",
-    "test_timestamp": "2026-09-30T15:32:25.163042+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.315206+00:00"
   },
   {
     "case_id": "P6-ROLE-001",
@@ -1848,7 +1848,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact and strong buyer role matches strictly outrank irrelevant administrative titles.",
-    "test_timestamp": "2026-09-30T15:32:25.168627+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.328065+00:00"
   },
   {
     "case_id": "P6-ROLE-002",
@@ -1876,7 +1876,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When buyer_roles is empty, system falls back to neutral generic behavior without hallucinating domain titles.",
-    "test_timestamp": "2026-09-30T15:32:25.173403+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.347175+00:00"
   },
   {
     "case_id": "P6-CONTACT-001",
@@ -1914,7 +1914,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All required ContactCandidate fields normalize cleanly, and missing optional fields fall back safely.",
-    "test_timestamp": "2026-09-30T15:32:25.179732+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.364133+00:00"
   },
   {
     "case_id": "P6-DEDUP-001",
@@ -1954,7 +1954,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts with identical work email merge into one record with consolidated data sources.",
-    "test_timestamp": "2026-09-30T15:32:25.184657+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.376927+00:00"
   },
   {
     "case_id": "P6-DEDUP-002",
@@ -1992,7 +1992,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts sharing canonical LinkedIn URL collapse into one logical candidate.",
-    "test_timestamp": "2026-09-30T15:32:25.190100+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.389858+00:00"
   },
   {
     "case_id": "P6-DEDUP-003",
@@ -2024,7 +2024,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts sharing identical names but distinct emails must remain separate entities.",
-    "test_timestamp": "2026-09-30T15:32:25.195926+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.402448+00:00"
   },
   {
     "case_id": "P6-DEDUP-004",
@@ -2056,7 +2056,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "In the absence of email or LinkedIn, distinct titles at the same firm are not aggressively collapsed.",
-    "test_timestamp": "2026-09-30T15:32:25.200668+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.418511+00:00"
   },
   {
     "case_id": "P6-EMAIL-001",
@@ -2080,7 +2080,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Statistical confidence from Domain Search produces likely, never verified without an SMTP verifier pass.",
-    "test_timestamp": "2026-09-30T15:32:25.205678+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.432088+00:00"
   },
   {
     "case_id": "P6-EMAIL-002",
@@ -2118,7 +2118,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Standardized verifier status mapping ensures cross-provider consistency.",
-    "test_timestamp": "2026-09-30T15:32:25.287650+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.708958+00:00"
   },
   {
     "case_id": "P6-EMAIL-003",
@@ -2145,7 +2145,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `email_status` mismatch: expected `not_found`, got `unknown`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: email_status='not_found'\n- Actual: email_status='unknown'\n- Analysis: ContactCandidate defaults to 'unknown' when work_email is None. Golden Ground Truth currently expects 'not_found'. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T15:32:25.294403+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.725287+00:00"
   },
   {
     "case_id": "P6-EMAIL-004",
@@ -2173,7 +2173,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Free public webmail domains (gmail, yahoo, etc.) are rejected as corporate work emails.",
-    "test_timestamp": "2026-09-30T15:32:25.299749+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.739683+00:00"
   },
   {
     "case_id": "P6-EMAIL-005",
@@ -2200,7 +2200,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Emails matching the verified company domain receive positive domain consistency weighting.",
-    "test_timestamp": "2026-09-30T15:32:25.304436+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.754456+00:00"
   },
   {
     "case_id": "P6-SCORE-001",
@@ -2232,7 +2232,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contact scores derive purely from deterministic rule evaluation without LLM calls or randomness.",
-    "test_timestamp": "2026-09-30T15:32:25.312886+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.771600+00:00"
   },
   {
     "case_id": "P6-SCORE-002",
@@ -2257,7 +2257,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All calculated contact scores strictly stay within the 0 to 100 range.",
-    "test_timestamp": "2026-09-30T15:32:25.318875+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.789290+00:00"
   },
   {
     "case_id": "P6-SCORE-003",
@@ -2287,7 +2287,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Strong buyer role relevance combined with usable email outscores irrelevant roles with verified emails.",
-    "test_timestamp": "2026-09-30T15:32:25.323759+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.807838+00:00"
   },
   {
     "case_id": "P6-BEST-001",
@@ -2335,7 +2335,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Top candidate with exact buyer match and verified work email wins best_contact unequivocally.",
-    "test_timestamp": "2026-09-30T15:32:25.329050+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.824983+00:00"
   },
   {
     "case_id": "P6-STATUS-001",
@@ -2358,7 +2358,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Status 'complete' requires company profile, at least one contact, and a verified/likely work email.",
-    "test_timestamp": "2026-09-30T15:32:25.333689+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.842671+00:00"
   },
   {
     "case_id": "P6-STATUS-002",
@@ -2380,7 +2380,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When only company or contact without verified email is resolved, status reflects partial.",
-    "test_timestamp": "2026-09-30T15:32:25.338302+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.863732+00:00"
   },
   {
     "case_id": "P6-STATUS-003",
@@ -2406,7 +2406,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Provider failures are captured as provider_error rather than masquerading as empty success.",
-    "test_timestamp": "2026-09-30T15:32:25.344821+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.880703+00:00"
   },
   {
     "case_id": "P6-PROVIDER-001",
@@ -2438,7 +2438,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Unconfigured environments return an explicit error and are not presented as zero contacts.",
-    "test_timestamp": "2026-09-30T15:32:25.350430+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.901758+00:00"
   },
   {
     "case_id": "P6-PROVIDER-002",
@@ -2461,7 +2461,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 401/403 maps directly to ProviderAuthError.",
-    "test_timestamp": "2026-09-30T15:32:25.355149+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.917555+00:00"
   },
   {
     "case_id": "P6-PROVIDER-003",
@@ -2484,7 +2484,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 429 maps directly to ProviderRateLimitError.",
-    "test_timestamp": "2026-09-30T15:32:25.360962+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.934231+00:00"
   },
   {
     "case_id": "P6-PROVIDER-004",
@@ -2507,7 +2507,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Network timeouts are classified as ProviderTimeoutError.",
-    "test_timestamp": "2026-09-30T15:32:25.365579+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.952595+00:00"
   },
   {
     "case_id": "P6-PROVIDER-005",
@@ -2530,7 +2530,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 500+ maps to standard ProviderError.",
-    "test_timestamp": "2026-09-30T15:32:25.370168+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.970911+00:00"
   },
   {
     "case_id": "P6-PROVIDER-006",
@@ -2553,7 +2553,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 200 with zero records or 404 maps to ProviderEmptyResult without crashing.",
-    "test_timestamp": "2026-09-30T15:32:25.375589+00:00"
+    "test_timestamp": "2026-09-30T15:47:21.986689+00:00"
   },
   {
     "case_id": "P6-USAGE-001",
@@ -2590,7 +2590,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "providers_used tracks all invoked providers, including failed calls.",
-    "test_timestamp": "2026-09-30T15:32:25.671694+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.380996+00:00"
   },
   {
     "case_id": "P6-APOLLO-001",
@@ -2615,7 +2615,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies correct URL and query parameters for Apollo organization enrichment.",
-    "test_timestamp": "2026-09-30T15:32:25.687677+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.483709+00:00"
   },
   {
     "case_id": "P6-APOLLO-002",
@@ -2655,7 +2655,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "People search payload strictly scopes domain, buyer titles, and page boundaries.",
-    "test_timestamp": "2026-09-30T15:32:25.704099+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.575473+00:00"
   },
   {
     "case_id": "P6-APOLLO-003",
@@ -2678,7 +2678,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Enforces GDPR data minimization: never requests personal emails or phone numbers.",
-    "test_timestamp": "2026-09-30T15:32:25.720219+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.676122+00:00"
   },
   {
     "case_id": "P6-HUNTER-001",
@@ -2702,7 +2702,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain search extracts candidate names, positions, and confidence scores accurately.",
-    "test_timestamp": "2026-09-30T15:32:25.737072+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.760973+00:00"
   },
   {
     "case_id": "P6-HUNTER-002",
@@ -2726,7 +2726,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Email verifier maps valid deliverable state directly to verified status.",
-    "test_timestamp": "2026-09-30T15:32:25.754568+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.845984+00:00"
   },
   {
     "case_id": "P6-LIMIT-001",
@@ -2750,7 +2750,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "API contract strictly bounds lead input batches to 50 items.",
-    "test_timestamp": "2026-09-30T15:32:25.761575+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.870404+00:00"
   },
   {
     "case_id": "P6-LIMIT-002",
@@ -2775,7 +2775,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Final contact candidate list is deterministically truncated to the top 5 highest-ranking records.",
-    "test_timestamp": "2026-09-30T15:32:25.766442+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.892013+00:00"
   },
   {
     "case_id": "P6-LIMIT-003",
@@ -2804,7 +2804,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Unqualified leads bypass expensive enrichment calls unless qualified_only=false is explicitly requested.",
-    "test_timestamp": "2026-09-30T15:32:25.787956+00:00"
+    "test_timestamp": "2026-09-30T15:47:22.919738+00:00"
   },
   {
     "case_id": "P6-PARTIAL-001",
@@ -2832,7 +2832,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A single provider failure does not abort the entire enrichment pipeline; successful provider data survives.",
-    "test_timestamp": "2026-09-30T15:32:26.055984+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.266087+00:00"
   },
   {
     "case_id": "P6-PARTIAL-002",
@@ -2857,7 +2857,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When SMTP verifier fails, contact remains available with unknown email status rather than being discarded.",
-    "test_timestamp": "2026-09-30T15:32:26.062528+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.288894+00:00"
   },
   {
     "case_id": "P6-PRIVACY-001",
@@ -2904,7 +2904,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures ContactCandidate model only exposes business work emails and professional contact links.",
-    "test_timestamp": "2026-09-30T15:32:26.066412+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.307966+00:00"
   },
   {
     "case_id": "P6-EXPLAIN-001",
@@ -2933,7 +2933,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Selected best_contact exposes all underlying attributes necessary to audit why it was chosen.",
-    "test_timestamp": "2026-09-30T15:32:26.070199+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.328874+00:00"
   },
   {
     "case_id": "P6-CROSS-001",
@@ -2968,7 +2968,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Enrichment results, scoring, and best-contact selection are completely invariant to provider execution order.",
-    "test_timestamp": "2026-09-30T15:32:26.074945+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.350745+00:00"
   },
   {
     "case_id": "P6-CROSS-002",
@@ -2992,7 +2992,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Mixed casing in email addresses normalizes to identical identity key during deduplication.",
-    "test_timestamp": "2026-09-30T15:32:26.079861+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.373993+00:00"
   },
   {
     "case_id": "P6-LIVE-APOLLO-001",
@@ -3011,7 +3011,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "APOLLO_API_KEY not configured in environment. Test skipped.",
-    "test_timestamp": "2026-09-30T15:32:26.084516+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.397020+00:00"
   },
   {
     "case_id": "P6-LIVE-HUNTER-001",
@@ -3030,6 +3030,1749 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "HUNTER_API_KEY not configured in environment. Test skipped.",
-    "test_timestamp": "2026-09-30T15:32:26.089453+00:00"
+    "test_timestamp": "2026-09-30T15:47:23.419534+00:00"
+  },
+  {
+    "case_id": "P7-EXP-001",
+    "phase": "Phase 7",
+    "title": "Full Multi-Format Export",
+    "source": "internal",
+    "snapshot_path": "tests/golden/snapshots/exports/p7_valid_enriched_leads.json",
+    "input": {
+      "case_id": "P7-EXP-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Full Multi-Format Export",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CONTRACT-001",
+    "phase": "Phase 7",
+    "title": "Score Bounds Preserved",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CONTRACT-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Score Bounds Preserved",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CONTRACT-002",
+    "phase": "Phase 7",
+    "title": "Arithmetic Preserved",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CONTRACT-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Arithmetic Preserved",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CONTRACT-003",
+    "phase": "Phase 7",
+    "title": "Qualification Threshold Preserved",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CONTRACT-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Qualification Threshold Preserved",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CONTRACT-004",
+    "phase": "Phase 7",
+    "title": "No Score Mutation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CONTRACT-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Score Mutation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CONTRACT-005",
+    "phase": "Phase 7",
+    "title": "Workflow Defaults Only",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CONTRACT-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Workflow Defaults Only",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ID-001",
+    "phase": "Phase 7",
+    "title": "Same Canonical Domain",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ID-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Same Canonical Domain",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ID-002",
+    "phase": "Phase 7",
+    "title": "Different Domains Same Name",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ID-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Different Domains Same Name",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ID-003",
+    "phase": "Phase 7",
+    "title": "ATS Namespace Isolation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ID-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: ATS Namespace Isolation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ID-004",
+    "phase": "Phase 7",
+    "title": "Same Namespaced Source Identity",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ID-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Same Namespaced Source Identity",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ID-005",
+    "phase": "Phase 7",
+    "title": "Name Fallback Determinism",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ID-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Name Fallback Determinism",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-001",
+    "phase": "Phase 7",
+    "title": "Same Email Identity",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Same Email Identity",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-002",
+    "phase": "Phase 7",
+    "title": "Same LinkedIn Identity",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Same LinkedIn Identity",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-003",
+    "phase": "Phase 7",
+    "title": "Same Provider Person ID",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Same Provider Person ID",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-004",
+    "phase": "Phase 7",
+    "title": "Same Name Different Emails",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Same Name Different Emails",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-005",
+    "phase": "Phase 7",
+    "title": "Weak Identity Must Survive",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Weak Identity Must Survive",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-006",
+    "phase": "Phase 7",
+    "title": "One Email Missing No Collapse",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: One Email Missing No Collapse",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CID-007",
+    "phase": "Phase 7",
+    "title": "Provider Order Independence",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CID-007"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Provider Order Independence",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JOB-001",
+    "phase": "Phase 7",
+    "title": "Raw Job Preservation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JOB-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Raw Job Preservation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JOB-002",
+    "phase": "Phase 7",
+    "title": "No Fabricated Jobs",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JOB-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Fabricated Jobs",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JOB-003",
+    "phase": "Phase 7",
+    "title": "Domainless ATS Job Association",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JOB-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Domainless ATS Job Association",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JOB-004",
+    "phase": "Phase 7",
+    "title": "Canonical Domain Matching",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JOB-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Canonical Domain Matching",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JOB-005",
+    "phase": "Phase 7",
+    "title": "Wrong Company Protection",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JOB-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Wrong Company Protection",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-001",
+    "phase": "Phase 7",
+    "title": "Workbook Opens",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Workbook Opens",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-002",
+    "phase": "Phase 7",
+    "title": "Required Sheets",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Required Sheets",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-003",
+    "phase": "Phase 7",
+    "title": "Header Freeze",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Header Freeze",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-004",
+    "phase": "Phase 7",
+    "title": "Auto Filter",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Auto Filter",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-005",
+    "phase": "Phase 7",
+    "title": "Canonical Columns No Duplicates",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Canonical Columns No Duplicates",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-006",
+    "phase": "Phase 7",
+    "title": "Row Counts Match Serializer",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Row Counts Match Serializer",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-007",
+    "phase": "Phase 7",
+    "title": "Best Contact Preservation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-007"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Best Contact Preservation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-008",
+    "phase": "Phase 7",
+    "title": "Evidence Preservation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-008"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Evidence Preservation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-009",
+    "phase": "Phase 7",
+    "title": "No Formula Mutation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-009"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Formula Mutation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-XLSX-010",
+    "phase": "Phase 7",
+    "title": "Null Serialization",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-XLSX-010"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Null Serialization",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CSV-001",
+    "phase": "Phase 7",
+    "title": "Canonical Headers",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CSV-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Canonical Headers",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CSV-002",
+    "phase": "Phase 7",
+    "title": "Row Integrity",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CSV-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Row Integrity",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CSV-003",
+    "phase": "Phase 7",
+    "title": "List Serialization",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CSV-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: List Serialization",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CSV-004",
+    "phase": "Phase 7",
+    "title": "Empty Collection Headers",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CSV-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Empty Collection Headers",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-CSV-005",
+    "phase": "Phase 7",
+    "title": "UTF-8 Names",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-CSV-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: UTF-8 Names",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JSON-001",
+    "phase": "Phase 7",
+    "title": "Canonical Structure",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JSON-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Canonical Structure",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JSON-002",
+    "phase": "Phase 7",
+    "title": "Arrays Remain Arrays",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JSON-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Arrays Remain Arrays",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JSON-003",
+    "phase": "Phase 7",
+    "title": "Null Remains Null",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JSON-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Null Remains Null",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-JSON-004",
+    "phase": "Phase 7",
+    "title": "Cross-Format Equality",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-JSON-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Cross-Format Equality",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-PRIV-001",
+    "phase": "Phase 7",
+    "title": "Personal Fields Excluded",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-PRIV-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Personal Fields Excluded",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-PRIV-002",
+    "phase": "Phase 7",
+    "title": "Public Email Not Upgraded",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-PRIV-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Public Email Not Upgraded",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-PRIV-003",
+    "phase": "Phase 7",
+    "title": "Secrets Not Leaked",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-PRIV-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Secrets Not Leaked",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-DET-001",
+    "phase": "Phase 7",
+    "title": "Stable Entity IDs",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-DET-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Stable Entity IDs",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-DET-002",
+    "phase": "Phase 7",
+    "title": "Stable Row Ordering",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-DET-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Stable Row Ordering",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-DET-003",
+    "phase": "Phase 7",
+    "title": "Export Run ID Unique",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-DET-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Export Run ID Unique",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-DET-004",
+    "phase": "Phase 7",
+    "title": "Entity ID Independent of Run",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-DET-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Entity ID Independent of Run",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-DET-005",
+    "phase": "Phase 7",
+    "title": "Input Not Mutated",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-DET-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Input Not Mutated",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-001",
+    "phase": "Phase 7",
+    "title": "Disabled Google",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Disabled Google",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-002",
+    "phase": "Phase 7",
+    "title": "Explicit Mock Snapshot",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Explicit Mock Snapshot",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-003",
+    "phase": "Phase 7",
+    "title": "Explicit Mock Upsert",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Explicit Mock Upsert",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-004",
+    "phase": "Phase 7",
+    "title": "Upsert Idempotency",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Upsert Idempotency",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-005",
+    "phase": "Phase 7",
+    "title": "ATS Identity in Sheets",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: ATS Identity in Sheets",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-006",
+    "phase": "Phase 7",
+    "title": "No Fake Production Mock",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Fake Production Mock",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-GS-LIVE-001",
+    "phase": "Phase 7",
+    "title": "Real Google Sheets",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-GS-LIVE-001"
+    },
+    "expected": {
+      "status": "NOT_RUN"
+    },
+    "actual": {
+      "status": "NOT_RUN"
+    },
+    "status": "NOT_RUN",
+    "differences": [],
+    "reason": "Real Google Sheets integration not yet implemented / live credentials unavailable",
+    "human_notes": "Phase 7 Golden Case: Real Google Sheets",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ERR-001",
+    "phase": "Phase 7",
+    "title": "XLSX Fail CSV JSON Succeed",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ERR-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: XLSX Fail CSV JSON Succeed",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ERR-002",
+    "phase": "Phase 7",
+    "title": "Google Failure Local Success",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ERR-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Google Failure Local Success",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ERR-003",
+    "phase": "Phase 7",
+    "title": "All Exporters Fail",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ERR-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: All Exporters Fail",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-ERR-004",
+    "phase": "Phase 7",
+    "title": "Error Audit Row",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-ERR-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Error Audit Row",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-LIMIT-001",
+    "phase": "Phase 7",
+    "title": "5000 Leads Accepted",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-LIMIT-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: 5000 Leads Accepted",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-LIMIT-002",
+    "phase": "Phase 7",
+    "title": "5001 Leads Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-LIMIT-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: 5001 Leads Rejected",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-LIMIT-003",
+    "phase": "Phase 7",
+    "title": "Qualified Only Default",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-LIMIT-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Qualified Only Default",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-LIMIT-004",
+    "phase": "Phase 7",
+    "title": "Include All Contacts",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-LIMIT-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Include All Contacts",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-WF-001",
+    "phase": "Phase 7",
+    "title": "Default Approval",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-WF-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Default Approval",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-WF-002",
+    "phase": "Phase 7",
+    "title": "Default Outreach",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-WF-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Default Outreach",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-WF-003",
+    "phase": "Phase 7",
+    "title": "Default Send",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-WF-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Default Send",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-WF-004",
+    "phase": "Phase 7",
+    "title": "No Draft Generation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-WF-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Draft Generation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-WF-005",
+    "phase": "Phase 7",
+    "title": "Existing Workflow State",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-WF-005"
+    },
+    "expected": {
+      "status": "REVIEW"
+    },
+    "actual": {
+      "status": "REVIEW"
+    },
+    "status": "REVIEW",
+    "differences": [],
+    "reason": "Human review required for pre-existing non-default workflow state export projection",
+    "human_notes": "Phase 7 Golden Case: Existing Workflow State",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-SUM-001",
+    "phase": "Phase 7",
+    "title": "Total Lead Count",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-SUM-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Total Lead Count",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-SUM-002",
+    "phase": "Phase 7",
+    "title": "Qualification Counts",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-SUM-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Qualification Counts",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-SUM-003",
+    "phase": "Phase 7",
+    "title": "Enrichment Status Counts",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-SUM-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Enrichment Status Counts",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-SUM-004",
+    "phase": "Phase 7",
+    "title": "Email Status Metrics",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-SUM-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Email Status Metrics",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-SUM-005",
+    "phase": "Phase 7",
+    "title": "Average Lead Score",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-SUM-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Average Lead Score",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-SUM-006",
+    "phase": "Phase 7",
+    "title": "No Double Counting",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-SUM-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Double Counting",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-001",
+    "phase": "Phase 7",
+    "title": "Threshold 60 Not 70",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Threshold 60 Not 70",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-002",
+    "phase": "Phase 7",
+    "title": "ATS Namespace No Collision",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: ATS Namespace No Collision",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-003",
+    "phase": "Phase 7",
+    "title": "Weak Contact No Collapse",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Weak Contact No Collapse",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-004",
+    "phase": "Phase 7",
+    "title": "No Fake Generic Job",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: No Fake Generic Job",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-005",
+    "phase": "Phase 7",
+    "title": "Google Mock Isolation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Google Mock Isolation",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-006",
+    "phase": "Phase 7",
+    "title": "Run ID No Collision",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Run ID No Collision",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
+  },
+  {
+    "case_id": "P7-REG-007",
+    "phase": "Phase 7",
+    "title": "Empty CSV Headers",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P7-REG-007"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 7 Golden Case: Empty CSV Headers",
+    "test_timestamp": "2026-09-30T15:45:52.550673+00:00"
   }
 ]
