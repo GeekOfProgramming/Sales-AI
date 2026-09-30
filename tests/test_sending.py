@@ -348,11 +348,17 @@ def test_sender_identity_mismatch_blocks_send(review_store, sample_draft_dict, m
     orch.from_email = "trusted@pybim.com"
 
     d = sample_draft_dict.copy()
-    d["sender_email"] = "alternate@pybim.com"  # Draft specifies alternate sender
+    d["sender_email"] = "trusted@pybim.com"
 
     svc = ApprovalService(review_store)
     svc.import_drafts([d])
     svc.approve_draft("draft:test-001", revision=1, reviewer="hamid")
+
+    # Tamper sender_email in DB to an untrusted sender outside allowed senders
+    with review_store._get_connection() as conn:
+        conn.execute(
+            "UPDATE drafts SET sender_email = 'untrusted@external.com' WHERE draft_id = 'draft:test-001'",
+        )
 
     res = orch.send_draft("draft:test-001", revision=1, dry_run=False)
     assert res.status == "failed"
@@ -643,6 +649,10 @@ def test_p9_reg_012_sent_payload_hash_equals_approved_payload_hash(
 
     # 4. Verify sent payload hash matches approved_content_hash exactly
     sent_delivery = mock_sender.sent_messages[0]
+    assert sent_delivery["from_name"] == approved_draft.sender_name
+    assert sent_delivery["from_email"] == approved_draft.sender_email
+    assert sent_delivery["to_email"] == approved_draft.recipient_email
+    assert sent_delivery["subject"] == approved_draft.subject
     assert sent_delivery["body"] == approved_draft.body
 
     sent_fingerprint = compute_content_fingerprint({
@@ -652,6 +662,7 @@ def test_p9_reg_012_sent_payload_hash_equals_approved_payload_hash(
         "contact_id": approved_draft.contact_id,
         "recipient_email": sent_delivery["to_email"],
         "sender_email": sent_delivery["from_email"],
+        "sender_name": sent_delivery["from_name"],
         "subject": sent_delivery["subject"],
         "body": sent_delivery["body"],
     })
@@ -720,6 +731,7 @@ def test_adversarial_1_missing_sender_in_draft_blocks_or_matches_hash(
         "contact_id": approved.contact_id,
         "recipient_email": sent_delivery["to_email"],
         "sender_email": sent_delivery["from_email"],
+        "sender_name": sent_delivery["from_name"],
         "subject": sent_delivery["subject"],
         "body": sent_delivery["body"],
     })
@@ -1171,5 +1183,187 @@ def test_p9_reg_017_sent_revision_remains_unchanged_after_invalid_transition(
     assert current.content_hash == initial_sent_draft.content_hash
     assert current.approved_content_hash == initial_sent_draft.approved_content_hash
     assert mock_sender.get_send_count() == 1
+
+
+# =========================================================================
+# 14. FINAL MICRO-PATCH REGRESSIONS: P9-REG-018 .. P9-REG-021
+# =========================================================================
+
+def test_p9_reg_018_trusted_alias_can_approve_and_send(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-018: A configured trusted alias (SMTP_ALLOWED_SENDERS) can be imported,
+    approved, and sent successfully without sender_mismatch.
+    The provider From email must remain exactly the alias, without substitution.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "primary@pybim.com")
+    monkeypatch.setenv("SMTP_ALLOWED_SENDERS", "alias@pybim.com,secondary@pybim.com")
+    monkeypatch.setenv("SMTP_FROM_NAME", "pyBIM Team")
+
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:alias-trusted-01"
+    d["sender_email"] = "alias@pybim.com"
+
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft = imported[0]
+    assert draft.sender_email == "alias@pybim.com"
+    assert draft.sender_name == "pyBIM Team"
+
+    approved = svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    assert approved.approval_status == "approved"
+    assert approved.sender_email == "alias@pybim.com"
+
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+    assert mock_sender.get_send_count() == 1
+
+    delivery = mock_sender.sent_messages[0]
+    assert delivery["from_email"] == "alias@pybim.com"
+    assert delivery["from_name"] == "pyBIM Team"
+    assert delivery["to_email"] == approved.recipient_email
+
+
+def test_p9_reg_019_untrusted_alias_cannot_approve_or_send(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-019: An unconfigured/untrusted sender cannot be approved,
+    and cannot be sent. Must result in sender_mismatch and 0 provider calls.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "primary@pybim.com")
+    monkeypatch.setenv("SMTP_ALLOWED_SENDERS", "alias@pybim.com")
+
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:untrusted-01"
+    d["sender_email"] = "hacker@evil.com"
+
+    # Draft import with untrusted sender resolves sender_email to None
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft = imported[0]
+    assert draft.sender_email is None
+
+    # Approval should be blocked because sender_email is not configured/trusted
+    with pytest.raises(ValueError, match="sender_config_missing"):
+        svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+
+    # Even if an untrusted sender email was directly forced into DB
+    with review_store._get_connection() as conn:
+        conn.execute(
+            "UPDATE drafts SET sender_email = 'hacker@evil.com', approval_status = 'approved', approved_content_hash = content_hash WHERE draft_id = ?",
+            (draft.draft_id,),
+        )
+
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "failed"
+    assert res.error_type == "sender_mismatch"
+    assert mock_sender.get_send_count() == 0
+
+
+def test_p9_reg_020_sender_display_name_fingerprinted(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-020: sender_name is stored on StoredDraft and included in compute_content_fingerprint.
+    Tampering with sender_name post-approval invalidates approved_content_hash and blocks sending.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "primary@pybim.com")
+    monkeypatch.setenv("SMTP_FROM_NAME", "Original Review Name")
+
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:sender-name-01"
+    d["sender_email"] = "primary@pybim.com"
+
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft = imported[0]
+    assert draft.sender_name == "Original Review Name"
+
+    approved = svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    assert approved.sender_name == "Original Review Name"
+    original_approved_hash = approved.approved_content_hash
+
+    # Tamper with sender_name in DB
+    with review_store._get_connection() as conn:
+        conn.execute(
+            "UPDATE drafts SET sender_name = 'Tampered Sender Name' WHERE draft_id = ?",
+            (draft.draft_id,),
+        )
+
+    tampered_draft = review_store.get_draft(draft.draft_id, revision=1)
+    # Current fingerprint must now differ from approved hash
+    assert compute_content_fingerprint(tampered_draft) != original_approved_hash
+
+    # Sending must be blocked with approval_stale and zero provider calls
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "blocked"
+    assert res.error_type == "approval_stale"
+    assert mock_sender.get_send_count() == 0
+
+
+def test_p9_reg_021_changing_smtp_from_name_after_approval_does_not_mutate_provider_payload(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-021: Changing SMTP_FROM_NAME in environment after approval does NOT alter the
+    provider payload. The provider strictly receives the sender_name stored on the approved revision.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "primary@pybim.com")
+    monkeypatch.setenv("SMTP_FROM_NAME", "Name At Approval")
+
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:env-name-change-01"
+    d["sender_email"] = "primary@pybim.com"
+
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft = imported[0]
+    approved = svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    assert approved.sender_name == "Name At Approval"
+
+    # Mutate environment AFTER approval
+    monkeypatch.setenv("SMTP_FROM_NAME", "Changed After Approval")
+
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+    assert mock_sender.get_send_count() == 1
+
+    sent_msg = mock_sender.sent_messages[0]
+    # Provider must receive the approved name, NEVER the mutated environment value
+    assert sent_msg["from_name"] == "Name At Approval"
+    assert sent_msg["from_name"] != "Changed After Approval"
+    assert sent_msg["from_email"] == approved.sender_email
+    assert sent_msg["to_email"] == approved.recipient_email
+
 
 

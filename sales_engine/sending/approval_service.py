@@ -62,6 +62,7 @@ def compute_content_fingerprint(draft: StoredDraft | Dict[str, Any]) -> str:
         contact_id = str(draft.get("contact_id", ""))
         recipient_email = str(draft.get("recipient_email", "")).strip().lower()
         sender_email = str(draft.get("sender_email", "") or "").strip().lower()
+        sender_name = str(draft.get("sender_name", "") or "").strip()
         subject = str(draft.get("subject", "")).strip()
         body = str(draft.get("body", "")).strip()
     else:
@@ -71,6 +72,7 @@ def compute_content_fingerprint(draft: StoredDraft | Dict[str, Any]) -> str:
         contact_id = str(draft.contact_id)
         recipient_email = str(draft.recipient_email).strip().lower()
         sender_email = str(draft.sender_email or "").strip().lower()
+        sender_name = str(draft.sender_name or "").strip()
         subject = str(draft.subject).strip()
         body = str(draft.body).strip()
 
@@ -81,6 +83,7 @@ def compute_content_fingerprint(draft: StoredDraft | Dict[str, Any]) -> str:
         "contact_id": contact_id,
         "recipient_email": recipient_email,
         "sender_email": sender_email,
+        "sender_name": sender_name,
         "subject": subject,
         "body": body,
     }
@@ -123,12 +126,17 @@ class ApprovalService:
             else:
                 resolved_sender = primary_sender
 
+            default_sender_name = (os.environ.get("SMTP_FROM_NAME") or "pyBIM Solutions").strip()
+            raw_sender_name = d.get("sender_name")
+            resolved_sender_name = str(raw_sender_name).strip() if (raw_sender_name and str(raw_sender_name).strip()) else default_sender_name
+
             # 2. Canonical payload preparation (opt-out footer incorporated before review)
             final_body = prepare_final_send_payload(d["body"], d.get("opt_out_text"))
 
             d_canonical = dict(d)
             d_canonical["body"] = final_body
             d_canonical["sender_email"] = resolved_sender or ""
+            d_canonical["sender_name"] = resolved_sender_name
             content_hash = compute_content_fingerprint(d_canonical)
 
             # 3. Immutability and conflict guard against overwriting existing drafts
@@ -153,6 +161,7 @@ class ApprovalService:
                 recipient_title=d.get("recipient_title"),
                 recipient_email=d["recipient_email"].strip().lower(),
                 sender_email=resolved_sender,
+                sender_name=resolved_sender_name,
                 subject=d["subject"].strip(),
                 body=final_body,
                 service_used=d.get("service_used", ""),
@@ -223,6 +232,11 @@ class ApprovalService:
         trusted_senders = get_trusted_senders()
         primary_trusted = trusted_senders[0] if trusted_senders else None
         sender_email = latest.sender_email if (latest.sender_email and latest.sender_email in trusted_senders) else primary_trusted
+        new_sender_name = (
+            edit.sender_name.strip()
+            if (edit.sender_name is not None and edit.sender_name.strip())
+            else (latest.sender_name or os.environ.get("SMTP_FROM_NAME") or "pyBIM Solutions").strip()
+        )
 
         # Phase 8 validation reuse: check placeholders and basic lengths
         for bad_placeholder in ["{{", "}}", "<NAME>", "[COMPANY]", "<COMPANY>"]:
@@ -238,6 +252,7 @@ class ApprovalService:
             "recipient_name": new_recip_name,
             "recipient_email": new_recip_email,
             "sender_email": sender_email or "",
+            "sender_name": new_sender_name,
         })
         new_content_hash = compute_content_fingerprint(draft_dict)
 
@@ -250,6 +265,7 @@ class ApprovalService:
             recipient_title=latest.recipient_title,
             recipient_email=new_recip_email,
             sender_email=sender_email,
+            sender_name=new_sender_name,
             subject=new_subject,
             body=new_body,
             service_used=latest.service_used,

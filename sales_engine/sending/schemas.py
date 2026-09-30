@@ -24,6 +24,7 @@ class StoredDraft(BaseModel):
     recipient_name: str = Field(..., description="Full or first name of recipient.")
     recipient_title: Optional[str] = Field(default=None, description="Job title of recipient.")
     recipient_email: str = Field(..., description="Target work email address.")
+    sender_name: Optional[str] = Field(default=None, description="Sender display name.")
     sender_email: Optional[str] = Field(default=None, description="Sender email address.")
 
     subject: str = Field(..., description="Email subject line.")
@@ -128,6 +129,8 @@ class DraftEditRequest(BaseModel):
     personalization_notes: Optional[str] = None
     recipient_name: Optional[str] = None
     recipient_email: Optional[str] = None
+    sender_name: Optional[str] = None
+    sender_email: Optional[str] = None
     reviewer: str = Field(default="human_reviewer")
     note: Optional[str] = None
 

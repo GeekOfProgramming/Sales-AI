@@ -54,6 +54,7 @@ class ReviewStore:
                     recipient_title TEXT,
                     recipient_email TEXT NOT NULL,
                     sender_email TEXT,
+                    sender_name TEXT,
                     subject TEXT NOT NULL,
                     body TEXT NOT NULL,
                     service_used TEXT,
@@ -127,6 +128,12 @@ class ReviewStore:
                 );
             """)
 
+            # Additive migration: check if sender_name column exists in drafts table
+            cur = conn.execute("PRAGMA table_info(drafts)")
+            col_names = [r["name"] for r in cur.fetchall()]
+            if "sender_name" not in col_names:
+                conn.execute("ALTER TABLE drafts ADD COLUMN sender_name TEXT")
+
     def save_draft(self, draft: StoredDraft) -> StoredDraft:
         with self._lock, self._get_connection() as conn:
             # Immutability and conflict verification
@@ -152,14 +159,14 @@ class ReviewStore:
                 """
                 INSERT OR REPLACE INTO drafts (
                     draft_id, revision, lead_id, contact_id,
-                    recipient_name, recipient_title, recipient_email, sender_email,
+                    recipient_name, recipient_title, recipient_email, sender_email, sender_name,
                     subject, body, service_used, personalization_notes,
                     evidence_refs, source_job_urls, language, tone,
                     prompt_version, generation_model,
                     approval_status, send_status, outreach_status,
                     content_hash, approved_content_hash, reviewer, review_note,
                     created_at, updated_at, approved_at, sent_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.draft_id,
@@ -170,6 +177,7 @@ class ReviewStore:
                     draft.recipient_title,
                     draft.recipient_email,
                     draft.sender_email,
+                    draft.sender_name,
                     draft.subject,
                     draft.body,
                     draft.service_used,
@@ -518,6 +526,7 @@ class ReviewStore:
             recipient_title=row["recipient_title"],
             recipient_email=row["recipient_email"],
             sender_email=row["sender_email"],
+            sender_name=row["sender_name"] if "sender_name" in row.keys() else None,
             subject=row["subject"],
             body=row["body"],
             service_used=row["service_used"] or "",

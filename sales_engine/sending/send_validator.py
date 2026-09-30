@@ -2,7 +2,7 @@ import re
 from typing import Tuple, Optional, List
 
 from sales_engine.sending.schemas import StoredDraft
-from sales_engine.sending.approval_service import compute_content_fingerprint
+from sales_engine.sending.approval_service import compute_content_fingerprint, get_trusted_senders
 from sales_engine.sending.suppression_store import SuppressionStore
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -79,18 +79,18 @@ class SendValidator:
                 "sender_config_missing",
                 f"Invalid sender email format: '{draft_sender}'",
             )
-        if not trusted_sender_email or not trusted_sender_email.strip():
+        trusted_senders = get_trusted_senders(trusted_sender_email)
+        if not trusted_senders:
             return (
                 False,
                 "sender_config_missing",
                 "Trusted sender email is not configured (SMTP_FROM_EMAIL is unset)",
             )
-        trusted_lower = trusted_sender_email.strip().lower()
-        if draft_sender != trusted_lower:
+        if draft_sender not in trusted_senders:
             return (
                 False,
                 "sender_mismatch",
-                f"Draft sender '{draft_sender}' does not match trusted sender '{trusted_lower}'",
+                f"Draft sender '{draft_sender}' does not match any trusted sender",
             )
 
         # 6. Suppression check (Do-Not-Contact)

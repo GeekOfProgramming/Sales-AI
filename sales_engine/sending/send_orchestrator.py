@@ -17,7 +17,7 @@ from sales_engine.sending.suppression_store import SuppressionStore
 from sales_engine.sending.send_validator import SendValidator
 from sales_engine.sending.base_sender import BaseEmailSender
 from sales_engine.sending.smtp_sender import SMTPEmailSender
-from sales_engine.sending.approval_service import compute_content_fingerprint
+from sales_engine.sending.approval_service import compute_content_fingerprint, get_trusted_senders
 from sales_engine.sending.sanitizer import sanitize_error_message
 from sales_engine.sending.rate_limiter import RateLimiter
 
@@ -74,7 +74,8 @@ class SendOrchestrator:
         )
 
         # Pre-check: Trusted server sender must be configured
-        if not self.from_email:
+        trusted_senders = get_trusted_senders(self.from_email)
+        if not trusted_senders:
             return SendResult(
                 draft_id=draft_id,
                 revision=revision,
@@ -132,7 +133,7 @@ class SendOrchestrator:
                     revision=revision,
                     provider="none",
                     recipient_email=draft.recipient_email if draft else "unknown",
-                    sender_email=self.from_email,
+                    sender_email=draft.sender_email if (draft and draft.sender_email) else (self.from_email or "unknown"),
                     status=attempt_status,
                     error_type=err_type,
                     error_message=err_msg,
@@ -172,7 +173,7 @@ class SendOrchestrator:
                     revision=draft.revision,
                     provider="none",
                     recipient_email=draft.recipient_email,
-                    sender_email=self.from_email,
+                    sender_email=draft.sender_email if draft.sender_email else (self.from_email or "unknown"),
                     status="dry_run",
                     error_type=None,
                     error_message="Dry run validated successfully with zero network transmission.",
@@ -236,7 +237,7 @@ class SendOrchestrator:
         # 7. Exact approved body transmission (P9-REG-012: zero post-approval mutations)
         final_body = draft.body
 
-        # 8. Provider payload fingerprint integrity gate (P9-REG-012)
+        # 8. Provider payload fingerprint integrity gate (P9-REG-012, P9-REG-020)
         provider_payload_fingerprint = compute_content_fingerprint({
             "draft_id": draft.draft_id,
             "revision": draft.revision,
@@ -244,6 +245,7 @@ class SendOrchestrator:
             "contact_id": draft.contact_id,
             "recipient_email": draft.recipient_email,
             "sender_email": draft.sender_email,
+            "sender_name": draft.sender_name or "",
             "subject": draft.subject,
             "body": final_body,
         })
@@ -263,14 +265,15 @@ class SendOrchestrator:
         # 9. Record pacing
         self.rate_limiter.record_send(1)
 
-        # 10. Provider Dispatch (strictly using draft.sender_email)
+        # 10. Provider Dispatch (strictly using draft.sender_email and draft.sender_name)
+        dispatch_from_name = draft.sender_name if draft.sender_name is not None else self.from_name
         send_res = self.sender.send_email(
             draft_id=draft.draft_id,
             revision=draft.revision,
             send_key=send_key,
             to_email=draft.recipient_email,
             from_email=draft.sender_email,
-            from_name=self.from_name,
+            from_name=dispatch_from_name,
             subject=draft.subject,
             body=final_body,
         )
