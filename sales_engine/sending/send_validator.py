@@ -79,20 +79,19 @@ class SendValidator:
                 "sender_config_missing",
                 f"Invalid sender email format: '{draft_sender}'",
             )
-        if trusted_sender_email:
-            trusted_lower = trusted_sender_email.strip().lower()
-            if not trusted_lower:
-                return (
-                    False,
-                    "sender_config_missing",
-                    "Trusted sender email is not configured",
-                )
-            if draft_sender != trusted_lower:
-                return (
-                    False,
-                    "sender_mismatch",
-                    f"Draft sender '{draft_sender}' does not match trusted sender '{trusted_lower}'",
-                )
+        if not trusted_sender_email or not trusted_sender_email.strip():
+            return (
+                False,
+                "sender_config_missing",
+                "Trusted sender email is not configured (SMTP_FROM_EMAIL is unset)",
+            )
+        trusted_lower = trusted_sender_email.strip().lower()
+        if draft_sender != trusted_lower:
+            return (
+                False,
+                "sender_mismatch",
+                f"Draft sender '{draft_sender}' does not match trusted sender '{trusted_lower}'",
+            )
 
         # 6. Suppression check (Do-Not-Contact)
         if suppression_store.is_suppressed(recip_email):

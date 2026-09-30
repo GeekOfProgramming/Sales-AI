@@ -336,7 +336,9 @@ def test_email_send_enabled_false_blocks_real_send(review_store, sample_draft_di
     assert len(mock_sender.sent_messages) == 0
 
 
-def test_sender_identity_mismatch_blocks_send(review_store, sample_draft_dict):
+def test_sender_identity_mismatch_blocks_send(review_store, sample_draft_dict, monkeypatch):
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "trusted@pybim.com")
+    monkeypatch.setenv("SMTP_ALLOWED_SENDERS", "alternate@pybim.com")
     mock_sender = MockEmailSender()
     orch = SendOrchestrator(
         review_store=review_store,
@@ -346,7 +348,7 @@ def test_sender_identity_mismatch_blocks_send(review_store, sample_draft_dict):
     orch.from_email = "trusted@pybim.com"
 
     d = sample_draft_dict.copy()
-    d["sender_email"] = "imposter@malicious.com"  # Draft specifies untrusted sender
+    d["sender_email"] = "alternate@pybim.com"  # Draft specifies alternate sender
 
     svc = ApprovalService(review_store)
     svc.import_drafts([d])
@@ -939,4 +941,235 @@ def test_adversarial_5_provider_secrets_redacted_across_all_audit_logs(
     assert len(fail_events) >= 1
     assert "SuperSecretPassword123" not in (fail_events[0].review_note or "")
     assert "secret-token-xyz-987654321" not in (fail_events[0].review_note or "")
+
+
+# =========================================================================
+# 13. ROUND-2 REGRESSIONS: P9-REG-013 THROUGH P9-REG-017
+# =========================================================================
+
+def test_p9_reg_013_missing_trusted_sender_config_blocks_approval_send(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-013: When SMTP_FROM_EMAIL is unset:
+    - Draft with sender_email=None cannot be approved or sent (sender_config_missing)
+    - Draft with untrusted sender (attacker@example.com) cannot self-authorize or send
+    - Zero provider calls in all failure paths
+    """
+    monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
+    monkeypatch.delenv("SMTP_ALLOWED_SENDERS", raising=False)
+    svc = ApprovalService(review_store)
+
+    # Sub-case A: Unset SMTP_FROM_EMAIL and draft.sender_email = None
+    d1 = sample_draft_dict.copy()
+    d1["draft_id"] = "draft:no-sender-01"
+    d1["sender_email"] = None
+    imported1 = svc.import_drafts([d1], reviewer="importer")
+    draft1 = imported1[0]
+    assert draft1.sender_email is None
+
+    # Approval must be strictly blocked
+    with pytest.raises(ValueError, match="sender_config_missing"):
+        svc.approve_draft(draft1.draft_id, revision=1, reviewer="approver")
+
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res1 = orchestrator.send_draft(draft1.draft_id, revision=1, dry_run=False)
+    assert res1.status in ("failed", "blocked")
+    assert res1.error_type == "sender_config_missing"
+    assert mock_sender.get_send_count() == 0
+
+    # Sub-case B: Unset SMTP_FROM_EMAIL and draft has untrusted sender
+    d2 = sample_draft_dict.copy()
+    d2["draft_id"] = "draft:untrusted-sender-02"
+    d2["sender_email"] = "attacker@example.com"
+    imported2 = svc.import_drafts([d2], reviewer="importer")
+    draft2 = imported2[0]
+    assert draft2.sender_email is None  # Not resolved to untrusted address!
+
+    with pytest.raises(ValueError, match="sender_config_missing"):
+        svc.approve_draft(draft2.draft_id, revision=1, reviewer="approver")
+
+    res2 = orchestrator.send_draft(draft2.draft_id, revision=1, dry_run=False)
+    assert res2.status in ("failed", "blocked")
+    assert res2.error_type == "sender_config_missing"
+    assert mock_sender.get_send_count() == 0
+
+    # Sub-case C: Trusted sender is set, but draft sender does not match
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "outreach@pybim.com")
+    with review_store._get_connection() as conn:
+        conn.execute(
+            "UPDATE drafts SET sender_email = ? WHERE draft_id = ? AND revision = ?",
+            ("attacker@example.com", draft2.draft_id, 1),
+        )
+    with pytest.raises(ValueError, match="sender_config_missing"):
+        svc.approve_draft(draft2.draft_id, revision=1, reviewer="approver")
+    assert mock_sender.get_send_count() == 0
+
+
+def test_p9_reg_014_sent_revision_cannot_be_rejected(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-014: A successfully sent draft revision is terminal and cannot be rejected.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "outreach@pybim.com")
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:sent-immutable-01"
+    imported = svc.import_drafts([d])
+    draft = imported[0]
+
+    svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+    assert mock_sender.get_send_count() == 1
+
+    # Attempt to reject the sent revision must raise ValueError
+    with pytest.raises(ValueError, match="invalid_state_transition"):
+        svc.reject_draft(draft.draft_id, revision=1, reviewer="reviewer", note="Attempted reject")
+
+    # Verify state remains completely intact
+    persisted = review_store.get_draft(draft.draft_id, revision=1)
+    assert persisted.send_status == "sent"
+    assert persisted.approval_status == "approved"
+    assert persisted.outreach_status == "sent"
+
+
+def test_p9_reg_015_sent_revision_cannot_request_changes(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-015: A successfully sent draft revision cannot have changes requested.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "outreach@pybim.com")
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:sent-immutable-02"
+    imported = svc.import_drafts([d])
+    draft = imported[0]
+
+    svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+
+    # Attempt to request changes on the sent revision must raise ValueError
+    with pytest.raises(ValueError, match="invalid_state_transition"):
+        svc.request_changes(draft.draft_id, revision=1, reviewer="reviewer", note="Needs edit")
+
+    persisted = review_store.get_draft(draft.draft_id, revision=1)
+    assert persisted.send_status == "sent"
+    assert persisted.approval_status == "approved"
+
+
+def test_p9_reg_016_sent_revision_cannot_transition_back_to_not_sent(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-016: Direct store mutation cannot reset sent_status from 'sent' to 'not_sent'.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "outreach@pybim.com")
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:sent-immutable-03"
+    imported = svc.import_drafts([d])
+    draft = imported[0]
+    svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=MockEmailSender(),
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+
+    # Direct store update_draft_status attempt to reset send_status to 'not_sent'
+    with pytest.raises(ValueError, match="invalid_state_transition"):
+        review_store.update_draft_status(
+            draft.draft_id,
+            revision=1,
+            send_status="not_sent",
+            approval_status="pending_review",
+        )
+
+
+def test_p9_reg_017_sent_revision_remains_unchanged_after_invalid_transition(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-017: Verifies that after any rejected mutation attempt, all sent revision fields
+    remain strictly unchanged (approval_status=approved, send_status=sent, outreach_status=sent,
+    sent_at unchanged, provider delivery count unchanged).
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "outreach@pybim.com")
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:sent-immutable-04"
+    imported = svc.import_drafts([d])
+    draft = imported[0]
+    svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+    initial_sent_draft = review_store.get_draft(draft.draft_id, revision=1)
+    initial_sent_at = initial_sent_draft.sent_at
+    assert initial_sent_at is not None
+
+    # Try reject
+    try:
+        svc.reject_draft(draft.draft_id, revision=1, reviewer="hacker")
+    except ValueError:
+        pass
+
+    # Try request changes
+    try:
+        svc.request_changes(draft.draft_id, revision=1, reviewer="hacker", note="hack")
+    except ValueError:
+        pass
+
+    # Try edit in place
+    try:
+        svc.edit_draft(draft.draft_id, DraftEditRequest(body="Tampered body", reviewer="hacker"))
+    except ValueError:
+        pass
+
+    # Verify everything remains exactly as originally sent
+    current = review_store.get_draft(draft.draft_id, revision=1)
+    assert current.approval_status == "approved"
+    assert current.send_status == "sent"
+    assert current.outreach_status == "sent"
+    assert current.sent_at == initial_sent_at
+    assert current.body == initial_sent_draft.body
+    assert current.content_hash == initial_sent_draft.content_hash
+    assert current.approved_content_hash == initial_sent_draft.approved_content_hash
+    assert mock_sender.get_send_count() == 1
+
 

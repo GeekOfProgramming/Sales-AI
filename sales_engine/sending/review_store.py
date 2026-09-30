@@ -309,6 +309,29 @@ class ReviewStore:
 
         params.extend([draft_id, revision])
         with self._lock, self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT send_status, approval_status, outreach_status FROM drafts WHERE draft_id = ? AND revision = ?",
+                (draft_id, revision),
+            )
+            row = cur.fetchone()
+            if row and row["send_status"] == "sent":
+                # Sent revision is strictly terminal and immutable
+                if send_status is not None and send_status != "sent":
+                    raise ValueError(
+                        f"invalid_state_transition: Cannot reset terminal send_status '{row['send_status']}' "
+                        f"to '{send_status}' for draft {draft_id} r{revision}"
+                    )
+                if approval_status is not None and approval_status != row["approval_status"]:
+                    raise ValueError(
+                        f"invalid_state_transition: Cannot mutate approval_status for terminal sent draft "
+                        f"{draft_id} r{revision}"
+                    )
+                if outreach_status is not None and outreach_status in ("draft_ready", "not_sent", "pending_review"):
+                    raise ValueError(
+                        f"invalid_state_transition: Cannot regress outreach_status for terminal sent draft "
+                        f"{draft_id} r{revision}"
+                    )
+
             conn.execute(
                 f"UPDATE drafts SET {', '.join(fields)} WHERE draft_id = ? AND revision = ?",
                 params,

@@ -19,6 +19,25 @@ from sales_engine.sending.review_store import ReviewStore
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+def get_trusted_senders(explicit_trusted: Optional[str] = None) -> List[str]:
+    """
+    Returns list of trusted sender email addresses from environment or explicit argument.
+    Zero hardcoded fallback addresses.
+    """
+    senders: List[str] = []
+    if explicit_trusted and explicit_trusted.strip():
+        senders.append(explicit_trusted.strip().lower())
+    env_primary = os.environ.get("SMTP_FROM_EMAIL", "").strip().lower()
+    if env_primary and env_primary not in senders:
+        senders.append(env_primary)
+    env_allowed = os.environ.get("SMTP_ALLOWED_SENDERS", "")
+    for s in env_allowed.split(","):
+        clean_s = s.strip().lower()
+        if clean_s and clean_s not in senders:
+            senders.append(clean_s)
+    return senders
+
+
 def prepare_final_send_payload(body: str, opt_out_text: Optional[str] = None) -> str:
     """
     Canonical preparation of send payload before review, fingerprinting, and approval.
@@ -92,19 +111,24 @@ class ApprovalService:
             revision = int(d.get("revision", 1))
 
             # 1. Finalize sender identity BEFORE review/approval
-            trusted_sender = os.environ.get("SMTP_FROM_EMAIL", "").strip().lower()
-            resolved_sender = (
-                d.get("sender_email")
-                or trusted_sender
-                or "outreach@pybim.com"
-            ).strip().lower()
+            trusted_senders = get_trusted_senders()
+            primary_sender = trusted_senders[0] if trusted_senders else None
+            draft_sender = (d.get("sender_email") or "").strip().lower()
+
+            if draft_sender:
+                if trusted_senders and draft_sender in trusted_senders:
+                    resolved_sender = draft_sender
+                else:
+                    resolved_sender = None  # Untrusted or unconfigured sender
+            else:
+                resolved_sender = primary_sender
 
             # 2. Canonical payload preparation (opt-out footer incorporated before review)
             final_body = prepare_final_send_payload(d["body"], d.get("opt_out_text"))
 
             d_canonical = dict(d)
             d_canonical["body"] = final_body
-            d_canonical["sender_email"] = resolved_sender
+            d_canonical["sender_email"] = resolved_sender or ""
             content_hash = compute_content_fingerprint(d_canonical)
 
             # 3. Immutability and conflict guard against overwriting existing drafts
@@ -178,7 +202,10 @@ class ApprovalService:
             raise ValueError(f"Draft not found: {draft_id}")
 
         if latest.send_status == "sent":
-            raise ValueError("Cannot edit a sent revision in place. A new outreach draft must be created.")
+            raise ValueError(
+                "invalid_state_transition: Cannot edit a sent revision in place. "
+                "A new outreach draft must be created."
+            )
 
         now_iso = datetime.now(timezone.utc).isoformat()
         new_rev = latest.revision + 1
@@ -193,8 +220,9 @@ class ApprovalService:
         new_notes = edit.personalization_notes if edit.personalization_notes is not None else latest.personalization_notes
         new_recip_name = edit.recipient_name if edit.recipient_name is not None else latest.recipient_name
         new_recip_email = edit.recipient_email.strip().lower() if edit.recipient_email is not None else latest.recipient_email
-        trusted_sender = os.environ.get("SMTP_FROM_EMAIL", "").strip().lower()
-        sender_email = latest.sender_email or trusted_sender or "outreach@pybim.com"
+        trusted_senders = get_trusted_senders()
+        primary_trusted = trusted_senders[0] if trusted_senders else None
+        sender_email = latest.sender_email if (latest.sender_email and latest.sender_email in trusted_senders) else primary_trusted
 
         # Phase 8 validation reuse: check placeholders and basic lengths
         for bad_placeholder in ["{{", "}}", "<NAME>", "[COMPANY]", "<COMPANY>"]:
@@ -209,7 +237,7 @@ class ApprovalService:
             "personalization_notes": new_notes,
             "recipient_name": new_recip_name,
             "recipient_email": new_recip_email,
-            "sender_email": sender_email,
+            "sender_email": sender_email or "",
         })
         new_content_hash = compute_content_fingerprint(draft_dict)
 
@@ -270,6 +298,13 @@ class ApprovalService:
         if not draft:
             raise ValueError(f"Draft {draft_id} revision {revision} not found")
 
+        # 0. Terminal sent revision immutability check
+        if draft.send_status == "sent":
+            raise ValueError(
+                f"invalid_state_transition: Cannot approve already sent revision {revision} of draft {draft_id}; "
+                f"sent revisions are immutable and terminal"
+            )
+
         # 1. Obsolete revision check: only the latest revision may be approved!
         latest = self.store.get_draft(draft_id)
         if latest and revision < latest.revision:
@@ -277,9 +312,6 @@ class ApprovalService:
                 f"stale_revision: Cannot approve obsolete revision {revision} of draft {draft_id}; "
                 f"current latest revision is {latest.revision}"
             )
-
-        if draft.send_status == "sent":
-            raise ValueError("Draft has already been sent; cannot re-approve")
 
         # 2. Pre-approval validation (Section 6)
         if not draft.subject or not draft.subject.strip():
@@ -298,8 +330,14 @@ class ApprovalService:
         if not draft.recipient_email or not EMAIL_REGEX.match(draft.recipient_email):
             raise ValueError(f"Draft recipient_email is invalid: '{draft.recipient_email}'")
 
+        # Trusted sender validation
+        trusted_senders = get_trusted_senders()
         if not draft.sender_email:
-            raise ValueError("Draft sender_email must be finalized before approval")
+            raise ValueError("sender_config_missing: Draft sender_email is not configured or resolved")
+        if not trusted_senders or draft.sender_email.strip().lower() not in trusted_senders:
+            raise ValueError(
+                f"sender_config_missing: Draft sender '{draft.sender_email}' is not a configured trusted server sender"
+            )
 
         now_iso = datetime.now(timezone.utc).isoformat()
         # Compute exact content fingerprint at moment of approval
@@ -345,7 +383,14 @@ class ApprovalService:
         if not draft:
             raise ValueError(f"Draft {draft_id} revision {revision} not found")
 
-        # Obsolete revision check
+        # 0. Terminal sent revision immutability check
+        if draft.send_status == "sent":
+            raise ValueError(
+                f"invalid_state_transition: Cannot reject already sent revision {revision} of draft {draft_id}; "
+                f"sent revisions are immutable and terminal"
+            )
+
+        # 1. Obsolete revision check
         latest = self.store.get_draft(draft_id)
         if latest and revision < latest.revision:
             raise ValueError(
@@ -392,7 +437,14 @@ class ApprovalService:
         if not draft:
             raise ValueError(f"Draft {draft_id} revision {revision} not found")
 
-        # Obsolete revision check
+        # 0. Terminal sent revision immutability check
+        if draft.send_status == "sent":
+            raise ValueError(
+                f"invalid_state_transition: Cannot request changes on already sent revision {revision} of draft {draft_id}; "
+                f"sent revisions are immutable and terminal"
+            )
+
+        # 1. Obsolete revision check
         latest = self.store.get_draft(draft_id)
         if latest and revision < latest.revision:
             raise ValueError(

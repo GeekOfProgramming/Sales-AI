@@ -51,7 +51,8 @@ class SendOrchestrator:
             self.email_send_enabled = os.environ.get("EMAIL_SEND_ENABLED", "false").lower() in ("true", "1", "yes")
 
         self.opt_out_text = opt_out_text or os.environ.get("OUTREACH_OPT_OUT_TEXT")
-        self.from_email = os.environ.get("SMTP_FROM_EMAIL", "outreach@pybim.com")
+        raw_from = os.environ.get("SMTP_FROM_EMAIL")
+        self.from_email = raw_from.strip().lower() if raw_from else None
         self.from_name = os.environ.get("SMTP_FROM_NAME", "pyBIM Solutions")
 
     def send_draft(
@@ -71,6 +72,18 @@ class SendOrchestrator:
             if draft
             else f"{draft_id}:{revision}:unknown"
         )
+
+        # Pre-check: Trusted server sender must be configured
+        if not self.from_email:
+            return SendResult(
+                draft_id=draft_id,
+                revision=revision,
+                send_key=send_key,
+                status="failed",
+                error_type="sender_config_missing",
+                error_message="Trusted sender email is not configured (SMTP_FROM_EMAIL is unset)",
+                dry_run=dry_run,
+            )
 
         # 0. Obsolete revision check: cannot send older revision if newer exists
         latest = self.store.get_draft(draft_id)
