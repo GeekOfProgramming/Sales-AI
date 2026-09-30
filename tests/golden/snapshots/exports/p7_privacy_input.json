@@ -1,0 +1,31 @@
+{
+  "forbidden_fields_lead": {
+    "company_name": "Privacy Corp",
+    "company_domain": "privacy-corp.com",
+    "lead_score": 80,
+    "qualified": true,
+    "api_key": "SECRET_API_KEY_12345",
+    "access_token": "ACCESS_TOKEN_ABCDEF",
+    "personal_phone": "+1-555-0199",
+    "mobile_phone": "+1-555-0198",
+    "phone_numbers": ["+1-555-0197"]
+  },
+  "forbidden_fields_contact": {
+    "first_name": "Eve",
+    "last_name": "Secret",
+    "full_name": "Eve Secret",
+    "work_email": "eve@privacy-corp.com",
+    "personal_email": "eve.private@gmail.com",
+    "personal_phone": "+1-555-0199",
+    "mobile_phone": "+1-555-0198",
+    "phone_numbers": ["+1-555-0197"],
+    "api_key": "CONTACT_SECRET_KEY"
+  },
+  "public_rejected_email_contact": {
+    "first_name": "Bob",
+    "last_name": "Public",
+    "full_name": "Bob Public",
+    "email": "bob@gmail.com",
+    "work_email": null
+  }
+}

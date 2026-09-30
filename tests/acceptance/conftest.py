@@ -144,6 +144,13 @@ def pytest_sessionfinish(session, exitstatus):
         with open(p6_file, "w", encoding="utf-8") as f:
             json.dump(phase6_results, f, indent=2, ensure_ascii=False)
 
+    # If any Phase 7 cases exist in final_results, write phase7_latest.json
+    phase7_results = [r for r in final_results if str(r.get("phase", "")) in ["Phase 7", "7"] or str(r.get("case_id", "")).startswith("P7-")]
+    if phase7_results:
+        p7_file = reports_dir / "phase7_latest.json"
+        with open(p7_file, "w", encoding="utf-8") as f:
+            json.dump(phase7_results, f, indent=2, ensure_ascii=False)
+
 @pytest.fixture
 def qa_logger(request):
     """Fixture to let tests attach QA data to the item."""

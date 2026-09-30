@@ -1,4 +1,4 @@
 lead_id,company_name,company_domain,job_title,job_url,source,source_company_key,location,employment_type,posted_date,seniority,remote_status,technologies,relevant_signals,signal_evidence,is_relevant
-domain:vdc-autolab.de,VDC Automation Lab GmbH,vdc-autolab.de,Head of Digital Practice,,generic,,"Munich, Germany | Remote",,,,,Revit | Dynamo | C# | Python,revit_api:3,Develop Revit C# addins | Automate QA with Dynamo,True
-domain:vdc-autolab.de,VDC Automation Lab GmbH,vdc-autolab.de,Revit API Developer,,generic,,"Munich, Germany | Remote",,,,,Revit | Dynamo | C# | Python,revit_api:3,Develop Revit C# addins | Automate QA with Dynamo,True
-domain:vdc-autolab.de,VDC Automation Lab GmbH,vdc-autolab.de,Dynamo Specialist,,generic,,"Munich, Germany | Remote",,,,,Revit | Dynamo | C# | Python,revit_api:3,Develop Revit C# addins | Automate QA with Dynamo,True
+domain:vdc-autolab.de,VDC Automation Lab GmbH,vdc-autolab.de,Head of Digital Practice,https://jobs.lever.co/vdc-autolab/101,lever,vdc-autolab,"Munich, Germany",,,,,Revit | Dynamo | Python,,,True
+domain:vdc-autolab.de,VDC Automation Lab GmbH,vdc-autolab.de,Revit API Developer,https://jobs.lever.co/vdc-autolab/102,lever,vdc-autolab,Remote,,,,,Revit | C#,,,True
+domain:nordicbim.no,Nordic BIM Consulting AS,nordicbim.no,BIM Coordinator,https://boards.greenhouse.io/nordicbim/301,greenhouse,nordic-bim,"Oslo, Norway",,,,,Revit | Navisworks,,,True

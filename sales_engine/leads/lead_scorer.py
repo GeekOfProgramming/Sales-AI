@@ -99,6 +99,7 @@ def score_lead(lead: CompanyLead, min_qualified_score: int = 60) -> CompanyLead:
     lead.lead_score = min(max(lead.lead_score, 0), 100)
     
     lead.scoring_reasons = reasons
+    lead.qualification_threshold = min_qualified_score
     lead.qualified = lead.lead_score >= min_qualified_score
     
     return lead

@@ -77,14 +77,6 @@ class ContactEnricher:
                 if c.provider_person_id and existing.provider_person_id and c.provider_person_id == existing.provider_person_id and c.provider == existing.provider:
                     matched_existing = existing
                     break
-                # 4. Name + Domain match (only if emails do not conflict)
-                if c.full_name and existing.full_name and c.company_domain and existing.company_domain:
-                    # If both have different emails, do NOT merge solely by name!
-                    if c.work_email and existing.work_email and c.work_email.lower().strip() != existing.work_email.lower().strip():
-                        pass
-                    elif c.full_name.lower().strip() == existing.full_name.lower().strip() and c.company_domain.lower().strip() == existing.company_domain.lower().strip():
-                        matched_existing = existing
-                        break
                         
             if matched_existing:
                 # Merge
@@ -188,6 +180,8 @@ class ContactEnricher:
             len(x.data_sources), 
             1 if x.email_status == "verified" else 0,
             x.full_name or "", 
-            x.work_email or ""
+            x.job_title or "",
+            x.work_email or "",
+            x.provider or ""
         ), reverse=True)
         return candidates[:max_contacts]

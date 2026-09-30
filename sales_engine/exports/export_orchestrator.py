@@ -50,7 +50,7 @@ class ExportOrchestrator:
                 "Export rejected to prevent resource exhaustion."
             )
 
-        export_run_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        export_run_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}"
         serializer = ExportSerializer(export_run_id=export_run_id)
 
         output_dir = request.output_dir or os.path.join(os.getcwd(), "exports", export_run_id)
@@ -64,13 +64,31 @@ class ExportOrchestrator:
 
         seen_lead_ids: Set[str] = set()
 
-        # Build raw jobs index if raw jobs provided separately
+        # Build raw jobs indices across domain, source identity, and normalized name
         raw_jobs_by_domain: Dict[str, List[Any]] = {}
+        raw_jobs_by_source_identity: Dict[str, List[Any]] = {}
+        raw_jobs_by_name: Dict[str, List[Any]] = {}
         if request.jobs:
             for j in request.jobs:
                 d = getattr(j, "company_domain", None) or (j.get("company_domain") if isinstance(j, dict) else None)
                 if d:
-                    raw_jobs_by_domain.setdefault(str(d).lower().strip(), []).append(j)
+                    from sales_engine.analysis.company_normalizer import CompanyNormalizer
+                    canon_d = CompanyNormalizer.canonicalize_domain(d)
+                    if canon_d:
+                        raw_jobs_by_domain.setdefault(canon_d, []).append(j)
+                
+                src = getattr(j, "source", None) or (j.get("source") if isinstance(j, dict) else None)
+                s_key = getattr(j, "source_company_key", None) or (j.get("source_company_key") if isinstance(j, dict) else None)
+                if src and s_key:
+                    ident = f"{src}:{s_key}".lower().strip()
+                    raw_jobs_by_source_identity.setdefault(ident, []).append(j)
+                    
+                name = getattr(j, "company_name", None) or (j.get("company_name") if isinstance(j, dict) else None)
+                if name:
+                    from sales_engine.analysis.company_normalizer import CompanyNormalizer
+                    norm_n = CompanyNormalizer.normalize(name)
+                    if norm_n:
+                        raw_jobs_by_name.setdefault(norm_n, []).append(j)
 
         # 2. Process and serialize leads
         for lead_item in request.leads:
@@ -99,10 +117,52 @@ class ExportOrchestrator:
                 c_rows = [c for c in c_rows if c.is_best_contact]
             contact_rows.extend(c_rows)
 
-            # Serialize Jobs
-            lead_domain = str(getattr(base, "company_domain", "") or (base.get("company_domain", "") if isinstance(base, dict) else "")).lower().strip()
-            associated_jobs = raw_jobs_by_domain.get(lead_domain)
+            # Serialize Jobs with multi-priority resolution
+            associated_jobs = []
+            if request.jobs:
+                from sales_engine.analysis.company_normalizer import CompanyNormalizer
+                # 1. Canonical domain lookup
+                lead_dom = getattr(base, "company_domain", None) or (base.get("company_domain") if isinstance(base, dict) else None)
+                if lead_dom:
+                    canon_ld = CompanyNormalizer.canonicalize_domain(lead_dom)
+                    if canon_ld and canon_ld in raw_jobs_by_domain:
+                        associated_jobs = raw_jobs_by_domain[canon_ld]
+                
+                # 2. Source identity lookup
+                if not associated_jobs:
+                    s_idents = getattr(base, "source_company_identities", None) or (base.get("source_company_identities") if isinstance(base, dict) else [])
+                    if not s_idents:
+                        single_id = getattr(base, "source_company_identity", None) or (base.get("source_company_identity") if isinstance(base, dict) else None)
+                        if single_id:
+                            s_idents = [single_id]
+                    for s_id in s_idents:
+                        s_id_clean = str(s_id).lower().strip()
+                        if s_id_clean in raw_jobs_by_source_identity:
+                            associated_jobs = raw_jobs_by_source_identity[s_id_clean]
+                            break
+                            
+                # 3. Normalized company name lookup
+                if not associated_jobs:
+                    lead_nm = getattr(base, "company_name_normalized", None) or getattr(base, "company_name", None) or (base.get("company_name") if isinstance(base, dict) else None)
+                    if lead_nm:
+                        norm_nm = CompanyNormalizer.normalize(lead_nm)
+                        if norm_nm and norm_nm in raw_jobs_by_name:
+                            associated_jobs = raw_jobs_by_name[norm_nm]
+
             j_rows = serializer.serialize_jobs(lead_item, lead_id, raw_jobs=associated_jobs) if request.include_jobs else []
+            if request.include_jobs and not j_rows:
+                # Add diagnostic when raw jobs were not supplied
+                error_rows.append(ErrorAuditRow(
+                    export_run_id=export_run_id,
+                    lead_id=lead_id,
+                    company_name=getattr(base, "company_name", "") or "",
+                    stage="export",
+                    error_type="jobs_not_provided",
+                    provider="system",
+                    message="Raw StructuredJob records were not supplied; job-level audit export is unavailable.",
+                    source_reference="",
+                    created_at=serializer.current_time_iso
+                ))
             job_rows.extend(j_rows)
 
             # Serialize Errors

@@ -2,11 +2,11 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 12:30:28 UTC
-- **Git Commit:** `89ec192`
+- **Time:** 15:21:27 UTC
+- **Git Commit:** `dadb576`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
-- **Ollama Version:** `0.33.3`
+- **Ollama Version:** `Not detected / unreachable`
 - **Brave enabled?** No
 - **Apollo enabled?** No
 - **Hunter enabled?** No

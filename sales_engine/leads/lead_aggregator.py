@@ -61,7 +61,13 @@ def aggregate_jobs(jobs: List[StructuredJob], total_jobs: int = None) -> Company
         if job.source_company_key and job.source_company_key not in lead.source_company_keys:
             lead.source_company_keys.append(job.source_company_key)
             
+        if job.source and job.source_company_key:
+            identity = f"{job.source}:{job.source_company_key}".lower()
+            if identity not in lead.source_company_identities:
+                lead.source_company_identities.append(identity)
+            
     lead.source_company_keys.sort()
+    lead.source_company_identities.sort()
     
     job_titles = set()
     locations = set()

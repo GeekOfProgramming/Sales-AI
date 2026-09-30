@@ -70,13 +70,11 @@ class GoogleSheetsExporter(BaseSheetExporter):
             return self._export_snapshot(client, spreadsheet_id, lead_rows, contact_rows, job_rows, error_rows, summary)
 
     def _resolve_client(self, config: GoogleSheetsConfig) -> Optional[Any]:
-        # If credentials provided or environment set, real google client can be created here.
-        # Otherwise return None so clear explicit error is raised if enabled=True.
+        # Live Google Sheets adapter is deferred. Mock client is only allowed when explicitly injected.
         creds = config.credentials_json or os.getenv("GOOGLE_SHEETS_CREDENTIALS")
         if not creds:
-            return None
-        # Here we would initialize googleapiclient / gspread when configured
-        return MockGoogleSheetClient(config.spreadsheet_id or "sheet-configured")
+            raise RuntimeError("Google Sheets integration enabled but credentials not provided.")
+        raise NotImplementedError("Live Google Sheets client adapter is not yet implemented. Set an explicit test mock client to verify sync.")
 
     def _export_snapshot(
         self,

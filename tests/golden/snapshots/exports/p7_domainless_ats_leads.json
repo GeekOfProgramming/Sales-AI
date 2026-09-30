@@ -1,0 +1,36 @@
+[
+  {
+    "company_name": "Acme",
+    "company_name_normalized": "acme",
+    "company_domain": null,
+    "source_company_keys": ["acme"],
+    "source_company_identities": ["lever:acme"],
+    "fit_score": 25,
+    "intent_score": 25,
+    "recency_score": 15,
+    "evidence_score": 10,
+    "lead_score": 75,
+    "qualification_threshold": 60,
+    "qualified": true,
+    "enrichment_status": "none",
+    "contacts": [],
+    "best_contact": null
+  },
+  {
+    "company_name": "Acme",
+    "company_name_normalized": "acme",
+    "company_domain": null,
+    "source_company_keys": ["acme"],
+    "source_company_identities": ["greenhouse:acme"],
+    "fit_score": 25,
+    "intent_score": 25,
+    "recency_score": 15,
+    "evidence_score": 10,
+    "lead_score": 75,
+    "qualification_threshold": 60,
+    "qualified": true,
+    "enrichment_status": "none",
+    "contacts": [],
+    "best_contact": null
+  }
+]

@@ -49,11 +49,10 @@ def generate_lead_id(lead_obj: Any) -> str:
     Generate deterministic lead_id.
     Priority:
     1. Canonical company domain (e.g. domain:acme.com)
-    2. ATS source + source_company_key (e.g. source_key:lever:acme-co)
+    2. Explicit source company identity (e.g. source_identity:lever:acme)
     3. Normalized company name (e.g. name:acme_corporation)
     4. Deterministic fallback
     """
-    # Extract fields from dict or model
     base = lead_obj.base_lead if hasattr(lead_obj, "base_lead") else lead_obj
     
     domain = getattr(base, "company_domain", None)
@@ -65,6 +64,22 @@ def generate_lead_id(lead_obj: Any) -> str:
         if canonical_domain:
             return f"domain:{canonical_domain}"
             
+    # Priority 2: Source identities (source:key, e.g. lever:acme)
+    source_idents = getattr(base, "source_company_identities", None)
+    if not source_idents and isinstance(base, dict):
+        source_idents = base.get("source_company_identities", [])
+    if not source_idents:
+        single_ident = getattr(base, "source_company_identity", None)
+        if not single_ident and isinstance(base, dict):
+            single_ident = base.get("source_company_identity")
+        if single_ident:
+            source_idents = [single_ident]
+            
+    if source_idents and len(source_idents) > 0 and source_idents[0]:
+        ident = str(source_idents[0]).strip().lower()
+        return f"source_identity:{ident}"
+        
+    # Legacy fallback if source key exists
     source_keys = getattr(base, "source_company_keys", None)
     if not source_keys and isinstance(base, dict):
         source_keys = base.get("source_company_keys", [])
@@ -74,9 +89,10 @@ def generate_lead_id(lead_obj: Any) -> str:
             single_key = base.get("source_company_key")
         if single_key:
             source_keys = [single_key]
-            
     if source_keys and len(source_keys) > 0 and source_keys[0]:
         key = str(source_keys[0]).strip().lower()
+        if ":" in key:
+            return f"source_identity:{key}"
         return f"source_key:{key}"
         
     name_norm = getattr(base, "company_name_normalized", None)
@@ -96,14 +112,16 @@ def generate_lead_id(lead_obj: Any) -> str:
         
     return "lead:unknown"
 
-def generate_contact_id(contact_obj: Any, lead_id: str) -> str:
+def generate_contact_id(contact_obj: Any, lead_id: str, collision_suffix: Optional[str] = None) -> str:
     """
     Generate deterministic contact_id.
-    Priority:
+    Strong Priority:
     1. Normalized work email (e.g. email:jane@acme.com)
     2. Canonical LinkedIn URL (e.g. linkedin:in/jane-smith)
     3. Provider + provider_person_id (e.g. apollo:person_123)
-    4. Deterministic record-local fallback
+    
+    Weak identity fallback:
+    Includes lead_id, provider, name, title, department, seniority.
     """
     email = getattr(contact_obj, "work_email", None)
     if not email and isinstance(contact_obj, dict):
@@ -135,16 +153,30 @@ def generate_contact_id(contact_obj: Any, lead_id: str) -> str:
     title = getattr(contact_obj, "job_title", None)
     if not title and isinstance(contact_obj, dict):
         title = contact_obj.get("job_title")
+    dept = getattr(contact_obj, "department", None)
+    if not dept and isinstance(contact_obj, dict):
+        dept = contact_obj.get("department")
+    seniority = getattr(contact_obj, "seniority", None)
+    if not seniority and isinstance(contact_obj, dict):
+        seniority = contact_obj.get("seniority")
         
     name_slug = re.sub(r"[^a-z0-9]+", "_", str(name or "unknown").lower()).strip("_")
     title_slug = re.sub(r"[^a-z0-9]+", "_", str(title or "unknown").lower()).strip("_")
-    return f"fallback:{lead_id}:{name_slug}:{title_slug}"
+    prov_slug = re.sub(r"[^a-z0-9]+", "_", str(provider or "").lower()).strip("_")
+    dept_slug = re.sub(r"[^a-z0-9]+", "_", str(dept or "").lower()).strip("_")
+    sen_slug = re.sub(r"[^a-z0-9]+", "_", str(seniority or "").lower()).strip("_")
+    
+    parts = [lead_id, prov_slug, name_slug, title_slug, dept_slug, sen_slug]
+    base_key = f"fallback:{':'.join(p for p in parts if p)}"
+    if collision_suffix:
+        return f"{base_key}:{collision_suffix}"
+    return base_key
 
 class ExportSerializer:
     """Canonical serializer producing validated export rows and CRM-ready payloads."""
 
     def __init__(self, export_run_id: Optional[str] = None):
-        self.export_run_id = export_run_id or f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        self.export_run_id = export_run_id or f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}"
         self.current_time_iso = datetime.now(timezone.utc).isoformat()
 
     def serialize_lead(self, enriched: Any, lead_id: str, best_contact_id: Optional[str]) -> LeadExportRow:
@@ -170,6 +202,7 @@ class ExportSerializer:
         intent_score = int(g(base, "intent_score", 0))
         recency_score = int(g(base, "recency_score", 0))
         evidence_score = int(g(base, "evidence_score", 0))
+        qual_threshold = int(g(base, "qualification_threshold", 60))
         total_jobs = int(g(base, "total_job_count", g(base, "job_count", 0)))
         relevant_jobs = int(g(base, "relevant_job_count", 0))
 
@@ -213,7 +246,7 @@ class ExportSerializer:
             intent_score=intent_score,
             recency_score=recency_score,
             evidence_score=evidence_score,
-            qualification_threshold=70,
+            qualification_threshold=qual_threshold,
             total_job_count=total_jobs,
             relevant_job_count=relevant_jobs,
             lead_reasons=lead_reasons_str,
@@ -258,8 +291,11 @@ class ExportSerializer:
         for idx, cont in enumerate(contacts_raw):
             c_id = generate_contact_id(cont, lead_id)
             if c_id in seen_contact_ids:
-                # Deduplicate within same lead
-                continue
+                if c_id.startswith("fallback:"):
+                    c_id = f"{c_id}:idx_{idx}"
+                else:
+                    # Deduplicate within same lead for strong identifiers
+                    continue
             seen_contact_ids.add(c_id)
 
             def g(attr: str, default: Any = None) -> Any:
@@ -350,33 +386,6 @@ class ExportSerializer:
                     relevant_signals=clean_scalar_list(sig_names),
                     signal_evidence=clean_scalar_list(sig_evs),
                     is_relevant=bool(sig_names or gj("is_relevant", True))
-                ))
-        else:
-            # Audit fallback from aggregated CompanyLead when individual job objects were omitted
-            job_titles = getattr(base, "job_titles", []) if hasattr(base, "job_titles") else (base.get("job_titles", []) if isinstance(base, dict) else [])
-            techs = getattr(base, "technologies", []) if hasattr(base, "technologies") else (base.get("technologies", []) if isinstance(base, dict) else [])
-            evidences = getattr(base, "evidence", []) if hasattr(base, "evidence") else (base.get("evidence", []) if isinstance(base, dict) else [])
-            signals = getattr(base, "signals", []) if hasattr(base, "signals") else (base.get("signals", []) if isinstance(base, dict) else [])
-            sig_strs = [f"{s.get('signal')}:{s.get('evidence_count')}" if isinstance(s, dict) else str(s) for s in signals]
-
-            for title in (job_titles or ["General Job Posting"]):
-                rows.append(JobExportRow(
-                    lead_id=lead_id,
-                    company_name=company_name,
-                    company_domain=company_domain,
-                    job_title=title,
-                    job_url="",
-                    source="generic",
-                    source_company_key="",
-                    location=clean_scalar_list(getattr(base, "locations", []) if hasattr(base, "locations") else []),
-                    employment_type="",
-                    posted_date=getattr(base, "newest_job_date", "") if hasattr(base, "newest_job_date") else "",
-                    seniority="",
-                    remote_status="",
-                    technologies=clean_scalar_list(techs),
-                    relevant_signals=clean_scalar_list(sig_strs),
-                    signal_evidence=clean_scalar_list(evidences),
-                    is_relevant=True
                 ))
         return rows
 

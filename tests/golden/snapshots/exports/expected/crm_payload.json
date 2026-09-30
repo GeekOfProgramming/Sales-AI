@@ -8,7 +8,7 @@
       "employee_count": 120
     },
     "lead": {
-      "export_run_id": "run_20260930_152140_857003",
+      "export_run_id": "run_20260930_151604_382862",
       "lead_id": "domain:vdc-autolab.de",
       "lead_score": 94,
       "qualified": true,
@@ -37,8 +37,8 @@
       "send_status": "not_sent",
       "owner": "",
       "notes": "",
-      "created_at": "2026-09-30T15:21:40.857038+00:00",
-      "updated_at": "2026-09-30T15:21:40.857038+00:00"
+      "created_at": "2026-09-30T15:16:04.382884+00:00",
+      "updated_at": "2026-09-30T15:16:04.382884+00:00"
     },
     "best_contact": {
       "contact_id": "email:m.bauer@vdc-autolab.de",
@@ -130,97 +130,19 @@
         "relevant_signals": [],
         "signal_evidence": [],
         "is_relevant": true
-      }
-    ],
-    "audit": {
-      "errors": []
-    }
-  },
-  {
-    "company": {
-      "name": "Nordic BIM Consulting AS",
-      "domain": "nordicbim.no",
-      "industry": "Engineering Services",
-      "country": "Norway",
-      "employee_count": 45
-    },
-    "lead": {
-      "export_run_id": "run_20260930_152140_857003",
-      "lead_id": "domain:nordicbim.no",
-      "lead_score": 60,
-      "qualified": true,
-      "fit_score": 20,
-      "intent_score": 10,
-      "recency_score": 20,
-      "evidence_score": 10,
-      "qualification_threshold": 60,
-      "relevant_job_count": 1,
-      "total_job_count": 2,
-      "reasons": [
-        "BIM tech detected"
-      ],
-      "evidence": [
-        "BIM coordination workflow"
-      ],
-      "enrichment_status": "partial",
-      "providers_used": [
-        "apollo"
-      ],
-      "outreach_status": "not_started",
-      "approval_status": "pending_review",
-      "send_status": "not_sent",
-      "owner": "",
-      "notes": "",
-      "created_at": "2026-09-30T15:21:40.857038+00:00",
-      "updated_at": "2026-09-30T15:21:40.857038+00:00"
-    },
-    "best_contact": {
-      "contact_id": "email:erik.hansen@nordicbim.no",
-      "full_name": "Erik Hansen",
-      "job_title": "BIM Manager",
-      "work_email": "erik.hansen@nordicbim.no",
-      "email_status": "likely",
-      "email_confidence": 82,
-      "linkedin_url": "",
-      "contact_score": 80,
-      "buyer_role_match": "exact"
-    },
-    "contacts": [
+      },
       {
-        "contact_id": "email:erik.hansen@nordicbim.no",
-        "first_name": "Erik",
-        "last_name": "Hansen",
-        "full_name": "Erik Hansen",
-        "job_title": "BIM Manager",
-        "seniority": "Manager",
-        "department": "Digital Delivery",
-        "work_email": "erik.hansen@nordicbim.no",
-        "email_status": "likely",
-        "email_confidence": 82,
-        "linkedin_url": "",
-        "buyer_role_match": "exact",
-        "contact_score": 80,
-        "data_sources": [
-          "apollo"
-        ],
-        "is_best_contact": true,
-        "contact_rank": 1
-      }
-    ],
-    "jobs": [
-      {
-        "job_title": "BIM Coordinator",
-        "job_url": "https://boards.greenhouse.io/nordicbim/301",
-        "source": "greenhouse",
-        "source_company_key": "nordic-bim",
-        "location": "Oslo, Norway",
+        "job_title": "Dynamo Specialist",
+        "job_url": "https://jobs.lever.co/vdc-autolab/103",
+        "source": "lever",
+        "source_company_key": "vdc-autolab",
+        "location": "Munich, Germany",
         "employment_type": "",
         "posted_date": "",
         "seniority": "",
         "remote_status": "",
         "technologies": [
-          "Revit",
-          "Navisworks"
+          "Dynamo"
         ],
         "relevant_signals": [],
         "signal_evidence": [],

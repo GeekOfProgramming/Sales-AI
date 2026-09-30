@@ -1,0 +1,98 @@
+{
+  "email_casing_pair": [
+    {
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "full_name": "Jane Smith",
+      "job_title": "BIM Manager",
+      "company_name": "Acme",
+      "company_domain": "acme.com",
+      "work_email": "Jane.Smith@Acme.com",
+      "data_sources": ["apollo"]
+    },
+    {
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "full_name": "Jane Smith",
+      "job_title": "BIM Manager",
+      "company_name": "Acme",
+      "company_domain": "acme.com",
+      "work_email": "jane.smith@acme.com",
+      "data_sources": ["hunter"]
+    }
+  ],
+  "linkedin_canonical_pair": [
+    {
+      "first_name": "John",
+      "last_name": "Doe",
+      "full_name": "John Doe",
+      "job_title": "Director",
+      "company_domain": "acme.com",
+      "linkedin_url": "https://www.linkedin.com/in/johndoe/",
+      "data_sources": ["apollo"]
+    },
+    {
+      "first_name": "John",
+      "last_name": "Doe",
+      "full_name": "John Doe",
+      "job_title": "Director",
+      "company_domain": "acme.com",
+      "linkedin_url": "https://linkedin.com/in/johndoe",
+      "data_sources": ["hunter"]
+    }
+  ],
+  "provider_person_id_pair": [
+    {
+      "first_name": "Sam",
+      "last_name": "Wilson",
+      "company_domain": "acme.com",
+      "provider": "apollo",
+      "provider_person_id": "person_123"
+    },
+    {
+      "first_name": "Sam",
+      "last_name": "Wilson",
+      "company_domain": "acme.com",
+      "provider": "apollo",
+      "provider_person_id": "person_123"
+    }
+  ],
+  "weak_identity_pair": [
+    {
+      "first_name": "Alex",
+      "last_name": "Smith",
+      "full_name": "Alex Smith",
+      "job_title": "BIM Manager",
+      "company_name": "Acme",
+      "company_domain": "acme.com",
+      "provider": "apollo",
+      "data_sources": ["apollo"]
+    },
+    {
+      "first_name": "Alex",
+      "last_name": "Smith",
+      "full_name": "Alex Smith",
+      "job_title": "BIM Manager",
+      "company_name": "Acme",
+      "company_domain": "acme.com",
+      "provider": "hunter",
+      "data_sources": ["hunter"]
+    }
+  ],
+  "one_email_missing_pair": [
+    {
+      "first_name": "Chris",
+      "last_name": "Evans",
+      "full_name": "Chris Evans",
+      "company_domain": "acme.com",
+      "work_email": null
+    },
+    {
+      "first_name": "Chris",
+      "last_name": "Evans",
+      "full_name": "Chris Evans",
+      "company_domain": "acme.com",
+      "work_email": "chris.evans@acme.com"
+    }
+  ]
+}

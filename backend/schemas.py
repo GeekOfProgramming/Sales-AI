@@ -364,10 +364,15 @@ class CompanyLead(BaseModel):
     company_name_normalized: Optional[str] = None
     company_domain: Optional[str] = None
     source_company_keys: List[str] = Field(default_factory=list)
+    source_company_identities: List[str] = Field(default_factory=list)
 
     @property
     def source_company_key(self) -> Optional[str]:
         return self.source_company_keys[0] if self.source_company_keys else None
+
+    @property
+    def source_company_identity(self) -> Optional[str]:
+        return self.source_company_identities[0] if self.source_company_identities else None
 
     job_count: int = 0
     total_job_count: int = 0
@@ -395,6 +400,7 @@ class CompanyLead(BaseModel):
     lead_score: int = 0
 
     qualified: bool = False
+    qualification_threshold: int = 60
     scoring_reasons: List[str] = Field(default_factory=list)
 
 # ==========================================

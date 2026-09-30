@@ -186,6 +186,72 @@ async def test_same_name_different_company_stays_separate():
     assert len(contacts) == 2
 
 @pytest.mark.asyncio
+async def test_same_name_same_domain_no_strong_id_stays_separate():
+    """Regression: same full_name + same company_domain but no strong identity must NOT merge."""
+    c1 = ContactCandidate(
+        first_name="Alex", last_name="Smith", full_name="Alex Smith",
+        job_title="Project Lead", company_domain="acme.com", provider="apollo"
+    )
+    c2 = ContactCandidate(
+        first_name="Alex", last_name="Smith", full_name="Alex Smith",
+        job_title="Design Director", company_domain="acme.com", provider="hunter"
+    )
+
+    class MockApollo(BaseContactProvider):
+        def get_provider_name(self): return "apollo"
+        async def search_contacts(self, domain, titles, limit): return [c1]
+        async def find_work_email(self, fn, ln, dom, person_id=None): raise ProviderEmptyResult("none", "mock")
+        async def verify_email(self, email): raise ProviderEmptyResult("none", "mock")
+
+    class MockHunter(BaseContactProvider):
+        def get_provider_name(self): return "hunter"
+        async def search_contacts(self, domain, titles, limit): return [c2]
+        async def find_work_email(self, fn, ln, dom, person_id=None): raise ProviderEmptyResult("none", "mock")
+        async def verify_email(self, email): raise ProviderEmptyResult("none", "mock")
+
+    tracker = ProviderUsageTracker()
+    ranker = BuyerRoleRanker()
+    enricher = ContactEnricher([MockApollo(), MockHunter()], ranker, tracker)
+    errors = []
+
+    contacts = await enricher.discover_and_enrich("acme.com", max_contacts=10, errors=errors)
+    assert len(contacts) == 2, f"Expected 2 contacts, got {len(contacts)}: weak identity must not merge"
+
+@pytest.mark.asyncio
+async def test_same_name_same_title_different_provider_stays_separate():
+    """Regression: same name + same title + same domain + different provider + no email/LinkedIn → 2 contacts."""
+    c1 = ContactCandidate(
+        first_name="Alex", last_name="Smith", full_name="Alex Smith",
+        job_title="BIM Manager", company_domain="acme.com", provider="apollo"
+    )
+    c2 = ContactCandidate(
+        first_name="Alex", last_name="Smith", full_name="Alex Smith",
+        job_title="BIM Manager", company_domain="acme.com", provider="hunter"
+    )
+
+    class MockApollo(BaseContactProvider):
+        def get_provider_name(self): return "apollo"
+        async def search_contacts(self, domain, titles, limit): return [c1]
+        async def find_work_email(self, fn, ln, dom, person_id=None): raise ProviderEmptyResult("none", "mock")
+        async def verify_email(self, email): raise ProviderEmptyResult("none", "mock")
+
+    class MockHunter(BaseContactProvider):
+        def get_provider_name(self): return "hunter"
+        async def search_contacts(self, domain, titles, limit): return [c2]
+        async def find_work_email(self, fn, ln, dom, person_id=None): raise ProviderEmptyResult("none", "mock")
+        async def verify_email(self, email): raise ProviderEmptyResult("none", "mock")
+
+    tracker = ProviderUsageTracker()
+    ranker = BuyerRoleRanker()
+    enricher = ContactEnricher([MockApollo(), MockHunter()], ranker, tracker)
+    errors = []
+
+    contacts = await enricher.discover_and_enrich("acme.com", max_contacts=10, errors=errors)
+    assert len(contacts) == 2, f"Expected 2 contacts even with same name+title, got {len(contacts)}"
+    providers = sorted([c.provider for c in contacts])
+    assert providers == ["apollo", "hunter"], f"Expected both providers, got {providers}"
+
+@pytest.mark.asyncio
 async def test_no_api_keys_configured():
     # Clear env vars if set
     import os

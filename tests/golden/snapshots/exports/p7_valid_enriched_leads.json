@@ -1,0 +1,122 @@
+[
+  {
+    "company_name": "VDC Automation Lab GmbH",
+    "company_name_normalized": "vdc automation lab",
+    "company_domain": "vdc-autolab.de",
+    "source_company_keys": ["vdc-autolab"],
+    "source_company_identities": ["lever:vdc-autolab"],
+    "job_count": 4,
+    "total_job_count": 4,
+    "unique_job_count": 4,
+    "relevant_job_count": 3,
+    "job_titles": [
+      "Head of Digital Practice",
+      "Revit API Developer",
+      "Dynamo Specialist"
+    ],
+    "locations": [
+      "Munich, Germany",
+      "Remote"
+    ],
+    "technologies": [
+      "Revit",
+      "Dynamo",
+      "C#",
+      "Python"
+    ],
+    "signals": [
+      {
+        "signal": "revit_api",
+        "evidence_count": 3
+      }
+    ],
+    "evidence": [
+      "Develop Revit C# addins",
+      "Automate QA with Dynamo"
+    ],
+    "fit_score": 30,
+    "intent_score": 30,
+    "recency_score": 20,
+    "evidence_score": 14,
+    "lead_score": 94,
+    "qualification_threshold": 60,
+    "qualified": true,
+    "scoring_reasons": [
+      "High fit BIM role",
+      "Active Revit automation hiring"
+    ],
+    "company_enrichment": {
+      "company_name": "VDC Automation Lab GmbH",
+      "company_domain": "vdc-autolab.de",
+      "industry": "Architecture & Planning",
+      "employee_count": 120,
+      "country": "Germany"
+    },
+    "buyer_roles_searched": [
+      "Head of BIM",
+      "BIM Director"
+    ],
+    "contacts": [
+      {
+        "first_name": "Maximilian",
+        "last_name": "Bauer",
+        "full_name": "Maximilian Bauer",
+        "job_title": "Head of BIM & Digital Delivery",
+        "seniority": "Head",
+        "department": "Digital Practice",
+        "company_name": "VDC Automation Lab GmbH",
+        "company_domain": "vdc-autolab.de",
+        "work_email": "m.bauer@vdc-autolab.de",
+        "email_status": "verified",
+        "email_confidence": 98,
+        "linkedin_url": "https://linkedin.com/in/max-bauer-bim",
+        "buyer_role_match": "exact",
+        "contact_score": 95,
+        "data_sources": ["apollo"],
+        "is_best_contact": true
+      },
+      {
+        "first_name": "Anna",
+        "last_name": "Schmidt",
+        "full_name": "Anna Schmidt",
+        "job_title": "Lead BIM Software Engineer",
+        "seniority": "Lead",
+        "department": "Software",
+        "company_name": "VDC Automation Lab GmbH",
+        "company_domain": "vdc-autolab.de",
+        "work_email": "a.schmidt@vdc-autolab.de",
+        "email_status": "likely",
+        "email_confidence": 80,
+        "linkedin_url": "https://linkedin.com/in/anna-schmidt-eng",
+        "buyer_role_match": "strong",
+        "contact_score": 85,
+        "data_sources": ["hunter"],
+        "is_best_contact": false
+      }
+    ],
+    "best_contact": {
+      "first_name": "Maximilian",
+      "last_name": "Bauer",
+      "full_name": "Maximilian Bauer",
+      "job_title": "Head of BIM & Digital Delivery",
+      "seniority": "Head",
+      "department": "Digital Practice",
+      "company_name": "VDC Automation Lab GmbH",
+      "company_domain": "vdc-autolab.de",
+      "work_email": "m.bauer@vdc-autolab.de",
+      "email_status": "verified",
+      "email_confidence": 98,
+      "linkedin_url": "https://linkedin.com/in/max-bauer-bim",
+      "buyer_role_match": "exact",
+      "contact_score": 95,
+      "data_sources": ["apollo"],
+      "is_best_contact": true
+    },
+    "enrichment_status": "complete",
+    "providers_used": [
+      "apollo",
+      "hunter"
+    ],
+    "enrichment_errors": []
+  }
+]

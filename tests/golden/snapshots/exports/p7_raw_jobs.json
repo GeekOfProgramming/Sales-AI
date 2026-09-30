@@ -1,0 +1,38 @@
+[
+  {
+    "company_name": "VDC Automation Lab GmbH",
+    "company_domain": "vdc-autolab.de",
+    "source": "lever",
+    "source_company_key": "vdc-autolab",
+    "job_title": "Head of Digital Practice",
+    "job_url": "https://jobs.lever.co/vdc-autolab/101",
+    "location": "Munich, Germany",
+    "technologies": ["Revit", "Dynamo", "Python"],
+    "relevant_signals": [],
+    "evidence": ["Lead digital transformation"]
+  },
+  {
+    "company_name": "VDC Automation Lab GmbH",
+    "company_domain": "vdc-autolab.de",
+    "source": "lever",
+    "source_company_key": "vdc-autolab",
+    "job_title": "Revit API Developer",
+    "job_url": "https://jobs.lever.co/vdc-autolab/102",
+    "location": "Remote",
+    "technologies": ["Revit", "C#"],
+    "relevant_signals": [],
+    "evidence": ["Develop Revit C# plugins"]
+  },
+  {
+    "company_name": "VDC Automation Lab GmbH",
+    "company_domain": "vdc-autolab.de",
+    "source": "lever",
+    "source_company_key": "vdc-autolab",
+    "job_title": "Dynamo Specialist",
+    "job_url": "https://jobs.lever.co/vdc-autolab/103",
+    "location": "Munich, Germany",
+    "technologies": ["Dynamo"],
+    "relevant_signals": [],
+    "evidence": ["Automate Dynamo workflows"]
+  }
+]

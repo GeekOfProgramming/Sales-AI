@@ -23,7 +23,7 @@ class LeadExportRow(BaseModel):
     intent_score: int = 0
     recency_score: int = 0
     evidence_score: int = 0
-    qualification_threshold: int = 70
+    qualification_threshold: int = 60
     total_job_count: int = 0
     relevant_job_count: int = 0
     lead_reasons: str = ""
