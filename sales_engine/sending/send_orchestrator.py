@@ -204,10 +204,8 @@ class SendOrchestrator:
             )
         )
 
-        # 7. Prepare final body with opt-out footer if configured
+        # 7. Exact approved body transmission (P9-REG-012: zero post-approval mutations)
         final_body = draft.body
-        if self.opt_out_text and self.opt_out_text.strip():
-            final_body = f"{draft.body}\n\n---\n{self.opt_out_text.strip()}"
 
         # 8. Record pacing
         self.rate_limiter.record_send(1)

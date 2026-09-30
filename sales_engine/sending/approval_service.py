@@ -1,3 +1,4 @@
+import os
 import hashlib
 import json
 import uuid
@@ -77,10 +78,17 @@ class ApprovalService:
 
             # Safety: Do not overwrite an existing sent revision
             existing = self.store.get_draft(draft_id, revision)
-            if existing and existing.send_status == "sent":
-                continue
+            # Prepare final payload (including opt-out footer if configured) BEFORE review and fingerprinting
+            raw_body = d["body"].strip()
+            opt_out = d.get("opt_out_text") or os.environ.get("OUTREACH_OPT_OUT_TEXT")
+            if opt_out and opt_out.strip() and opt_out.strip() not in raw_body:
+                final_body = f"{raw_body}\n\n---\n{opt_out.strip()}"
+            else:
+                final_body = raw_body
 
-            content_hash = compute_content_fingerprint(d)
+            d_canonical = dict(d)
+            d_canonical["body"] = final_body
+            content_hash = compute_content_fingerprint(d_canonical)
 
             stored = StoredDraft(
                 draft_id=draft_id,
@@ -92,7 +100,7 @@ class ApprovalService:
                 recipient_email=d["recipient_email"].strip().lower(),
                 sender_email=d.get("sender_email"),
                 subject=d["subject"].strip(),
-                body=d["body"].strip(),
+                body=final_body,
                 service_used=d.get("service_used", ""),
                 personalization_notes=d.get("personalization_notes"),
                 evidence_refs=d.get("evidence_refs") or [],

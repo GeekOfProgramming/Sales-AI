@@ -24,6 +24,9 @@ class MockEmailSender(BaseEmailSender):
         self.simulate_connection_error = simulate_connection_error
         self.simulate_provider_error = simulate_provider_error
 
+    def get_send_count(self) -> int:
+        return len(self.sent_messages)
+
     def send_email(
         self,
         draft_id: str,

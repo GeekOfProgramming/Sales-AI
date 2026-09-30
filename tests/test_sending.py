@@ -598,3 +598,78 @@ def test_api_review_and_send_lifecycle(tmp_path, monkeypatch, sample_draft_dict)
     )
     assert send_res.status_code == 200
     assert send_res.json()["status"] == "dry_run"
+
+
+# =========================================================================
+# 11. CRITICAL REGRESSION: P9-REG-012
+# =========================================================================
+
+def test_p9_reg_012_sent_payload_hash_equals_approved_payload_hash(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    P9-REG-012: The exact payload (subject, body, recipient, sender) delivered to the provider
+    MUST match the content protected by the approval fingerprint (approved_content_hash).
+    Opt-out footers and signatures MUST be part of the payload BEFORE approval.
+    Any post-approval alteration strictly causes approval_stale and blocks sending.
+    """
+    monkeypatch.setenv("OUTREACH_OPT_OUT_TEXT", "Reply unsubscribe to stop receiving outreach.")
+    svc = ApprovalService(review_store)
+
+    # 1. Import draft with opt-out footer configured
+    imported = svc.import_drafts([sample_draft_dict], reviewer="importer")
+    draft = imported[0]
+    assert "Reply unsubscribe to stop receiving outreach." in draft.body
+
+    # 2. Human reviews and approves the full payload including footer
+    approved_draft = svc.approve_draft(draft.draft_id, revision=1, reviewer="compliance_officer")
+    assert approved_draft.approval_status == "approved"
+    assert approved_draft.approved_content_hash is not None
+
+    # 3. Send using MockEmailSender
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+    assert mock_sender.get_send_count() == 1
+
+    # 4. Verify sent payload hash matches approved_content_hash exactly
+    sent_delivery = mock_sender.sent_messages[0]
+    assert sent_delivery["body"] == approved_draft.body
+
+    sent_fingerprint = compute_content_fingerprint({
+        "draft_id": approved_draft.draft_id,
+        "revision": approved_draft.revision,
+        "lead_id": approved_draft.lead_id,
+        "contact_id": approved_draft.contact_id,
+        "recipient_email": sent_delivery["to_email"],
+        "sender_email": sent_delivery["from_email"],
+        "subject": sent_delivery["subject"],
+        "body": sent_delivery["body"],
+    })
+    assert sent_fingerprint == approved_draft.approved_content_hash
+
+    # 5. Adversarial mutation: tamper with draft body in DB post-approval
+    d2 = sample_draft_dict.copy()
+    d2["draft_id"] = "draft:tamper-001"
+    imported2 = svc.import_drafts([d2], reviewer="importer")
+    approved2 = svc.approve_draft(imported2[0].draft_id, revision=1, reviewer="approver")
+
+    # Manually tamper with body post-approval
+    review_store.update_draft_status(approved2.draft_id, revision=1, send_status="not_sent")
+    with review_store._get_connection() as conn:
+        conn.execute(
+            "UPDATE drafts SET body = ? WHERE draft_id = ? AND revision = ?",
+            ("Tampered body after approval", approved2.draft_id, 1),
+        )
+
+    # Attempt to send tampered draft
+    res_tampered = orchestrator.send_draft(approved2.draft_id, revision=1, dry_run=False)
+    assert res_tampered.status == "blocked"
+    assert res_tampered.error_type == "approval_stale"
+    assert mock_sender.get_send_count() == 1  # No additional send!
