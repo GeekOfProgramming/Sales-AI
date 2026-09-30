@@ -8,18 +8,14 @@ from typing import Dict, Any, Optional
 
 from sales_engine.sending.base_sender import BaseEmailSender
 from sales_engine.sending.schemas import SendResult
+from sales_engine.sending.sanitizer import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
 
 def sanitize_error(msg: str, secret_patterns: Optional[list] = None) -> str:
     """Removes sensitive credentials from error strings."""
-    sanitized = str(msg)
-    if secret_patterns:
-        for secret in secret_patterns:
-            if secret and str(secret).strip():
-                sanitized = sanitized.replace(str(secret).strip(), "********")
-    return sanitized[:300]
+    return sanitize_error_message(msg, extra_secrets=secret_patterns)
 
 
 class SMTPEmailSender(BaseEmailSender):

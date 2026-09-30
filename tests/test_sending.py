@@ -20,6 +20,7 @@ from sales_engine.sending import (
     StoredDraft,
     ReviewEvent,
     DraftEditRequest,
+    SendResult,
     compute_content_fingerprint,
 )
 
@@ -673,3 +674,269 @@ def test_p9_reg_012_sent_payload_hash_equals_approved_payload_hash(
     assert res_tampered.status == "blocked"
     assert res_tampered.error_type == "approval_stale"
     assert mock_sender.get_send_count() == 1  # No additional send!
+
+
+# =========================================================================
+# 12. ADVERSARIAL ATTACK PATH REGRESSIONS (Phase 9 Pre-Golden Hardening)
+# =========================================================================
+
+def test_adversarial_1_missing_sender_in_draft_blocks_or_matches_hash(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    Vulnerability 1: If sender inside Draft is empty/None, sending must either be blocked
+    or resolved to an exact match where actual provider hash == approved_content_hash.
+    """
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "outreach@pybim.com")
+    svc = ApprovalService(review_store)
+
+    # Test A: Import draft with explicit None sender -> resolved to trusted sender
+    d1 = sample_draft_dict.copy()
+    d1["draft_id"] = "draft:sender-none-01"
+    d1["sender_email"] = None
+    imported = svc.import_drafts([d1], reviewer="importer")
+    draft = imported[0]
+    assert draft.sender_email == "outreach@pybim.com"
+
+    approved = svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "sent"
+    sent_delivery = mock_sender.sent_messages[0]
+    assert sent_delivery["from_email"] == "outreach@pybim.com"
+
+    actual_hash = compute_content_fingerprint({
+        "draft_id": approved.draft_id,
+        "revision": approved.revision,
+        "lead_id": approved.lead_id,
+        "contact_id": approved.contact_id,
+        "recipient_email": sent_delivery["to_email"],
+        "sender_email": sent_delivery["from_email"],
+        "subject": sent_delivery["subject"],
+        "body": sent_delivery["body"],
+    })
+    assert actual_hash == approved.approved_content_hash
+
+    # Test B: If a draft in DB has an empty sender_email, SendValidator strictly blocks it
+    d2 = sample_draft_dict.copy()
+    d2["draft_id"] = "draft:sender-none-02"
+    imported2 = svc.import_drafts([d2], reviewer="importer")
+    draft2 = imported2[0]
+    approved2 = svc.approve_draft(draft2.draft_id, revision=1, reviewer="approver")
+
+    # Manually clear sender_email in DB
+    with review_store._get_connection() as conn:
+        conn.execute(
+            "UPDATE drafts SET sender_email = NULL WHERE draft_id = ? AND revision = ?",
+            (draft2.draft_id, 1),
+        )
+
+    res_blocked = orchestrator.send_draft(draft2.draft_id, revision=1, dry_run=False)
+    assert res_blocked.status == "failed" or res_blocked.status == "blocked"
+    assert res_blocked.error_type == "sender_config_missing"
+    assert mock_sender.get_send_count() == 1  # No additional send dispatched!
+
+
+def test_adversarial_2_obsolete_revision_cannot_be_approved_or_sent(
+    review_store, suppression_store, sample_draft_dict
+):
+    """
+    Vulnerability 2: Revision 2 is created, but someone attempts to approve or send Revision 1.
+    Must be strictly blocked with stale_revision error.
+    """
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:stale-rev-01"
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft_r1 = imported[0]
+
+    # Human edits draft -> Revision 2 created
+    draft_r2 = svc.edit_draft(
+        draft_r1.draft_id,
+        DraftEditRequest(
+            body="New updated body for revision 2.",
+            reviewer="editor",
+            note="Revision 2 update",
+        ),
+    )
+    assert draft_r2.revision == 2
+
+    # Attempting to approve obsolete revision 1 must raise ValueError (stale_revision)
+    with pytest.raises(ValueError, match="stale_revision"):
+        svc.approve_draft(draft_r1.draft_id, revision=1, reviewer="approver")
+
+    # If revision 1 was somehow marked approved, orchestrator must still refuse to send it
+    review_store.update_draft_status(
+        draft_r1.draft_id, revision=1,
+        approval_status="approved",
+        approved_content_hash="dummy_hash",
+        send_status="not_sent",
+    )
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft_r1.draft_id, revision=1, dry_run=False)
+    assert res.status == "blocked"
+    assert res.error_type == "stale_revision"
+    assert mock_sender.get_send_count() == 0
+
+
+def test_adversarial_3_reimport_sent_draft_cannot_overwrite_or_resend(
+    review_store, suppression_store, sample_draft_dict
+):
+    """
+    Vulnerability 3: Draft sent at revision 1. Same draft_id / revision=1 is re-imported
+    with a different recipient and body. Must NOT overwrite sent status, and cannot double-send.
+    """
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:reimport-exploit-01"
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft = imported[0]
+
+    # Approve and send Revision 1
+    svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res1 = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res1.status == "sent"
+    assert mock_sender.get_send_count() == 1
+
+    # Adversarial re-import with new recipient and body
+    exploit_dict = d.copy()
+    exploit_dict["recipient_email"] = "other@acme.com"
+    exploit_dict["body"] = "Different body to hijack delivery"
+    svc.import_drafts([exploit_dict], reviewer="attacker")
+
+    # Verify that existing draft is STILL sent and was NOT overwritten
+    persisted = review_store.get_draft(draft.draft_id, 1)
+    assert persisted.send_status == "sent"
+    assert persisted.recipient_email == d["recipient_email"].strip().lower()
+    assert persisted.body == draft.body
+
+    # Attempting to re-send must be rejected as already_sent
+    res2 = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res2.status == "already_sent"
+    assert mock_sender.get_send_count() == 1  # Total deliveries strictly remains 1!
+
+    # Direct save_draft on sent revision must raise ValueError
+    with pytest.raises(ValueError, match="Cannot overwrite immutable sent draft revision"):
+        review_store.save_draft(persisted)
+
+
+def test_adversarial_4_edit_body_preserves_opt_out_footer(
+    review_store, suppression_store, sample_draft_dict, monkeypatch
+):
+    """
+    Vulnerability 4: Opt-out is configured. Human editor edits draft body and omits footer.
+    The new revision MUST automatically preserve the opt-out footer.
+    """
+    footer_text = "Reply STOP to opt out of future communications."
+    monkeypatch.setenv("OUTREACH_OPT_OUT_TEXT", footer_text)
+    svc = ApprovalService(review_store)
+
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:optout-preserve-01"
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft_r1 = imported[0]
+    assert footer_text in draft_r1.body
+
+    # Unset env var temporarily to ensure footer is preserved from draft content
+    monkeypatch.delenv("OUTREACH_OPT_OUT_TEXT", raising=False)
+
+    # Human edits body and does NOT include the footer
+    draft_r2 = svc.edit_draft(
+        draft_r1.draft_id,
+        DraftEditRequest(
+            body="Hi Alex, here is our customized proposal for BIM engineering.",
+            reviewer="human_editor",
+            note="Updated pitch",
+        ),
+    )
+    # The footer MUST still be present in the new revision!
+    assert footer_text in draft_r2.body
+
+    # Approve and send
+    approved = svc.approve_draft(draft_r2.draft_id, revision=2, reviewer="approver")
+    mock_sender = MockEmailSender()
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=mock_sender,
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft_r2.draft_id, revision=2, dry_run=False)
+    assert res.status == "sent"
+    sent_msg = mock_sender.sent_messages[0]
+    assert footer_text in sent_msg["body"]
+
+
+def test_adversarial_5_provider_secrets_redacted_across_all_audit_logs(
+    review_store, suppression_store, sample_draft_dict
+):
+    """
+    Vulnerability 5: Provider returns error containing sensitive tokens/passwords.
+    All secrets MUST be redacted in SendResult, send_attempts, and review_events.
+    """
+    svc = ApprovalService(review_store)
+    d = sample_draft_dict.copy()
+    d["draft_id"] = "draft:secret-leak-01"
+    imported = svc.import_drafts([d], reviewer="importer")
+    draft = imported[0]
+    svc.approve_draft(draft.draft_id, revision=1, reviewer="approver")
+
+    # Custom mock sender that simulates an error leaking credentials
+    class LeakyMockSender(MockEmailSender):
+        def send_email(self, *args, **kwargs):
+            return SendResult(
+                draft_id=args[0] if args else kwargs.get("draft_id"),
+                revision=args[1] if len(args) > 1 else kwargs.get("revision", 1),
+                send_key=args[2] if len(args) > 2 else kwargs.get("send_key", ""),
+                status="failed",
+                provider="mock_provider",
+                error_type="auth_failure",
+                error_message="Connection rejected: smtp_password=SuperSecretPassword123 with Bearer secret-token-xyz-987654321",
+            )
+
+    orchestrator = SendOrchestrator(
+        review_store=review_store,
+        suppression_store=suppression_store,
+        sender=LeakyMockSender(),
+        email_send_enabled=True,
+    )
+    res = orchestrator.send_draft(draft.draft_id, revision=1, dry_run=False)
+    assert res.status == "failed"
+
+    # 1. Check SendResult
+    assert "SuperSecretPassword123" not in res.error_message
+    assert "secret-token-xyz-987654321" not in res.error_message
+    assert "********" in res.error_message
+
+    # 2. Check send_attempts DB record
+    attempts = review_store.get_send_attempts(draft.draft_id)
+    assert len(attempts) >= 1
+    assert "SuperSecretPassword123" not in attempts[0].error_message
+    assert "secret-token-xyz-987654321" not in attempts[0].error_message
+
+    # 3. Check review_events DB record
+    events = review_store.list_events(draft.draft_id)
+    fail_events = [e for e in events if e.action == "send_failed"]
+    assert len(fail_events) >= 1
+    assert "SuperSecretPassword123" not in (fail_events[0].review_note or "")
+    assert "secret-token-xyz-987654321" not in (fail_events[0].review_note or "")
+

@@ -23,6 +23,7 @@ class SendValidator:
         trusted_sender_email: Optional[str] = None,
         email_send_enabled: bool = False,
         dry_run: bool = False,
+        latest_revision: Optional[int] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Validates draft readiness before provider network call.
@@ -31,6 +32,14 @@ class SendValidator:
         # 1. Draft existence
         if draft is None:
             return False, "missing_recipient", "Draft does not exist"
+
+        # 1.1 Obsolete revision check
+        if latest_revision is not None and draft.revision < latest_revision:
+            return (
+                False,
+                "stale_revision",
+                f"Draft revision {draft.revision} is obsolete; current latest is {latest_revision}",
+            )
 
         # 2. Approval Status
         if draft.approval_status != "approved":
@@ -56,7 +65,36 @@ class SendValidator:
         if not EMAIL_REGEX.match(recip_email):
             return False, "invalid_recipient", f"Invalid recipient email format: '{recip_email}'"
 
-        # 5. Suppression check (Do-Not-Contact)
+        # 5. Sender Identity Validation
+        draft_sender = (draft.sender_email or "").strip().lower()
+        if not draft_sender:
+            return (
+                False,
+                "sender_config_missing",
+                "Draft sender_email is missing or empty; send payload sender must be explicit",
+            )
+        if not EMAIL_REGEX.match(draft_sender):
+            return (
+                False,
+                "sender_config_missing",
+                f"Invalid sender email format: '{draft_sender}'",
+            )
+        if trusted_sender_email:
+            trusted_lower = trusted_sender_email.strip().lower()
+            if not trusted_lower:
+                return (
+                    False,
+                    "sender_config_missing",
+                    "Trusted sender email is not configured",
+                )
+            if draft_sender != trusted_lower:
+                return (
+                    False,
+                    "sender_mismatch",
+                    f"Draft sender '{draft_sender}' does not match trusted sender '{trusted_lower}'",
+                )
+
+        # 6. Suppression check (Do-Not-Contact)
         if suppression_store.is_suppressed(recip_email):
             return (
                 False,
@@ -64,7 +102,7 @@ class SendValidator:
                 f"Recipient {recip_email} is on the do-not-contact suppression list",
             )
 
-        # 6. Approval Fingerprint (Stale Approval Prevention)
+        # 7. Approval Fingerprint (Stale Approval Prevention)
         if not draft.approved_content_hash:
             return (
                 False,
@@ -79,17 +117,6 @@ class SendValidator:
                 "approval_stale",
                 "Draft content has been modified since approval (fingerprint mismatch)",
             )
-
-        # 7. Sender Identity Validation
-        if trusted_sender_email:
-            trusted_lower = trusted_sender_email.strip().lower()
-            draft_sender = (draft.sender_email or "").strip().lower()
-            if draft_sender and draft_sender != trusted_lower:
-                return (
-                    False,
-                    "sender_mismatch",
-                    f"Draft sender '{draft_sender}' does not match trusted sender '{trusted_lower}'",
-                )
 
         # 8. Subject / Body integrity & Placeholder checks
         if not draft.subject or not draft.subject.strip():

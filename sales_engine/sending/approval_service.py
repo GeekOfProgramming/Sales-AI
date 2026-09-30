@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
+import re
 from sales_engine.sending.schemas import (
     StoredDraft,
     ReviewEvent,
@@ -14,6 +15,20 @@ from sales_engine.sending.schemas import (
     OutreachStatus,
 )
 from sales_engine.sending.review_store import ReviewStore
+
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def prepare_final_send_payload(body: str, opt_out_text: Optional[str] = None) -> str:
+    """
+    Canonical preparation of send payload before review, fingerprinting, and approval.
+    Appends server-owned opt-out footer if configured and not already present.
+    """
+    clean_body = body.strip()
+    opt_out = (opt_out_text or os.environ.get("OUTREACH_OPT_OUT_TEXT") or "").strip()
+    if opt_out and opt_out not in clean_body:
+        return f"{clean_body}\n\n---\n{opt_out}"
+    return clean_body
 
 
 def compute_content_fingerprint(draft: StoredDraft | Dict[str, Any]) -> str:
@@ -76,19 +91,34 @@ class ApprovalService:
             draft_id = d.get("draft_id") or f"draft:{uuid.uuid4().hex[:12]}"
             revision = int(d.get("revision", 1))
 
-            # Safety: Do not overwrite an existing sent revision
-            existing = self.store.get_draft(draft_id, revision)
-            # Prepare final payload (including opt-out footer if configured) BEFORE review and fingerprinting
-            raw_body = d["body"].strip()
-            opt_out = d.get("opt_out_text") or os.environ.get("OUTREACH_OPT_OUT_TEXT")
-            if opt_out and opt_out.strip() and opt_out.strip() not in raw_body:
-                final_body = f"{raw_body}\n\n---\n{opt_out.strip()}"
-            else:
-                final_body = raw_body
+            # 1. Finalize sender identity BEFORE review/approval
+            trusted_sender = os.environ.get("SMTP_FROM_EMAIL", "").strip().lower()
+            resolved_sender = (
+                d.get("sender_email")
+                or trusted_sender
+                or "outreach@pybim.com"
+            ).strip().lower()
+
+            # 2. Canonical payload preparation (opt-out footer incorporated before review)
+            final_body = prepare_final_send_payload(d["body"], d.get("opt_out_text"))
 
             d_canonical = dict(d)
             d_canonical["body"] = final_body
+            d_canonical["sender_email"] = resolved_sender
             content_hash = compute_content_fingerprint(d_canonical)
+
+            # 3. Immutability and conflict guard against overwriting existing drafts
+            existing = self.store.get_draft(draft_id, revision)
+            if existing:
+                if existing.send_status == "sent":
+                    # Sent revisions are strictly immutable; cannot overwrite
+                    continue
+                if existing.content_hash == content_hash:
+                    # Idempotent re-import of identical revision
+                    imported.append(existing)
+                    continue
+                # If content differs for same revision, reject overwrite
+                continue
 
             stored = StoredDraft(
                 draft_id=draft_id,
@@ -98,7 +128,7 @@ class ApprovalService:
                 recipient_name=d["recipient_name"],
                 recipient_title=d.get("recipient_title"),
                 recipient_email=d["recipient_email"].strip().lower(),
-                sender_email=d.get("sender_email"),
+                sender_email=resolved_sender,
                 subject=d["subject"].strip(),
                 body=final_body,
                 service_used=d.get("service_used", ""),
@@ -153,12 +183,18 @@ class ApprovalService:
         now_iso = datetime.now(timezone.utc).isoformat()
         new_rev = latest.revision + 1
 
-        # Apply edits
+        # Apply edits with canonical send payload preparation (preserving opt-out footer)
         new_subject = edit.subject.strip() if edit.subject is not None else latest.subject
-        new_body = edit.body.strip() if edit.body is not None else latest.body
+        raw_new_body = edit.body if edit.body is not None else latest.body
+        existing_footer = None
+        if "\n\n---\n" in latest.body:
+            existing_footer = latest.body.split("\n\n---\n", 1)[1].strip()
+        new_body = prepare_final_send_payload(raw_new_body, opt_out_text=existing_footer)
         new_notes = edit.personalization_notes if edit.personalization_notes is not None else latest.personalization_notes
         new_recip_name = edit.recipient_name if edit.recipient_name is not None else latest.recipient_name
         new_recip_email = edit.recipient_email.strip().lower() if edit.recipient_email is not None else latest.recipient_email
+        trusted_sender = os.environ.get("SMTP_FROM_EMAIL", "").strip().lower()
+        sender_email = latest.sender_email or trusted_sender or "outreach@pybim.com"
 
         # Phase 8 validation reuse: check placeholders and basic lengths
         for bad_placeholder in ["{{", "}}", "<NAME>", "[COMPANY]", "<COMPANY>"]:
@@ -173,6 +209,7 @@ class ApprovalService:
             "personalization_notes": new_notes,
             "recipient_name": new_recip_name,
             "recipient_email": new_recip_email,
+            "sender_email": sender_email,
         })
         new_content_hash = compute_content_fingerprint(draft_dict)
 
@@ -184,7 +221,7 @@ class ApprovalService:
             recipient_name=new_recip_name,
             recipient_title=latest.recipient_title,
             recipient_email=new_recip_email,
-            sender_email=latest.sender_email,
+            sender_email=sender_email,
             subject=new_subject,
             body=new_body,
             service_used=latest.service_used,
@@ -233,8 +270,36 @@ class ApprovalService:
         if not draft:
             raise ValueError(f"Draft {draft_id} revision {revision} not found")
 
+        # 1. Obsolete revision check: only the latest revision may be approved!
+        latest = self.store.get_draft(draft_id)
+        if latest and revision < latest.revision:
+            raise ValueError(
+                f"stale_revision: Cannot approve obsolete revision {revision} of draft {draft_id}; "
+                f"current latest revision is {latest.revision}"
+            )
+
         if draft.send_status == "sent":
             raise ValueError("Draft has already been sent; cannot re-approve")
+
+        # 2. Pre-approval validation (Section 6)
+        if not draft.subject or not draft.subject.strip():
+            raise ValueError("Draft subject is empty")
+        if len(draft.subject) > 60:
+            raise ValueError(f"Subject length ({len(draft.subject)}) exceeds 60 characters limit")
+        if not draft.body or not draft.body.strip():
+            raise ValueError("Draft body is empty")
+        if len(draft.body.split()) > 160:
+            raise ValueError(f"Body length ({len(draft.body.split())} words) exceeds 160 words limit")
+
+        for bad in ["{{", "}}", "<NAME>", "[COMPANY]", "<COMPANY>"]:
+            if bad in draft.subject or bad in draft.body:
+                raise ValueError(f"Draft contains unresolved template placeholder: '{bad}'")
+
+        if not draft.recipient_email or not EMAIL_REGEX.match(draft.recipient_email):
+            raise ValueError(f"Draft recipient_email is invalid: '{draft.recipient_email}'")
+
+        if not draft.sender_email:
+            raise ValueError("Draft sender_email must be finalized before approval")
 
         now_iso = datetime.now(timezone.utc).isoformat()
         # Compute exact content fingerprint at moment of approval
@@ -280,6 +345,14 @@ class ApprovalService:
         if not draft:
             raise ValueError(f"Draft {draft_id} revision {revision} not found")
 
+        # Obsolete revision check
+        latest = self.store.get_draft(draft_id)
+        if latest and revision < latest.revision:
+            raise ValueError(
+                f"stale_revision: Cannot operate on obsolete revision {revision} of draft {draft_id}; "
+                f"current latest is {latest.revision}"
+            )
+
         now_iso = datetime.now(timezone.utc).isoformat()
         updated = self.store.update_draft_status(
             draft_id=draft_id,
@@ -318,6 +391,14 @@ class ApprovalService:
         draft = self.store.get_draft(draft_id, revision)
         if not draft:
             raise ValueError(f"Draft {draft_id} revision {revision} not found")
+
+        # Obsolete revision check
+        latest = self.store.get_draft(draft_id)
+        if latest and revision < latest.revision:
+            raise ValueError(
+                f"stale_revision: Cannot operate on obsolete revision {revision} of draft {draft_id}; "
+                f"current latest is {latest.revision}"
+            )
 
         now_iso = datetime.now(timezone.utc).isoformat()
         updated = self.store.update_draft_status(

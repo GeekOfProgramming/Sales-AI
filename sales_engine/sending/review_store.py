@@ -12,6 +12,7 @@ from sales_engine.sending.schemas import (
     SendAttempt,
     SuppressionEntry,
 )
+from sales_engine.sending.sanitizer import sanitize_error_message
 
 def get_default_db_path() -> Path:
     env_path = os.getenv("SALES_OUTREACH_DB")
@@ -128,6 +129,25 @@ class ReviewStore:
 
     def save_draft(self, draft: StoredDraft) -> StoredDraft:
         with self._lock, self._get_connection() as conn:
+            # Immutability and conflict verification
+            cur = conn.execute(
+                "SELECT send_status, content_hash FROM drafts WHERE draft_id = ? AND revision = ?",
+                (draft.draft_id, draft.revision),
+            )
+            row = cur.fetchone()
+            if row:
+                existing_status = row["send_status"]
+                existing_hash = row["content_hash"]
+                if existing_status == "sent":
+                    raise ValueError(
+                        f"Cannot overwrite immutable sent draft revision: {draft.draft_id} r{draft.revision}"
+                    )
+                if existing_hash != draft.content_hash:
+                    raise ValueError(
+                        f"revision_conflict: Cannot overwrite existing revision {draft.revision} "
+                        f"of draft {draft.draft_id} with different content; create a new revision instead."
+                    )
+
             conn.execute(
                 """
                 INSERT OR REPLACE INTO drafts (
@@ -312,7 +332,7 @@ class ReviewStore:
                     event.previous_status,
                     event.new_status,
                     event.reviewer,
-                    event.review_note,
+                    sanitize_error_message(event.review_note) if event.review_note else None,
                     event.created_at,
                 ),
             )
@@ -351,6 +371,8 @@ class ReviewStore:
         return self.list_events(draft_id=draft_id)
 
     def record_send_attempt(self, attempt: SendAttempt):
+        from sales_engine.sending.sanitizer import sanitize_error_message
+        sanitized_err = sanitize_error_message(attempt.error_message) if attempt.error_message else None
         with self._lock, self._get_connection() as conn:
             conn.execute(
                 """
@@ -371,7 +393,7 @@ class ReviewStore:
                     attempt.sender_email,
                     attempt.status,
                     attempt.error_type,
-                    attempt.error_message,
+                    sanitized_err,
                     attempt.provider_message_id,
                     attempt.attempted_at,
                     attempt.completed_at,

@@ -17,6 +17,8 @@ from sales_engine.sending.suppression_store import SuppressionStore
 from sales_engine.sending.send_validator import SendValidator
 from sales_engine.sending.base_sender import BaseEmailSender
 from sales_engine.sending.smtp_sender import SMTPEmailSender
+from sales_engine.sending.approval_service import compute_content_fingerprint
+from sales_engine.sending.sanitizer import sanitize_error_message
 from sales_engine.sending.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,19 @@ class SendOrchestrator:
             else f"{draft_id}:{revision}:unknown"
         )
 
+        # 0. Obsolete revision check: cannot send older revision if newer exists
+        latest = self.store.get_draft(draft_id)
+        if latest and draft and draft.revision < latest.revision:
+            return SendResult(
+                draft_id=draft_id,
+                revision=revision,
+                send_key=send_key,
+                status="blocked",
+                error_type="stale_revision",
+                error_message=f"Cannot send obsolete revision {revision}; current latest revision is {latest.revision}",
+                dry_run=dry_run,
+            )
+
         # 1. Idempotency Check: Already successfully sent?
         if draft and self.store.has_successful_send(send_key):
             return SendResult(
@@ -89,10 +104,11 @@ class SendOrchestrator:
             trusted_sender_email=self.from_email,
             email_send_enabled=self.email_send_enabled,
             dry_run=dry_run,
+            latest_revision=latest.revision if latest else None,
         )
 
         if not is_valid:
-            attempt_status = "blocked" if err_type in ("suppressed_recipient", "approval_stale", "not_approved") else "failed"
+            attempt_status = "blocked" if err_type in ("suppressed_recipient", "approval_stale", "not_approved", "stale_revision") else "failed"
 
             # Record attempt in DB
             self.store.record_send_attempt(
@@ -207,16 +223,40 @@ class SendOrchestrator:
         # 7. Exact approved body transmission (P9-REG-012: zero post-approval mutations)
         final_body = draft.body
 
-        # 8. Record pacing
+        # 8. Provider payload fingerprint integrity gate (P9-REG-012)
+        provider_payload_fingerprint = compute_content_fingerprint({
+            "draft_id": draft.draft_id,
+            "revision": draft.revision,
+            "lead_id": draft.lead_id,
+            "contact_id": draft.contact_id,
+            "recipient_email": draft.recipient_email,
+            "sender_email": draft.sender_email,
+            "subject": draft.subject,
+            "body": final_body,
+        })
+        if provider_payload_fingerprint != draft.approved_content_hash:
+            self.store.release_send_lock(send_key)
+            self.store.update_draft_status(draft.draft_id, draft.revision, send_status="blocked")
+            return SendResult(
+                draft_id=draft.draft_id,
+                revision=draft.revision,
+                send_key=send_key,
+                status="blocked",
+                error_type="approval_stale",
+                error_message="Actual provider payload fingerprint does not match approved_content_hash",
+                dry_run=dry_run,
+            )
+
+        # 9. Record pacing
         self.rate_limiter.record_send(1)
 
-        # 9. Provider Dispatch
+        # 10. Provider Dispatch (strictly using draft.sender_email)
         send_res = self.sender.send_email(
             draft_id=draft.draft_id,
             revision=draft.revision,
             send_key=send_key,
             to_email=draft.recipient_email,
-            from_email=self.from_email,
+            from_email=draft.sender_email,
             from_name=self.from_name,
             subject=draft.subject,
             body=final_body,
@@ -224,7 +264,7 @@ class SendOrchestrator:
 
         completed_iso = datetime.now(timezone.utc).isoformat()
 
-        # 10. Process Provider Outcome
+        # 11. Process Provider Outcome
         if send_res.status == "sent":
             self.store.mark_send_lock_sent(send_key)
             self.store.update_draft_status(
@@ -242,7 +282,7 @@ class SendOrchestrator:
                     revision=draft.revision,
                     provider=send_res.provider,
                     recipient_email=draft.recipient_email,
-                    sender_email=self.from_email,
+                    sender_email=draft.sender_email,
                     status="sent",
                     provider_message_id=send_res.provider_message_id,
                     attempted_at=now_iso,
@@ -271,6 +311,9 @@ class SendOrchestrator:
                 send_status="failed",
                 outreach_status="send_failed",
             )
+            sanitized_err = sanitize_error_message(send_res.error_message)
+            send_res.error_message = sanitized_err
+
             self.store.record_send_attempt(
                 SendAttempt(
                     attempt_id=f"att_{uuid.uuid4().hex[:12]}",
@@ -279,10 +322,10 @@ class SendOrchestrator:
                     revision=draft.revision,
                     provider=send_res.provider,
                     recipient_email=draft.recipient_email,
-                    sender_email=self.from_email,
+                    sender_email=draft.sender_email,
                     status="failed",
                     error_type=send_res.error_type,
-                    error_message=send_res.error_message,
+                    error_message=sanitized_err,
                     attempted_at=now_iso,
                     completed_at=completed_iso,
                 )
@@ -296,7 +339,7 @@ class SendOrchestrator:
                     previous_status="sending",
                     new_status="failed",
                     reviewer=reviewer or "system",
-                    review_note=f"Send failed: {send_res.error_message}",
+                    review_note=f"Send failed: {sanitized_err}",
                     created_at=completed_iso,
                 )
             )
