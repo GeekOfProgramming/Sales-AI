@@ -1,8 +1,8 @@
 {
   "phase": "Phase 9",
   "description": "Human Review, Approval, Safe Sending & Audit Trail",
-  "generated_at": "2026-09-30T17:02:40.142422+00:00",
-  "git_commit": "97253ef",
+  "generated_at": "2026-09-30T17:08:11.745865+00:00",
+  "git_commit": "dae1863",
   "total_cases": 16,
   "passed": 15,
   "failed": 0,
@@ -43,7 +43,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.088
+      "execution_time_s": 0.066
     },
     {
       "case_id": "P9-REVIEW-002",
@@ -67,7 +67,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.112
+      "execution_time_s": 0.096
     },
     {
       "case_id": "P9-APPROVE-001",
@@ -91,7 +91,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.092
+      "execution_time_s": 0.082
     },
     {
       "case_id": "P9-APPROVE-002",
@@ -111,7 +111,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.099
+      "execution_time_s": 0.085
     },
     {
       "case_id": "P9-SEND-001",
@@ -133,7 +133,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.104
+      "execution_time_s": 0.091
     },
     {
       "case_id": "P9-SEND-002",
@@ -155,7 +155,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.266
+      "execution_time_s": 0.199
     },
     {
       "case_id": "P9-SEND-003",
@@ -175,7 +175,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.079
+      "execution_time_s": 0.062
     },
     {
       "case_id": "P9-SEND-004",
@@ -197,7 +197,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.104
+      "execution_time_s": 0.084
     },
     {
       "case_id": "P9-SEND-005",
@@ -217,7 +217,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.137
+      "execution_time_s": 0.096
     },
     {
       "case_id": "P9-SUPPRESS-001",
@@ -237,7 +237,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.109
+      "execution_time_s": 0.084
     },
     {
       "case_id": "P9-IDEMP-001",
@@ -257,7 +257,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.13
+      "execution_time_s": 0.103
     },
     {
       "case_id": "P9-BATCH-001",
@@ -279,7 +279,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.354
+      "execution_time_s": 0.24
     },
     {
       "case_id": "P9-SEC-001",
@@ -299,7 +299,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.058
+      "execution_time_s": 0.05
     },
     {
       "case_id": "P9-WF-001",
@@ -321,7 +321,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.137
+      "execution_time_s": 0.108
     },
     {
       "case_id": "P9-NOLLM-001",
@@ -339,7 +339,7 @@
       },
       "differences": [],
       "reason": "",
-      "execution_time_s": 0.011
+      "execution_time_s": 0.008
     },
     {
       "case_id": "P9-LIVE-SMTP-001",

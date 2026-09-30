@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 17:02:40 UTC
-- **Git Commit:** `97253ef`
+- **Time:** 21:40:09 UTC
+- **Git Commit:** `dae1863`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,8 +14,8 @@
 - **Live Tests Executed:** No
 
 ## Summary
-- **Total Cases:** 286
-- **Passed:** 270
+- **Total Cases:** 289
+- **Passed:** 273
 - **Failed:** 0
 - **Review Required:** 4
 - **Deferred (Model Limitation):** 7
@@ -31,7 +31,7 @@
 | Phase 5 | 27 | 26 | 0 | 1 | 0 | 0 |
 | Phase 6 | 43 | 40 | 0 | 1 | 0 | 2 |
 | Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
-| Phase 8 | 95 | 90 | 0 | 0 | 5 | 0 |
+| Phase 8 | 98 | 93 | 0 | 0 | 5 | 0 |
 | Phase 9 | 16 | 15 | 0 | 0 | 0 | 1 |
 
 ## Phase 7 Reconciliation & Case Count Model
@@ -45,9 +45,9 @@ To ensure 100% auditability across test suites and golden sets, the Phase 7 coun
 
 ## Phase 8 Case Count & Architecture Model
 Phase 8 implements personalized cold email draft generation with strict deterministic isolation:
-- **Total Cases in Catalog (`tests/golden/phase8_outreach.json` & `phase8_latest.json`):** 95 cases
+- **Total Cases in Catalog (`tests/golden/phase8_outreach.json` & `phase8_latest.json`):** 98 cases
   - **Deterministic Acceptance & Behavioral Cases:** 79 cases passed (covering main golden drafting, eligibility boundaries, contact and lead identity preservation, active service gating, deterministic evidence citations, prompt injection traps, parsing retry, workflow safety, batch resilience, privacy scrubbing, error taxonomy, and Phase 7 handoff).
-  - **Mandatory Regression Invariants (`P8-REG-001` .. `011`):** 11 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, deterministic ordering, missing location non-fabrication, missing contact title non-fabrication, and external company/contact untrusted delimiter containment).
+  - **Mandatory Regression Invariants (`P8-REG-001` .. `014`):** 14 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, deterministic ordering, missing location non-fabrication, missing contact title non-fabrication, external company/contact untrusted delimiter containment, complete prompt trust boundary, missing recipient name non-fabrication, and structured service explicit active status enforcement).
   - **Semantic Deferred Quality (`P8-SEM-001` .. `005`):** 5 cases marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, tone differentiation, and multilingual drafting deferred for high-capacity LLM review).
 - **False Pass Count:** 0 (dynamically verified and computed by execution-driven reporting engine).
 - **Unmapped Deterministic Cases:** 0 (all deterministic cases traced to executable pytest nodes).
@@ -6458,2976 +6458,6 @@ _(None / In sync)_
 Phase 7 Golden Case: Empty CSV Headers
 
 ---
-### P8-DRAFT-001 — Strong BIM Automation Signal
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-DRAFT-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Strong BIM Automation Signal (test: tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation)
-
----
-### P8-ELIG-001 — Qualified and Verified Allowed
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
-  "execution_time_s": 0.003
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Qualified and Verified Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified)
-
----
-### P8-ELIG-002 — Qualified and Likely Allowed
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
-  "execution_time_s": 0.003
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Qualified and Likely Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely)
-
----
-### P8-ELIG-003 — Unqualified Lead Skipped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Unqualified Lead Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead)
-
----
-### P8-ELIG-004 — No Best Contact Skipped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Best Contact Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact)
-
----
-### P8-ELIG-005 — No Work Email Skipped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Work Email Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email)
-
----
-### P8-ELIG-006 — Risky Email Skipped by Default
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-006"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Risky Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped)
-
----
-### P8-ELIG-007 — Unknown Email Skipped by Default
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-007"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Unknown Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped)
-
----
-### P8-ELIG-008 — Preview Override Without Fabrication
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ELIG-008"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
-  "execution_time_s": 0.003
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Preview Override Without Fabrication (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication)
-
----
-### P8-ID-001 — Lead ID Preserved
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ID-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Lead ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
-
----
-### P8-ID-002 — Contact ID Preserved
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ID-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Contact ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
-
----
-### P8-ID-003 — Recipient Email Preserved
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ID-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Recipient Email Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
-
----
-### P8-ID-004 — Recipient Name and Title Bound to Same Contact
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ID-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Recipient Name and Title Bound to Same Contact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
-
----
-### P8-ID-005 — Explicit Contact ID Belongs to Lead
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ID-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Explicit Contact ID Belongs to Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation)
-
----
-### P8-REG-001 — Wrong-Company Same-Title Job Contamination
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Wrong-Company Same-Title Job Contamination (test: tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job)
-
----
-### P8-COMPANY-001 — Canonical Domain Match
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-COMPANY-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Canonical Domain Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match)
-
----
-### P8-COMPANY-002 — ATS Namespaced Match
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-COMPANY-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: ATS Namespaced Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match)
-
----
-### P8-COMPANY-003 — ATS Namespace Mismatch
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-COMPANY-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: ATS Namespace Mismatch (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch)
-
----
-### P8-COMPANY-004 — Conservative Name Fallback
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-COMPANY-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Conservative Name Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback)
-
----
-### P8-REG-004 — API Raw Jobs Handoff
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: API Raw Jobs Handoff (test: tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff)
-
----
-### P8-JOB-001 — Relevant Jobs Filter
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-JOB-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Relevant Jobs Filter (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only)
-
----
-### P8-JOB-002 — No Raw Jobs Safe Fallback
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-JOB-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Raw Jobs Safe Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback)
-
----
-### P8-REG-005 — Phase 5 Evidence Preservation
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Phase 5 Evidence Preservation (test: tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation)
-
----
-### P8-REG-006 — Phase 5 Signal Schema
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-006"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Phase 5 Signal Schema (test: tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema)
-
----
-### P8-EVID-001 — StructuredJob Signal Evidence Extracted
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-EVID-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: StructuredJob Signal Evidence Extracted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence)
-
----
-### P8-EVID-002 — Unknown Evidence Reference Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-EVID-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Unknown Evidence Reference Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected)
-
----
-### P8-EVID-003 — Duplicate Evidence Deterministically Handled
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-EVID-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Duplicate Evidence Deterministically Handled (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling)
-
----
-### P8-REG-003 — No Fabricated BIM/Revit Technology
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Fabricated BIM/Revit Technology (test: tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology)
-
----
-### P8-FAB-001 — No Fake Metrics in Context
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-FAB-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Fake Metrics in Context (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics)
-
----
-### P8-FAB-002 — No Fake Relationship Claims
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-FAB-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Fake Relationship Claims (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims)
-
----
-### P8-SVC-001 — Active Service Accepted
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-SVC-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Active Service Accepted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted)
-
----
-### P8-SVC-002 — In-Development Service Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-SVC-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: In-Development Service Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected)
-
----
-### P8-REG-002 — Active Service Substring Bypass Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Active Service Substring Bypass Rejected (test: tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass)
-
----
-### P8-SVC-004 — CTA Offering Rejected as Active Service
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-SVC-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: CTA Offering Rejected as Active Service (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected)
-
----
-### P8-SVC-005 — Missing Offering Status Rejected as Active
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-SVC-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected",
-  "execution_time_s": 0.0
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Missing Offering Status Rejected as Active (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected)
-
----
-### P8-SVC-006 — No Active Service Skips Lead
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-SVC-006"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: No Active Service Skips Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead)
-
----
-### P8-CTX-001 — Deterministic Context Generation
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-CTX-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Deterministic Context Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context)
-
----
-### P8-REG-008 — Deterministic Evidence Ordering
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-008"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Deterministic Evidence Ordering (test: tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering)
-
----
-### P8-REG-007 — SOURCE_DATA Delimiter Injection Escaping
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-007"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: SOURCE_DATA Delimiter Injection Escaping (test: tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection)
-
----
-### P8-INJECT-001 — Prompt Injection Ignore Instructions Trapped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-INJECT-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Prompt Injection Ignore Instructions Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
-
----
-### P8-INJECT-002 — Prompt Injection Recipient Override Trapped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-INJECT-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Prompt Injection Recipient Override Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
-
----
-### P8-INJECT-003 — Prompt Injection Auto Approve Trapped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-INJECT-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Prompt Injection Auto Approve Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
-
----
-### P8-INJECT-004 — Prompt Injection Send Immediately Trapped
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-INJECT-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Prompt Injection Send Immediately Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
-
----
-### P8-PROMPT-001 — Sales Outreach Environment Isolated
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PROMPT-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Sales Outreach Environment Isolated (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment)
-
----
-### P8-PROMPT-002 — Tone Preset Mapping
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PROMPT-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Tone Preset Mapping (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets)
-
----
-### P8-PROMPT-003 — Language Preset Supported
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PROMPT-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Language Preset Supported (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset)
-
----
-### P8-PARSE-001 — Valid JSON Single Parse
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PARSE-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Valid JSON Single Parse (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call)
-
----
-### P8-PARSE-002 — Invalid Then Repaired JSON Retry
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PARSE-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Invalid Then Repaired JSON Retry (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json)
-
----
-### P8-PARSE-003 — Two Invalid Responses Fail Safely
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PARSE-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Two Invalid Responses Fail Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely)
-
----
-### P8-VAL-001 — Empty Subject Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Empty Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-002 — Empty Body Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Empty Body Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-003 — Subject Exceeding 60 Characters Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Subject Exceeding 60 Characters Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-004 — Body Exceeding 160 Words Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Body Exceeding 160 Words Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-005 — Fake Re/Fwd Prefix Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Fake Re/Fwd Prefix Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-006 — All Caps Subject Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-006"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: All Caps Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-007 — Unresolved Placeholders Rejected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-007"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Unresolved Placeholders Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-008 — Identity Mutation Invariant Protected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-008"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Identity Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-009 — Recipient Email Mutation Invariant Protected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-009"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Recipient Email Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-VAL-010 — Workflow Mutation Invariant Protected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-VAL-010"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Workflow Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
-
----
-### P8-WF-001 — Approval Status Always Pending Review
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-WF-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Approval Status Always Pending Review (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)
-
----
-### P8-WF-002 — Send Status Always Not Sent
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-WF-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Send Status Always Not Sent (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)
-
----
-### P8-WF-003 — Workflow Projection Draft Ready
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-WF-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Workflow Projection Draft Ready (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety)
-
----
-### P8-WF-004 — Zero Sending Code Path Static Verification
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-WF-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Zero Sending Code Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification)
-
----
-### P8-WF-005 — Zero Auto Approval Path Static Verification
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-WF-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Zero Auto Approval Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification)
-
----
-### P8-IDEMP-001 — Deterministic Draft ID Generation
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-IDEMP-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Deterministic Draft ID Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
-
----
-### P8-IDEMP-002 — Revision Mutation Changes Draft ID
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-IDEMP-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Revision Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
-
----
-### P8-IDEMP-003 — Prompt Version Mutation Changes Draft ID
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-IDEMP-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Prompt Version Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
-
----
-### P8-BATCH-001 — Multiple Successful Leads Batch Processing
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-BATCH-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Multiple Successful Leads Batch Processing (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing)
-
----
-### P8-BATCH-002 — Partial Failure Batch Resilience
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-BATCH-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Partial Failure Batch Resilience (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure)
-
----
-### P8-BATCH-003 — Max 50 Drafts Respected
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-BATCH-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit",
-  "execution_time_s": 0.003
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Max 50 Drafts Respected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit)
-
----
-### P8-PRIV-001 — Personal Contact Data Excluded
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PRIV-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Personal Contact Data Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
-
----
-### P8-PRIV-002 — Secrets and Tokens Excluded
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PRIV-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Secrets and Tokens Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
-
----
-### P8-PRIV-003 — Sensitive Personal Attributes Excluded
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-PRIV-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Sensitive Personal Attributes Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
-
----
-### P8-GROUND-001 — Disabled Grounding Checker Explicitly Reported Not Run
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-GROUND-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
-
----
-### P8-GROUND-002 — Grounding Checker Cannot Rewrite Draft
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-GROUND-002"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Grounding Checker Cannot Rewrite Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
-
----
-### P8-GROUND-003 — Grounding Checker Cannot Approve Draft
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-GROUND-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Grounding Checker Cannot Approve Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
-
----
-### P8-GROUND-004 — Grounding Checker Cannot Send Draft
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-GROUND-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Grounding Checker Cannot Send Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
-
----
-### P8-ERR-001 — Error Taxonomy Distinguishable
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-ERR-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
-  "execution_time_s": 0.002
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Error Taxonomy Distinguishable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes)
-
----
-### P8-LLM-001 — Model Unavailable Handled Safely
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-LLM-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Model Unavailable Handled Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable)
-
----
-### P8-LLM-003 — Existing LLM Client Reused
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-LLM-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse",
-  "execution_time_s": 0.0
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Existing LLM Client Reused (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse)
-
----
-### P8-HANDOFF-001 — Phase 7 Handoff Fields Intact
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-HANDOFF-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Phase 7 Handoff Fields Intact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields)
-
----
-### P8-HANDOFF-003 — Lead Score and Qualification Immutable
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-HANDOFF-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Lead Score and Qualification Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)
-
----
-### P8-HANDOFF-004 — Best Contact Ranking Immutable
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-HANDOFF-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Best Contact Ranking Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)
-
----
-### P8-API-001 — API Generate Drafts Valid Request
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-API-001"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
-  "execution_time_s": 0.252
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: API Generate Drafts Valid Request (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)
-
----
-### P8-API-003 — API Missing Sender Returns 422
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-API-003"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
-  "execution_time_s": 0.252
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: API Missing Sender Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)
-
----
-### P8-API-004 — API Invalid Tone Returns 422
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-API-004"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422",
-  "execution_time_s": 0.006
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: API Invalid Tone Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422)
-
----
-### P8-API-005 — API Invalid Language Returns 422
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-API-005"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
-  "execution_time_s": 0.005
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: API Invalid Language Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422)
-
----
-### P8-REG-009 — Missing Job Location Does Not Become Remote
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-009"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Missing Job Location Does Not Become Remote (test: tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote)
-
----
-### P8-REG-010 — Missing Contact Title Does Not Become Leadership
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-010"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Missing Contact Title Does Not Become Leadership (test: tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership)
-
----
-### P8-REG-011 — Company and Contact Fields Cannot Escape Untrusted-Data Boundary
-**Phase:** Phase 8
-**Source:** internal
-
-**Input:**
-```json
-{
-  "case_id": "P8-REG-011"
-}
-```
-**Expected:**
-```json
-{
-  "status": "PASS"
-}
-```
-**Actual:**
-```json
-{
-  "status": "PASS",
-  "test_node": "tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data",
-  "execution_time_s": 0.001
-}
-```
-**Result:** PASS
-
-**Differences:**
-_(None / In sync)_
-
-**Human Notes:**
-Phase 8: Company and Contact Fields Cannot Escape Untrusted-Data Boundary (test: tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data)
-
----
 ### P9-REVIEW-001 — Import Pending Draft
 **Phase:** Phase 9
 **Source:** internal
@@ -10003,5 +7033,3074 @@ _(Not executed yet)_
 
 **Human Notes:**
 Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)
+
+---
+### P8-DRAFT-001 — Strong BIM Automation Signal
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-DRAFT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation",
+  "execution_time_s": 0.002
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Strong BIM Automation Signal (test: tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation)
+
+---
+### P8-ELIG-001 — Qualified and Verified Allowed
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Qualified and Verified Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified)
+
+---
+### P8-ELIG-002 — Qualified and Likely Allowed
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Qualified and Likely Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely)
+
+---
+### P8-ELIG-003 — Unqualified Lead Skipped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
+  "execution_time_s": 0.002
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unqualified Lead Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead)
+
+---
+### P8-ELIG-004 — No Best Contact Skipped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Best Contact Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact)
+
+---
+### P8-ELIG-005 — No Work Email Skipped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Work Email Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email)
+
+---
+### P8-ELIG-006 — Risky Email Skipped by Default
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Risky Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped)
+
+---
+### P8-ELIG-007 — Unknown Email Skipped by Default
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unknown Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped)
+
+---
+### P8-ELIG-008 — Preview Override Without Fabrication
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ELIG-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Preview Override Without Fabrication (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication)
+
+---
+### P8-ID-001 — Lead ID Preserved
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Lead ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
+
+---
+### P8-ID-002 — Contact ID Preserved
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Contact ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
+
+---
+### P8-ID-003 — Recipient Email Preserved
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Recipient Email Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
+
+---
+### P8-ID-004 — Recipient Name and Title Bound to Same Contact
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Recipient Name and Title Bound to Same Contact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
+
+---
+### P8-ID-005 — Explicit Contact ID Belongs to Lead
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Explicit Contact ID Belongs to Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation)
+
+---
+### P8-REG-001 — Wrong-Company Same-Title Job Contamination
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Wrong-Company Same-Title Job Contamination (test: tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job)
+
+---
+### P8-COMPANY-001 — Canonical Domain Match
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-COMPANY-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Canonical Domain Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match)
+
+---
+### P8-COMPANY-002 — ATS Namespaced Match
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-COMPANY-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: ATS Namespaced Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match)
+
+---
+### P8-COMPANY-003 — ATS Namespace Mismatch
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-COMPANY-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: ATS Namespace Mismatch (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch)
+
+---
+### P8-COMPANY-004 — Conservative Name Fallback
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-COMPANY-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Conservative Name Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback)
+
+---
+### P8-REG-004 — API Raw Jobs Handoff
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Raw Jobs Handoff (test: tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff)
+
+---
+### P8-JOB-001 — Relevant Jobs Filter
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-JOB-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Relevant Jobs Filter (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only)
+
+---
+### P8-JOB-002 — No Raw Jobs Safe Fallback
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-JOB-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Raw Jobs Safe Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback)
+
+---
+### P8-REG-005 — Phase 5 Evidence Preservation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Phase 5 Evidence Preservation (test: tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation)
+
+---
+### P8-REG-006 — Phase 5 Signal Schema
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Phase 5 Signal Schema (test: tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema)
+
+---
+### P8-EVID-001 — StructuredJob Signal Evidence Extracted
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-EVID-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: StructuredJob Signal Evidence Extracted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence)
+
+---
+### P8-EVID-002 — Unknown Evidence Reference Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-EVID-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected",
+  "execution_time_s": 0.002
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unknown Evidence Reference Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected)
+
+---
+### P8-EVID-003 — Duplicate Evidence Deterministically Handled
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-EVID-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Duplicate Evidence Deterministically Handled (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling)
+
+---
+### P8-REG-003 — No Fabricated BIM/Revit Technology
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Fabricated BIM/Revit Technology (test: tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology)
+
+---
+### P8-FAB-001 — No Fake Metrics in Context
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-FAB-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Fake Metrics in Context (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics)
+
+---
+### P8-FAB-002 — No Fake Relationship Claims
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-FAB-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Fake Relationship Claims (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims)
+
+---
+### P8-SVC-001 — Active Service Accepted
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Active Service Accepted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted)
+
+---
+### P8-SVC-002 — In-Development Service Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: In-Development Service Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected)
+
+---
+### P8-REG-002 — Active Service Substring Bypass Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Active Service Substring Bypass Rejected (test: tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass)
+
+---
+### P8-SVC-004 — CTA Offering Rejected as Active Service
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: CTA Offering Rejected as Active Service (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected)
+
+---
+### P8-SVC-005 — Missing Offering Status Rejected as Active
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Offering Status Rejected as Active (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected)
+
+---
+### P8-SVC-006 — No Active Service Skips Lead
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Active Service Skips Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead)
+
+---
+### P8-CTX-001 — Deterministic Context Generation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-CTX-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Deterministic Context Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context)
+
+---
+### P8-REG-008 — Deterministic Evidence Ordering
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Deterministic Evidence Ordering (test: tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering)
+
+---
+### P8-REG-007 — SOURCE_DATA Delimiter Injection Escaping
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: SOURCE_DATA Delimiter Injection Escaping (test: tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection)
+
+---
+### P8-INJECT-001 — Prompt Injection Ignore Instructions Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Ignore Instructions Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
+
+---
+### P8-INJECT-002 — Prompt Injection Recipient Override Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Recipient Override Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
+
+---
+### P8-INJECT-003 — Prompt Injection Auto Approve Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Auto Approve Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
+
+---
+### P8-INJECT-004 — Prompt Injection Send Immediately Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Send Immediately Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
+
+---
+### P8-PROMPT-001 — Sales Outreach Environment Isolated
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PROMPT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Sales Outreach Environment Isolated (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment)
+
+---
+### P8-PROMPT-002 — Tone Preset Mapping
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PROMPT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Tone Preset Mapping (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets)
+
+---
+### P8-PROMPT-003 — Language Preset Supported
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PROMPT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Language Preset Supported (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset)
+
+---
+### P8-PARSE-001 — Valid JSON Single Parse
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PARSE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Valid JSON Single Parse (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call)
+
+---
+### P8-PARSE-002 — Invalid Then Repaired JSON Retry
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PARSE-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Invalid Then Repaired JSON Retry (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json)
+
+---
+### P8-PARSE-003 — Two Invalid Responses Fail Safely
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PARSE-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Two Invalid Responses Fail Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely)
+
+---
+### P8-VAL-001 — Empty Subject Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Empty Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-002 — Empty Body Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Empty Body Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-003 — Subject Exceeding 60 Characters Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Subject Exceeding 60 Characters Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-004 — Body Exceeding 160 Words Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Body Exceeding 160 Words Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-005 — Fake Re/Fwd Prefix Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Fake Re/Fwd Prefix Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-006 — All Caps Subject Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: All Caps Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-007 — Unresolved Placeholders Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unresolved Placeholders Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-008 — Identity Mutation Invariant Protected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Identity Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-009 — Recipient Email Mutation Invariant Protected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Recipient Email Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-VAL-010 — Workflow Mutation Invariant Protected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Workflow Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
+
+---
+### P8-WF-001 — Approval Status Always Pending Review
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Approval Status Always Pending Review (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)
+
+---
+### P8-WF-002 — Send Status Always Not Sent
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Send Status Always Not Sent (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)
+
+---
+### P8-WF-003 — Workflow Projection Draft Ready
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Workflow Projection Draft Ready (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety)
+
+---
+### P8-WF-004 — Zero Sending Code Path Static Verification
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
+  "execution_time_s": 0.004
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Zero Sending Code Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification)
+
+---
+### P8-WF-005 — Zero Auto Approval Path Static Verification
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Zero Auto Approval Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification)
+
+---
+### P8-IDEMP-001 — Deterministic Draft ID Generation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-IDEMP-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Deterministic Draft ID Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
+
+---
+### P8-IDEMP-002 — Revision Mutation Changes Draft ID
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-IDEMP-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Revision Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
+
+---
+### P8-IDEMP-003 — Prompt Version Mutation Changes Draft ID
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-IDEMP-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Version Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
+
+---
+### P8-BATCH-001 — Multiple Successful Leads Batch Processing
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-BATCH-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Multiple Successful Leads Batch Processing (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing)
+
+---
+### P8-BATCH-002 — Partial Failure Batch Resilience
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-BATCH-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Partial Failure Batch Resilience (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure)
+
+---
+### P8-BATCH-003 — Max 50 Drafts Respected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-BATCH-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit",
+  "execution_time_s": 0.002
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Max 50 Drafts Respected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit)
+
+---
+### P8-PRIV-001 — Personal Contact Data Excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PRIV-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Personal Contact Data Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
+
+---
+### P8-PRIV-002 — Secrets and Tokens Excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PRIV-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Secrets and Tokens Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
+
+---
+### P8-PRIV-003 — Sensitive Personal Attributes Excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PRIV-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Sensitive Personal Attributes Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
+
+---
+### P8-GROUND-001 — Disabled Grounding Checker Explicitly Reported Not Run
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
+
+---
+### P8-GROUND-002 — Grounding Checker Cannot Rewrite Draft
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Grounding Checker Cannot Rewrite Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
+
+---
+### P8-GROUND-003 — Grounding Checker Cannot Approve Draft
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Grounding Checker Cannot Approve Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
+
+---
+### P8-GROUND-004 — Grounding Checker Cannot Send Draft
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Grounding Checker Cannot Send Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
+
+---
+### P8-ERR-001 — Error Taxonomy Distinguishable
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ERR-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Error Taxonomy Distinguishable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes)
+
+---
+### P8-LLM-001 — Model Unavailable Handled Safely
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-LLM-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Model Unavailable Handled Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable)
+
+---
+### P8-LLM-003 — Existing LLM Client Reused
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-LLM-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Existing LLM Client Reused (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse)
+
+---
+### P8-HANDOFF-001 — Phase 7 Handoff Fields Intact
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-HANDOFF-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Phase 7 Handoff Fields Intact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields)
+
+---
+### P8-HANDOFF-003 — Lead Score and Qualification Immutable
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-HANDOFF-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Lead Score and Qualification Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)
+
+---
+### P8-HANDOFF-004 — Best Contact Ranking Immutable
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-HANDOFF-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Best Contact Ranking Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)
+
+---
+### P8-API-001 — API Generate Drafts Valid Request
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+  "execution_time_s": 0.257
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Generate Drafts Valid Request (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)
+
+---
+### P8-API-003 — API Missing Sender Returns 422
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+  "execution_time_s": 0.257
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Missing Sender Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)
+
+---
+### P8-API-004 — API Invalid Tone Returns 422
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422",
+  "execution_time_s": 0.006
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Invalid Tone Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422)
+
+---
+### P8-API-005 — API Invalid Language Returns 422
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
+  "execution_time_s": 0.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Invalid Language Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422)
+
+---
+### P8-REG-009 — Missing Job Location Does Not Become Remote
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Job Location Does Not Become Remote (test: tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote)
+
+---
+### P8-REG-010 — Missing Contact Title Does Not Become Leadership
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Contact Title Does Not Become Leadership (test: tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership)
+
+---
+### P8-REG-011 — Company and Contact Fields Cannot Escape Untrusted-Data Boundary
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-011"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Company and Contact Fields Cannot Escape Untrusted-Data Boundary (test: tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data)
+
+---
+### P8-REG-012 — Complete Prompt Trust Boundary
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-012"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_012_complete_prompt_trust_boundary",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Complete Prompt Trust Boundary (test: tests/test_outreach.py::test_p8_reg_012_complete_prompt_trust_boundary)
+
+---
+### P8-REG-013 — Missing Recipient Name Is Not Fabricated
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-013"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_013_missing_recipient_name_not_fabricated",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Recipient Name Is Not Fabricated (test: tests/test_outreach.py::test_p8_reg_013_missing_recipient_name_not_fabricated)
+
+---
+### P8-REG-014 — Structured Service Missing Status Is Not Active
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-014"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_014_structured_service_missing_status_not_active",
+  "execution_time_s": 0.0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Structured Service Missing Status Is Not Active (test: tests/test_outreach.py::test_p8_reg_014_structured_service_missing_status_not_active)
 
 ---

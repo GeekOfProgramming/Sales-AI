@@ -109,6 +109,9 @@ CASE_TO_TEST_MAPPING: Dict[str, str] = {
     "P8-REG-009": "tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote",
     "P8-REG-010": "tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership",
     "P8-REG-011": "tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data",
+    "P8-REG-012": "tests/test_outreach.py::test_p8_reg_012_complete_prompt_trust_boundary",
+    "P8-REG-013": "tests/test_outreach.py::test_p8_reg_013_missing_recipient_name_not_fabricated",
+    "P8-REG-014": "tests/test_outreach.py::test_p8_reg_014_structured_service_missing_status_not_active",
 }
 
 

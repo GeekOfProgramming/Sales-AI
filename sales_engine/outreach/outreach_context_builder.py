@@ -38,12 +38,17 @@ class OutreachContextBuilder:
         for svc in services:
             if isinstance(svc, dict):
                 name = svc.get("name") or svc.get("title") or svc.get("service_name")
-                status = str(svc.get("status", "active")).strip().lower()
-                if status not in NON_ACTIVE_STATUSES and name:
-                    active_services.append(name.strip())
+                status = str(svc.get("status", "")).strip().lower()
+                # Structured service dict REQUIRES explicit status == "active"
+                if status == "active" and name:
+                    clean_name = name.strip()
+                    if clean_name not in active_services:
+                        active_services.append(clean_name)
             elif isinstance(svc, str) and svc.strip():
                 # Plain string service name is considered active per Phase 2 contract
-                active_services.append(svc.strip())
+                clean_name = svc.strip()
+                if clean_name not in active_services:
+                    active_services.append(clean_name)
 
         # Also check offerings if present (requires status explicitly == "active")
         offerings = website_profile.get("offerings") or []
@@ -154,11 +159,11 @@ class OutreachContextBuilder:
 
         contact_id = generate_contact_id(contact, lead_id)
 
-        # Contact identity fields
+        # Contact identity fields - NEVER fabricate "Hiring Leader" when name is missing
         recipient_name = (
             contact.full_name
             or (f"{contact.first_name or ''} {contact.last_name or ''}".strip())
-            or "Hiring Leader"
+            or ""
         )
         recipient_email = contact.work_email or ""
         recipient_title = contact.job_title
