@@ -64,7 +64,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Multiple strong relevant jobs yield high intent, top recency, rich grounded evidence, and qualification.",
-    "test_timestamp": "2026-09-30T15:23:40.047616+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.088687+00:00"
   },
   {
     "case_id": "P5-WEAK-001",
@@ -115,7 +115,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Generic administrative job must not invent BIM relevance or intent; lead is disqualified.",
-    "test_timestamp": "2026-09-30T15:23:40.049357+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.090089+00:00"
   },
   {
     "case_id": "P5-ID-001",
@@ -143,7 +143,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalized company name must NOT override conflicting domains.",
-    "test_timestamp": "2026-09-30T15:23:40.051098+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.091936+00:00"
   },
   {
     "case_id": "P5-ID-002",
@@ -167,7 +167,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Different name spellings sharing identical domain must merge into 1 CompanyLead.",
-    "test_timestamp": "2026-09-30T15:23:40.052733+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.094058+00:00"
   },
   {
     "case_id": "P5-ID-003",
@@ -189,7 +189,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When domain is absent, ATS source + source_company_key correctly identifies the company.",
-    "test_timestamp": "2026-09-30T15:23:40.054140+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.095223+00:00"
   },
   {
     "case_id": "P5-ID-004",
@@ -215,7 +215,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identity priority remains domain -> source+key -> normalized name. Conflicting source keys stay separate.",
-    "test_timestamp": "2026-09-30T15:23:40.056261+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.096857+00:00"
   },
   {
     "case_id": "P5-DEDUP-001",
@@ -244,7 +244,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Canonical URL normalization collapses identical job postings without inflating counts or score.",
-    "test_timestamp": "2026-09-30T15:23:40.058266+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.099018+00:00"
   },
   {
     "case_id": "P5-REL-001",
@@ -266,7 +266,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Administrative role does not become relevant merely because Revit is in the text.",
-    "test_timestamp": "2026-09-30T15:23:40.060149+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.101156+00:00"
   },
   {
     "case_id": "P5-REL-002",
@@ -289,7 +289,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Explicit BIM management title counts as relevant even if tech stack list is empty.",
-    "test_timestamp": "2026-09-30T15:23:40.061878+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.103201+00:00"
   },
   {
     "case_id": "P5-REL-003",
@@ -311,7 +311,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Senior roles outside BIM/digital engineering do NOT receive the +10 leadership intent bonus.",
-    "test_timestamp": "2026-09-30T15:23:40.063646+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.105186+00:00"
   },
   {
     "case_id": "P5-REC-001",
@@ -336,7 +336,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Recent irrelevant job does not boost company recency score; score depends strictly on relevant jobs.",
-    "test_timestamp": "2026-09-30T15:23:40.065459+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.107353+00:00"
   },
   {
     "case_id": "P5-REC-002",
@@ -358,7 +358,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Missing date gracefully falls back to older_unknown score without fabricating a timestamp.",
-    "test_timestamp": "2026-09-30T15:23:40.067231+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.109810+00:00"
   },
   {
     "case_id": "P5-REC-003",
@@ -380,7 +380,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Future date does not yield max recency score through negative age.",
-    "test_timestamp": "2026-09-30T15:23:40.069299+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.111309+00:00"
   },
   {
     "case_id": "P5-EVID-001",
@@ -403,7 +403,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Signals and verifiable snippets survive aggregation and remain traceable to source jobs.",
-    "test_timestamp": "2026-09-30T15:23:40.070613+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.112394+00:00"
   },
   {
     "case_id": "P5-EVID-002",
@@ -428,7 +428,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `evidence_score` mismatch: expected `5`, got `0`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: evidence_score=5\n- Actual: evidence_score=0\n- Analysis: Production scoring correctly assigns 0 to empty-string evidence. Golden Ground Truth currently expects 5. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T15:23:40.072833+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.113445+00:00"
   },
   {
     "case_id": "P5-SCORE-001",
@@ -470,7 +470,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All sub-scores strictly respect their defined contractual bounds.",
-    "test_timestamp": "2026-09-30T15:23:40.074358+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.114533+00:00"
   },
   {
     "case_id": "P5-SCORE-002",
@@ -497,7 +497,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Total score is exactly equal to the mathematical sum of its four constituent sub-scores.",
-    "test_timestamp": "2026-09-30T15:23:40.075597+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.116202+00:00"
   },
   {
     "case_id": "P5-SCORE-003",
@@ -528,7 +528,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Scoring contains zero randomness or temperature variance.",
-    "test_timestamp": "2026-09-30T15:23:40.076841+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.117305+00:00"
   },
   {
     "case_id": "P5-SCORE-004",
@@ -550,7 +550,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Critical fail condition verified: LLM never directly assigns any numeric score.",
-    "test_timestamp": "2026-09-30T15:23:40.080516+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.122054+00:00"
   },
   {
     "case_id": "P5-QUAL-001",
@@ -577,7 +577,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Qualification strictly triggers at score >= 60; score of 59 is unqualified.",
-    "test_timestamp": "2026-09-30T15:23:40.081960+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.123652+00:00"
   },
   {
     "case_id": "P5-AGG-001",
@@ -606,7 +606,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Reasons explain qualification truthfully and do not cite irrelevant jobs.",
-    "test_timestamp": "2026-09-30T15:23:40.083263+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.125762+00:00"
   },
   {
     "case_id": "P5-AGG-002",
@@ -628,7 +628,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "System tracks raw input jobs, unique deduplicated jobs, and relevant jobs distinctly.",
-    "test_timestamp": "2026-09-30T15:23:40.084916+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.128779+00:00"
   },
   {
     "case_id": "P5-AGG-003",
@@ -651,7 +651,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A low-quality or malformed job does not crash company aggregation or corrupt scoring.",
-    "test_timestamp": "2026-09-30T15:23:40.086852+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.130579+00:00"
   },
   {
     "case_id": "P5-ADV-001",
@@ -674,7 +674,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Separate legal entities sharing generic names do not collide if domains differ.",
-    "test_timestamp": "2026-09-30T15:23:40.088948+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.132735+00:00"
   },
   {
     "case_id": "P5-ADV-002",
@@ -695,7 +695,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain variations resolve to a single canonical domain identity.",
-    "test_timestamp": "2026-09-30T15:23:40.091715+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.134112+00:00"
   },
   {
     "case_id": "P5-ADV-003",
@@ -721,7 +721,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "High job count from non-BIM roles does not inflate relevant_job_count or intent.",
-    "test_timestamp": "2026-09-30T15:23:40.093877+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.136883+00:00"
   },
   {
     "case_id": "P5-ADV-004",
@@ -743,6 +743,6 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact duplicate signals do not receive multiple signal count bonuses.",
-    "test_timestamp": "2026-09-30T15:23:40.095281+00:00"
+    "test_timestamp": "2026-09-30T15:32:25.139262+00:00"
   }
 ]

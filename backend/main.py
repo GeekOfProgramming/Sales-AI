@@ -961,6 +961,30 @@ async def export_leads(request: dict):
         raise HTTPException(status_code=500, detail=f"Export failed: {e}")
 
 
+@app.post("/api/sales/generate-drafts", tags=["SalesAI"])
+async def generate_email_drafts(request: dict):
+    """
+    Phase 8: Generate grounded, personalized cold email drafts for qualified leads.
+    """
+    from sales_engine.outreach.schemas import GenerateDraftsRequest
+    from sales_engine.outreach.outreach_orchestrator import OutreachOrchestrator
+    try:
+        req_obj = GenerateDraftsRequest(**request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid draft generation request schema: {e}")
+
+    try:
+        llm = getattr(app.state, "llm_client", None)
+        from sales_engine.outreach.email_generator import EmailGenerator
+        gen = EmailGenerator(llm_client=llm)
+        orchestrator = OutreachOrchestrator(email_generator=gen)
+        result = orchestrator.generate_drafts(req_obj)
+        return result.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Draft generation failed: {e}")
+
+
+
 
 
 
