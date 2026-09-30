@@ -1,0 +1,18 @@
+[
+  {"case_id": "P9-REVIEW-001", "phase": "Phase 9", "title": "Import Pending Draft", "mode": "deterministic"},
+  {"case_id": "P9-REVIEW-002", "phase": "Phase 9", "title": "Edit Invalidates Approval", "mode": "deterministic"},
+  {"case_id": "P9-APPROVE-001", "phase": "Phase 9", "title": "Explicit Approval", "mode": "deterministic"},
+  {"case_id": "P9-APPROVE-002", "phase": "Phase 9", "title": "Approval Does Not Send", "mode": "deterministic"},
+  {"case_id": "P9-SEND-001", "phase": "Phase 9", "title": "Approved Dry Run", "mode": "deterministic"},
+  {"case_id": "P9-SEND-002", "phase": "Phase 9", "title": "Approved Mock SMTP Send", "mode": "deterministic"},
+  {"case_id": "P9-SEND-003", "phase": "Phase 9", "title": "Unapproved Blocked", "mode": "deterministic"},
+  {"case_id": "P9-SEND-004", "phase": "Phase 9", "title": "Stale Approval Blocked", "mode": "deterministic"},
+  {"case_id": "P9-SEND-005", "phase": "Phase 9", "title": "Already Sent Blocked", "mode": "deterministic"},
+  {"case_id": "P9-SUPPRESS-001", "phase": "Phase 9", "title": "Suppressed Recipient Blocked", "mode": "deterministic"},
+  {"case_id": "P9-IDEMP-001", "phase": "Phase 9", "title": "Concurrent Duplicate Prevented", "mode": "deterministic"},
+  {"case_id": "P9-BATCH-001", "phase": "Phase 9", "title": "Partial Failure Isolation", "mode": "deterministic"},
+  {"case_id": "P9-SEC-001", "phase": "Phase 9", "title": "Secrets Never Logged", "mode": "deterministic"},
+  {"case_id": "P9-WF-001", "phase": "Phase 9", "title": "Sent State Projection", "mode": "deterministic"},
+  {"case_id": "P9-NOLLM-001", "phase": "Phase 9", "title": "Zero LLM Code Path", "mode": "deterministic"},
+  {"case_id": "P9-LIVE-SMTP-001", "phase": "Phase 9", "title": "Live SMTP Send Guardrail", "mode": "opt_in_live"}
+]

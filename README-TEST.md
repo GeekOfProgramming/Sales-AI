@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 16:11:53 UTC
-- **Git Commit:** `2bf7620`
+- **Time:** 17:02:11 UTC
+- **Git Commit:** `8b5d902`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,12 +14,12 @@
 - **Live Tests Executed:** No
 
 ## Summary
-- **Total Cases:** 266
-- **Passed:** 251
+- **Total Cases:** 286
+- **Passed:** 270
 - **Failed:** 0
 - **Review Required:** 4
 - **Deferred (Model Limitation):** 7
-- **Skipped / Not Run:** 4
+- **Skipped / Not Run:** 5
 - **Source Changed:** 0
 
 ## Phase Summary
@@ -31,7 +31,8 @@
 | Phase 5 | 27 | 26 | 0 | 1 | 0 | 0 |
 | Phase 6 | 43 | 40 | 0 | 1 | 0 | 2 |
 | Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
-| Phase 8 | 91 | 86 | 0 | 0 | 5 | 0 |
+| Phase 8 | 95 | 90 | 0 | 0 | 5 | 0 |
+| Phase 9 | 16 | 15 | 0 | 0 | 0 | 1 |
 
 ## Phase 7 Reconciliation & Case Count Model
 To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
@@ -44,11 +45,20 @@ To ensure 100% auditability across test suites and golden sets, the Phase 7 coun
 
 ## Phase 8 Case Count & Architecture Model
 Phase 8 implements personalized cold email draft generation with strict deterministic isolation:
-- **Total Cases in Catalog (`tests/golden/phase8_outreach.json` & `phase8_latest.json`):** 91 cases
-  - **Deterministic Acceptance & Behavioral Cases:** 78 cases passed (covering main golden drafting, eligibility boundaries, contact and lead identity preservation, active service gating, deterministic evidence citations, prompt injection traps, parsing retry, workflow safety, batch resilience, privacy scrubbing, error taxonomy, and Phase 7 handoff).
-  - **Mandatory Regression Invariants (`P8-REG-001` .. `008`):** 8 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, and deterministic ordering).
+- **Total Cases in Catalog (`tests/golden/phase8_outreach.json` & `phase8_latest.json`):** 95 cases
+  - **Deterministic Acceptance & Behavioral Cases:** 79 cases passed (covering main golden drafting, eligibility boundaries, contact and lead identity preservation, active service gating, deterministic evidence citations, prompt injection traps, parsing retry, workflow safety, batch resilience, privacy scrubbing, error taxonomy, and Phase 7 handoff).
+  - **Mandatory Regression Invariants (`P8-REG-001` .. `011`):** 11 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, deterministic ordering, missing location non-fabrication, missing contact title non-fabrication, and external company/contact untrusted delimiter containment).
   - **Semantic Deferred Quality (`P8-SEM-001` .. `005`):** 5 cases marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, tone differentiation, and multilingual drafting deferred for high-capacity LLM review).
-- **False Pass Count:** 0 (strictly verified by automated QA integrity check).
+- **False Pass Count:** 0 (dynamically verified and computed by execution-driven reporting engine).
+- **Unmapped Deterministic Cases:** 0 (all deterministic cases traced to executable pytest nodes).
+
+## Phase 9 Case Count & Architecture Model
+Phase 9 implements human review, approval, safe email sending, and immutable audit trails:
+- **Total Golden Cases in Catalog (`tests/golden/phase9_sending.json` & `phase9_latest.json`):** 16 cases
+  - **Passed (Deterministic):** 15 test cases (covering draft import, pending_review default, edit revisioning, approval fingerprinting, approval send decoupling, dry-run network isolation, unapproved blocking, stale approval blocking, already_sent idempotency, suppression blocking, concurrent duplicate prevention, batch partial failure isolation, credential sanitization, SQLite state projection, and static zero-LLM verification).
+  - **Skipped / Opt-in Guardrail:** 1 case (`P9-LIVE-SMTP-001` — strictly gated behind `RUN_LIVE_EMAIL_TESTS=true` and `EMAIL_SEND_ENABLED=true` to guarantee zero real emails in offline suites).
+- **Critical Safety Invariants:** Approval never triggers send, approval fingerprint SHA-256 blocks stale edits, `EMAIL_SEND_ENABLED=false` by default, idempotency locks prevent double sending, and zero LLM calls exist in the entire sending subsystem.
+- **False Pass Count:** 0 (dynamically verified and computed by execution-driven reporting engine).
 
 ## Failures
 _No failures detected._
@@ -487,7 +497,8 @@ Semantic LLM extraction fixture for API developer role. Deferring execution unti
 **Actual:**
 ```json
 {
-  "status": "NOT_RUN_MODEL_LIMITATION"
+  "status": "NOT_RUN_MODEL_LIMITATION",
+  "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
 }
 ```
 **Result:** NOT_RUN_MODEL_LIMITATION
@@ -498,7 +509,7 @@ _(None / In sync)_
 **Reason:** Deferred for higher-capacity model review; deterministic invariants verified
 
 **Human Notes:**
-Phase 8: Strong BIM Automation Email Semantic Review (mode: local_live_llm)
+Phase 8: Strong BIM Automation Email Semantic Review (test: None)
 
 ---
 ### P8-SEM-002 — BIM Manager Hiring Email Semantic Review
@@ -520,7 +531,8 @@ Phase 8: Strong BIM Automation Email Semantic Review (mode: local_live_llm)
 **Actual:**
 ```json
 {
-  "status": "NOT_RUN_MODEL_LIMITATION"
+  "status": "NOT_RUN_MODEL_LIMITATION",
+  "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
 }
 ```
 **Result:** NOT_RUN_MODEL_LIMITATION
@@ -531,7 +543,7 @@ _(None / In sync)_
 **Reason:** Deferred for higher-capacity model review; deterministic invariants verified
 
 **Human Notes:**
-Phase 8: BIM Manager Hiring Email Semantic Review (mode: local_live_llm)
+Phase 8: BIM Manager Hiring Email Semantic Review (test: None)
 
 ---
 ### P8-SEM-003 — Executive Brief Tone Semantic Review
@@ -553,7 +565,8 @@ Phase 8: BIM Manager Hiring Email Semantic Review (mode: local_live_llm)
 **Actual:**
 ```json
 {
-  "status": "NOT_RUN_MODEL_LIMITATION"
+  "status": "NOT_RUN_MODEL_LIMITATION",
+  "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
 }
 ```
 **Result:** NOT_RUN_MODEL_LIMITATION
@@ -564,7 +577,7 @@ _(None / In sync)_
 **Reason:** Deferred for higher-capacity model review; deterministic invariants verified
 
 **Human Notes:**
-Phase 8: Executive Brief Tone Semantic Review (mode: local_live_llm)
+Phase 8: Executive Brief Tone Semantic Review (test: None)
 
 ---
 ### P8-SEM-004 — Italian Draft Semantic Review
@@ -586,7 +599,8 @@ Phase 8: Executive Brief Tone Semantic Review (mode: local_live_llm)
 **Actual:**
 ```json
 {
-  "status": "NOT_RUN_MODEL_LIMITATION"
+  "status": "NOT_RUN_MODEL_LIMITATION",
+  "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
 }
 ```
 **Result:** NOT_RUN_MODEL_LIMITATION
@@ -597,7 +611,7 @@ _(None / In sync)_
 **Reason:** Deferred for higher-capacity model review; deterministic invariants verified
 
 **Human Notes:**
-Phase 8: Italian Draft Semantic Review (mode: local_live_llm)
+Phase 8: Italian Draft Semantic Review (test: None)
 
 ---
 ### P8-SEM-005 — German Draft Semantic Review
@@ -619,7 +633,8 @@ Phase 8: Italian Draft Semantic Review (mode: local_live_llm)
 **Actual:**
 ```json
 {
-  "status": "NOT_RUN_MODEL_LIMITATION"
+  "status": "NOT_RUN_MODEL_LIMITATION",
+  "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
 }
 ```
 **Result:** NOT_RUN_MODEL_LIMITATION
@@ -630,7 +645,7 @@ _(None / In sync)_
 **Reason:** Deferred for higher-capacity model review; deterministic invariants verified
 
 **Human Notes:**
-Phase 8: German Draft Semantic Review (mode: local_live_llm)
+Phase 8: German Draft Semantic Review (test: None)
 
 ---
 
@@ -6462,7 +6477,9 @@ Phase 7 Golden Case: Empty CSV Headers
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -6471,7 +6488,7 @@ Phase 7 Golden Case: Empty CSV Headers
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Strong BIM Automation Signal (mode: mock_llm)
+Phase 8: Strong BIM Automation Signal (test: tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation)
 
 ---
 ### P8-ELIG-001 — Qualified and Verified Allowed
@@ -6493,7 +6510,9 @@ Phase 8: Strong BIM Automation Signal (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
+  "execution_time_s": 0.003
 }
 ```
 **Result:** PASS
@@ -6502,7 +6521,7 @@ Phase 8: Strong BIM Automation Signal (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Qualified and Verified Allowed (mode: mock_llm)
+Phase 8: Qualified and Verified Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified)
 
 ---
 ### P8-ELIG-002 — Qualified and Likely Allowed
@@ -6524,7 +6543,9 @@ Phase 8: Qualified and Verified Allowed (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
+  "execution_time_s": 0.003
 }
 ```
 **Result:** PASS
@@ -6533,7 +6554,7 @@ Phase 8: Qualified and Verified Allowed (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Qualified and Likely Allowed (mode: mock_llm)
+Phase 8: Qualified and Likely Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely)
 
 ---
 ### P8-ELIG-003 — Unqualified Lead Skipped
@@ -6555,7 +6576,9 @@ Phase 8: Qualified and Likely Allowed (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -6564,7 +6587,7 @@ Phase 8: Qualified and Likely Allowed (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Unqualified Lead Skipped (mode: no_llm)
+Phase 8: Unqualified Lead Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead)
 
 ---
 ### P8-ELIG-004 — No Best Contact Skipped
@@ -6586,7 +6609,9 @@ Phase 8: Unqualified Lead Skipped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -6595,7 +6620,7 @@ Phase 8: Unqualified Lead Skipped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Best Contact Skipped (mode: no_llm)
+Phase 8: No Best Contact Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact)
 
 ---
 ### P8-ELIG-005 — No Work Email Skipped
@@ -6617,7 +6642,9 @@ Phase 8: No Best Contact Skipped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -6626,7 +6653,7 @@ Phase 8: No Best Contact Skipped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Work Email Skipped (mode: no_llm)
+Phase 8: No Work Email Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email)
 
 ---
 ### P8-ELIG-006 — Risky Email Skipped by Default
@@ -6648,7 +6675,9 @@ Phase 8: No Work Email Skipped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6657,7 +6686,7 @@ Phase 8: No Work Email Skipped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Risky Email Skipped by Default (mode: no_llm)
+Phase 8: Risky Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped)
 
 ---
 ### P8-ELIG-007 — Unknown Email Skipped by Default
@@ -6679,7 +6708,9 @@ Phase 8: Risky Email Skipped by Default (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -6688,7 +6719,7 @@ Phase 8: Risky Email Skipped by Default (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Unknown Email Skipped by Default (mode: no_llm)
+Phase 8: Unknown Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped)
 
 ---
 ### P8-ELIG-008 — Preview Override Without Fabrication
@@ -6710,7 +6741,9 @@ Phase 8: Unknown Email Skipped by Default (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
+  "execution_time_s": 0.003
 }
 ```
 **Result:** PASS
@@ -6719,7 +6752,7 @@ Phase 8: Unknown Email Skipped by Default (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Preview Override Without Fabrication (mode: no_llm)
+Phase 8: Preview Override Without Fabrication (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication)
 
 ---
 ### P8-ID-001 — Lead ID Preserved
@@ -6741,7 +6774,9 @@ Phase 8: Preview Override Without Fabrication (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6750,7 +6785,7 @@ Phase 8: Preview Override Without Fabrication (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Lead ID Preserved (mode: mock_llm)
+Phase 8: Lead ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
 
 ---
 ### P8-ID-002 — Contact ID Preserved
@@ -6772,7 +6807,9 @@ Phase 8: Lead ID Preserved (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6781,7 +6818,7 @@ Phase 8: Lead ID Preserved (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Contact ID Preserved (mode: mock_llm)
+Phase 8: Contact ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
 
 ---
 ### P8-ID-003 — Recipient Email Preserved
@@ -6803,7 +6840,9 @@ Phase 8: Contact ID Preserved (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6812,7 +6851,7 @@ Phase 8: Contact ID Preserved (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Recipient Email Preserved (mode: mock_llm)
+Phase 8: Recipient Email Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
 
 ---
 ### P8-ID-004 — Recipient Name and Title Bound to Same Contact
@@ -6834,7 +6873,9 @@ Phase 8: Recipient Email Preserved (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6843,7 +6884,7 @@ Phase 8: Recipient Email Preserved (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Recipient Name and Title Bound to Same Contact (mode: mock_llm)
+Phase 8: Recipient Name and Title Bound to Same Contact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)
 
 ---
 ### P8-ID-005 — Explicit Contact ID Belongs to Lead
@@ -6865,7 +6906,9 @@ Phase 8: Recipient Name and Title Bound to Same Contact (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6874,7 +6917,7 @@ Phase 8: Recipient Name and Title Bound to Same Contact (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Explicit Contact ID Belongs to Lead (mode: mock_llm)
+Phase 8: Explicit Contact ID Belongs to Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation)
 
 ---
 ### P8-REG-001 — Wrong-Company Same-Title Job Contamination
@@ -6896,7 +6939,9 @@ Phase 8: Explicit Contact ID Belongs to Lead (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6905,7 +6950,7 @@ Phase 8: Explicit Contact ID Belongs to Lead (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Wrong-Company Same-Title Job Contamination (mode: no_llm)
+Phase 8: Wrong-Company Same-Title Job Contamination (test: tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job)
 
 ---
 ### P8-COMPANY-001 — Canonical Domain Match
@@ -6927,7 +6972,9 @@ Phase 8: Wrong-Company Same-Title Job Contamination (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6936,7 +6983,7 @@ Phase 8: Wrong-Company Same-Title Job Contamination (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Canonical Domain Match (mode: no_llm)
+Phase 8: Canonical Domain Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match)
 
 ---
 ### P8-COMPANY-002 — ATS Namespaced Match
@@ -6958,7 +7005,9 @@ Phase 8: Canonical Domain Match (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6967,7 +7016,7 @@ Phase 8: Canonical Domain Match (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: ATS Namespaced Match (mode: no_llm)
+Phase 8: ATS Namespaced Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match)
 
 ---
 ### P8-COMPANY-003 — ATS Namespace Mismatch
@@ -6989,7 +7038,9 @@ Phase 8: ATS Namespaced Match (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -6998,7 +7049,7 @@ Phase 8: ATS Namespaced Match (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: ATS Namespace Mismatch (mode: no_llm)
+Phase 8: ATS Namespace Mismatch (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch)
 
 ---
 ### P8-COMPANY-004 — Conservative Name Fallback
@@ -7020,7 +7071,9 @@ Phase 8: ATS Namespace Mismatch (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7029,7 +7082,7 @@ Phase 8: ATS Namespace Mismatch (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Conservative Name Fallback (mode: no_llm)
+Phase 8: Conservative Name Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback)
 
 ---
 ### P8-REG-004 — API Raw Jobs Handoff
@@ -7051,7 +7104,9 @@ Phase 8: Conservative Name Fallback (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7060,7 +7115,7 @@ Phase 8: Conservative Name Fallback (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: API Raw Jobs Handoff (mode: mock_llm)
+Phase 8: API Raw Jobs Handoff (test: tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff)
 
 ---
 ### P8-JOB-001 — Relevant Jobs Filter
@@ -7082,7 +7137,9 @@ Phase 8: API Raw Jobs Handoff (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7091,7 +7148,7 @@ Phase 8: API Raw Jobs Handoff (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Relevant Jobs Filter (mode: no_llm)
+Phase 8: Relevant Jobs Filter (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only)
 
 ---
 ### P8-JOB-002 — No Raw Jobs Safe Fallback
@@ -7113,7 +7170,9 @@ Phase 8: Relevant Jobs Filter (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7122,7 +7181,7 @@ Phase 8: Relevant Jobs Filter (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Raw Jobs Safe Fallback (mode: no_llm)
+Phase 8: No Raw Jobs Safe Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback)
 
 ---
 ### P8-REG-005 — Phase 5 Evidence Preservation
@@ -7144,7 +7203,9 @@ Phase 8: No Raw Jobs Safe Fallback (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7153,7 +7214,7 @@ Phase 8: No Raw Jobs Safe Fallback (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Phase 5 Evidence Preservation (mode: no_llm)
+Phase 8: Phase 5 Evidence Preservation (test: tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation)
 
 ---
 ### P8-REG-006 — Phase 5 Signal Schema
@@ -7175,7 +7236,9 @@ Phase 8: Phase 5 Evidence Preservation (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7184,7 +7247,7 @@ Phase 8: Phase 5 Evidence Preservation (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Phase 5 Signal Schema (mode: no_llm)
+Phase 8: Phase 5 Signal Schema (test: tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema)
 
 ---
 ### P8-EVID-001 — StructuredJob Signal Evidence Extracted
@@ -7206,7 +7269,9 @@ Phase 8: Phase 5 Signal Schema (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -7215,7 +7280,7 @@ Phase 8: Phase 5 Signal Schema (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: StructuredJob Signal Evidence Extracted (mode: no_llm)
+Phase 8: StructuredJob Signal Evidence Extracted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence)
 
 ---
 ### P8-EVID-002 — Unknown Evidence Reference Rejected
@@ -7237,7 +7302,9 @@ Phase 8: StructuredJob Signal Evidence Extracted (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7246,7 +7313,7 @@ Phase 8: StructuredJob Signal Evidence Extracted (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Unknown Evidence Reference Rejected (mode: mock_llm)
+Phase 8: Unknown Evidence Reference Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected)
 
 ---
 ### P8-EVID-003 — Duplicate Evidence Deterministically Handled
@@ -7268,7 +7335,9 @@ Phase 8: Unknown Evidence Reference Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7277,7 +7346,7 @@ Phase 8: Unknown Evidence Reference Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Duplicate Evidence Deterministically Handled (mode: no_llm)
+Phase 8: Duplicate Evidence Deterministically Handled (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling)
 
 ---
 ### P8-REG-003 — No Fabricated BIM/Revit Technology
@@ -7299,7 +7368,9 @@ Phase 8: Duplicate Evidence Deterministically Handled (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7308,7 +7379,7 @@ Phase 8: Duplicate Evidence Deterministically Handled (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Fabricated BIM/Revit Technology (mode: no_llm)
+Phase 8: No Fabricated BIM/Revit Technology (test: tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology)
 
 ---
 ### P8-FAB-001 — No Fake Metrics in Context
@@ -7330,7 +7401,9 @@ Phase 8: No Fabricated BIM/Revit Technology (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7339,7 +7412,7 @@ Phase 8: No Fabricated BIM/Revit Technology (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Fake Metrics in Context (mode: no_llm)
+Phase 8: No Fake Metrics in Context (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics)
 
 ---
 ### P8-FAB-002 — No Fake Relationship Claims
@@ -7361,7 +7434,9 @@ Phase 8: No Fake Metrics in Context (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7370,7 +7445,7 @@ Phase 8: No Fake Metrics in Context (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Fake Relationship Claims (mode: mock_llm)
+Phase 8: No Fake Relationship Claims (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims)
 
 ---
 ### P8-SVC-001 — Active Service Accepted
@@ -7392,7 +7467,9 @@ Phase 8: No Fake Relationship Claims (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7401,7 +7478,7 @@ Phase 8: No Fake Relationship Claims (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Active Service Accepted (mode: no_llm)
+Phase 8: Active Service Accepted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted)
 
 ---
 ### P8-SVC-002 — In-Development Service Rejected
@@ -7423,7 +7500,9 @@ Phase 8: Active Service Accepted (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7432,7 +7511,7 @@ Phase 8: Active Service Accepted (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: In-Development Service Rejected (mode: no_llm)
+Phase 8: In-Development Service Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected)
 
 ---
 ### P8-REG-002 — Active Service Substring Bypass Rejected
@@ -7454,7 +7533,9 @@ Phase 8: In-Development Service Rejected (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7463,7 +7544,7 @@ Phase 8: In-Development Service Rejected (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Active Service Substring Bypass Rejected (mode: mock_llm)
+Phase 8: Active Service Substring Bypass Rejected (test: tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass)
 
 ---
 ### P8-SVC-004 — CTA Offering Rejected as Active Service
@@ -7485,7 +7566,9 @@ Phase 8: Active Service Substring Bypass Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7494,7 +7577,7 @@ Phase 8: Active Service Substring Bypass Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: CTA Offering Rejected as Active Service (mode: no_llm)
+Phase 8: CTA Offering Rejected as Active Service (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected)
 
 ---
 ### P8-SVC-005 — Missing Offering Status Rejected as Active
@@ -7516,7 +7599,9 @@ Phase 8: CTA Offering Rejected as Active Service (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected",
+  "execution_time_s": 0.0
 }
 ```
 **Result:** PASS
@@ -7525,7 +7610,7 @@ Phase 8: CTA Offering Rejected as Active Service (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Missing Offering Status Rejected as Active (mode: no_llm)
+Phase 8: Missing Offering Status Rejected as Active (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected)
 
 ---
 ### P8-SVC-006 — No Active Service Skips Lead
@@ -7547,7 +7632,9 @@ Phase 8: Missing Offering Status Rejected as Active (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7556,7 +7643,7 @@ Phase 8: Missing Offering Status Rejected as Active (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No Active Service Skips Lead (mode: no_llm)
+Phase 8: No Active Service Skips Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead)
 
 ---
 ### P8-CTX-001 — Deterministic Context Generation
@@ -7578,7 +7665,9 @@ Phase 8: No Active Service Skips Lead (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7587,7 +7676,7 @@ Phase 8: No Active Service Skips Lead (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Deterministic Context Generation (mode: no_llm)
+Phase 8: Deterministic Context Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context)
 
 ---
 ### P8-REG-008 — Deterministic Evidence Ordering
@@ -7609,7 +7698,9 @@ Phase 8: Deterministic Context Generation (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7618,7 +7709,7 @@ Phase 8: Deterministic Context Generation (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Deterministic Evidence Ordering (mode: no_llm)
+Phase 8: Deterministic Evidence Ordering (test: tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering)
 
 ---
 ### P8-REG-007 — SOURCE_DATA Delimiter Injection Escaping
@@ -7640,7 +7731,9 @@ Phase 8: Deterministic Evidence Ordering (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7649,7 +7742,7 @@ Phase 8: Deterministic Evidence Ordering (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: SOURCE_DATA Delimiter Injection Escaping (mode: no_llm)
+Phase 8: SOURCE_DATA Delimiter Injection Escaping (test: tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection)
 
 ---
 ### P8-INJECT-001 — Prompt Injection Ignore Instructions Trapped
@@ -7671,7 +7764,9 @@ Phase 8: SOURCE_DATA Delimiter Injection Escaping (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7680,7 +7775,7 @@ Phase 8: SOURCE_DATA Delimiter Injection Escaping (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Prompt Injection Ignore Instructions Trapped (mode: no_llm)
+Phase 8: Prompt Injection Ignore Instructions Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
 
 ---
 ### P8-INJECT-002 — Prompt Injection Recipient Override Trapped
@@ -7702,7 +7797,9 @@ Phase 8: Prompt Injection Ignore Instructions Trapped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7711,7 +7808,7 @@ Phase 8: Prompt Injection Ignore Instructions Trapped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Prompt Injection Recipient Override Trapped (mode: no_llm)
+Phase 8: Prompt Injection Recipient Override Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
 
 ---
 ### P8-INJECT-003 — Prompt Injection Auto Approve Trapped
@@ -7733,7 +7830,9 @@ Phase 8: Prompt Injection Recipient Override Trapped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7742,7 +7841,7 @@ Phase 8: Prompt Injection Recipient Override Trapped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Prompt Injection Auto Approve Trapped (mode: no_llm)
+Phase 8: Prompt Injection Auto Approve Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
 
 ---
 ### P8-INJECT-004 — Prompt Injection Send Immediately Trapped
@@ -7764,7 +7863,9 @@ Phase 8: Prompt Injection Auto Approve Trapped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7773,7 +7874,7 @@ Phase 8: Prompt Injection Auto Approve Trapped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Prompt Injection Send Immediately Trapped (mode: no_llm)
+Phase 8: Prompt Injection Send Immediately Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)
 
 ---
 ### P8-PROMPT-001 — Sales Outreach Environment Isolated
@@ -7795,7 +7896,9 @@ Phase 8: Prompt Injection Send Immediately Trapped (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7804,7 +7907,7 @@ Phase 8: Prompt Injection Send Immediately Trapped (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Sales Outreach Environment Isolated (mode: no_llm)
+Phase 8: Sales Outreach Environment Isolated (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment)
 
 ---
 ### P8-PROMPT-002 — Tone Preset Mapping
@@ -7826,7 +7929,9 @@ Phase 8: Sales Outreach Environment Isolated (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -7835,7 +7940,7 @@ Phase 8: Sales Outreach Environment Isolated (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Tone Preset Mapping (mode: no_llm)
+Phase 8: Tone Preset Mapping (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets)
 
 ---
 ### P8-PROMPT-003 — Language Preset Supported
@@ -7857,7 +7962,9 @@ Phase 8: Tone Preset Mapping (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7866,7 +7973,7 @@ Phase 8: Tone Preset Mapping (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Language Preset Supported (mode: no_llm)
+Phase 8: Language Preset Supported (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset)
 
 ---
 ### P8-PARSE-001 — Valid JSON Single Parse
@@ -7888,7 +7995,9 @@ Phase 8: Language Preset Supported (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -7897,7 +8006,7 @@ Phase 8: Language Preset Supported (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Valid JSON Single Parse (mode: mock_llm)
+Phase 8: Valid JSON Single Parse (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call)
 
 ---
 ### P8-PARSE-002 — Invalid Then Repaired JSON Retry
@@ -7919,7 +8028,9 @@ Phase 8: Valid JSON Single Parse (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -7928,7 +8039,7 @@ Phase 8: Valid JSON Single Parse (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Invalid Then Repaired JSON Retry (mode: mock_llm)
+Phase 8: Invalid Then Repaired JSON Retry (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json)
 
 ---
 ### P8-PARSE-003 — Two Invalid Responses Fail Safely
@@ -7950,7 +8061,9 @@ Phase 8: Invalid Then Repaired JSON Retry (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -7959,7 +8072,7 @@ Phase 8: Invalid Then Repaired JSON Retry (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Two Invalid Responses Fail Safely (mode: mock_llm)
+Phase 8: Two Invalid Responses Fail Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely)
 
 ---
 ### P8-VAL-001 — Empty Subject Rejected
@@ -7981,7 +8094,9 @@ Phase 8: Two Invalid Responses Fail Safely (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -7990,7 +8105,7 @@ Phase 8: Two Invalid Responses Fail Safely (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Empty Subject Rejected (mode: mock_llm)
+Phase 8: Empty Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-002 — Empty Body Rejected
@@ -8012,7 +8127,9 @@ Phase 8: Empty Subject Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8021,7 +8138,7 @@ Phase 8: Empty Subject Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Empty Body Rejected (mode: mock_llm)
+Phase 8: Empty Body Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-003 — Subject Exceeding 60 Characters Rejected
@@ -8043,7 +8160,9 @@ Phase 8: Empty Body Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8052,7 +8171,7 @@ Phase 8: Empty Body Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Subject Exceeding 60 Characters Rejected (mode: mock_llm)
+Phase 8: Subject Exceeding 60 Characters Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-004 — Body Exceeding 160 Words Rejected
@@ -8074,7 +8193,9 @@ Phase 8: Subject Exceeding 60 Characters Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8083,7 +8204,7 @@ Phase 8: Subject Exceeding 60 Characters Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Body Exceeding 160 Words Rejected (mode: mock_llm)
+Phase 8: Body Exceeding 160 Words Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-005 — Fake Re/Fwd Prefix Rejected
@@ -8105,7 +8226,9 @@ Phase 8: Body Exceeding 160 Words Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8114,7 +8237,7 @@ Phase 8: Body Exceeding 160 Words Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Fake Re/Fwd Prefix Rejected (mode: mock_llm)
+Phase 8: Fake Re/Fwd Prefix Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-006 — All Caps Subject Rejected
@@ -8136,7 +8259,9 @@ Phase 8: Fake Re/Fwd Prefix Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8145,7 +8270,7 @@ Phase 8: Fake Re/Fwd Prefix Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: All Caps Subject Rejected (mode: mock_llm)
+Phase 8: All Caps Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-007 — Unresolved Placeholders Rejected
@@ -8167,7 +8292,9 @@ Phase 8: All Caps Subject Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8176,7 +8303,7 @@ Phase 8: All Caps Subject Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Unresolved Placeholders Rejected (mode: mock_llm)
+Phase 8: Unresolved Placeholders Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-008 — Identity Mutation Invariant Protected
@@ -8198,7 +8325,9 @@ Phase 8: Unresolved Placeholders Rejected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8207,7 +8336,7 @@ Phase 8: Unresolved Placeholders Rejected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Identity Mutation Invariant Protected (mode: mock_llm)
+Phase 8: Identity Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-009 — Recipient Email Mutation Invariant Protected
@@ -8229,7 +8358,9 @@ Phase 8: Identity Mutation Invariant Protected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8238,7 +8369,7 @@ Phase 8: Identity Mutation Invariant Protected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Recipient Email Mutation Invariant Protected (mode: mock_llm)
+Phase 8: Recipient Email Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-VAL-010 — Workflow Mutation Invariant Protected
@@ -8260,7 +8391,9 @@ Phase 8: Recipient Email Mutation Invariant Protected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8269,7 +8402,7 @@ Phase 8: Recipient Email Mutation Invariant Protected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Workflow Mutation Invariant Protected (mode: mock_llm)
+Phase 8: Workflow Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)
 
 ---
 ### P8-WF-001 — Approval Status Always Pending Review
@@ -8291,7 +8424,9 @@ Phase 8: Workflow Mutation Invariant Protected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8300,7 +8435,7 @@ Phase 8: Workflow Mutation Invariant Protected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Approval Status Always Pending Review (mode: mock_llm)
+Phase 8: Approval Status Always Pending Review (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)
 
 ---
 ### P8-WF-002 — Send Status Always Not Sent
@@ -8322,7 +8457,9 @@ Phase 8: Approval Status Always Pending Review (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8331,7 +8468,7 @@ Phase 8: Approval Status Always Pending Review (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Send Status Always Not Sent (mode: mock_llm)
+Phase 8: Send Status Always Not Sent (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)
 
 ---
 ### P8-WF-003 — Workflow Projection Draft Ready
@@ -8353,7 +8490,9 @@ Phase 8: Send Status Always Not Sent (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8362,7 +8501,7 @@ Phase 8: Send Status Always Not Sent (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Workflow Projection Draft Ready (mode: mock_llm)
+Phase 8: Workflow Projection Draft Ready (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety)
 
 ---
 ### P8-WF-004 — Zero Sending Code Path Static Verification
@@ -8384,7 +8523,9 @@ Phase 8: Workflow Projection Draft Ready (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8393,7 +8534,7 @@ Phase 8: Workflow Projection Draft Ready (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Zero Sending Code Path Static Verification (mode: no_llm)
+Phase 8: Zero Sending Code Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification)
 
 ---
 ### P8-WF-005 — Zero Auto Approval Path Static Verification
@@ -8415,7 +8556,9 @@ Phase 8: Zero Sending Code Path Static Verification (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8424,7 +8567,7 @@ Phase 8: Zero Sending Code Path Static Verification (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Zero Auto Approval Path Static Verification (mode: no_llm)
+Phase 8: Zero Auto Approval Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification)
 
 ---
 ### P8-IDEMP-001 — Deterministic Draft ID Generation
@@ -8446,7 +8589,9 @@ Phase 8: Zero Auto Approval Path Static Verification (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8455,7 +8600,7 @@ Phase 8: Zero Auto Approval Path Static Verification (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Deterministic Draft ID Generation (mode: mock_llm)
+Phase 8: Deterministic Draft ID Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
 
 ---
 ### P8-IDEMP-002 — Revision Mutation Changes Draft ID
@@ -8477,7 +8622,9 @@ Phase 8: Deterministic Draft ID Generation (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8486,7 +8633,7 @@ Phase 8: Deterministic Draft ID Generation (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Revision Mutation Changes Draft ID (mode: mock_llm)
+Phase 8: Revision Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
 
 ---
 ### P8-IDEMP-003 — Prompt Version Mutation Changes Draft ID
@@ -8508,7 +8655,9 @@ Phase 8: Revision Mutation Changes Draft ID (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8517,7 +8666,7 @@ Phase 8: Revision Mutation Changes Draft ID (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Prompt Version Mutation Changes Draft ID (mode: mock_llm)
+Phase 8: Prompt Version Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)
 
 ---
 ### P8-BATCH-001 — Multiple Successful Leads Batch Processing
@@ -8539,7 +8688,9 @@ Phase 8: Prompt Version Mutation Changes Draft ID (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8548,7 +8699,7 @@ Phase 8: Prompt Version Mutation Changes Draft ID (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Multiple Successful Leads Batch Processing (mode: mock_llm)
+Phase 8: Multiple Successful Leads Batch Processing (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing)
 
 ---
 ### P8-BATCH-002 — Partial Failure Batch Resilience
@@ -8570,7 +8721,9 @@ Phase 8: Multiple Successful Leads Batch Processing (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8579,7 +8732,7 @@ Phase 8: Multiple Successful Leads Batch Processing (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Partial Failure Batch Resilience (mode: mock_llm)
+Phase 8: Partial Failure Batch Resilience (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure)
 
 ---
 ### P8-BATCH-003 — Max 50 Drafts Respected
@@ -8601,7 +8754,9 @@ Phase 8: Partial Failure Batch Resilience (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit",
+  "execution_time_s": 0.003
 }
 ```
 **Result:** PASS
@@ -8610,7 +8765,7 @@ Phase 8: Partial Failure Batch Resilience (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Max 50 Drafts Respected (mode: mock_llm)
+Phase 8: Max 50 Drafts Respected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit)
 
 ---
 ### P8-PRIV-001 — Personal Contact Data Excluded
@@ -8632,7 +8787,9 @@ Phase 8: Max 50 Drafts Respected (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8641,7 +8798,7 @@ Phase 8: Max 50 Drafts Respected (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Personal Contact Data Excluded (mode: no_llm)
+Phase 8: Personal Contact Data Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
 
 ---
 ### P8-PRIV-002 — Secrets and Tokens Excluded
@@ -8663,7 +8820,9 @@ Phase 8: Personal Contact Data Excluded (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8672,7 +8831,7 @@ Phase 8: Personal Contact Data Excluded (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Secrets and Tokens Excluded (mode: no_llm)
+Phase 8: Secrets and Tokens Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
 
 ---
 ### P8-PRIV-003 — Sensitive Personal Attributes Excluded
@@ -8694,7 +8853,9 @@ Phase 8: Secrets and Tokens Excluded (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8703,7 +8864,7 @@ Phase 8: Secrets and Tokens Excluded (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Sensitive Personal Attributes Excluded (mode: no_llm)
+Phase 8: Sensitive Personal Attributes Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)
 
 ---
 ### P8-GROUND-001 — Disabled Grounding Checker Explicitly Reported Not Run
@@ -8725,7 +8886,9 @@ Phase 8: Sensitive Personal Attributes Excluded (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8734,7 +8897,7 @@ Phase 8: Sensitive Personal Attributes Excluded (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (mode: no_llm)
+Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
 
 ---
 ### P8-GROUND-002 — Grounding Checker Cannot Rewrite Draft
@@ -8756,7 +8919,9 @@ Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8765,7 +8930,7 @@ Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Grounding Checker Cannot Rewrite Draft (mode: no_llm)
+Phase 8: Grounding Checker Cannot Rewrite Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
 
 ---
 ### P8-GROUND-003 — Grounding Checker Cannot Approve Draft
@@ -8787,7 +8952,9 @@ Phase 8: Grounding Checker Cannot Rewrite Draft (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8796,7 +8963,7 @@ Phase 8: Grounding Checker Cannot Rewrite Draft (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Grounding Checker Cannot Approve Draft (mode: no_llm)
+Phase 8: Grounding Checker Cannot Approve Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
 
 ---
 ### P8-GROUND-004 — Grounding Checker Cannot Send Draft
@@ -8818,7 +8985,9 @@ Phase 8: Grounding Checker Cannot Approve Draft (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8827,7 +8996,7 @@ Phase 8: Grounding Checker Cannot Approve Draft (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Grounding Checker Cannot Send Draft (mode: no_llm)
+Phase 8: Grounding Checker Cannot Send Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)
 
 ---
 ### P8-ERR-001 — Error Taxonomy Distinguishable
@@ -8849,7 +9018,9 @@ Phase 8: Grounding Checker Cannot Send Draft (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
+  "execution_time_s": 0.002
 }
 ```
 **Result:** PASS
@@ -8858,7 +9029,7 @@ Phase 8: Grounding Checker Cannot Send Draft (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Error Taxonomy Distinguishable (mode: no_llm)
+Phase 8: Error Taxonomy Distinguishable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes)
 
 ---
 ### P8-LLM-001 — Model Unavailable Handled Safely
@@ -8880,7 +9051,9 @@ Phase 8: Error Taxonomy Distinguishable (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8889,7 +9062,7 @@ Phase 8: Error Taxonomy Distinguishable (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Model Unavailable Handled Safely (mode: no_llm)
+Phase 8: Model Unavailable Handled Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable)
 
 ---
 ### P8-LLM-003 — Existing LLM Client Reused
@@ -8911,7 +9084,9 @@ Phase 8: Model Unavailable Handled Safely (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse",
+  "execution_time_s": 0.0
 }
 ```
 **Result:** PASS
@@ -8920,7 +9095,7 @@ Phase 8: Model Unavailable Handled Safely (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Existing LLM Client Reused (mode: no_llm)
+Phase 8: Existing LLM Client Reused (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse)
 
 ---
 ### P8-HANDOFF-001 — Phase 7 Handoff Fields Intact
@@ -8942,7 +9117,9 @@ Phase 8: Existing LLM Client Reused (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8951,7 +9128,7 @@ Phase 8: Existing LLM Client Reused (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Phase 7 Handoff Fields Intact (mode: mock_llm)
+Phase 8: Phase 7 Handoff Fields Intact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields)
 
 ---
 ### P8-HANDOFF-003 — Lead Score and Qualification Immutable
@@ -8973,7 +9150,9 @@ Phase 8: Phase 7 Handoff Fields Intact (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -8982,7 +9161,7 @@ Phase 8: Phase 7 Handoff Fields Intact (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Lead Score and Qualification Immutable (mode: mock_llm)
+Phase 8: Lead Score and Qualification Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)
 
 ---
 ### P8-HANDOFF-004 — Best Contact Ranking Immutable
@@ -9004,7 +9183,9 @@ Phase 8: Lead Score and Qualification Immutable (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+  "execution_time_s": 0.001
 }
 ```
 **Result:** PASS
@@ -9013,7 +9194,7 @@ Phase 8: Lead Score and Qualification Immutable (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Best Contact Ranking Immutable (mode: mock_llm)
+Phase 8: Best Contact Ranking Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)
 
 ---
 ### P8-API-001 — API Generate Drafts Valid Request
@@ -9035,7 +9216,9 @@ Phase 8: Best Contact Ranking Immutable (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+  "execution_time_s": 0.252
 }
 ```
 **Result:** PASS
@@ -9044,7 +9227,7 @@ Phase 8: Best Contact Ranking Immutable (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: API Generate Drafts Valid Request (mode: mock_llm)
+Phase 8: API Generate Drafts Valid Request (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)
 
 ---
 ### P8-API-003 — API Missing Sender Returns 422
@@ -9066,7 +9249,9 @@ Phase 8: API Generate Drafts Valid Request (mode: mock_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+  "execution_time_s": 0.252
 }
 ```
 **Result:** PASS
@@ -9075,7 +9260,7 @@ Phase 8: API Generate Drafts Valid Request (mode: mock_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: API Missing Sender Returns 422 (mode: no_llm)
+Phase 8: API Missing Sender Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)
 
 ---
 ### P8-API-004 — API Invalid Tone Returns 422
@@ -9097,7 +9282,9 @@ Phase 8: API Missing Sender Returns 422 (mode: no_llm)
 **Actual:**
 ```json
 {
-  "status": "PASS"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422",
+  "execution_time_s": 0.006
 }
 ```
 **Result:** PASS
@@ -9106,6 +9293,715 @@ Phase 8: API Missing Sender Returns 422 (mode: no_llm)
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: API Invalid Tone Returns 422 (mode: no_llm)
+Phase 8: API Invalid Tone Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422)
+
+---
+### P8-API-005 — API Invalid Language Returns 422
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
+  "execution_time_s": 0.005
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Invalid Language Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422)
+
+---
+### P8-REG-009 — Missing Job Location Does Not Become Remote
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Job Location Does Not Become Remote (test: tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote)
+
+---
+### P8-REG-010 — Missing Contact Title Does Not Become Leadership
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Contact Title Does Not Become Leadership (test: tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership)
+
+---
+### P8-REG-011 — Company and Contact Fields Cannot Escape Untrusted-Data Boundary
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-011"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data",
+  "execution_time_s": 0.001
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Company and Contact Fields Cannot Escape Untrusted-Data Boundary (test: tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data)
+
+---
+### P9-REVIEW-001 — Import Pending Draft
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REVIEW-001"
+}
+```
+**Expected:**
+```json
+{
+  "default_approval_status": "pending_review",
+  "default_send_status": "not_sent",
+  "default_outreach_status": "draft_ready",
+  "evidence_preserved": true,
+  "prompt_version_preserved": true
+}
+```
+**Actual:**
+```json
+{
+  "default_approval_status": "pending_review",
+  "default_send_status": "not_sent",
+  "default_outreach_status": "draft_ready",
+  "evidence_preserved": true,
+  "prompt_version_preserved": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft)
+
+---
+### P9-REVIEW-002 — Edit Invalidates Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REVIEW-002"
+}
+```
+**Expected:**
+```json
+{
+  "edit_creates_new_revision": true,
+  "revision_increment": 1,
+  "resets_approval_status": "pending_review",
+  "clears_approved_fingerprint": true,
+  "prior_revision_immutable": true
+}
+```
+**Actual:**
+```json
+{
+  "edit_creates_new_revision": true,
+  "revision_increment": 1,
+  "resets_approval_status": "pending_review",
+  "clears_approved_fingerprint": true,
+  "prior_revision_immutable": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval)
+
+---
+### P9-APPROVE-001 — Explicit Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-APPROVE-001"
+}
+```
+**Expected:**
+```json
+{
+  "explicit_human_action": true,
+  "approval_status": "approved",
+  "outreach_status": "approved",
+  "fingerprint_algorithm": "sha256",
+  "audit_event_recorded": true
+}
+```
+**Actual:**
+```json
+{
+  "explicit_human_action": true,
+  "approval_status": "approved",
+  "outreach_status": "approved",
+  "fingerprint_algorithm": "sha256",
+  "audit_event_recorded": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Explicit Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval)
+
+---
+### P9-APPROVE-002 — Approval Does Not Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-APPROVE-002"
+}
+```
+**Expected:**
+```json
+{
+  "approval_triggers_send": false,
+  "provider_calls_on_approval": 0,
+  "send_status_after_approval": "not_sent"
+}
+```
+**Actual:**
+```json
+{
+  "approval_triggers_send": false,
+  "provider_calls_on_approval": 0,
+  "send_status_after_approval": "not_sent"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send)
+
+---
+### P9-SEND-001 — Approved Dry Run
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-001"
+}
+```
+**Expected:**
+```json
+{
+  "dry_run_validation_passed": true,
+  "network_messages_transmitted": 0,
+  "send_status": "dry_run",
+  "stored_draft_unmarked": true
+}
+```
+**Actual:**
+```json
+{
+  "dry_run_validation_passed": true,
+  "network_messages_transmitted": 0,
+  "send_status": "dry_run",
+  "stored_draft_unmarked": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run)
+
+---
+### P9-SEND-002 — Approved Mock SMTP Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-002"
+}
+```
+**Expected:**
+```json
+{
+  "explicit_send_status": "sent",
+  "outreach_status": "sent",
+  "provider_message_id_captured": true,
+  "send_attempt_logged": true
+}
+```
+**Actual:**
+```json
+{
+  "explicit_send_status": "sent",
+  "outreach_status": "sent",
+  "provider_message_id_captured": true,
+  "send_attempt_logged": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send)
+
+---
+### P9-SEND-003 — Unapproved Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-003"
+}
+```
+**Expected:**
+```json
+{
+  "send_blocked": true,
+  "error_type": "not_approved",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "send_blocked": true,
+  "error_type": "not_approved",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)
+
+---
+### P9-SEND-004 — Stale Approval Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-004"
+}
+```
+**Expected:**
+```json
+{
+  "post_approval_tamper_detected": true,
+  "send_blocked": true,
+  "error_type": "approval_stale",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "post_approval_tamper_detected": true,
+  "send_blocked": true,
+  "error_type": "approval_stale",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)
+
+---
+### P9-SEND-005 — Already Sent Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEND-005"
+}
+```
+**Expected:**
+```json
+{
+  "duplicate_send_blocked": true,
+  "status": "already_sent",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "duplicate_send_blocked": true,
+  "status": "already_sent",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)
+
+---
+### P9-SUPPRESS-001 — Suppressed Recipient Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-001"
+}
+```
+**Expected:**
+```json
+{
+  "suppressed_recipient_blocked": true,
+  "error_type": "suppressed_recipient",
+  "provider_calls": 0
+}
+```
+**Actual:**
+```json
+{
+  "suppressed_recipient_blocked": true,
+  "error_type": "suppressed_recipient",
+  "provider_calls": 0
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked)
+
+---
+### P9-IDEMP-001 — Concurrent Duplicate Prevented
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-IDEMP-001"
+}
+```
+**Expected:**
+```json
+{
+  "concurrent_requests": 2,
+  "provider_messages_delivered": 1,
+  "second_request_blocked": true
+}
+```
+**Actual:**
+```json
+{
+  "concurrent_requests": 2,
+  "provider_messages_delivered": 1,
+  "second_request_blocked": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented)
+
+---
+### P9-BATCH-001 — Partial Failure Isolation
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-BATCH-001"
+}
+```
+**Expected:**
+```json
+{
+  "partial_failure_isolated": true,
+  "valid_drafts_sent": 2,
+  "invalid_drafts_blocked": 1,
+  "success_corrupted": false
+}
+```
+**Actual:**
+```json
+{
+  "partial_failure_isolated": true,
+  "valid_drafts_sent": 2,
+  "invalid_drafts_blocked": 1,
+  "success_corrupted": false
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)
+
+---
+### P9-SEC-001 — Secrets Never Logged
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-001"
+}
+```
+**Expected:**
+```json
+{
+  "secrets_in_error_logs": false,
+  "secrets_in_review_events": false,
+  "sanitized_with_asterisks": true
+}
+```
+**Actual:**
+```json
+{
+  "secrets_in_error_logs": false,
+  "secrets_in_review_events": false,
+  "sanitized_with_asterisks": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)
+
+---
+### P9-WF-001 — Sent State Projection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-WF-001"
+}
+```
+**Expected:**
+```json
+{
+  "source_of_truth": "sqlite_db",
+  "queryable_approval_status": true,
+  "queryable_send_status": true,
+  "queryable_outreach_status": true
+}
+```
+**Actual:**
+```json
+{
+  "source_of_truth": "sqlite_db",
+  "queryable_approval_status": true,
+  "queryable_send_status": true,
+  "queryable_outreach_status": true
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection)
+
+---
+### P9-NOLLM-001 — Zero LLM Code Path
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-NOLLM-001"
+}
+```
+**Expected:**
+```json
+{
+  "llm_calls_in_phase9": 0,
+  "forbidden_tokens_present": false
+}
+```
+**Actual:**
+```json
+{
+  "llm_calls_in_phase9": 0,
+  "forbidden_tokens_present": false
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)
+
+---
+### P9-LIVE-SMTP-001 — Live SMTP Send Guardrail
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-LIVE-SMTP-001"
+}
+```
+**Expected:**
+```json
+{
+  "opt_in_live_guardrail": true,
+  "default_status": "SKIPPED",
+  "safe_in_offline_suite": true
+}
+```
+**Actual:**
+_(Not executed yet)_
+
+**Result:** NOT_RUN
+
+**Differences:**
+- Test skipped: P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
+
+**Reason:** P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
+
+**Human Notes:**
+Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)
 
 ---

@@ -1,8 +1,8 @@
 {
   "phase": "Phase 8",
   "title": "Personalized Cold Email Draft Generation",
-  "run_timestamp": "2026-09-30T16:38:31.213848+00:00",
-  "git_commit": "7d68645",
+  "run_timestamp": "2026-09-30T16:42:46.085941+00:00",
+  "git_commit": "9cbb2b9",
   "prompt_version": "outreach_v1",
   "default_model": "qwen2.5:1.5b (default)",
   "catalog_cases": 95,
@@ -73,7 +73,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.003
       },
       "differences": [],
       "reason": "",
@@ -92,7 +92,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.003
       },
       "differences": [],
       "reason": "",
@@ -111,7 +111,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -130,7 +130,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -149,7 +149,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -187,7 +187,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
-        "execution_time_s": 0.003
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -206,7 +206,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
-        "execution_time_s": 0.002
+        "execution_time_s": 0.003
       },
       "differences": [],
       "reason": "",
@@ -510,7 +510,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -890,7 +890,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -928,7 +928,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
-        "execution_time_s": 0.002
+        "execution_time_s": 0.001
       },
       "differences": [],
       "reason": "",
@@ -985,7 +985,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1004,7 +1004,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1023,7 +1023,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1042,7 +1042,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1061,7 +1061,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1080,7 +1080,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1099,7 +1099,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1118,7 +1118,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1137,7 +1137,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1156,7 +1156,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1175,7 +1175,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1194,7 +1194,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1213,7 +1213,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1232,7 +1232,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
-        "execution_time_s": 0.007
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1327,7 +1327,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
-        "execution_time_s": 0.002
+        "execution_time_s": 0.001
       },
       "differences": [],
       "reason": "",
@@ -1346,7 +1346,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
-        "execution_time_s": 0.001
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1517,7 +1517,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
-        "execution_time_s": 0.003
+        "execution_time_s": 0.002
       },
       "differences": [],
       "reason": "",
@@ -1631,7 +1631,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
-        "execution_time_s": 0.316
+        "execution_time_s": 0.252
       },
       "differences": [],
       "reason": "",
@@ -1650,7 +1650,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
-        "execution_time_s": 0.316
+        "execution_time_s": 0.252
       },
       "differences": [],
       "reason": "",
@@ -1688,7 +1688,7 @@
       "actual": {
         "status": "PASS",
         "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
-        "execution_time_s": 0.009
+        "execution_time_s": 0.005
       },
       "differences": [],
       "reason": "",

@@ -187,7 +187,7 @@
     ],
     "reason": "",
     "human_notes": "Ground Truth verified by human review from real pybim.com crawl snapshot. FLAGGED FOR HUMAN CORRECTION: Expected primary_job_signals contains 3 non-pure job titles: 'Python BIM Automation' (propose 'Python BIM Automation Engineer'), 'ISO 19650 information-management roles' (propose 'BIM Information Manager'), 'Digital Construction / BIM technology leadership' (propose 'Digital Construction Manager').",
-    "test_timestamp": "2026-09-30T16:39:45.262527+00:00"
+    "test_timestamp": "2026-09-30T16:57:59.788240+00:00"
   },
   {
     "case_id": "P3-DISC-001",
@@ -401,7 +401,7 @@
     "differences": [],
     "reason": "All Phase 3 critical requirements and intent coverage targets satisfied.",
     "human_notes": "Frozen human-approved WebsiteProfile for pyBIM to test Discovery query generation independently of Phase 2 known limitations. Evaluates intent coverage, signal diversity, ATS targeting, geography distribution, and absence of semantic pollution.",
-    "test_timestamp": "2026-09-30T16:39:45.309839+00:00"
+    "test_timestamp": "2026-09-30T16:57:59.907921+00:00"
   },
   {
     "case_id": "P3-LIVE-001",
@@ -429,7 +429,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "Live test validating top 10 search results per query. Evaluates Precision@10 across ATS and career categories. Status remains REVIEW for initial baseline.",
-    "test_timestamp": "2026-09-30T16:39:45.316920+00:00"
+    "test_timestamp": "2026-09-30T16:57:59.935050+00:00"
   },
   {
     "case_id": "P4-DET-001",
@@ -465,7 +465,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies accurate detection of ATS providers vs generic career pages from URLs.",
-    "test_timestamp": "2026-09-30T16:39:45.350304+00:00"
+    "test_timestamp": "2026-09-30T16:57:59.982263+00:00"
   },
   {
     "case_id": "P4-DET-002",
@@ -494,7 +494,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts basic structured fields from Greenhouse HTML/API snapshot.",
-    "test_timestamp": "2026-09-30T16:39:45.419325+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.113982+00:00"
   },
   {
     "case_id": "P4-DET-003",
@@ -525,7 +525,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts role title, location, employment type, and source key from Lever snapshot.",
-    "test_timestamp": "2026-09-30T16:39:45.503356+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.234259+00:00"
   },
   {
     "case_id": "P4-DET-004",
@@ -552,7 +552,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts company, title, and location from Ashby job page snapshot.",
-    "test_timestamp": "2026-09-30T16:39:45.561908+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.325309+00:00"
   },
   {
     "case_id": "P4-DET-005",
@@ -583,7 +583,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Parses standard Schema.org JobPosting application/ld+json metadata.",
-    "test_timestamp": "2026-09-30T16:39:45.598711+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.376762+00:00"
   },
   {
     "case_id": "P4-DET-006",
@@ -614,7 +614,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Locates and extracts JobPosting when nested inside @graph schema array.",
-    "test_timestamp": "2026-09-30T16:39:45.633778+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.425542+00:00"
   },
   {
     "case_id": "P4-DET-007",
@@ -653,7 +653,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures company domain canonicalizes www and case while never using the ATS hosting platform.",
-    "test_timestamp": "2026-09-30T16:39:45.668186+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.469434+00:00"
   },
   {
     "case_id": "P4-DET-008",
@@ -698,7 +698,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes corporate legal suffixes, punctuation, and whitespace differences.",
-    "test_timestamp": "2026-09-30T16:39:45.707300+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.522869+00:00"
   },
   {
     "case_id": "P4-DET-009",
@@ -719,7 +719,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies source_company_key survives across raw source, analyzer, and StructuredJob.",
-    "test_timestamp": "2026-09-30T16:39:45.777785+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.646924+00:00"
   },
   {
     "case_id": "P4-DET-010",
@@ -755,7 +755,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Validates distinct error classification without silently converting errors to empty successes.",
-    "test_timestamp": "2026-09-30T16:39:45.847659+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.761660+00:00"
   },
   {
     "case_id": "P4-NEG-001",
@@ -787,7 +787,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing company name is rejected as invalid/parse_failed rather than succeeding as an empty job.",
-    "test_timestamp": "2026-09-30T16:39:45.916236+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.871897+00:00"
   },
   {
     "case_id": "P4-NEG-002",
@@ -819,7 +819,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing job title produces an explicit validation/parse_failed error and is not accepted.",
-    "test_timestamp": "2026-09-30T16:39:45.978139+00:00"
+    "test_timestamp": "2026-09-30T16:58:00.993445+00:00"
   },
   {
     "case_id": "P4-NEG-003",
@@ -841,7 +841,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Gracefully recovers from malformed JSON-LD scripts using DOM fallback.",
-    "test_timestamp": "2026-09-30T16:39:46.008981+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.047119+00:00"
   },
   {
     "case_id": "P4-NEG-004",
@@ -863,7 +863,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Does not fabricate active job postings from expired notices.",
-    "test_timestamp": "2026-09-30T16:39:46.038975+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.087965+00:00"
   },
   {
     "case_id": "P4-NEG-005",
@@ -885,7 +885,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identifies generic career homepages that lack specific job postings.",
-    "test_timestamp": "2026-09-30T16:39:46.069361+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.122703+00:00"
   },
   {
     "case_id": "P4-NEG-006",
@@ -913,7 +913,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes URL tracking query params, fragments, and trailing slashes.",
-    "test_timestamp": "2026-09-30T16:39:46.098497+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.159507+00:00"
   },
   {
     "case_id": "P4-NEG-007",
@@ -946,7 +946,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Guarantees ATS domains never become company_domain on StructuredJob.",
-    "test_timestamp": "2026-09-30T16:39:46.128375+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.196440+00:00"
   },
   {
     "case_id": "P4-SEM-001",
@@ -979,7 +979,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture prepared for future evaluation on larger models (qwen2.5:3b/7b/claude). Contains ground truth technologies and signal evidence.",
-    "test_timestamp": "2026-09-30T16:39:46.133847+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.212131+00:00"
   },
   {
     "case_id": "P4-SEM-002",
@@ -1015,7 +1015,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture for API developer role. Deferring execution until higher-tier model deployment.",
-    "test_timestamp": "2026-09-30T16:39:46.140303+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.227470+00:00"
   },
   {
     "case_id": "P5-STRONG-001",
@@ -1082,7 +1082,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Multiple strong relevant jobs yield high intent, top recency, rich grounded evidence, and qualification.",
-    "test_timestamp": "2026-09-30T16:39:46.143778+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.235514+00:00"
   },
   {
     "case_id": "P5-WEAK-001",
@@ -1133,7 +1133,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Generic administrative job must not invent BIM relevance or intent; lead is disqualified.",
-    "test_timestamp": "2026-09-30T16:39:46.145975+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.240214+00:00"
   },
   {
     "case_id": "P5-ID-001",
@@ -1161,7 +1161,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalized company name must NOT override conflicting domains.",
-    "test_timestamp": "2026-09-30T16:39:46.147666+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.246232+00:00"
   },
   {
     "case_id": "P5-ID-002",
@@ -1185,7 +1185,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Different name spellings sharing identical domain must merge into 1 CompanyLead.",
-    "test_timestamp": "2026-09-30T16:39:46.149448+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.252564+00:00"
   },
   {
     "case_id": "P5-ID-003",
@@ -1207,7 +1207,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When domain is absent, ATS source + source_company_key correctly identifies the company.",
-    "test_timestamp": "2026-09-30T16:39:46.150761+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.256155+00:00"
   },
   {
     "case_id": "P5-ID-004",
@@ -1233,7 +1233,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identity priority remains domain -> source+key -> normalized name. Conflicting source keys stay separate.",
-    "test_timestamp": "2026-09-30T16:39:46.152688+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.260505+00:00"
   },
   {
     "case_id": "P5-DEDUP-001",
@@ -1262,7 +1262,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Canonical URL normalization collapses identical job postings without inflating counts or score.",
-    "test_timestamp": "2026-09-30T16:39:46.155820+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.265258+00:00"
   },
   {
     "case_id": "P5-REL-001",
@@ -1284,7 +1284,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Administrative role does not become relevant merely because Revit is in the text.",
-    "test_timestamp": "2026-09-30T16:39:46.157726+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.269614+00:00"
   },
   {
     "case_id": "P5-REL-002",
@@ -1307,7 +1307,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Explicit BIM management title counts as relevant even if tech stack list is empty.",
-    "test_timestamp": "2026-09-30T16:39:46.160213+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.273379+00:00"
   },
   {
     "case_id": "P5-REL-003",
@@ -1329,7 +1329,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Senior roles outside BIM/digital engineering do NOT receive the +10 leadership intent bonus.",
-    "test_timestamp": "2026-09-30T16:39:46.161773+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.278759+00:00"
   },
   {
     "case_id": "P5-REC-001",
@@ -1354,7 +1354,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Recent irrelevant job does not boost company recency score; score depends strictly on relevant jobs.",
-    "test_timestamp": "2026-09-30T16:39:46.163711+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.282964+00:00"
   },
   {
     "case_id": "P5-REC-002",
@@ -1376,7 +1376,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Missing date gracefully falls back to older_unknown score without fabricating a timestamp.",
-    "test_timestamp": "2026-09-30T16:39:46.165345+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.287129+00:00"
   },
   {
     "case_id": "P5-REC-003",
@@ -1398,7 +1398,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Future date does not yield max recency score through negative age.",
-    "test_timestamp": "2026-09-30T16:39:46.166905+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.295068+00:00"
   },
   {
     "case_id": "P5-EVID-001",
@@ -1421,7 +1421,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Signals and verifiable snippets survive aggregation and remain traceable to source jobs.",
-    "test_timestamp": "2026-09-30T16:39:46.168678+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.300705+00:00"
   },
   {
     "case_id": "P5-EVID-002",
@@ -1446,7 +1446,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `evidence_score` mismatch: expected `5`, got `0`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: evidence_score=5\n- Actual: evidence_score=0\n- Analysis: Production scoring correctly assigns 0 to empty-string evidence. Golden Ground Truth currently expects 5. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T16:39:46.171210+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.303709+00:00"
   },
   {
     "case_id": "P5-SCORE-001",
@@ -1488,7 +1488,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All sub-scores strictly respect their defined contractual bounds.",
-    "test_timestamp": "2026-09-30T16:39:46.173024+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.306579+00:00"
   },
   {
     "case_id": "P5-SCORE-002",
@@ -1515,7 +1515,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Total score is exactly equal to the mathematical sum of its four constituent sub-scores.",
-    "test_timestamp": "2026-09-30T16:39:46.174510+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.309792+00:00"
   },
   {
     "case_id": "P5-SCORE-003",
@@ -1546,7 +1546,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Scoring contains zero randomness or temperature variance.",
-    "test_timestamp": "2026-09-30T16:39:46.176607+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.313747+00:00"
   },
   {
     "case_id": "P5-SCORE-004",
@@ -1568,7 +1568,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Critical fail condition verified: LLM never directly assigns any numeric score.",
-    "test_timestamp": "2026-09-30T16:39:46.183089+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.323062+00:00"
   },
   {
     "case_id": "P5-QUAL-001",
@@ -1595,7 +1595,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Qualification strictly triggers at score >= 60; score of 59 is unqualified.",
-    "test_timestamp": "2026-09-30T16:39:46.184478+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.326460+00:00"
   },
   {
     "case_id": "P5-AGG-001",
@@ -1624,7 +1624,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Reasons explain qualification truthfully and do not cite irrelevant jobs.",
-    "test_timestamp": "2026-09-30T16:39:46.185599+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.329569+00:00"
   },
   {
     "case_id": "P5-AGG-002",
@@ -1646,7 +1646,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "System tracks raw input jobs, unique deduplicated jobs, and relevant jobs distinctly.",
-    "test_timestamp": "2026-09-30T16:39:46.186752+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.332915+00:00"
   },
   {
     "case_id": "P5-AGG-003",
@@ -1669,7 +1669,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A low-quality or malformed job does not crash company aggregation or corrupt scoring.",
-    "test_timestamp": "2026-09-30T16:39:46.187858+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.336334+00:00"
   },
   {
     "case_id": "P5-ADV-001",
@@ -1692,7 +1692,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Separate legal entities sharing generic names do not collide if domains differ.",
-    "test_timestamp": "2026-09-30T16:39:46.189019+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.342543+00:00"
   },
   {
     "case_id": "P5-ADV-002",
@@ -1713,7 +1713,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain variations resolve to a single canonical domain identity.",
-    "test_timestamp": "2026-09-30T16:39:46.191113+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.349768+00:00"
   },
   {
     "case_id": "P5-ADV-003",
@@ -1739,7 +1739,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "High job count from non-BIM roles does not inflate relevant_job_count or intent.",
-    "test_timestamp": "2026-09-30T16:39:46.194005+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.354812+00:00"
   },
   {
     "case_id": "P5-ADV-004",
@@ -1761,7 +1761,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact duplicate signals do not receive multiple signal count bonuses.",
-    "test_timestamp": "2026-09-30T16:39:46.195183+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.358088+00:00"
   },
   {
     "case_id": "P6-COMPANY-001",
@@ -1795,7 +1795,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes external provider company data into internal schema without leaking raw provider wrappers.",
-    "test_timestamp": "2026-09-30T16:39:46.218110+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.411659+00:00"
   },
   {
     "case_id": "P6-ROLE-001",
@@ -1848,7 +1848,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact and strong buyer role matches strictly outrank irrelevant administrative titles.",
-    "test_timestamp": "2026-09-30T16:39:46.226542+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.425539+00:00"
   },
   {
     "case_id": "P6-ROLE-002",
@@ -1876,7 +1876,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When buyer_roles is empty, system falls back to neutral generic behavior without hallucinating domain titles.",
-    "test_timestamp": "2026-09-30T16:39:46.232495+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.438090+00:00"
   },
   {
     "case_id": "P6-CONTACT-001",
@@ -1914,7 +1914,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All required ContactCandidate fields normalize cleanly, and missing optional fields fall back safely.",
-    "test_timestamp": "2026-09-30T16:39:46.238468+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.449917+00:00"
   },
   {
     "case_id": "P6-DEDUP-001",
@@ -1954,7 +1954,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts with identical work email merge into one record with consolidated data sources.",
-    "test_timestamp": "2026-09-30T16:39:46.244928+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.464189+00:00"
   },
   {
     "case_id": "P6-DEDUP-002",
@@ -1992,7 +1992,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts sharing canonical LinkedIn URL collapse into one logical candidate.",
-    "test_timestamp": "2026-09-30T16:39:46.250790+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.476760+00:00"
   },
   {
     "case_id": "P6-DEDUP-003",
@@ -2024,7 +2024,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts sharing identical names but distinct emails must remain separate entities.",
-    "test_timestamp": "2026-09-30T16:39:46.257130+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.489451+00:00"
   },
   {
     "case_id": "P6-DEDUP-004",
@@ -2056,7 +2056,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "In the absence of email or LinkedIn, distinct titles at the same firm are not aggressively collapsed.",
-    "test_timestamp": "2026-09-30T16:39:46.263587+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.506118+00:00"
   },
   {
     "case_id": "P6-EMAIL-001",
@@ -2080,7 +2080,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Statistical confidence from Domain Search produces likely, never verified without an SMTP verifier pass.",
-    "test_timestamp": "2026-09-30T16:39:46.270652+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.521857+00:00"
   },
   {
     "case_id": "P6-EMAIL-002",
@@ -2118,7 +2118,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Standardized verifier status mapping ensures cross-provider consistency.",
-    "test_timestamp": "2026-09-30T16:39:46.375886+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.758519+00:00"
   },
   {
     "case_id": "P6-EMAIL-003",
@@ -2145,7 +2145,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `email_status` mismatch: expected `not_found`, got `unknown`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: email_status='not_found'\n- Actual: email_status='unknown'\n- Analysis: ContactCandidate defaults to 'unknown' when work_email is None. Golden Ground Truth currently expects 'not_found'. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T16:39:46.382446+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.770704+00:00"
   },
   {
     "case_id": "P6-EMAIL-004",
@@ -2173,7 +2173,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Free public webmail domains (gmail, yahoo, etc.) are rejected as corporate work emails.",
-    "test_timestamp": "2026-09-30T16:39:46.388675+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.789226+00:00"
   },
   {
     "case_id": "P6-EMAIL-005",
@@ -2200,7 +2200,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Emails matching the verified company domain receive positive domain consistency weighting.",
-    "test_timestamp": "2026-09-30T16:39:46.395519+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.807165+00:00"
   },
   {
     "case_id": "P6-SCORE-001",
@@ -2232,7 +2232,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contact scores derive purely from deterministic rule evaluation without LLM calls or randomness.",
-    "test_timestamp": "2026-09-30T16:39:46.403991+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.823285+00:00"
   },
   {
     "case_id": "P6-SCORE-002",
@@ -2257,7 +2257,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All calculated contact scores strictly stay within the 0 to 100 range.",
-    "test_timestamp": "2026-09-30T16:39:46.412622+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.838404+00:00"
   },
   {
     "case_id": "P6-SCORE-003",
@@ -2287,7 +2287,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Strong buyer role relevance combined with usable email outscores irrelevant roles with verified emails.",
-    "test_timestamp": "2026-09-30T16:39:46.440104+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.850195+00:00"
   },
   {
     "case_id": "P6-BEST-001",
@@ -2335,7 +2335,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Top candidate with exact buyer match and verified work email wins best_contact unequivocally.",
-    "test_timestamp": "2026-09-30T16:39:46.457761+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.865345+00:00"
   },
   {
     "case_id": "P6-STATUS-001",
@@ -2358,7 +2358,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Status 'complete' requires company profile, at least one contact, and a verified/likely work email.",
-    "test_timestamp": "2026-09-30T16:39:46.473258+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.877254+00:00"
   },
   {
     "case_id": "P6-STATUS-002",
@@ -2380,7 +2380,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When only company or contact without verified email is resolved, status reflects partial.",
-    "test_timestamp": "2026-09-30T16:39:46.496712+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.889119+00:00"
   },
   {
     "case_id": "P6-STATUS-003",
@@ -2406,7 +2406,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Provider failures are captured as provider_error rather than masquerading as empty success.",
-    "test_timestamp": "2026-09-30T16:39:46.514181+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.900693+00:00"
   },
   {
     "case_id": "P6-PROVIDER-001",
@@ -2438,7 +2438,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Unconfigured environments return an explicit error and are not presented as zero contacts.",
-    "test_timestamp": "2026-09-30T16:39:46.528318+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.918254+00:00"
   },
   {
     "case_id": "P6-PROVIDER-002",
@@ -2461,7 +2461,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 401/403 maps directly to ProviderAuthError.",
-    "test_timestamp": "2026-09-30T16:39:46.538980+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.928764+00:00"
   },
   {
     "case_id": "P6-PROVIDER-003",
@@ -2484,7 +2484,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 429 maps directly to ProviderRateLimitError.",
-    "test_timestamp": "2026-09-30T16:39:46.552093+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.941736+00:00"
   },
   {
     "case_id": "P6-PROVIDER-004",
@@ -2507,7 +2507,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Network timeouts are classified as ProviderTimeoutError.",
-    "test_timestamp": "2026-09-30T16:39:46.561389+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.956033+00:00"
   },
   {
     "case_id": "P6-PROVIDER-005",
@@ -2530,7 +2530,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 500+ maps to standard ProviderError.",
-    "test_timestamp": "2026-09-30T16:39:46.569635+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.971442+00:00"
   },
   {
     "case_id": "P6-PROVIDER-006",
@@ -2553,7 +2553,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 200 with zero records or 404 maps to ProviderEmptyResult without crashing.",
-    "test_timestamp": "2026-09-30T16:39:46.584366+00:00"
+    "test_timestamp": "2026-09-30T16:58:01.985610+00:00"
   },
   {
     "case_id": "P6-USAGE-001",
@@ -2590,7 +2590,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "providers_used tracks all invoked providers, including failed calls.",
-    "test_timestamp": "2026-09-30T16:39:46.912746+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.397036+00:00"
   },
   {
     "case_id": "P6-APOLLO-001",
@@ -2615,7 +2615,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies correct URL and query parameters for Apollo organization enrichment.",
-    "test_timestamp": "2026-09-30T16:39:46.939097+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.463528+00:00"
   },
   {
     "case_id": "P6-APOLLO-002",
@@ -2655,7 +2655,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "People search payload strictly scopes domain, buyer titles, and page boundaries.",
-    "test_timestamp": "2026-09-30T16:39:46.963399+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.522677+00:00"
   },
   {
     "case_id": "P6-APOLLO-003",
@@ -2678,7 +2678,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Enforces GDPR data minimization: never requests personal emails or phone numbers.",
-    "test_timestamp": "2026-09-30T16:39:46.986449+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.573378+00:00"
   },
   {
     "case_id": "P6-HUNTER-001",
@@ -2702,7 +2702,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain search extracts candidate names, positions, and confidence scores accurately.",
-    "test_timestamp": "2026-09-30T16:39:47.009432+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.631407+00:00"
   },
   {
     "case_id": "P6-HUNTER-002",
@@ -2726,7 +2726,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Email verifier maps valid deliverable state directly to verified status.",
-    "test_timestamp": "2026-09-30T16:39:47.033449+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.693617+00:00"
   },
   {
     "case_id": "P6-LIMIT-001",
@@ -2750,7 +2750,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "API contract strictly bounds lead input batches to 50 items.",
-    "test_timestamp": "2026-09-30T16:39:47.039921+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.710214+00:00"
   },
   {
     "case_id": "P6-LIMIT-002",
@@ -2775,7 +2775,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Final contact candidate list is deterministically truncated to the top 5 highest-ranking records.",
-    "test_timestamp": "2026-09-30T16:39:47.048613+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.724261+00:00"
   },
   {
     "case_id": "P6-LIMIT-003",
@@ -2804,7 +2804,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Unqualified leads bypass expensive enrichment calls unless qualified_only=false is explicitly requested.",
-    "test_timestamp": "2026-09-30T16:39:47.056867+00:00"
+    "test_timestamp": "2026-09-30T16:58:02.740904+00:00"
   },
   {
     "case_id": "P6-PARTIAL-001",
@@ -2832,7 +2832,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A single provider failure does not abort the entire enrichment pipeline; successful provider data survives.",
-    "test_timestamp": "2026-09-30T16:39:47.306990+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.052621+00:00"
   },
   {
     "case_id": "P6-PARTIAL-002",
@@ -2857,7 +2857,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When SMTP verifier fails, contact remains available with unknown email status rather than being discarded.",
-    "test_timestamp": "2026-09-30T16:39:47.314051+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.071933+00:00"
   },
   {
     "case_id": "P6-PRIVACY-001",
@@ -2904,7 +2904,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures ContactCandidate model only exposes business work emails and professional contact links.",
-    "test_timestamp": "2026-09-30T16:39:47.318247+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.086452+00:00"
   },
   {
     "case_id": "P6-EXPLAIN-001",
@@ -2933,7 +2933,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Selected best_contact exposes all underlying attributes necessary to audit why it was chosen.",
-    "test_timestamp": "2026-09-30T16:39:47.322317+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.101289+00:00"
   },
   {
     "case_id": "P6-CROSS-001",
@@ -2968,7 +2968,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Enrichment results, scoring, and best-contact selection are completely invariant to provider execution order.",
-    "test_timestamp": "2026-09-30T16:39:47.326822+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.120494+00:00"
   },
   {
     "case_id": "P6-CROSS-002",
@@ -2992,7 +2992,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Mixed casing in email addresses normalizes to identical identity key during deduplication.",
-    "test_timestamp": "2026-09-30T16:39:47.330974+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.140351+00:00"
   },
   {
     "case_id": "P6-LIVE-APOLLO-001",
@@ -3011,7 +3011,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "APOLLO_API_KEY not configured in environment. Test skipped.",
-    "test_timestamp": "2026-09-30T16:39:47.335238+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.153472+00:00"
   },
   {
     "case_id": "P6-LIVE-HUNTER-001",
@@ -3030,7 +3030,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "HUNTER_API_KEY not configured in environment. Test skipped.",
-    "test_timestamp": "2026-09-30T16:39:47.339463+00:00"
+    "test_timestamp": "2026-09-30T16:58:03.166539+00:00"
   },
   {
     "case_id": "P7-EXP-001",
@@ -4796,7 +4796,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Strong BIM Automation Signal (test: tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-001",
@@ -4813,13 +4813,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.003
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Qualified and Verified Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-002",
@@ -4836,13 +4836,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.003
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Qualified and Likely Allowed (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-003",
@@ -4859,13 +4859,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Unqualified Lead Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-004",
@@ -4882,13 +4882,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Best Contact Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-005",
@@ -4905,13 +4905,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Work Email Skipped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-006",
@@ -4934,7 +4934,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Risky Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-007",
@@ -4951,13 +4951,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
-      "execution_time_s": 0.003
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Unknown Email Skipped by Default (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ELIG-008",
@@ -4974,13 +4974,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
-      "execution_time_s": 0.002
+      "execution_time_s": 0.003
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Preview Override Without Fabrication (test: tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ID-001",
@@ -5003,7 +5003,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Lead ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ID-002",
@@ -5026,7 +5026,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Contact ID Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ID-003",
@@ -5049,7 +5049,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Recipient Email Preserved (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ID-004",
@@ -5072,7 +5072,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Recipient Name and Title Bound to Same Contact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ID-005",
@@ -5095,7 +5095,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Explicit Contact ID Belongs to Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-001",
@@ -5118,7 +5118,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Wrong-Company Same-Title Job Contamination (test: tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-COMPANY-001",
@@ -5141,7 +5141,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Canonical Domain Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-COMPANY-002",
@@ -5164,7 +5164,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: ATS Namespaced Match (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-COMPANY-003",
@@ -5187,7 +5187,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: ATS Namespace Mismatch (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-COMPANY-004",
@@ -5210,7 +5210,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Conservative Name Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-004",
@@ -5233,7 +5233,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: API Raw Jobs Handoff (test: tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-JOB-001",
@@ -5256,7 +5256,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Relevant Jobs Filter (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-JOB-002",
@@ -5279,7 +5279,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Raw Jobs Safe Fallback (test: tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-005",
@@ -5302,7 +5302,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Phase 5 Evidence Preservation (test: tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-006",
@@ -5325,7 +5325,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Phase 5 Signal Schema (test: tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-EVID-001",
@@ -5342,13 +5342,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: StructuredJob Signal Evidence Extracted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-EVID-002",
@@ -5371,7 +5371,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Unknown Evidence Reference Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-EVID-003",
@@ -5394,7 +5394,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Duplicate Evidence Deterministically Handled (test: tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-003",
@@ -5417,7 +5417,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Fabricated BIM/Revit Technology (test: tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-FAB-001",
@@ -5440,7 +5440,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Fake Metrics in Context (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-FAB-002",
@@ -5463,7 +5463,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Fake Relationship Claims (test: tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SVC-001",
@@ -5486,7 +5486,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Active Service Accepted (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SVC-002",
@@ -5509,7 +5509,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: In-Development Service Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-002",
@@ -5532,7 +5532,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Active Service Substring Bypass Rejected (test: tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SVC-004",
@@ -5555,7 +5555,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: CTA Offering Rejected as Active Service (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SVC-005",
@@ -5578,7 +5578,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Missing Offering Status Rejected as Active (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SVC-006",
@@ -5601,7 +5601,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: No Active Service Skips Lead (test: tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-CTX-001",
@@ -5624,7 +5624,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Deterministic Context Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-008",
@@ -5647,7 +5647,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Deterministic Evidence Ordering (test: tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-007",
@@ -5670,7 +5670,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: SOURCE_DATA Delimiter Injection Escaping (test: tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-INJECT-001",
@@ -5693,7 +5693,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Prompt Injection Ignore Instructions Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-INJECT-002",
@@ -5716,7 +5716,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Prompt Injection Recipient Override Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-INJECT-003",
@@ -5739,7 +5739,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Prompt Injection Auto Approve Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-INJECT-004",
@@ -5762,7 +5762,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Prompt Injection Send Immediately Trapped (test: tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PROMPT-001",
@@ -5785,7 +5785,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Sales Outreach Environment Isolated (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PROMPT-002",
@@ -5802,13 +5802,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Tone Preset Mapping (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PROMPT-003",
@@ -5831,7 +5831,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Language Preset Supported (test: tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PARSE-001",
@@ -5848,13 +5848,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
-      "execution_time_s": 0.002
+      "execution_time_s": 0.001
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Valid JSON Single Parse (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PARSE-002",
@@ -5877,7 +5877,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Invalid Then Repaired JSON Retry (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PARSE-003",
@@ -5900,7 +5900,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Two Invalid Responses Fail Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-001",
@@ -5917,13 +5917,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Empty Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-002",
@@ -5940,13 +5940,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Empty Body Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-003",
@@ -5963,13 +5963,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Subject Exceeding 60 Characters Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-004",
@@ -5986,13 +5986,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Body Exceeding 160 Words Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-005",
@@ -6009,13 +6009,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Fake Re/Fwd Prefix Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-006",
@@ -6032,13 +6032,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: All Caps Subject Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-007",
@@ -6055,13 +6055,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Unresolved Placeholders Rejected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-008",
@@ -6078,13 +6078,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Identity Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-009",
@@ -6101,13 +6101,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Recipient Email Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-VAL-010",
@@ -6124,13 +6124,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Workflow Mutation Invariant Protected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-WF-001",
@@ -6147,13 +6147,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Approval Status Always Pending Review (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-WF-002",
@@ -6170,13 +6170,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Send Status Always Not Sent (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-WF-003",
@@ -6193,13 +6193,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Workflow Projection Draft Ready (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-WF-004",
@@ -6216,13 +6216,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
-      "execution_time_s": 0.007
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Zero Sending Code Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-WF-005",
@@ -6245,7 +6245,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Zero Auto Approval Path Static Verification (test: tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-IDEMP-001",
@@ -6268,7 +6268,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Deterministic Draft ID Generation (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-IDEMP-002",
@@ -6291,7 +6291,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Revision Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-IDEMP-003",
@@ -6314,7 +6314,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Prompt Version Mutation Changes Draft ID (test: tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-BATCH-001",
@@ -6331,13 +6331,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
-      "execution_time_s": 0.002
+      "execution_time_s": 0.001
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Multiple Successful Leads Batch Processing (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-BATCH-002",
@@ -6354,13 +6354,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
-      "execution_time_s": 0.001
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Partial Failure Batch Resilience (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-BATCH-003",
@@ -6383,7 +6383,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Max 50 Drafts Respected (test: tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PRIV-001",
@@ -6406,7 +6406,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Personal Contact Data Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PRIV-002",
@@ -6429,7 +6429,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Secrets and Tokens Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-PRIV-003",
@@ -6452,7 +6452,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Sensitive Personal Attributes Excluded (test: tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-GROUND-001",
@@ -6475,7 +6475,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-GROUND-002",
@@ -6498,7 +6498,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Grounding Checker Cannot Rewrite Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-GROUND-003",
@@ -6521,7 +6521,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Grounding Checker Cannot Approve Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-GROUND-004",
@@ -6544,7 +6544,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Grounding Checker Cannot Send Draft (test: tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-ERR-001",
@@ -6561,13 +6561,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
-      "execution_time_s": 0.003
+      "execution_time_s": 0.002
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Error Taxonomy Distinguishable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-LLM-001",
@@ -6590,7 +6590,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Model Unavailable Handled Safely (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-LLM-003",
@@ -6613,7 +6613,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Existing LLM Client Reused (test: tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-HANDOFF-001",
@@ -6636,7 +6636,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Phase 7 Handoff Fields Intact (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-HANDOFF-003",
@@ -6659,7 +6659,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Lead Score and Qualification Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-HANDOFF-004",
@@ -6682,7 +6682,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Best Contact Ranking Immutable (test: tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-API-001",
@@ -6699,13 +6699,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
-      "execution_time_s": 0.316
+      "execution_time_s": 0.252
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: API Generate Drafts Valid Request (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-API-003",
@@ -6722,13 +6722,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
-      "execution_time_s": 0.316
+      "execution_time_s": 0.252
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: API Missing Sender Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-API-004",
@@ -6751,7 +6751,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: API Invalid Tone Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-API-005",
@@ -6768,13 +6768,13 @@
     "actual": {
       "status": "PASS",
       "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
-      "execution_time_s": 0.009
+      "execution_time_s": 0.005
     },
     "status": "PASS",
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: API Invalid Language Returns 422 (test: tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-009",
@@ -6797,7 +6797,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Missing Job Location Does Not Become Remote (test: tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-010",
@@ -6820,7 +6820,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Missing Contact Title Does Not Become Leadership (test: tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-REG-011",
@@ -6843,7 +6843,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 8: Company and Contact Fields Cannot Escape Untrusted-Data Boundary (test: tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SEM-001",
@@ -6865,7 +6865,7 @@
     "differences": [],
     "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
     "human_notes": "Phase 8: Strong BIM Automation Email Semantic Review (test: None)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SEM-002",
@@ -6887,7 +6887,7 @@
     "differences": [],
     "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
     "human_notes": "Phase 8: BIM Manager Hiring Email Semantic Review (test: None)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SEM-003",
@@ -6909,7 +6909,7 @@
     "differences": [],
     "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
     "human_notes": "Phase 8: Executive Brief Tone Semantic Review (test: None)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SEM-004",
@@ -6931,7 +6931,7 @@
     "differences": [],
     "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
     "human_notes": "Phase 8: Italian Draft Semantic Review (test: None)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
   },
   {
     "case_id": "P8-SEM-005",
@@ -6953,6 +6953,428 @@
     "differences": [],
     "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
     "human_notes": "Phase 8: German Draft Semantic Review (test: None)",
-    "test_timestamp": "2026-09-30T16:38:31.213848+00:00"
+    "test_timestamp": "2026-09-30T16:42:46.085941+00:00"
+  },
+  {
+    "case_id": "P9-REVIEW-001",
+    "phase": "Phase 9",
+    "title": "Import Pending Draft",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-REVIEW-001"
+    },
+    "expected": {
+      "default_approval_status": "pending_review",
+      "default_send_status": "not_sent",
+      "default_outreach_status": "draft_ready",
+      "evidence_preserved": true,
+      "prompt_version_preserved": true
+    },
+    "actual": {
+      "default_approval_status": "pending_review",
+      "default_send_status": "not_sent",
+      "default_outreach_status": "draft_ready",
+      "evidence_preserved": true,
+      "prompt_version_preserved": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-REVIEW-002",
+    "phase": "Phase 9",
+    "title": "Edit Invalidates Approval",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-REVIEW-002"
+    },
+    "expected": {
+      "edit_creates_new_revision": true,
+      "revision_increment": 1,
+      "resets_approval_status": "pending_review",
+      "clears_approved_fingerprint": true,
+      "prior_revision_immutable": true
+    },
+    "actual": {
+      "edit_creates_new_revision": true,
+      "revision_increment": 1,
+      "resets_approval_status": "pending_review",
+      "clears_approved_fingerprint": true,
+      "prior_revision_immutable": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-APPROVE-001",
+    "phase": "Phase 9",
+    "title": "Explicit Approval",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-APPROVE-001"
+    },
+    "expected": {
+      "explicit_human_action": true,
+      "approval_status": "approved",
+      "outreach_status": "approved",
+      "fingerprint_algorithm": "sha256",
+      "audit_event_recorded": true
+    },
+    "actual": {
+      "explicit_human_action": true,
+      "approval_status": "approved",
+      "outreach_status": "approved",
+      "fingerprint_algorithm": "sha256",
+      "audit_event_recorded": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Explicit Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-APPROVE-002",
+    "phase": "Phase 9",
+    "title": "Approval Does Not Send",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-APPROVE-002"
+    },
+    "expected": {
+      "approval_triggers_send": false,
+      "provider_calls_on_approval": 0,
+      "send_status_after_approval": "not_sent"
+    },
+    "actual": {
+      "approval_triggers_send": false,
+      "provider_calls_on_approval": 0,
+      "send_status_after_approval": "not_sent"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SEND-001",
+    "phase": "Phase 9",
+    "title": "Approved Dry Run",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SEND-001"
+    },
+    "expected": {
+      "dry_run_validation_passed": true,
+      "network_messages_transmitted": 0,
+      "send_status": "dry_run",
+      "stored_draft_unmarked": true
+    },
+    "actual": {
+      "dry_run_validation_passed": true,
+      "network_messages_transmitted": 0,
+      "send_status": "dry_run",
+      "stored_draft_unmarked": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SEND-002",
+    "phase": "Phase 9",
+    "title": "Approved Mock SMTP Send",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SEND-002"
+    },
+    "expected": {
+      "explicit_send_status": "sent",
+      "outreach_status": "sent",
+      "provider_message_id_captured": true,
+      "send_attempt_logged": true
+    },
+    "actual": {
+      "explicit_send_status": "sent",
+      "outreach_status": "sent",
+      "provider_message_id_captured": true,
+      "send_attempt_logged": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SEND-003",
+    "phase": "Phase 9",
+    "title": "Unapproved Blocked",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SEND-003"
+    },
+    "expected": {
+      "send_blocked": true,
+      "error_type": "not_approved",
+      "provider_calls": 0
+    },
+    "actual": {
+      "send_blocked": true,
+      "error_type": "not_approved",
+      "provider_calls": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SEND-004",
+    "phase": "Phase 9",
+    "title": "Stale Approval Blocked",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SEND-004"
+    },
+    "expected": {
+      "post_approval_tamper_detected": true,
+      "send_blocked": true,
+      "error_type": "approval_stale",
+      "provider_calls": 0
+    },
+    "actual": {
+      "post_approval_tamper_detected": true,
+      "send_blocked": true,
+      "error_type": "approval_stale",
+      "provider_calls": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SEND-005",
+    "phase": "Phase 9",
+    "title": "Already Sent Blocked",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SEND-005"
+    },
+    "expected": {
+      "duplicate_send_blocked": true,
+      "status": "already_sent",
+      "provider_calls": 0
+    },
+    "actual": {
+      "duplicate_send_blocked": true,
+      "status": "already_sent",
+      "provider_calls": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SUPPRESS-001",
+    "phase": "Phase 9",
+    "title": "Suppressed Recipient Blocked",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SUPPRESS-001"
+    },
+    "expected": {
+      "suppressed_recipient_blocked": true,
+      "error_type": "suppressed_recipient",
+      "provider_calls": 0
+    },
+    "actual": {
+      "suppressed_recipient_blocked": true,
+      "error_type": "suppressed_recipient",
+      "provider_calls": 0
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-IDEMP-001",
+    "phase": "Phase 9",
+    "title": "Concurrent Duplicate Prevented",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-IDEMP-001"
+    },
+    "expected": {
+      "concurrent_requests": 2,
+      "provider_messages_delivered": 1,
+      "second_request_blocked": true
+    },
+    "actual": {
+      "concurrent_requests": 2,
+      "provider_messages_delivered": 1,
+      "second_request_blocked": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-BATCH-001",
+    "phase": "Phase 9",
+    "title": "Partial Failure Isolation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-BATCH-001"
+    },
+    "expected": {
+      "partial_failure_isolated": true,
+      "valid_drafts_sent": 2,
+      "invalid_drafts_blocked": 1,
+      "success_corrupted": false
+    },
+    "actual": {
+      "partial_failure_isolated": true,
+      "valid_drafts_sent": 2,
+      "invalid_drafts_blocked": 1,
+      "success_corrupted": false
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-SEC-001",
+    "phase": "Phase 9",
+    "title": "Secrets Never Logged",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-SEC-001"
+    },
+    "expected": {
+      "secrets_in_error_logs": false,
+      "secrets_in_review_events": false,
+      "sanitized_with_asterisks": true
+    },
+    "actual": {
+      "secrets_in_error_logs": false,
+      "secrets_in_review_events": false,
+      "sanitized_with_asterisks": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-WF-001",
+    "phase": "Phase 9",
+    "title": "Sent State Projection",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-WF-001"
+    },
+    "expected": {
+      "source_of_truth": "sqlite_db",
+      "queryable_approval_status": true,
+      "queryable_send_status": true,
+      "queryable_outreach_status": true
+    },
+    "actual": {
+      "source_of_truth": "sqlite_db",
+      "queryable_approval_status": true,
+      "queryable_send_status": true,
+      "queryable_outreach_status": true
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-NOLLM-001",
+    "phase": "Phase 9",
+    "title": "Zero LLM Code Path",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-NOLLM-001"
+    },
+    "expected": {
+      "llm_calls_in_phase9": 0,
+      "forbidden_tokens_present": false
+    },
+    "actual": {
+      "llm_calls_in_phase9": 0,
+      "forbidden_tokens_present": false
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+  },
+  {
+    "case_id": "P9-LIVE-SMTP-001",
+    "phase": "Phase 9",
+    "title": "Live SMTP Send Guardrail",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P9-LIVE-SMTP-001"
+    },
+    "expected": {
+      "opt_in_live_guardrail": true,
+      "default_status": "SKIPPED",
+      "safe_in_offline_suite": true
+    },
+    "actual": {
+      "opt_in_live_guardrail": true,
+      "default_status": "NOT_RUN",
+      "safe_in_offline_suite": true
+    },
+    "status": "NOT_RUN",
+    "differences": [
+      "Test skipped: P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled."
+    ],
+    "reason": "P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.",
+    "human_notes": "Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)",
+    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
   }
 ]

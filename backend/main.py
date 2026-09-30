@@ -984,3 +984,211 @@ async def generate_email_drafts(request: GenerateDraftsRequest):
 
 
 
+
+
+# =========================================================================
+# PHASE 9: HUMAN REVIEW, APPROVAL, SAFE EMAIL SENDING & AUDIT TRAIL
+# =========================================================================
+
+from sales_engine.sending import (
+    ReviewStore,
+    ApprovalService,
+    SuppressionStore,
+    SendOrchestrator,
+    AuditService,
+    DraftImportRequest,
+    DraftImportResponse,
+    DraftEditRequest,
+    DraftApprovalRequest,
+    DraftRejectRequest,
+    DraftRequestChangesRequest,
+    DraftSendRequest,
+    BatchSendRequest,
+    BatchSendResponse,
+    SuppressionAddRequest,
+)
+
+# Global store & services instances for the FastAPI app
+def get_sending_services():
+    store = ReviewStore()
+    approval_svc = ApprovalService(store)
+    suppression_svc = SuppressionStore(store)
+    orchestrator = SendOrchestrator(review_store=store, suppression_store=suppression_svc)
+    audit_svc = AuditService(store)
+    return store, approval_svc, suppression_svc, orchestrator, audit_svc
+
+
+@app.post("/api/sales/drafts/import", response_model=DraftImportResponse, tags=["Sending"])
+def import_drafts_endpoint(req: DraftImportRequest):
+    """Import Phase 8 EmailDrafts into the human review queue."""
+    _, approval_svc, _, _, _ = get_sending_services()
+    imported = approval_svc.import_drafts(req.drafts)
+    return DraftImportResponse(
+        imported_count=len(imported),
+        draft_ids=[d.draft_id for d in imported],
+        drafts=imported,
+    )
+
+
+@app.get("/api/sales/drafts", tags=["Sending"])
+def list_drafts_endpoint(
+    approval_status: Optional[str] = None,
+    send_status: Optional[str] = None,
+    lead_id: Optional[str] = None,
+    contact_id: Optional[str] = None,
+    recipient_email: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List drafts in review queue with filtering."""
+    store, _, _, _, _ = get_sending_services()
+    filters = {}
+    if approval_status:
+        filters["approval_status"] = approval_status
+    if send_status:
+        filters["send_status"] = send_status
+    if lead_id:
+        filters["lead_id"] = lead_id
+    if contact_id:
+        filters["contact_id"] = contact_id
+    if recipient_email:
+        filters["recipient_email"] = recipient_email
+
+    drafts, total = store.list_drafts(filters=filters, limit=limit, offset=offset)
+    return {"total": total, "limit": limit, "offset": offset, "drafts": [d.model_dump() for d in drafts]}
+
+
+@app.get("/api/sales/drafts/{draft_id}", tags=["Sending"])
+def get_draft_endpoint(draft_id: str, revision: Optional[int] = None):
+    """Retrieve a specific draft by ID and optional revision."""
+    store, _, _, _, _ = get_sending_services()
+    draft = store.get_draft(draft_id, revision)
+    if not draft:
+        raise HTTPException(status_code=404, detail=f"Draft not found: {draft_id}")
+    return draft.model_dump()
+
+
+@app.post("/api/sales/drafts/{draft_id}/edit", tags=["Sending"])
+def edit_draft_endpoint(draft_id: str, req: DraftEditRequest):
+    """Human edit on draft content. Creates a new revision and invalidates approval."""
+    _, approval_svc, _, _, _ = get_sending_services()
+    try:
+        new_draft = approval_svc.edit_draft(draft_id, req)
+        return new_draft.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/sales/drafts/{draft_id}/approve", tags=["Sending"])
+def approve_draft_endpoint(draft_id: str, req: DraftApprovalRequest):
+    """Explicit human approval. Computes and locks approval fingerprint. DOES NOT SEND."""
+    _, approval_svc, _, _, _ = get_sending_services()
+    try:
+        approved = approval_svc.approve_draft(
+            draft_id=draft_id,
+            revision=req.revision,
+            reviewer=req.reviewer,
+            note=req.note,
+        )
+        return approved.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/sales/drafts/{draft_id}/reject", tags=["Sending"])
+def reject_draft_endpoint(draft_id: str, req: DraftRejectRequest):
+    """Reject draft from sending."""
+    _, approval_svc, _, _, _ = get_sending_services()
+    try:
+        rejected = approval_svc.reject_draft(
+            draft_id=draft_id,
+            revision=req.revision,
+            reviewer=req.reviewer,
+            note=req.note,
+        )
+        return rejected.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/sales/drafts/{draft_id}/request-changes", tags=["Sending"])
+def request_changes_endpoint(draft_id: str, req: DraftRequestChangesRequest):
+    """Request changes on a draft revision."""
+    _, approval_svc, _, _, _ = get_sending_services()
+    try:
+        updated = approval_svc.request_changes(
+            draft_id=draft_id,
+            revision=req.revision,
+            reviewer=req.reviewer,
+            note=req.note,
+        )
+        return updated.model_dump()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/sales/drafts/{draft_id}/send", tags=["Sending"])
+def send_single_draft_endpoint(draft_id: str, req: DraftSendRequest):
+    """Explicitly send an approved draft revision (dry-run by default)."""
+    _, _, _, orchestrator, _ = get_sending_services()
+    result = orchestrator.send_draft(
+        draft_id=draft_id,
+        revision=req.revision,
+        dry_run=req.dry_run,
+        reviewer=req.reviewer,
+    )
+    return result.model_dump()
+
+
+@app.post("/api/sales/send-batch", response_model=BatchSendResponse, tags=["Sending"])
+def send_batch_endpoint(req: BatchSendRequest):
+    """Explicit batch send for listed draft IDs with partial failure isolation."""
+    _, _, _, orchestrator, _ = get_sending_services()
+    try:
+        response = orchestrator.send_batch(
+            draft_ids=req.draft_ids,
+            dry_run=req.dry_run,
+            reviewer=req.reviewer,
+        )
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/sales/suppression", tags=["Sending"])
+def list_suppression_endpoint(limit: int = 100, offset: int = 0):
+    """List entries on the do-not-contact suppression list."""
+    _, _, suppression_svc, _, _ = get_sending_services()
+    entries = suppression_svc.list_suppressed(limit=limit, offset=offset)
+    return {"total": len(entries), "entries": [e.model_dump() for e in entries]}
+
+
+@app.post("/api/sales/suppression", tags=["Sending"])
+def add_suppression_endpoint(req: SuppressionAddRequest):
+    """Add email address to suppression list."""
+    _, _, suppression_svc, _, _ = get_sending_services()
+    entry = suppression_svc.add_suppression(
+        email=req.email,
+        reason=req.reason,
+        source=req.source,
+        company_domain=req.company_domain,
+    )
+    return entry.model_dump()
+
+
+@app.delete("/api/sales/suppression/{email}", tags=["Sending"])
+def remove_suppression_endpoint(email: str):
+    """Remove email from suppression list."""
+    _, _, suppression_svc, _, _ = get_sending_services()
+    success = suppression_svc.remove_suppression(email)
+    if not success:
+        raise HTTPException(status_code=404, detail="Email not found in suppression list")
+    return {"status": "removed", "email": email}
+
+
+@app.get("/api/sales/drafts/{draft_id}/events", tags=["Sending"])
+def list_draft_events_endpoint(draft_id: str):
+    """List immutable audit events for a draft."""
+    _, _, _, _, audit_svc = get_sending_services()
+    events = audit_svc.get_draft_events(draft_id)
+    return {"draft_id": draft_id, "events": [e.model_dump() for e in events]}

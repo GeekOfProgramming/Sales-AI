@@ -1,0 +1,367 @@
+{
+  "phase": "Phase 9",
+  "description": "Human Review, Approval, Safe Sending & Audit Trail",
+  "generated_at": "2026-09-30T17:02:11.448303+00:00",
+  "git_commit": "8b5d902",
+  "total_cases": 16,
+  "passed": 15,
+  "failed": 0,
+  "review": 0,
+  "deferred": 0,
+  "not_run": 1,
+  "false_pass_count": 0,
+  "unmapped_cases": 0,
+  "invariants": {
+    "approval_never_triggers_send": true,
+    "stale_approval_fingerprint_blocks_send": true,
+    "already_sent_idempotency_prevents_duplicate": true,
+    "suppressed_recipient_blocks_send": true,
+    "dry_run_invokes_zero_network_transmissions": true,
+    "zero_llm_calls_in_phase9": true,
+    "secrets_never_logged_or_exposed": true
+  },
+  "cases": [
+    {
+      "case_id": "P9-REVIEW-001",
+      "phase": "Phase 9",
+      "title": "Import Pending Draft",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft",
+      "expected": {
+        "default_approval_status": "pending_review",
+        "default_send_status": "not_sent",
+        "default_outreach_status": "draft_ready",
+        "evidence_preserved": true,
+        "prompt_version_preserved": true
+      },
+      "actual": {
+        "default_approval_status": "pending_review",
+        "default_send_status": "not_sent",
+        "default_outreach_status": "draft_ready",
+        "evidence_preserved": true,
+        "prompt_version_preserved": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.072
+    },
+    {
+      "case_id": "P9-REVIEW-002",
+      "phase": "Phase 9",
+      "title": "Edit Invalidates Approval",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval",
+      "expected": {
+        "edit_creates_new_revision": true,
+        "revision_increment": 1,
+        "resets_approval_status": "pending_review",
+        "clears_approved_fingerprint": true,
+        "prior_revision_immutable": true
+      },
+      "actual": {
+        "edit_creates_new_revision": true,
+        "revision_increment": 1,
+        "resets_approval_status": "pending_review",
+        "clears_approved_fingerprint": true,
+        "prior_revision_immutable": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.1
+    },
+    {
+      "case_id": "P9-APPROVE-001",
+      "phase": "Phase 9",
+      "title": "Explicit Approval",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval",
+      "expected": {
+        "explicit_human_action": true,
+        "approval_status": "approved",
+        "outreach_status": "approved",
+        "fingerprint_algorithm": "sha256",
+        "audit_event_recorded": true
+      },
+      "actual": {
+        "explicit_human_action": true,
+        "approval_status": "approved",
+        "outreach_status": "approved",
+        "fingerprint_algorithm": "sha256",
+        "audit_event_recorded": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.097
+    },
+    {
+      "case_id": "P9-APPROVE-002",
+      "phase": "Phase 9",
+      "title": "Approval Does Not Send",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send",
+      "expected": {
+        "approval_triggers_send": false,
+        "provider_calls_on_approval": 0,
+        "send_status_after_approval": "not_sent"
+      },
+      "actual": {
+        "approval_triggers_send": false,
+        "provider_calls_on_approval": 0,
+        "send_status_after_approval": "not_sent"
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.087
+    },
+    {
+      "case_id": "P9-SEND-001",
+      "phase": "Phase 9",
+      "title": "Approved Dry Run",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run",
+      "expected": {
+        "dry_run_validation_passed": true,
+        "network_messages_transmitted": 0,
+        "send_status": "dry_run",
+        "stored_draft_unmarked": true
+      },
+      "actual": {
+        "dry_run_validation_passed": true,
+        "network_messages_transmitted": 0,
+        "send_status": "dry_run",
+        "stored_draft_unmarked": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.099
+    },
+    {
+      "case_id": "P9-SEND-002",
+      "phase": "Phase 9",
+      "title": "Approved Mock SMTP Send",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send",
+      "expected": {
+        "explicit_send_status": "sent",
+        "outreach_status": "sent",
+        "provider_message_id_captured": true,
+        "send_attempt_logged": true
+      },
+      "actual": {
+        "explicit_send_status": "sent",
+        "outreach_status": "sent",
+        "provider_message_id_captured": true,
+        "send_attempt_logged": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.254
+    },
+    {
+      "case_id": "P9-SEND-003",
+      "phase": "Phase 9",
+      "title": "Unapproved Blocked",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked",
+      "expected": {
+        "send_blocked": true,
+        "error_type": "not_approved",
+        "provider_calls": 0
+      },
+      "actual": {
+        "send_blocked": true,
+        "error_type": "not_approved",
+        "provider_calls": 0
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.087
+    },
+    {
+      "case_id": "P9-SEND-004",
+      "phase": "Phase 9",
+      "title": "Stale Approval Blocked",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked",
+      "expected": {
+        "post_approval_tamper_detected": true,
+        "send_blocked": true,
+        "error_type": "approval_stale",
+        "provider_calls": 0
+      },
+      "actual": {
+        "post_approval_tamper_detected": true,
+        "send_blocked": true,
+        "error_type": "approval_stale",
+        "provider_calls": 0
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.102
+    },
+    {
+      "case_id": "P9-SEND-005",
+      "phase": "Phase 9",
+      "title": "Already Sent Blocked",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked",
+      "expected": {
+        "duplicate_send_blocked": true,
+        "status": "already_sent",
+        "provider_calls": 0
+      },
+      "actual": {
+        "duplicate_send_blocked": true,
+        "status": "already_sent",
+        "provider_calls": 0
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.132
+    },
+    {
+      "case_id": "P9-SUPPRESS-001",
+      "phase": "Phase 9",
+      "title": "Suppressed Recipient Blocked",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked",
+      "expected": {
+        "suppressed_recipient_blocked": true,
+        "error_type": "suppressed_recipient",
+        "provider_calls": 0
+      },
+      "actual": {
+        "suppressed_recipient_blocked": true,
+        "error_type": "suppressed_recipient",
+        "provider_calls": 0
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.115
+    },
+    {
+      "case_id": "P9-IDEMP-001",
+      "phase": "Phase 9",
+      "title": "Concurrent Duplicate Prevented",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented",
+      "expected": {
+        "concurrent_requests": 2,
+        "provider_messages_delivered": 1,
+        "second_request_blocked": true
+      },
+      "actual": {
+        "concurrent_requests": 2,
+        "provider_messages_delivered": 1,
+        "second_request_blocked": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.154
+    },
+    {
+      "case_id": "P9-BATCH-001",
+      "phase": "Phase 9",
+      "title": "Partial Failure Isolation",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation",
+      "expected": {
+        "partial_failure_isolated": true,
+        "valid_drafts_sent": 2,
+        "invalid_drafts_blocked": 1,
+        "success_corrupted": false
+      },
+      "actual": {
+        "partial_failure_isolated": true,
+        "valid_drafts_sent": 2,
+        "invalid_drafts_blocked": 1,
+        "success_corrupted": false
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.387
+    },
+    {
+      "case_id": "P9-SEC-001",
+      "phase": "Phase 9",
+      "title": "Secrets Never Logged",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged",
+      "expected": {
+        "secrets_in_error_logs": false,
+        "secrets_in_review_events": false,
+        "sanitized_with_asterisks": true
+      },
+      "actual": {
+        "secrets_in_error_logs": false,
+        "secrets_in_review_events": false,
+        "sanitized_with_asterisks": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.063
+    },
+    {
+      "case_id": "P9-WF-001",
+      "phase": "Phase 9",
+      "title": "Sent State Projection",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection",
+      "expected": {
+        "source_of_truth": "sqlite_db",
+        "queryable_approval_status": true,
+        "queryable_send_status": true,
+        "queryable_outreach_status": true
+      },
+      "actual": {
+        "source_of_truth": "sqlite_db",
+        "queryable_approval_status": true,
+        "queryable_send_status": true,
+        "queryable_outreach_status": true
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.137
+    },
+    {
+      "case_id": "P9-NOLLM-001",
+      "phase": "Phase 9",
+      "title": "Zero LLM Code Path",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path",
+      "expected": {
+        "llm_calls_in_phase9": 0,
+        "forbidden_tokens_present": false
+      },
+      "actual": {
+        "llm_calls_in_phase9": 0,
+        "forbidden_tokens_present": false
+      },
+      "differences": [],
+      "reason": "",
+      "execution_time_s": 0.01
+    },
+    {
+      "case_id": "P9-LIVE-SMTP-001",
+      "phase": "Phase 9",
+      "title": "Live SMTP Send Guardrail",
+      "status": "NOT_RUN",
+      "mapped_test": "tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail",
+      "expected": {
+        "opt_in_live_guardrail": true,
+        "default_status": "SKIPPED",
+        "safe_in_offline_suite": true
+      },
+      "actual": {
+        "opt_in_live_guardrail": true,
+        "default_status": "NOT_RUN",
+        "safe_in_offline_suite": true
+      },
+      "differences": [
+        "Test skipped: P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled."
+      ],
+      "reason": "P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.",
+      "execution_time_s": 0.001
+    }
+  ]
+}
