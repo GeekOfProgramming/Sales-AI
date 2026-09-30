@@ -117,20 +117,39 @@ class OutreachContextBuilder:
         if not contact:
             return None, "no_best_contact"
 
-        # P8-ID-005: If explicit target_contact is provided, verify it belongs to this lead
+        # P8-ID-005: If explicit target_contact is provided, verify it belongs to this lead using strong identity
         if target_contact:
-            lead_contact_emails = {c.work_email for c in (lead.contacts or []) if c.work_email}
-            lead_contact_names = {c.full_name for c in (lead.contacts or []) if c.full_name}
-            best_email = lead.best_contact.work_email if lead.best_contact else None
-            best_name = lead.best_contact.full_name if lead.best_contact else None
-            if best_email:
-                lead_contact_emails.add(best_email)
-            if best_name:
-                lead_contact_names.add(best_name)
+            # Strong identity keys: normalized work email, canonical LinkedIn, provider + provider_person_id, contact_id
+            lead_strong_emails = {c.work_email.strip().lower() for c in (lead.contacts or []) if c.work_email}
+            lead_linkedins = {c.linkedin_url.strip().lower() for c in (lead.contacts or []) if c.linkedin_url}
+            lead_provider_ids = {
+                f"{c.provider}:{c.provider_person_id}".lower()
+                for c in (lead.contacts or [])
+                if c.provider and c.provider_person_id
+            }
 
-            matches_email = target_contact.work_email and target_contact.work_email in lead_contact_emails
-            matches_name = target_contact.full_name and target_contact.full_name in lead_contact_names
-            if not (matches_email or matches_name):
+            if lead.best_contact:
+                if lead.best_contact.work_email:
+                    lead_strong_emails.add(lead.best_contact.work_email.strip().lower())
+                if lead.best_contact.linkedin_url:
+                    lead_linkedins.add(lead.best_contact.linkedin_url.strip().lower())
+                if lead.best_contact.provider and lead.best_contact.provider_person_id:
+                    lead_provider_ids.add(f"{lead.best_contact.provider}:{lead.best_contact.provider_person_id}".lower())
+
+            target_email = (target_contact.work_email or "").strip().lower()
+            target_linkedin = (target_contact.linkedin_url or "").strip().lower()
+            target_provider_id = (
+                f"{target_contact.provider}:{target_contact.provider_person_id}".lower()
+                if target_contact.provider and target_contact.provider_person_id
+                else ""
+            )
+
+            matches_email = bool(target_email and target_email in lead_strong_emails)
+            matches_linkedin = bool(target_linkedin and target_linkedin in lead_linkedins)
+            matches_provider = bool(target_provider_id and target_provider_id in lead_provider_ids)
+
+            # NEVER authorize a target contact solely because full_name matches
+            if not (matches_email or matches_linkedin or matches_provider):
                 return None, "invalid_contact_for_lead"
 
         contact_id = generate_contact_id(contact, lead_id)
@@ -155,8 +174,12 @@ class OutreachContextBuilder:
         evidence_items: List[OutreachEvidenceItem] = []
         source_job_urls_set: Set[str] = set()
 
-        # 1. Contact evidence
-        contact_summary = f"{recipient_name}, {recipient_title or 'Leadership'} at {company_name}"
+        # 1. Contact evidence - DO NOT fabricate Leadership when title is missing
+        if recipient_title and recipient_title.strip():
+            contact_summary = f"{recipient_name}, {recipient_title.strip()} at {company_name}"
+        else:
+            contact_summary = f"{recipient_name} at {company_name}"
+
         evidence_items.append(
             OutreachEvidenceItem(
                 id="CONTACT-001",
@@ -246,7 +269,9 @@ class OutreachContextBuilder:
 
             # Create compact grounded snippet without fabrication
             tech_str = ", ".join(job.technologies[:5]) if job.technologies else ""
-            summary = f"Job Opening: {job.job_title} at {job.location or 'Remote'}."
+            summary = f"Job Opening: {job.job_title}."
+            if job.location and str(job.location).strip():
+                summary = f"Job Opening: {job.job_title}. Location: {str(job.location).strip()}."
             if tech_str:
                 summary += f" Tech requirements: {tech_str}."
             dept = getattr(job, "department", None)

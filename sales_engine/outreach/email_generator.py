@@ -86,7 +86,14 @@ class EmailGenerator:
         try:
             gen_resp = self.llm_client.generate_code(req, model_name=self.model_name)
             raw_output = gen_resp.raw_response
+        except (TimeoutError, TimeoutException if "TimeoutException" in globals() else TimeoutError) as e:
+            logger.error(f"LLM call timed out: {e}")
+            return None, "timeout", str(e)
         except Exception as e:
+            err_str = str(e).lower()
+            if "timeout" in err_str or "timed out" in err_str:
+                logger.error(f"LLM call timed out: {e}")
+                return None, "timeout", str(e)
             logger.error(f"LLM call failed: {e}")
             return None, "model_unavailable", str(e)
 

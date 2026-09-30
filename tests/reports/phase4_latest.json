@@ -33,7 +33,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies accurate detection of ATS providers vs generic career pages from URLs.",
-    "test_timestamp": "2026-09-30T16:12:05.985917+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.350304+00:00"
   },
   {
     "case_id": "P4-DET-002",
@@ -62,7 +62,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts basic structured fields from Greenhouse HTML/API snapshot.",
-    "test_timestamp": "2026-09-30T16:12:06.046744+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.419325+00:00"
   },
   {
     "case_id": "P4-DET-003",
@@ -93,7 +93,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts role title, location, employment type, and source key from Lever snapshot.",
-    "test_timestamp": "2026-09-30T16:12:06.108846+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.503356+00:00"
   },
   {
     "case_id": "P4-DET-004",
@@ -120,7 +120,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts company, title, and location from Ashby job page snapshot.",
-    "test_timestamp": "2026-09-30T16:12:06.158645+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.561908+00:00"
   },
   {
     "case_id": "P4-DET-005",
@@ -151,7 +151,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Parses standard Schema.org JobPosting application/ld+json metadata.",
-    "test_timestamp": "2026-09-30T16:12:06.192456+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.598711+00:00"
   },
   {
     "case_id": "P4-DET-006",
@@ -182,7 +182,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Locates and extracts JobPosting when nested inside @graph schema array.",
-    "test_timestamp": "2026-09-30T16:12:06.223343+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.633778+00:00"
   },
   {
     "case_id": "P4-DET-007",
@@ -221,7 +221,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures company domain canonicalizes www and case while never using the ATS hosting platform.",
-    "test_timestamp": "2026-09-30T16:12:06.252444+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.668186+00:00"
   },
   {
     "case_id": "P4-DET-008",
@@ -266,7 +266,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes corporate legal suffixes, punctuation, and whitespace differences.",
-    "test_timestamp": "2026-09-30T16:12:06.282887+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.707300+00:00"
   },
   {
     "case_id": "P4-DET-009",
@@ -287,7 +287,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies source_company_key survives across raw source, analyzer, and StructuredJob.",
-    "test_timestamp": "2026-09-30T16:12:06.344649+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.777785+00:00"
   },
   {
     "case_id": "P4-DET-010",
@@ -323,7 +323,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Validates distinct error classification without silently converting errors to empty successes.",
-    "test_timestamp": "2026-09-30T16:12:06.418079+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.847659+00:00"
   },
   {
     "case_id": "P4-NEG-001",
@@ -355,7 +355,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing company name is rejected as invalid/parse_failed rather than succeeding as an empty job.",
-    "test_timestamp": "2026-09-30T16:12:06.479057+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.916236+00:00"
   },
   {
     "case_id": "P4-NEG-002",
@@ -387,7 +387,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing job title produces an explicit validation/parse_failed error and is not accepted.",
-    "test_timestamp": "2026-09-30T16:12:06.535310+00:00"
+    "test_timestamp": "2026-09-30T16:39:45.978139+00:00"
   },
   {
     "case_id": "P4-NEG-003",
@@ -409,7 +409,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Gracefully recovers from malformed JSON-LD scripts using DOM fallback.",
-    "test_timestamp": "2026-09-30T16:12:06.565848+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.008981+00:00"
   },
   {
     "case_id": "P4-NEG-004",
@@ -431,7 +431,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Does not fabricate active job postings from expired notices.",
-    "test_timestamp": "2026-09-30T16:12:06.594860+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.038975+00:00"
   },
   {
     "case_id": "P4-NEG-005",
@@ -453,7 +453,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identifies generic career homepages that lack specific job postings.",
-    "test_timestamp": "2026-09-30T16:12:06.623856+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.069361+00:00"
   },
   {
     "case_id": "P4-NEG-006",
@@ -481,7 +481,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes URL tracking query params, fragments, and trailing slashes.",
-    "test_timestamp": "2026-09-30T16:12:06.651525+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.098497+00:00"
   },
   {
     "case_id": "P4-NEG-007",
@@ -514,7 +514,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Guarantees ATS domains never become company_domain on StructuredJob.",
-    "test_timestamp": "2026-09-30T16:12:06.677298+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.128375+00:00"
   },
   {
     "case_id": "P4-SEM-001",
@@ -547,7 +547,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture prepared for future evaluation on larger models (qwen2.5:3b/7b/claude). Contains ground truth technologies and signal evidence.",
-    "test_timestamp": "2026-09-30T16:12:06.685028+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.133847+00:00"
   },
   {
     "case_id": "P4-SEM-002",
@@ -583,6 +583,6 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture for API developer role. Deferring execution until higher-tier model deployment.",
-    "test_timestamp": "2026-09-30T16:12:06.690259+00:00"
+    "test_timestamp": "2026-09-30T16:39:46.140303+00:00"
   }
 ]

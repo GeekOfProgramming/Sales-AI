@@ -1,4 +1,5 @@
 import logging
+import copy
 from typing import List, Dict, Any, Optional
 
 from backend.schemas import EnrichedLead, ContactCandidate, StructuredJob
@@ -171,3 +172,31 @@ class OutreachOrchestrator:
         response.failed_count = len(response.errors)
 
         return response
+
+    @staticmethod
+    def project_draft_to_lead_row(lead_row: Any, draft: EmailDraft) -> Any:
+        """
+        Deterministic Phase 7 handoff projection helper:
+        Projects generated draft content and workflow fields into a LeadExportRow.
+        Invariants:
+        - approval_status = 'pending_review'
+        - outreach_status = 'draft_ready'
+        - send_status = 'not_sent'
+        - lead_id, scoring, and best_contact remain untouched
+        """
+        updated = lead_row.model_copy(deep=True) if hasattr(lead_row, "model_copy") else copy.deepcopy(lead_row)
+        if hasattr(updated, "draft_subject"):
+            updated.draft_subject = draft.subject
+            updated.draft_body = draft.body
+            updated.personalization_notes = draft.personalization_notes or ""
+            updated.approval_status = "pending_review"
+            updated.outreach_status = "draft_ready"
+            updated.send_status = "not_sent"
+        elif isinstance(updated, dict):
+            updated["draft_subject"] = draft.subject
+            updated["draft_body"] = draft.body
+            updated["personalization_notes"] = draft.personalization_notes or ""
+            updated["approval_status"] = "pending_review"
+            updated["outreach_status"] = "draft_ready"
+            updated["send_status"] = "not_sent"
+        return updated

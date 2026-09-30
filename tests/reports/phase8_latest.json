@@ -1,22 +1,24 @@
 {
   "phase": "Phase 8",
   "title": "Personalized Cold Email Draft Generation",
-  "run_timestamp": "2026-09-30T16:11:32.055730+00:00",
-  "git_commit": "2bf7620",
+  "run_timestamp": "2026-09-30T16:38:31.213848+00:00",
+  "git_commit": "7d68645",
   "prompt_version": "outreach_v1",
   "default_model": "qwen2.5:1.5b (default)",
-  "total_cases": 91,
-  "passed": 86,
+  "catalog_cases": 95,
+  "total_cases": 95,
+  "mapped_executable_cases": 90,
+  "executed_cases": 90,
+  "passed": 90,
   "failed": 0,
   "review": 0,
   "not_run": 0,
   "deferred_model": 5,
+  "unmapped_cases": 0,
   "false_pass_count": 0,
-  "deterministic_cases": 86,
+  "deterministic_cases": 90,
   "semantic_cases": 5,
-  "mock_llm_cases": 38,
-  "live_llm_cases": 5,
-  "critical_regressions": 8,
+  "critical_regressions": 11,
   "eligibility_passed": 8,
   "identity_passed": 5,
   "company_job_matching_passed": 5,
@@ -34,7 +36,9 @@
     "exact_active_service_matching": true,
     "no_fabricated_technologies": true,
     "raw_jobs_api_forwarding": true,
-    "source_data_delimiter_escaping": true
+    "source_data_delimiter_escaping": true,
+    "no_fabricated_location_remote": true,
+    "no_fabricated_contact_leadership": true
   },
   "cases": [
     {
@@ -43,7 +47,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_draft_001_strong_bim_automation",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-001",
@@ -51,7 +66,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_001_qualified_and_verified",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-002",
@@ -59,7 +85,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_002_qualified_and_likely",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-003",
@@ -67,7 +104,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_003_unqualified_lead",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-004",
@@ -75,7 +123,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_004_no_best_contact",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-005",
@@ -83,7 +142,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_005_no_work_email",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-006",
@@ -91,7 +161,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_006_risky_email_skipped",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-007",
@@ -99,7 +180,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_007_unknown_email_skipped",
+        "execution_time_s": 0.003
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ELIG-008",
@@ -107,7 +199,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_elig_008_preview_override_without_fabrication",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ID-001",
@@ -115,7 +218,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ID-002",
@@ -123,7 +237,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ID-003",
@@ -131,7 +256,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ID-004",
@@ -139,7 +275,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_001_to_004_identity_fields_preserved",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ID-005",
@@ -147,7 +294,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_id_005_explicit_contact_id_validation",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-001",
@@ -155,7 +313,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_001_wrong_company_same_title_job",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-COMPANY-001",
@@ -163,7 +332,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_001_canonical_domain_match",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-COMPANY-002",
@@ -171,7 +351,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_002_ats_namespaced_match",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-COMPANY-003",
@@ -179,7 +370,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_003_ats_namespace_mismatch",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-COMPANY-004",
@@ -187,7 +389,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_company_004_conservative_name_fallback",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-004",
@@ -195,7 +408,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_004_api_raw_jobs_handoff",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-JOB-001",
@@ -203,7 +427,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_001_relevant_jobs_only",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-JOB-002",
@@ -211,7 +446,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_job_002_no_raw_jobs_safe_fallback",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-005",
@@ -219,7 +465,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_005_phase5_evidence_preservation",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-006",
@@ -227,7 +484,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_006_phase5_signal_schema",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-EVID-001",
@@ -235,7 +503,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_001_structured_job_signal_evidence",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-EVID-002",
@@ -243,7 +522,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_002_unknown_evidence_ref_rejected",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-EVID-003",
@@ -251,7 +541,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_evid_003_duplicate_evidence_handling",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-003",
@@ -259,7 +560,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_003_no_fabricated_technology",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-FAB-001",
@@ -267,7 +579,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_001_no_fake_metrics",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-FAB-002",
@@ -275,7 +598,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_fab_002_no_fake_relationship_claims",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SVC-001",
@@ -283,7 +617,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_001_active_service_accepted",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SVC-002",
@@ -291,7 +636,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_002_and_003_in_development_rejected",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-002",
@@ -299,7 +655,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_002_active_service_substring_bypass",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SVC-004",
@@ -307,7 +674,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_004_cta_rejected",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SVC-005",
@@ -315,7 +693,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_005_missing_offering_status_rejected",
+        "execution_time_s": 0.0
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SVC-006",
@@ -323,7 +712,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_svc_006_no_active_service_skips_lead",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-CTX-001",
@@ -331,7 +731,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ctx_001_deterministic_context",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-008",
@@ -339,7 +750,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_008_deterministic_evidence_ordering",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-REG-007",
@@ -347,7 +769,18 @@
       "status": "PASS",
       "type": "regression",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_007_source_data_delimiter_injection",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-INJECT-001",
@@ -355,7 +788,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-INJECT-002",
@@ -363,7 +807,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-INJECT-003",
@@ -371,7 +826,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-INJECT-004",
@@ -379,7 +845,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_inject_001_to_004_prompt_injection_safety",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PROMPT-001",
@@ -387,7 +864,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_001_sales_outreach_environment",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PROMPT-002",
@@ -395,7 +883,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_002_tone_presets",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PROMPT-003",
@@ -403,7 +902,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_prompt_003_language_preset",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PARSE-001",
@@ -411,7 +921,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_001_valid_json_single_call",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PARSE-002",
@@ -419,7 +940,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_002_invalid_then_repaired_json",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PARSE-003",
@@ -427,7 +959,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_parse_003_two_invalid_responses_fail_safely",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-001",
@@ -435,7 +978,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-002",
@@ -443,7 +997,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-003",
@@ -451,7 +1016,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-004",
@@ -459,7 +1035,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-005",
@@ -467,7 +1054,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-006",
@@ -475,7 +1073,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-007",
@@ -483,7 +1092,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-008",
@@ -491,7 +1111,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-009",
@@ -499,7 +1130,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-VAL-010",
@@ -507,7 +1149,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_val_001_to_010_validator_rules",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-WF-001",
@@ -515,7 +1168,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-WF-002",
@@ -523,7 +1187,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_001_and_002_draft_safety_statuses",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-WF-003",
@@ -531,7 +1206,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_003_projection_and_safety",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-WF-004",
@@ -539,7 +1225,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_004_zero_sending_code_path_static_verification",
+        "execution_time_s": 0.007
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-WF-005",
@@ -547,7 +1244,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_wf_005_zero_auto_approval_code_path_static_verification",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-IDEMP-001",
@@ -555,7 +1263,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-IDEMP-002",
@@ -563,7 +1282,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-IDEMP-003",
@@ -571,7 +1301,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_idemp_001_to_003_deterministic_draft_id",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-BATCH-001",
@@ -579,7 +1320,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_001_batch_processing",
+        "execution_time_s": 0.002
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-BATCH-002",
@@ -587,7 +1339,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_002_partial_failure",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-BATCH-003",
@@ -595,7 +1358,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_batch_003_max_50_limit",
+        "execution_time_s": 0.003
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PRIV-001",
@@ -603,7 +1377,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PRIV-002",
@@ -611,7 +1396,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-PRIV-003",
@@ -619,7 +1415,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_priv_001_to_003_privacy_keyword_detection",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-GROUND-001",
@@ -627,7 +1434,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-GROUND-002",
@@ -635,7 +1453,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-GROUND-003",
@@ -643,7 +1472,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-GROUND-004",
@@ -651,7 +1491,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_ground_001_disabled_reported_honestly",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-ERR-001",
@@ -659,7 +1510,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_err_001_distinguishable_error_codes",
+        "execution_time_s": 0.003
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-LLM-001",
@@ -667,7 +1529,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_001_model_unavailable",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-LLM-003",
@@ -675,7 +1548,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_llm_003_client_reuse",
+        "execution_time_s": 0.0
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-HANDOFF-001",
@@ -683,7 +1567,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_001_projection_fields",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-HANDOFF-003",
@@ -691,7 +1586,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-HANDOFF-004",
@@ -699,7 +1605,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_handoff_invariants",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-API-001",
@@ -707,7 +1624,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "mock_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+        "execution_time_s": 0.316
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-API-003",
@@ -715,7 +1643,18 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_001_and_validation",
+        "execution_time_s": 0.316
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-API-004",
@@ -723,7 +1662,94 @@
       "status": "PASS",
       "type": "deterministic",
       "mode": "no_llm",
-      "reason": ""
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_004_invalid_tone_returns_422",
+        "execution_time_s": 0.006
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P8-API-005",
+      "title": "API Invalid Language Returns 422",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "mapped_test": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase8_acceptance.py::test_p8_api_005_invalid_language_returns_422",
+        "execution_time_s": 0.009
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P8-REG-009",
+      "title": "Missing Job Location Does Not Become Remote",
+      "status": "PASS",
+      "type": "regression",
+      "mode": "no_llm",
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_009_missing_job_location_not_remote",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P8-REG-010",
+      "title": "Missing Contact Title Does Not Become Leadership",
+      "status": "PASS",
+      "type": "regression",
+      "mode": "no_llm",
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_010_missing_contact_title_not_leadership",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P8-REG-011",
+      "title": "Company and Contact Fields Cannot Escape Untrusted-Data Boundary",
+      "status": "PASS",
+      "type": "regression",
+      "mode": "no_llm",
+      "mapped_test": "tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_outreach.py::test_p8_reg_011_company_contact_cannot_escape_untrusted_data",
+        "execution_time_s": 0.001
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SEM-001",
@@ -731,7 +1757,17 @@
       "status": "NOT_RUN_MODEL_LIMITATION",
       "type": "semantic_deferred",
       "mode": "local_live_llm",
-      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      "mapped_test": null,
+      "expected": {
+        "status": "NOT_RUN_MODEL_LIMITATION"
+      },
+      "actual": {
+        "status": "NOT_RUN_MODEL_LIMITATION",
+        "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      },
+      "differences": [],
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SEM-002",
@@ -739,7 +1775,17 @@
       "status": "NOT_RUN_MODEL_LIMITATION",
       "type": "semantic_deferred",
       "mode": "local_live_llm",
-      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      "mapped_test": null,
+      "expected": {
+        "status": "NOT_RUN_MODEL_LIMITATION"
+      },
+      "actual": {
+        "status": "NOT_RUN_MODEL_LIMITATION",
+        "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      },
+      "differences": [],
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SEM-003",
@@ -747,7 +1793,17 @@
       "status": "NOT_RUN_MODEL_LIMITATION",
       "type": "semantic_deferred",
       "mode": "local_live_llm",
-      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      "mapped_test": null,
+      "expected": {
+        "status": "NOT_RUN_MODEL_LIMITATION"
+      },
+      "actual": {
+        "status": "NOT_RUN_MODEL_LIMITATION",
+        "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      },
+      "differences": [],
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SEM-004",
@@ -755,7 +1811,17 @@
       "status": "NOT_RUN_MODEL_LIMITATION",
       "type": "semantic_deferred",
       "mode": "local_live_llm",
-      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      "mapped_test": null,
+      "expected": {
+        "status": "NOT_RUN_MODEL_LIMITATION"
+      },
+      "actual": {
+        "status": "NOT_RUN_MODEL_LIMITATION",
+        "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      },
+      "differences": [],
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+      "has_stub_pass": false
     },
     {
       "case_id": "P8-SEM-005",
@@ -763,7 +1829,17 @@
       "status": "NOT_RUN_MODEL_LIMITATION",
       "type": "semantic_deferred",
       "mode": "local_live_llm",
-      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      "mapped_test": null,
+      "expected": {
+        "status": "NOT_RUN_MODEL_LIMITATION"
+      },
+      "actual": {
+        "status": "NOT_RUN_MODEL_LIMITATION",
+        "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+      },
+      "differences": [],
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+      "has_stub_pass": false
     }
   ]
 }

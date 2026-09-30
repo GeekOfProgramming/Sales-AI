@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from pydantic import BaseModel, Field
 
 from backend.schemas import EnrichedLead, StructuredJob
@@ -94,8 +94,10 @@ class GenerateDraftsRequest(BaseModel):
     jobs: List[StructuredJob] = Field(default_factory=list, description="Optional raw structured jobs for high-fidelity grounding.")
     website_profile: Optional[Dict[str, Any]] = Field(default=None, description="Website profile containing active services.")
     sender_profile: SenderProfile = Field(..., description="Sender identity.")
-    language: str = Field(default="en", description="Draft language (en, it, de).")
-    tone: str = Field(default="professional_concise", description="Preset tone.")
+    language: Literal["en", "it", "de"] = Field(default="en", description="Draft language (en, it, de).")
+    tone: Literal["professional_concise", "technical_consultative", "executive_brief"] = Field(
+        default="professional_concise", description="Preset tone."
+    )
     require_usable_email: bool = Field(default=True, description="Only generate for verified/likely emails.")
     max_drafts: int = Field(default=50, ge=1, le=50, description="Max drafts to generate per request.")
 

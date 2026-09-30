@@ -363,6 +363,28 @@ def test_p8_id_005_explicit_contact_id_validation(golden_qualified_lead, sender_
 # 8. COMPANY / JOB IDENTITY: P8-COMPANY-001 .. 004 & P8-REG-001
 # =========================================================================
 
+
+
+def test_p8_id_005b_same_name_foreign_contact_rejected(golden_qualified_lead, sender_profile, website_profile_pybim):
+    """
+    P8-ID-005b: Explicit target contact selection MUST reject a contact with the same name
+    if strong identity (email, linkedin, provider id, contact_id) does not match lead.
+    """
+    imposter_contact = ContactCandidate(
+        contact_id="email:jane@imposter.com",
+        full_name="Jane Smith",
+        work_email="jane@imposter.com",
+    )
+    ctx, err = OutreachContextBuilder.build_context(
+        lead=golden_qualified_lead,
+        sender=sender_profile,
+        website_profile=website_profile_pybim,
+        target_contact=imposter_contact,
+    )
+    assert ctx is None
+    assert err == "invalid_contact_for_lead"
+
+
 def test_p8_company_001_canonical_domain_match(golden_qualified_lead, sender_profile, website_profile_pybim):
     job = StructuredJob(
         company_name="Acme",
@@ -553,9 +575,37 @@ def test_p8_evid_003_duplicate_evidence_handling(golden_qualified_lead, sender_p
 # 11. NO FABRICATION: P8-FAB-001, P8-FAB-002
 # =========================================================================
 
-def test_p8_fab_001_no_fake_metrics():
-    # Deterministic check that DraftValidator flags unresolved metrics or placeholders
-    pass
+def test_p8_fab_001_no_fake_metrics(golden_qualified_lead, sender_profile, website_profile_pybim):
+    """
+    P8-FAB-001: Deterministic context and prompt builder must NOT fabricate numeric metrics
+    (30%, 50%, 2x, 10x, ROI, cost savings, time savings, guaranteed results)
+    when input evidence contains none of them.
+    """
+    clean_lead = golden_qualified_lead.model_copy(deep=True)
+    clean_lead.base_lead.evidence = ["Developing custom plugins using C# and Dynamo."]
+    clean_lead.base_lead.signals = [{"signal": "Hiring Revit Developer", "evidence_count": 1}]
+
+    ctx, err = OutreachContextBuilder.build_context(
+        lead=clean_lead,
+        sender=sender_profile,
+        website_profile=website_profile_pybim,
+    )
+    assert err is None
+    assert ctx is not None
+
+    prompt = EmailPromptBuilder.build_prompt(ctx)
+
+    forbidden_claims = [
+        "30%", "50%", "2x", "10x", "ROI",
+        "cost savings", "time savings", "guaranteed results"
+    ]
+    for ev in ctx.evidence_items:
+        for claim in forbidden_claims:
+            assert claim.lower() not in ev.content.lower(), f"Context fabricated metric: {claim}"
+
+    source_data = prompt.split('<SOURCE_DATA>')[1].split('</SOURCE_DATA>')[0]
+    for claim in forbidden_claims:
+        assert claim.lower() not in source_data.lower(), f"SOURCE_DATA fabricated metric: {claim}" 
 
 
 def test_p8_fab_002_no_fake_relationship_claims(golden_qualified_lead, sender_profile, website_profile_pybim):
@@ -849,6 +899,52 @@ def test_p8_wf_001_and_002_draft_safety_statuses(golden_qualified_lead, sender_p
     assert draft.send_status == "not_sent"
 
 
+
+
+def test_p8_wf_003_projection_and_safety():
+    """P8-WF-003: Deterministic projection sets outreach_status='draft_ready', approval_status='pending_review', send_status='not_sent'."""
+    draft = EmailDraft(
+        draft_id="d1", lead_id="domain:acme.com", contact_id="c1",
+        recipient_name="Jane", recipient_email="jane@acme.com",
+        subject="Streamlining Revit Automation",
+        body="Body text long enough for testing purpose here.",
+        personalization_notes="Mapped to Revit API hiring signal",
+        service_used="Tech-Enabled BIM Services", generation_model="m",
+    )
+    lead_dict = {
+        "lead_id": "domain:acme.com",
+        "company_name": "Acme BIM Innovations",
+        "lead_score": 86,
+    }
+    projected = OutreachOrchestrator.project_draft_to_lead_row(lead_dict, draft)
+    assert projected["draft_subject"] == "Streamlining Revit Automation"
+    assert projected["draft_body"] == "Body text long enough for testing purpose here."
+    assert projected["personalization_notes"] == "Mapped to Revit API hiring signal"
+    assert projected["approval_status"] == "pending_review"
+    assert projected["outreach_status"] == "draft_ready"
+    assert projected["send_status"] == "not_sent"
+
+
+def test_p8_handoff_001_projection_fields():
+    """P8-HANDOFF-001: Phase 7 handoff fields intact through deterministic projection."""
+    draft = EmailDraft(
+        draft_id="d1", lead_id="domain:acme.com", contact_id="c1",
+        recipient_name="Jane", recipient_email="jane@acme.com",
+        subject="Sub", body="Body text long enough.",
+        service_used="Tech-Enabled BIM Services", generation_model="m",
+    )
+    lead_dict = {
+        "lead_id": "domain:acme.com",
+        "company_name": "Acme BIM Innovations",
+        "lead_score": 86,
+        "qualification_threshold": 60,
+    }
+    projected = OutreachOrchestrator.project_draft_to_lead_row(lead_dict, draft)
+    assert projected["lead_id"] == "domain:acme.com"
+    assert projected["lead_score"] == 86
+    assert projected["outreach_status"] == "draft_ready"
+
+
 def test_p8_wf_004_zero_sending_code_path_static_verification():
     """Verify Phase 8 modules contain NO email sending client calls (SMTP, sendgrid, gmail, mailgun)."""
     import sales_engine.outreach.outreach_orchestrator as orch_mod
@@ -910,30 +1006,94 @@ def test_p8_idemp_001_to_003_deterministic_draft_id(golden_qualified_lead, sende
 # 20. BATCH: P8-BATCH-001 .. 003
 # =========================================================================
 
-def test_p8_batch_001_and_002_batch_isolation(golden_qualified_lead, sender_profile, website_profile_pybim):
-    valid_lead = golden_qualified_lead.model_copy(deep=True)
-    unqual_lead = golden_qualified_lead.model_copy(deep=True)
-    unqual_lead.base_lead.qualified = False
+def test_p8_batch_001_batch_processing(golden_qualified_lead, sender_profile, website_profile_pybim):
+    """P8-BATCH-001: Multiple successful leads batch processing."""
+    lead_a = golden_qualified_lead.model_copy(deep=True)
+    lead_b = golden_qualified_lead.model_copy(deep=True)
+    lead_b.base_lead.company_domain = "leadb.com"
+    lead_b.best_contact.work_email = "b@leadb.com"
 
     mock_gen = MagicMock()
-    mock_gen.generate_draft.return_value = (
-        EmailDraft(
-            draft_id="d1", lead_id="domain:acme.com", contact_id="c1",
+    mock_gen.generate_draft.side_effect = [
+        (EmailDraft(
+            draft_id="d-a", lead_id="domain:acme.com", contact_id="c1",
             recipient_name="Jane", recipient_email="jane@acme.com",
-            subject="Sub", body="Body text long enough for testing purpose here.",
+            subject="Sub A", body="Body text long enough for testing purpose here.",
             service_used="Tech-Enabled BIM Services", generation_model="m",
-        ), None, None
-    )
+        ), None, None),
+        (EmailDraft(
+            draft_id="d-b", lead_id="domain:leadb.com", contact_id="c2",
+            recipient_name="Bob", recipient_email="b@leadb.com",
+            subject="Sub B", body="Body text long enough for testing purpose here.",
+            service_used="Tech-Enabled BIM Services", generation_model="m",
+        ), None, None),
+    ]
     orchestrator = OutreachOrchestrator(email_generator=mock_gen)
     req = GenerateDraftsRequest(
-        leads=[valid_lead, unqual_lead],
+        leads=[lead_a, lead_b],
+        sender_profile=sender_profile,
+        website_profile=website_profile_pybim,
+    )
+    resp = orchestrator.generate_drafts(req)
+    assert resp.generated_count == 2
+    assert resp.skipped_count == 0
+    assert resp.failed_count == 0
+    assert len(resp.drafts) == 2
+
+
+def test_p8_batch_002_partial_failure(golden_qualified_lead, sender_profile, website_profile_pybim):
+    """
+    P8-BATCH-002: Partial failure batch resilience:
+    Lead A: generation succeeds -> generated_count = 1
+    Lead B: generator returns validation_failed -> failed_count = 1
+    Lead C: no usable email -> skipped_count = 1
+    Verify successful draft survives.
+    """
+    lead_a = golden_qualified_lead.model_copy(deep=True)
+    lead_a.base_lead.company_domain = "leada.com"
+    lead_a.best_contact.work_email = "a@leada.com"
+
+    lead_b = golden_qualified_lead.model_copy(deep=True)
+    lead_b.base_lead.company_domain = "leadb.com"
+    lead_b.best_contact.work_email = "b@leadb.com"
+
+    lead_c = golden_qualified_lead.model_copy(deep=True)
+    lead_c.base_lead.company_domain = "leadc.com"
+    lead_c.best_contact.work_email = None
+
+    mock_gen = MagicMock()
+    mock_gen.generate_draft.side_effect = [
+        (EmailDraft(
+            draft_id="d-a", lead_id="domain:leada.com", contact_id="c-a",
+            recipient_name="Jane", recipient_email="a@leada.com",
+            subject="Sub A", body="Body text long enough for testing purpose here.",
+            service_used="Tech-Enabled BIM Services", generation_model="m",
+        ), None, None),
+        (None, "validation_failed", "Body exceeds 160 words"),
+    ]
+    orchestrator = OutreachOrchestrator(email_generator=mock_gen)
+    req = GenerateDraftsRequest(
+        leads=[lead_a, lead_b, lead_c],
         sender_profile=sender_profile,
         website_profile=website_profile_pybim,
     )
     resp = orchestrator.generate_drafts(req)
     assert resp.generated_count == 1
+    assert resp.failed_count == 1
     assert resp.skipped_count == 1
-    assert resp.failed_count == 0
+
+    # Verify successful draft survives
+    assert len(resp.drafts) == 1
+    assert resp.drafts[0].recipient_email == "a@leada.com"
+    assert resp.drafts[0].draft_id == "d-a"
+
+    # Verify failure recorded
+    assert len(resp.errors) == 1
+    assert resp.errors[0].error_type == "validation_failed"
+
+    # Verify skip recorded
+    assert len(resp.skipped) == 1
+    assert resp.skipped[0].reason == "no_work_email" 
 
 
 def test_p8_batch_003_max_50_limit(golden_qualified_lead, sender_profile, website_profile_pybim):
@@ -998,15 +1158,36 @@ def test_p8_ground_001_disabled_reported_honestly(golden_qualified_lead, sender_
 # 23. ERROR TAXONOMY: P8-ERR-001
 # =========================================================================
 
-def test_p8_err_001_distinguishable_error_codes():
+def test_p8_err_001_distinguishable_error_codes(golden_qualified_lead, sender_profile, website_profile_pybim):
     known_errors = [
         "not_qualified", "no_best_contact", "no_work_email",
         "email_not_usable", "no_active_service", "insufficient_grounding",
         "context_build_failed", "generation_failed", "parse_failed",
         "validation_failed", "model_unavailable", "timeout"
     ]
-    # Invariant: Each error must be distinct
     assert len(known_errors) == len(set(known_errors))
+
+    ctx, _ = OutreachContextBuilder.build_context(
+        lead=golden_qualified_lead,
+        sender=sender_profile,
+        website_profile=website_profile_pybim,
+    )
+
+    # 1. ConnectionError -> model_unavailable
+    mock_llm_conn = MagicMock()
+    mock_llm_conn.generate_code.side_effect = ConnectionError("Ollama unreachable")
+    gen_conn = EmailGenerator(llm_client=mock_llm_conn)
+    draft_c, err_c, _ = gen_conn.generate_draft(ctx)
+    assert draft_c is None
+    assert err_c == "model_unavailable"
+
+    # 2. TimeoutError -> timeout (NOT model_unavailable)
+    mock_llm_timeout = MagicMock()
+    mock_llm_timeout.generate_code.side_effect = TimeoutError("Request timed out after 30s")
+    gen_timeout = EmailGenerator(llm_client=mock_llm_timeout)
+    draft_t, err_t, _ = gen_timeout.generate_draft(ctx)
+    assert draft_t is None
+    assert err_t == "timeout" 
 
 
 # =========================================================================
@@ -1103,4 +1284,36 @@ def test_p8_api_001_and_validation(golden_qualified_lead, sender_profile, websit
         "website_profile": website_profile_pybim,
     }
     res = client.post("/api/sales/generate-drafts", json=invalid_payload)
+    assert res.status_code == 422
+
+
+def test_p8_api_004_invalid_tone_returns_422(golden_qualified_lead, sender_profile, website_profile_pybim):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    client = TestClient(app)
+    payload = {
+        "leads": [golden_qualified_lead.model_dump()],
+        "jobs": [],
+        "sender_profile": sender_profile.model_dump(),
+        "website_profile": website_profile_pybim,
+        "tone": "invalid_casual_slang",
+    }
+    res = client.post("/api/sales/generate-drafts", json=payload)
+    assert res.status_code == 422
+
+
+def test_p8_api_005_invalid_language_returns_422(golden_qualified_lead, sender_profile, website_profile_pybim):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    client = TestClient(app)
+    payload = {
+        "leads": [golden_qualified_lead.model_dump()],
+        "jobs": [],
+        "sender_profile": sender_profile.model_dump(),
+        "website_profile": website_profile_pybim,
+        "language": "es",
+    }
+    res = client.post("/api/sales/generate-drafts", json=payload)
     assert res.status_code == 422
