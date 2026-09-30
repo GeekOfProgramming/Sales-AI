@@ -1,0 +1,66 @@
+{
+  "semantic_cases": [
+    {
+      "case_id": "P8-SEM-001",
+      "title": "Strong BIM Automation Email",
+      "target_lead": "domain:acme.com",
+      "evaluation_status": "NOT_RUN_MODEL_LIMITATION",
+      "criteria": [
+        "correct_company",
+        "correct_recipient",
+        "references_revit_bim_automation",
+        "uses_active_service_only",
+        "natural_wording",
+        "no_invented_facts",
+        "low_friction_cta",
+        "concise_under_160_words"
+      ]
+    },
+    {
+      "case_id": "P8-SEM-002",
+      "title": "BIM Manager Hiring Email",
+      "target_lead": "domain:buildcorp.com",
+      "evaluation_status": "NOT_RUN_MODEL_LIMITATION",
+      "criteria": [
+        "correct_company",
+        "correct_recipient",
+        "references_bim_manager_signal",
+        "uses_active_service_only",
+        "natural_wording",
+        "no_invented_facts",
+        "low_friction_cta"
+      ]
+    },
+    {
+      "case_id": "P8-SEM-003",
+      "title": "Executive Brief Tone",
+      "target_lead": "domain:acme.com",
+      "evaluation_status": "NOT_RUN_MODEL_LIMITATION",
+      "criteria": [
+        "tone_executive_brief",
+        "no_sales_fluff",
+        "grounded_in_evidence"
+      ]
+    },
+    {
+      "case_id": "P8-SEM-004",
+      "title": "Italian Draft",
+      "target_lead": "domain:acme.com",
+      "evaluation_status": "NOT_RUN_MODEL_LIMITATION",
+      "criteria": [
+        "natural_italian_prose",
+        "accurate_bim_terminology"
+      ]
+    },
+    {
+      "case_id": "P8-SEM-005",
+      "title": "German Draft",
+      "target_lead": "domain:acme.com",
+      "evaluation_status": "NOT_RUN_MODEL_LIMITATION",
+      "criteria": [
+        "natural_german_prose",
+        "formal_business_tone_sie"
+      ]
+    }
+  ]
+}

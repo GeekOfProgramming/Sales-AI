@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 15:57:11 UTC
-- **Git Commit:** `11250ba`
+- **Time:** 16:11:53 UTC
+- **Git Commit:** `2bf7620`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,11 +14,11 @@
 - **Live Tests Executed:** No
 
 ## Summary
-- **Total Cases:** 194
-- **Passed:** 183
+- **Total Cases:** 266
+- **Passed:** 251
 - **Failed:** 0
 - **Review Required:** 4
-- **Deferred (Model Limitation):** 3
+- **Deferred (Model Limitation):** 7
 - **Skipped / Not Run:** 4
 - **Source Changed:** 0
 
@@ -31,7 +31,7 @@
 | Phase 5 | 27 | 26 | 0 | 1 | 0 | 0 |
 | Phase 6 | 43 | 40 | 0 | 1 | 0 | 2 |
 | Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
-| Phase 8 | 19 | 18 | 0 | 0 | 1 | 0 |
+| Phase 8 | 91 | 86 | 0 | 0 | 5 | 0 |
 
 ## Phase 7 Reconciliation & Case Count Model
 To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
@@ -44,10 +44,11 @@ To ensure 100% auditability across test suites and golden sets, the Phase 7 coun
 
 ## Phase 8 Case Count & Architecture Model
 Phase 8 implements personalized cold email draft generation with strict deterministic isolation:
-- **Total Cases in Catalog (`tests/reports/phase8_latest.json`):** 19 cases
-  - **Deterministic Golden Acceptance Cases (`P8-DRAFT-001` .. `010`):** 10 cases passed
-  - **Deterministic Regression Guardrail Cases (`P8-REG-001` .. `008`):** 8 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, and deterministic ordering).
-  - **Semantic Deferred Quality (`P8-SEM-QUALITY-001`):** 1 case marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, deferred for higher-capacity LLM review).
+- **Total Cases in Catalog (`tests/golden/phase8_outreach.json` & `phase8_latest.json`):** 91 cases
+  - **Deterministic Acceptance & Behavioral Cases:** 78 cases passed (covering main golden drafting, eligibility boundaries, contact and lead identity preservation, active service gating, deterministic evidence citations, prompt injection traps, parsing retry, workflow safety, batch resilience, privacy scrubbing, error taxonomy, and Phase 7 handoff).
+  - **Mandatory Regression Invariants (`P8-REG-001` .. `008`):** 8 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, and deterministic ordering).
+  - **Semantic Deferred Quality (`P8-SEM-001` .. `005`):** 5 cases marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, tone differentiation, and multilingual drafting deferred for high-capacity LLM review).
+- **False Pass Count:** 0 (strictly verified by automated QA integrity check).
 
 ## Failures
 _No failures detected._
@@ -467,14 +468,14 @@ _(Pending execution / Deferred)_
 Semantic LLM extraction fixture for API developer role. Deferring execution until higher-tier model deployment.
 
 ---
-### P8-SEM-QUALITY-001 — Semantic LLM Email Naturalness & Prose Quality
+### P8-SEM-001 — Strong BIM Automation Email Semantic Review
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-SEM-QUALITY-001"
+  "case_id": "P8-SEM-001"
 }
 ```
 **Expected:**
@@ -497,7 +498,139 @@ _(None / In sync)_
 **Reason:** Deferred for higher-capacity model review; deterministic invariants verified
 
 **Human Notes:**
-Phase 8: Semantic LLM Email Naturalness & Prose Quality
+Phase 8: Strong BIM Automation Email Semantic Review (mode: local_live_llm)
+
+---
+### P8-SEM-002 — BIM Manager Hiring Email Semantic Review
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SEM-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Actual:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Result:** NOT_RUN_MODEL_LIMITATION
+
+**Differences:**
+_(None / In sync)_
+
+**Reason:** Deferred for higher-capacity model review; deterministic invariants verified
+
+**Human Notes:**
+Phase 8: BIM Manager Hiring Email Semantic Review (mode: local_live_llm)
+
+---
+### P8-SEM-003 — Executive Brief Tone Semantic Review
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SEM-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Actual:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Result:** NOT_RUN_MODEL_LIMITATION
+
+**Differences:**
+_(None / In sync)_
+
+**Reason:** Deferred for higher-capacity model review; deterministic invariants verified
+
+**Human Notes:**
+Phase 8: Executive Brief Tone Semantic Review (mode: local_live_llm)
+
+---
+### P8-SEM-004 — Italian Draft Semantic Review
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SEM-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Actual:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Result:** NOT_RUN_MODEL_LIMITATION
+
+**Differences:**
+_(None / In sync)_
+
+**Reason:** Deferred for higher-capacity model review; deterministic invariants verified
+
+**Human Notes:**
+Phase 8: Italian Draft Semantic Review (mode: local_live_llm)
+
+---
+### P8-SEM-005 — German Draft Semantic Review
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SEM-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Actual:**
+```json
+{
+  "status": "NOT_RUN_MODEL_LIMITATION"
+}
+```
+**Result:** NOT_RUN_MODEL_LIMITATION
+
+**Differences:**
+_(None / In sync)_
+
+**Reason:** Deferred for higher-capacity model review; deterministic invariants verified
+
+**Human Notes:**
+Phase 8: German Draft Semantic Review (mode: local_live_llm)
 
 ---
 
@@ -6310,7 +6443,7 @@ _(None / In sync)_
 Phase 7 Golden Case: Empty CSV Headers
 
 ---
-### P8-DRAFT-001 — Strong BIM automation hiring signal
+### P8-DRAFT-001 — Strong BIM Automation Signal
 **Phase:** Phase 8
 **Source:** internal
 
@@ -6338,17 +6471,17 @@ Phase 7 Golden Case: Empty CSV Headers
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Strong BIM automation hiring signal
+Phase 8: Strong BIM Automation Signal (mode: mock_llm)
 
 ---
-### P8-DRAFT-002 — BIM Manager hiring signal
+### P8-ELIG-001 — Qualified and Verified Allowed
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-002"
+  "case_id": "P8-ELIG-001"
 }
 ```
 **Expected:**
@@ -6369,17 +6502,17 @@ Phase 8: Strong BIM automation hiring signal
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: BIM Manager hiring signal
+Phase 8: Qualified and Verified Allowed (mode: mock_llm)
 
 ---
-### P8-DRAFT-003 — Weak / insufficient evidence skip
+### P8-ELIG-002 — Qualified and Likely Allowed
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-003"
+  "case_id": "P8-ELIG-002"
 }
 ```
 **Expected:**
@@ -6400,17 +6533,17 @@ Phase 8: BIM Manager hiring signal
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Weak / insufficient evidence skip
+Phase 8: Qualified and Likely Allowed (mode: mock_llm)
 
 ---
-### P8-DRAFT-004 — No usable email skip
+### P8-ELIG-003 — Unqualified Lead Skipped
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-004"
+  "case_id": "P8-ELIG-003"
 }
 ```
 **Expected:**
@@ -6431,17 +6564,17 @@ Phase 8: Weak / insufficient evidence skip
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No usable email skip
+Phase 8: Unqualified Lead Skipped (mode: no_llm)
 
 ---
-### P8-DRAFT-005 — No active service skip
+### P8-ELIG-004 — No Best Contact Skipped
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-005"
+  "case_id": "P8-ELIG-004"
 }
 ```
 **Expected:**
@@ -6462,17 +6595,17 @@ Phase 8: No usable email skip
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No active service skip
+Phase 8: No Best Contact Skipped (mode: no_llm)
 
 ---
-### P8-DRAFT-006 — In-development service excluded
+### P8-ELIG-005 — No Work Email Skipped
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-006"
+  "case_id": "P8-ELIG-005"
 }
 ```
 **Expected:**
@@ -6493,17 +6626,17 @@ Phase 8: No active service skip
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: In-development service excluded
+Phase 8: No Work Email Skipped (mode: no_llm)
 
 ---
-### P8-DRAFT-007 — Prompt injection inside job text isolation
+### P8-ELIG-006 — Risky Email Skipped by Default
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-007"
+  "case_id": "P8-ELIG-006"
 }
 ```
 **Expected:**
@@ -6524,17 +6657,17 @@ Phase 8: In-development service excluded
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Prompt injection inside job text isolation
+Phase 8: Risky Email Skipped by Default (mode: no_llm)
 
 ---
-### P8-DRAFT-008 — Unsupported claim & unknown evidence ref validation
+### P8-ELIG-007 — Unknown Email Skipped by Default
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-008"
+  "case_id": "P8-ELIG-007"
 }
 ```
 **Expected:**
@@ -6555,17 +6688,17 @@ Phase 8: Prompt injection inside job text isolation
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Unsupported claim & unknown evidence ref validation
+Phase 8: Unknown Email Skipped by Default (mode: no_llm)
 
 ---
-### P8-DRAFT-009 — Unresolved placeholder rejection
+### P8-ELIG-008 — Preview Override Without Fabrication
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-009"
+  "case_id": "P8-ELIG-008"
 }
 ```
 **Expected:**
@@ -6586,17 +6719,17 @@ Phase 8: Unsupported claim & unknown evidence ref validation
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Unresolved placeholder rejection
+Phase 8: Preview Override Without Fabrication (mode: no_llm)
 
 ---
-### P8-DRAFT-010 — Batch partial failure isolation
+### P8-ID-001 — Lead ID Preserved
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-DRAFT-010"
+  "case_id": "P8-ID-001"
 }
 ```
 **Expected:**
@@ -6617,10 +6750,134 @@ Phase 8: Unresolved placeholder rejection
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Batch partial failure isolation
+Phase 8: Lead ID Preserved (mode: mock_llm)
 
 ---
-### P8-REG-001 — Wrong-company same-title job exclusion
+### P8-ID-002 — Contact ID Preserved
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Contact ID Preserved (mode: mock_llm)
+
+---
+### P8-ID-003 — Recipient Email Preserved
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Recipient Email Preserved (mode: mock_llm)
+
+---
+### P8-ID-004 — Recipient Name and Title Bound to Same Contact
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Recipient Name and Title Bound to Same Contact (mode: mock_llm)
+
+---
+### P8-ID-005 — Explicit Contact ID Belongs to Lead
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ID-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Explicit Contact ID Belongs to Lead (mode: mock_llm)
+
+---
+### P8-REG-001 — Wrong-Company Same-Title Job Contamination
 **Phase:** Phase 8
 **Source:** internal
 
@@ -6648,17 +6905,17 @@ Phase 8: Batch partial failure isolation
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Wrong-company same-title job exclusion
+Phase 8: Wrong-Company Same-Title Job Contamination (mode: no_llm)
 
 ---
-### P8-REG-002 — Active service substring bypass rejection
+### P8-COMPANY-001 — Canonical Domain Match
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-REG-002"
+  "case_id": "P8-COMPANY-001"
 }
 ```
 **Expected:**
@@ -6679,17 +6936,17 @@ Phase 8: Wrong-company same-title job exclusion
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Active service substring bypass rejection
+Phase 8: Canonical Domain Match (mode: no_llm)
 
 ---
-### P8-REG-003 — No fabricated technology fallback
+### P8-COMPANY-002 — ATS Namespaced Match
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-REG-003"
+  "case_id": "P8-COMPANY-002"
 }
 ```
 **Expected:**
@@ -6710,10 +6967,72 @@ Phase 8: Active service substring bypass rejection
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: No fabricated technology fallback
+Phase 8: ATS Namespaced Match (mode: no_llm)
 
 ---
-### P8-REG-004 — API raw jobs handoff into OutreachContext
+### P8-COMPANY-003 — ATS Namespace Mismatch
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-COMPANY-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: ATS Namespace Mismatch (mode: no_llm)
+
+---
+### P8-COMPANY-004 — Conservative Name Fallback
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-COMPANY-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Conservative Name Fallback (mode: no_llm)
+
+---
+### P8-REG-004 — API Raw Jobs Handoff
 **Phase:** Phase 8
 **Source:** internal
 
@@ -6741,10 +7060,72 @@ Phase 8: No fabricated technology fallback
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: API raw jobs handoff into OutreachContext
+Phase 8: API Raw Jobs Handoff (mode: mock_llm)
 
 ---
-### P8-REG-005 — Phase 5 evidence preservation as EVID-xxx
+### P8-JOB-001 — Relevant Jobs Filter
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-JOB-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Relevant Jobs Filter (mode: no_llm)
+
+---
+### P8-JOB-002 — No Raw Jobs Safe Fallback
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-JOB-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Raw Jobs Safe Fallback (mode: no_llm)
+
+---
+### P8-REG-005 — Phase 5 Evidence Preservation
 **Phase:** Phase 8
 **Source:** internal
 
@@ -6772,10 +7153,10 @@ Phase 8: API raw jobs handoff into OutreachContext
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Phase 5 evidence preservation as EVID-xxx
+Phase 8: Phase 5 Evidence Preservation (mode: no_llm)
 
 ---
-### P8-REG-006 — Phase 5 signal schema clean extraction
+### P8-REG-006 — Phase 5 Signal Schema
 **Phase:** Phase 8
 **Source:** internal
 
@@ -6803,17 +7184,17 @@ Phase 8: Phase 5 evidence preservation as EVID-xxx
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Phase 5 signal schema clean extraction
+Phase 8: Phase 5 Signal Schema (mode: no_llm)
 
 ---
-### P8-REG-007 — SOURCE_DATA delimiter injection escaping
+### P8-EVID-001 — StructuredJob Signal Evidence Extracted
 **Phase:** Phase 8
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P8-REG-007"
+  "case_id": "P8-EVID-001"
 }
 ```
 **Expected:**
@@ -6834,10 +7215,382 @@ Phase 8: Phase 5 signal schema clean extraction
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: SOURCE_DATA delimiter injection escaping
+Phase 8: StructuredJob Signal Evidence Extracted (mode: no_llm)
 
 ---
-### P8-REG-008 — Deterministic evidence ordering
+### P8-EVID-002 — Unknown Evidence Reference Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-EVID-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unknown Evidence Reference Rejected (mode: mock_llm)
+
+---
+### P8-EVID-003 — Duplicate Evidence Deterministically Handled
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-EVID-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Duplicate Evidence Deterministically Handled (mode: no_llm)
+
+---
+### P8-REG-003 — No Fabricated BIM/Revit Technology
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Fabricated BIM/Revit Technology (mode: no_llm)
+
+---
+### P8-FAB-001 — No Fake Metrics in Context
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-FAB-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Fake Metrics in Context (mode: no_llm)
+
+---
+### P8-FAB-002 — No Fake Relationship Claims
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-FAB-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Fake Relationship Claims (mode: mock_llm)
+
+---
+### P8-SVC-001 — Active Service Accepted
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Active Service Accepted (mode: no_llm)
+
+---
+### P8-SVC-002 — In-Development Service Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: In-Development Service Rejected (mode: no_llm)
+
+---
+### P8-REG-002 — Active Service Substring Bypass Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Active Service Substring Bypass Rejected (mode: mock_llm)
+
+---
+### P8-SVC-004 — CTA Offering Rejected as Active Service
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: CTA Offering Rejected as Active Service (mode: no_llm)
+
+---
+### P8-SVC-005 — Missing Offering Status Rejected as Active
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Missing Offering Status Rejected as Active (mode: no_llm)
+
+---
+### P8-SVC-006 — No Active Service Skips Lead
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-SVC-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: No Active Service Skips Lead (mode: no_llm)
+
+---
+### P8-CTX-001 — Deterministic Context Generation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-CTX-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Deterministic Context Generation (mode: no_llm)
+
+---
+### P8-REG-008 — Deterministic Evidence Ordering
 **Phase:** Phase 8
 **Source:** internal
 
@@ -6865,6 +7618,1494 @@ Phase 8: SOURCE_DATA delimiter injection escaping
 _(None / In sync)_
 
 **Human Notes:**
-Phase 8: Deterministic evidence ordering
+Phase 8: Deterministic Evidence Ordering (mode: no_llm)
+
+---
+### P8-REG-007 — SOURCE_DATA Delimiter Injection Escaping
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-REG-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: SOURCE_DATA Delimiter Injection Escaping (mode: no_llm)
+
+---
+### P8-INJECT-001 — Prompt Injection Ignore Instructions Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Ignore Instructions Trapped (mode: no_llm)
+
+---
+### P8-INJECT-002 — Prompt Injection Recipient Override Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Recipient Override Trapped (mode: no_llm)
+
+---
+### P8-INJECT-003 — Prompt Injection Auto Approve Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Auto Approve Trapped (mode: no_llm)
+
+---
+### P8-INJECT-004 — Prompt Injection Send Immediately Trapped
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-INJECT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Injection Send Immediately Trapped (mode: no_llm)
+
+---
+### P8-PROMPT-001 — Sales Outreach Environment Isolated
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PROMPT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Sales Outreach Environment Isolated (mode: no_llm)
+
+---
+### P8-PROMPT-002 — Tone Preset Mapping
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PROMPT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Tone Preset Mapping (mode: no_llm)
+
+---
+### P8-PROMPT-003 — Language Preset Supported
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PROMPT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Language Preset Supported (mode: no_llm)
+
+---
+### P8-PARSE-001 — Valid JSON Single Parse
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PARSE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Valid JSON Single Parse (mode: mock_llm)
+
+---
+### P8-PARSE-002 — Invalid Then Repaired JSON Retry
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PARSE-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Invalid Then Repaired JSON Retry (mode: mock_llm)
+
+---
+### P8-PARSE-003 — Two Invalid Responses Fail Safely
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PARSE-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Two Invalid Responses Fail Safely (mode: mock_llm)
+
+---
+### P8-VAL-001 — Empty Subject Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Empty Subject Rejected (mode: mock_llm)
+
+---
+### P8-VAL-002 — Empty Body Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Empty Body Rejected (mode: mock_llm)
+
+---
+### P8-VAL-003 — Subject Exceeding 60 Characters Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Subject Exceeding 60 Characters Rejected (mode: mock_llm)
+
+---
+### P8-VAL-004 — Body Exceeding 160 Words Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Body Exceeding 160 Words Rejected (mode: mock_llm)
+
+---
+### P8-VAL-005 — Fake Re/Fwd Prefix Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Fake Re/Fwd Prefix Rejected (mode: mock_llm)
+
+---
+### P8-VAL-006 — All Caps Subject Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: All Caps Subject Rejected (mode: mock_llm)
+
+---
+### P8-VAL-007 — Unresolved Placeholders Rejected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Unresolved Placeholders Rejected (mode: mock_llm)
+
+---
+### P8-VAL-008 — Identity Mutation Invariant Protected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Identity Mutation Invariant Protected (mode: mock_llm)
+
+---
+### P8-VAL-009 — Recipient Email Mutation Invariant Protected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Recipient Email Mutation Invariant Protected (mode: mock_llm)
+
+---
+### P8-VAL-010 — Workflow Mutation Invariant Protected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-VAL-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Workflow Mutation Invariant Protected (mode: mock_llm)
+
+---
+### P8-WF-001 — Approval Status Always Pending Review
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Approval Status Always Pending Review (mode: mock_llm)
+
+---
+### P8-WF-002 — Send Status Always Not Sent
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Send Status Always Not Sent (mode: mock_llm)
+
+---
+### P8-WF-003 — Workflow Projection Draft Ready
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Workflow Projection Draft Ready (mode: mock_llm)
+
+---
+### P8-WF-004 — Zero Sending Code Path Static Verification
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Zero Sending Code Path Static Verification (mode: no_llm)
+
+---
+### P8-WF-005 — Zero Auto Approval Path Static Verification
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-WF-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Zero Auto Approval Path Static Verification (mode: no_llm)
+
+---
+### P8-IDEMP-001 — Deterministic Draft ID Generation
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-IDEMP-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Deterministic Draft ID Generation (mode: mock_llm)
+
+---
+### P8-IDEMP-002 — Revision Mutation Changes Draft ID
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-IDEMP-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Revision Mutation Changes Draft ID (mode: mock_llm)
+
+---
+### P8-IDEMP-003 — Prompt Version Mutation Changes Draft ID
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-IDEMP-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Prompt Version Mutation Changes Draft ID (mode: mock_llm)
+
+---
+### P8-BATCH-001 — Multiple Successful Leads Batch Processing
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-BATCH-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Multiple Successful Leads Batch Processing (mode: mock_llm)
+
+---
+### P8-BATCH-002 — Partial Failure Batch Resilience
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-BATCH-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Partial Failure Batch Resilience (mode: mock_llm)
+
+---
+### P8-BATCH-003 — Max 50 Drafts Respected
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-BATCH-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Max 50 Drafts Respected (mode: mock_llm)
+
+---
+### P8-PRIV-001 — Personal Contact Data Excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PRIV-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Personal Contact Data Excluded (mode: no_llm)
+
+---
+### P8-PRIV-002 — Secrets and Tokens Excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PRIV-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Secrets and Tokens Excluded (mode: no_llm)
+
+---
+### P8-PRIV-003 — Sensitive Personal Attributes Excluded
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-PRIV-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Sensitive Personal Attributes Excluded (mode: no_llm)
+
+---
+### P8-GROUND-001 — Disabled Grounding Checker Explicitly Reported Not Run
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (mode: no_llm)
+
+---
+### P8-GROUND-002 — Grounding Checker Cannot Rewrite Draft
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Grounding Checker Cannot Rewrite Draft (mode: no_llm)
+
+---
+### P8-GROUND-003 — Grounding Checker Cannot Approve Draft
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Grounding Checker Cannot Approve Draft (mode: no_llm)
+
+---
+### P8-GROUND-004 — Grounding Checker Cannot Send Draft
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-GROUND-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Grounding Checker Cannot Send Draft (mode: no_llm)
+
+---
+### P8-ERR-001 — Error Taxonomy Distinguishable
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-ERR-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Error Taxonomy Distinguishable (mode: no_llm)
+
+---
+### P8-LLM-001 — Model Unavailable Handled Safely
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-LLM-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Model Unavailable Handled Safely (mode: no_llm)
+
+---
+### P8-LLM-003 — Existing LLM Client Reused
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-LLM-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Existing LLM Client Reused (mode: no_llm)
+
+---
+### P8-HANDOFF-001 — Phase 7 Handoff Fields Intact
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-HANDOFF-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Phase 7 Handoff Fields Intact (mode: mock_llm)
+
+---
+### P8-HANDOFF-003 — Lead Score and Qualification Immutable
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-HANDOFF-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Lead Score and Qualification Immutable (mode: mock_llm)
+
+---
+### P8-HANDOFF-004 — Best Contact Ranking Immutable
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-HANDOFF-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: Best Contact Ranking Immutable (mode: mock_llm)
+
+---
+### P8-API-001 — API Generate Drafts Valid Request
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Generate Drafts Valid Request (mode: mock_llm)
+
+---
+### P8-API-003 — API Missing Sender Returns 422
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Missing Sender Returns 422 (mode: no_llm)
+
+---
+### P8-API-004 — API Invalid Tone Returns 422
+**Phase:** Phase 8
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P8-API-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 8: API Invalid Tone Returns 422 (mode: no_llm)
 
 ---

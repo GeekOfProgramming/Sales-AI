@@ -1,0 +1,13 @@
+{
+  "lead_id": "domain:acme.com",
+  "contact_id": "email:jane@acme.com",
+  "recipient_email": "jane@acme.com",
+  "subject": "Streamlining Revit Automation at Acme",
+  "body": "Hi Jane,\n\nI noticed Acme BIM Innovations is actively hiring a Revit API Developer to build custom plugins in C#. Scaling custom automation internally often introduces substantial maintenance overhead.\n\nAt pyBIM, our Tech-Enabled BIM Services help digital delivery teams deploy reliable automation workflows without increasing engineering strain.\n\nWould you be open to a brief 10-minute introductory call next Tuesday?",
+  "service_used": "Tech-Enabled BIM Services",
+  "evidence_refs": ["JOB-001", "SERVICE-001"],
+  "source_job_urls": ["https://acme.com/careers/revit-dev"],
+  "approval_status": "pending_review",
+  "send_status": "not_sent",
+  "draft_status": "generated"
+}

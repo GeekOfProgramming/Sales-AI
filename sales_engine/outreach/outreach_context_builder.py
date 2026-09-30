@@ -81,12 +81,17 @@ class OutreachContextBuilder:
             job_ident = f"{job_src}:{job_key}".lower()
             if any(str(i).lower() == job_ident for i in lead_identities):
                 return True
+            # If lead has explicit namespaced identities and job has a source identity that does NOT match,
+            # do not fall back to company name matching
+            if lead_identities:
+                return False
 
-        # 3. Exact normalized company name fallback
-        lead_name = getattr(base_lead, "company_name_normalized", None) or CompanyNormalizer.normalize(base_lead.company_name or "")
-        job_name = getattr(job, "company_name_normalized", None) or CompanyNormalizer.normalize(job.company_name or "")
-        if lead_name and job_name:
-            return lead_name == job_name
+        # 3. Exact normalized company name fallback (only if neither has conflicting source identity)
+        if not lead_identities:
+            lead_name = getattr(base_lead, "company_name_normalized", None) or CompanyNormalizer.normalize(base_lead.company_name or "")
+            job_name = getattr(job, "company_name_normalized", None) or CompanyNormalizer.normalize(job.company_name or "")
+            if lead_name and job_name:
+                return lead_name == job_name
 
         return False
 
@@ -111,6 +116,22 @@ class OutreachContextBuilder:
         contact = target_contact or lead.best_contact
         if not contact:
             return None, "no_best_contact"
+
+        # P8-ID-005: If explicit target_contact is provided, verify it belongs to this lead
+        if target_contact:
+            lead_contact_emails = {c.work_email for c in (lead.contacts or []) if c.work_email}
+            lead_contact_names = {c.full_name for c in (lead.contacts or []) if c.full_name}
+            best_email = lead.best_contact.work_email if lead.best_contact else None
+            best_name = lead.best_contact.full_name if lead.best_contact else None
+            if best_email:
+                lead_contact_emails.add(best_email)
+            if best_name:
+                lead_contact_names.add(best_name)
+
+            matches_email = target_contact.work_email and target_contact.work_email in lead_contact_emails
+            matches_name = target_contact.full_name and target_contact.full_name in lead_contact_names
+            if not (matches_email or matches_name):
+                return None, "invalid_contact_for_lead"
 
         contact_id = generate_contact_id(contact, lead_id)
 
@@ -185,10 +206,24 @@ class OutreachContextBuilder:
 
         # 5. Relevant Jobs & Job Signals
         matched_jobs: List[StructuredJob] = []
+        lead_job_titles = {t.lower().strip() for t in (base_lead.job_titles or []) if t}
         if jobs:
             for job in jobs:
                 # Strictly match company identity FIRST
                 if cls._matches_company_identity(base_lead, job):
+                    # Check relevance: if lead has specific job titles or signals, verify relevance
+                    is_rel = getattr(job, "is_relevant", None)
+                    if is_rel is False:
+                        continue
+                    
+                    # If job title exists and lead specifies titles, check if title or technologies align
+                    title = (job.job_title or "").lower().strip()
+                    if lead_job_titles and title:
+                        # Exclude clearly non-technical/unrelated roles like receptionist/accountant if lead is BIM
+                        if not any(lt in title or title in lt for lt in lead_job_titles):
+                            if not (job.relevant_signals or (is_rel is True)):
+                                continue
+
                     matched_jobs.append(job)
 
         # Deterministically sort matched jobs by URL/title/location
@@ -230,16 +265,35 @@ class OutreachContextBuilder:
 
             # Also include structured job signals if present
             for rel_sig in (getattr(job, "relevant_signals", []) or []):
-                sig_text = getattr(rel_sig, "signal", None) or getattr(rel_sig, "evidence", None) or str(rel_sig)
-                evidence_items.append(
-                    OutreachEvidenceItem(
-                        id=f"SIG-JOB-{job_idx:03d}",
-                        category="signal",
-                        title=f"Job Signal: {job.job_title}",
-                        content=str(sig_text),
-                        url=str(job_url) if job_url else None,
+                sig_val = None
+                evid_val = None
+                if isinstance(rel_sig, dict):
+                    sig_val = rel_sig.get("signal")
+                    evid_val = rel_sig.get("evidence")
+                else:
+                    sig_val = getattr(rel_sig, "signal", None)
+                    evid_val = getattr(rel_sig, "evidence", None)
+
+                if sig_val:
+                    evidence_items.append(
+                        OutreachEvidenceItem(
+                            id=f"SIG-JOB-{job_idx:03d}",
+                            category="signal",
+                            title=f"Job Signal: {job.job_title}",
+                            content=str(sig_val),
+                            url=str(job_url) if job_url else None,
+                        )
                     )
-                )
+                if evid_val:
+                    evidence_items.append(
+                        OutreachEvidenceItem(
+                            id=f"EVID-JOB-{job_idx:03d}",
+                            category="job_evidence",
+                            title=f"Job Evidence: {job.job_title}",
+                            content=str(evid_val),
+                            url=str(job_url) if job_url else None,
+                        )
+                    )
 
             job_idx += 1
 

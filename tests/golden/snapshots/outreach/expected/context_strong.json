@@ -1,0 +1,62 @@
+{
+  "lead_id": "domain:acme.com",
+  "contact_id": "email:jane@acme.com",
+  "company_name": "Acme BIM Innovations",
+  "recipient_name": "Jane Smith",
+  "recipient_title": "Head of Digital Delivery",
+  "recipient_email": "jane@acme.com",
+  "active_services": [
+    {
+      "id": "SERVICE-001",
+      "name": "Tech-Enabled BIM Services",
+      "category": "service"
+    }
+  ],
+  "evidence_items": [
+    {
+      "id": "CONTACT-001",
+      "category": "contact",
+      "content": "Target Contact: Jane Smith (Head of Digital Delivery) at Acme BIM Innovations. Email: jane@acme.com",
+      "source_url": null
+    },
+    {
+      "id": "SERVICE-001",
+      "category": "service",
+      "content": "Active Offering: Tech-Enabled BIM Services",
+      "source_url": null
+    },
+    {
+      "id": "JOB-001",
+      "category": "job",
+      "content": "Job Opening: Revit API Developer at Acme BIM Innovations (Remote). Tech requirements: Revit, C#, Dynamo. URL: https://acme.com/careers/revit-dev",
+      "source_url": "https://acme.com/careers/revit-dev"
+    },
+    {
+      "id": "SIG-001",
+      "category": "signal",
+      "content": "Signal: Hiring BIM automation capability (Evidence: Build custom Revit plugins in C#.)",
+      "source_url": "https://acme.com/careers/revit-dev"
+    },
+    {
+      "id": "EVID-001",
+      "category": "job_evidence",
+      "content": "Job Evidence: Build custom Revit plugins in C#.",
+      "source_url": "https://acme.com/careers/revit-dev"
+    },
+    {
+      "id": "SIG-002",
+      "category": "signal",
+      "content": "Signal: Hiring Revit API Developer",
+      "source_url": null
+    },
+    {
+      "id": "EVID-002",
+      "category": "lead_evidence",
+      "content": "Lead Evidence: Building custom Revit automation plugins with C# and Revit API",
+      "source_url": null
+    }
+  ],
+  "source_job_urls": [
+    "https://acme.com/careers/revit-dev"
+  ]
+}

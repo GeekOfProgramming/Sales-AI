@@ -187,7 +187,7 @@
     ],
     "reason": "",
     "human_notes": "Ground Truth verified by human review from real pybim.com crawl snapshot. FLAGGED FOR HUMAN CORRECTION: Expected primary_job_signals contains 3 non-pure job titles: 'Python BIM Automation' (propose 'Python BIM Automation Engineer'), 'ISO 19650 information-management roles' (propose 'BIM Information Manager'), 'Digital Construction / BIM technology leadership' (propose 'Digital Construction Manager').",
-    "test_timestamp": "2026-09-30T15:57:21.687299+00:00"
+    "test_timestamp": "2026-09-30T16:12:05.904651+00:00"
   },
   {
     "case_id": "P3-DISC-001",
@@ -401,7 +401,7 @@
     "differences": [],
     "reason": "All Phase 3 critical requirements and intent coverage targets satisfied.",
     "human_notes": "Frozen human-approved WebsiteProfile for pyBIM to test Discovery query generation independently of Phase 2 known limitations. Evaluates intent coverage, signal diversity, ATS targeting, geography distribution, and absence of semantic pollution.",
-    "test_timestamp": "2026-09-30T15:57:21.727132+00:00"
+    "test_timestamp": "2026-09-30T16:12:05.950203+00:00"
   },
   {
     "case_id": "P3-LIVE-001",
@@ -429,7 +429,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "Live test validating top 10 search results per query. Evaluates Precision@10 across ATS and career categories. Status remains REVIEW for initial baseline.",
-    "test_timestamp": "2026-09-30T15:57:21.735401+00:00"
+    "test_timestamp": "2026-09-30T16:12:05.956882+00:00"
   },
   {
     "case_id": "P4-DET-001",
@@ -465,7 +465,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies accurate detection of ATS providers vs generic career pages from URLs.",
-    "test_timestamp": "2026-09-30T15:57:21.771957+00:00"
+    "test_timestamp": "2026-09-30T16:12:05.985917+00:00"
   },
   {
     "case_id": "P4-DET-002",
@@ -494,7 +494,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts basic structured fields from Greenhouse HTML/API snapshot.",
-    "test_timestamp": "2026-09-30T15:57:21.834521+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.046744+00:00"
   },
   {
     "case_id": "P4-DET-003",
@@ -525,7 +525,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts role title, location, employment type, and source key from Lever snapshot.",
-    "test_timestamp": "2026-09-30T15:57:21.904884+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.108846+00:00"
   },
   {
     "case_id": "P4-DET-004",
@@ -552,7 +552,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Extracts company, title, and location from Ashby job page snapshot.",
-    "test_timestamp": "2026-09-30T15:57:21.956073+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.158645+00:00"
   },
   {
     "case_id": "P4-DET-005",
@@ -583,7 +583,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Parses standard Schema.org JobPosting application/ld+json metadata.",
-    "test_timestamp": "2026-09-30T15:57:21.989064+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.192456+00:00"
   },
   {
     "case_id": "P4-DET-006",
@@ -614,7 +614,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Locates and extracts JobPosting when nested inside @graph schema array.",
-    "test_timestamp": "2026-09-30T15:57:22.020398+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.223343+00:00"
   },
   {
     "case_id": "P4-DET-007",
@@ -653,7 +653,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures company domain canonicalizes www and case while never using the ATS hosting platform.",
-    "test_timestamp": "2026-09-30T15:57:22.051223+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.252444+00:00"
   },
   {
     "case_id": "P4-DET-008",
@@ -698,7 +698,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes corporate legal suffixes, punctuation, and whitespace differences.",
-    "test_timestamp": "2026-09-30T15:57:22.082296+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.282887+00:00"
   },
   {
     "case_id": "P4-DET-009",
@@ -719,7 +719,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies source_company_key survives across raw source, analyzer, and StructuredJob.",
-    "test_timestamp": "2026-09-30T15:57:22.135809+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.344649+00:00"
   },
   {
     "case_id": "P4-DET-010",
@@ -755,7 +755,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Validates distinct error classification without silently converting errors to empty successes.",
-    "test_timestamp": "2026-09-30T15:57:22.192072+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.418079+00:00"
   },
   {
     "case_id": "P4-NEG-001",
@@ -787,7 +787,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing company name is rejected as invalid/parse_failed rather than succeeding as an empty job.",
-    "test_timestamp": "2026-09-30T15:57:22.245147+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.479057+00:00"
   },
   {
     "case_id": "P4-NEG-002",
@@ -819,7 +819,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Confirms missing job title produces an explicit validation/parse_failed error and is not accepted.",
-    "test_timestamp": "2026-09-30T15:57:22.302846+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.535310+00:00"
   },
   {
     "case_id": "P4-NEG-003",
@@ -841,7 +841,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Gracefully recovers from malformed JSON-LD scripts using DOM fallback.",
-    "test_timestamp": "2026-09-30T15:57:22.333369+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.565848+00:00"
   },
   {
     "case_id": "P4-NEG-004",
@@ -863,7 +863,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Does not fabricate active job postings from expired notices.",
-    "test_timestamp": "2026-09-30T15:57:22.361436+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.594860+00:00"
   },
   {
     "case_id": "P4-NEG-005",
@@ -885,7 +885,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identifies generic career homepages that lack specific job postings.",
-    "test_timestamp": "2026-09-30T15:57:22.392658+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.623856+00:00"
   },
   {
     "case_id": "P4-NEG-006",
@@ -913,7 +913,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes URL tracking query params, fragments, and trailing slashes.",
-    "test_timestamp": "2026-09-30T15:57:22.421935+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.651525+00:00"
   },
   {
     "case_id": "P4-NEG-007",
@@ -946,7 +946,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Guarantees ATS domains never become company_domain on StructuredJob.",
-    "test_timestamp": "2026-09-30T15:57:22.448669+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.677298+00:00"
   },
   {
     "case_id": "P4-SEM-001",
@@ -979,7 +979,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture prepared for future evaluation on larger models (qwen2.5:3b/7b/claude). Contains ground truth technologies and signal evidence.",
-    "test_timestamp": "2026-09-30T15:57:22.454049+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.685028+00:00"
   },
   {
     "case_id": "P4-SEM-002",
@@ -1015,7 +1015,7 @@
     "differences": [],
     "reason": "Deferred: Heavy semantic LLM evaluation will run on stronger hardware/model.",
     "human_notes": "Semantic LLM extraction fixture for API developer role. Deferring execution until higher-tier model deployment.",
-    "test_timestamp": "2026-09-30T15:57:22.458074+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.690259+00:00"
   },
   {
     "case_id": "P5-STRONG-001",
@@ -1082,7 +1082,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Multiple strong relevant jobs yield high intent, top recency, rich grounded evidence, and qualification.",
-    "test_timestamp": "2026-09-30T15:57:22.460238+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.692614+00:00"
   },
   {
     "case_id": "P5-WEAK-001",
@@ -1133,7 +1133,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Generic administrative job must not invent BIM relevance or intent; lead is disqualified.",
-    "test_timestamp": "2026-09-30T15:57:22.461902+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.694369+00:00"
   },
   {
     "case_id": "P5-ID-001",
@@ -1161,7 +1161,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalized company name must NOT override conflicting domains.",
-    "test_timestamp": "2026-09-30T15:57:22.464781+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.696151+00:00"
   },
   {
     "case_id": "P5-ID-002",
@@ -1185,7 +1185,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Different name spellings sharing identical domain must merge into 1 CompanyLead.",
-    "test_timestamp": "2026-09-30T15:57:22.467602+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.698868+00:00"
   },
   {
     "case_id": "P5-ID-003",
@@ -1207,7 +1207,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When domain is absent, ATS source + source_company_key correctly identifies the company.",
-    "test_timestamp": "2026-09-30T15:57:22.468976+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.700342+00:00"
   },
   {
     "case_id": "P5-ID-004",
@@ -1233,7 +1233,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Identity priority remains domain -> source+key -> normalized name. Conflicting source keys stay separate.",
-    "test_timestamp": "2026-09-30T15:57:22.470487+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.701900+00:00"
   },
   {
     "case_id": "P5-DEDUP-001",
@@ -1262,7 +1262,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Canonical URL normalization collapses identical job postings without inflating counts or score.",
-    "test_timestamp": "2026-09-30T15:57:22.472294+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.703629+00:00"
   },
   {
     "case_id": "P5-REL-001",
@@ -1284,7 +1284,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Administrative role does not become relevant merely because Revit is in the text.",
-    "test_timestamp": "2026-09-30T15:57:22.473852+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.705213+00:00"
   },
   {
     "case_id": "P5-REL-002",
@@ -1307,7 +1307,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Explicit BIM management title counts as relevant even if tech stack list is empty.",
-    "test_timestamp": "2026-09-30T15:57:22.475544+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.706744+00:00"
   },
   {
     "case_id": "P5-REL-003",
@@ -1329,7 +1329,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Senior roles outside BIM/digital engineering do NOT receive the +10 leadership intent bonus.",
-    "test_timestamp": "2026-09-30T15:57:22.477638+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.708307+00:00"
   },
   {
     "case_id": "P5-REC-001",
@@ -1354,7 +1354,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Recent irrelevant job does not boost company recency score; score depends strictly on relevant jobs.",
-    "test_timestamp": "2026-09-30T15:57:22.479423+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.710211+00:00"
   },
   {
     "case_id": "P5-REC-002",
@@ -1376,7 +1376,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Missing date gracefully falls back to older_unknown score without fabricating a timestamp.",
-    "test_timestamp": "2026-09-30T15:57:22.482073+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.711874+00:00"
   },
   {
     "case_id": "P5-REC-003",
@@ -1398,7 +1398,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Future date does not yield max recency score through negative age.",
-    "test_timestamp": "2026-09-30T15:57:22.483566+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.714408+00:00"
   },
   {
     "case_id": "P5-EVID-001",
@@ -1421,7 +1421,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Signals and verifiable snippets survive aggregation and remain traceable to source jobs.",
-    "test_timestamp": "2026-09-30T15:57:22.484574+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.716565+00:00"
   },
   {
     "case_id": "P5-EVID-002",
@@ -1446,7 +1446,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `evidence_score` mismatch: expected `5`, got `0`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: evidence_score=5\n- Actual: evidence_score=0\n- Analysis: Production scoring correctly assigns 0 to empty-string evidence. Golden Ground Truth currently expects 5. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T15:57:22.485486+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.718328+00:00"
   },
   {
     "case_id": "P5-SCORE-001",
@@ -1488,7 +1488,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All sub-scores strictly respect their defined contractual bounds.",
-    "test_timestamp": "2026-09-30T15:57:22.486382+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.719536+00:00"
   },
   {
     "case_id": "P5-SCORE-002",
@@ -1515,7 +1515,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Total score is exactly equal to the mathematical sum of its four constituent sub-scores.",
-    "test_timestamp": "2026-09-30T15:57:22.487206+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.720897+00:00"
   },
   {
     "case_id": "P5-SCORE-003",
@@ -1546,7 +1546,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Scoring contains zero randomness or temperature variance.",
-    "test_timestamp": "2026-09-30T15:57:22.488005+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.722129+00:00"
   },
   {
     "case_id": "P5-SCORE-004",
@@ -1568,7 +1568,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Critical fail condition verified: LLM never directly assigns any numeric score.",
-    "test_timestamp": "2026-09-30T15:57:22.491867+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.726328+00:00"
   },
   {
     "case_id": "P5-QUAL-001",
@@ -1595,7 +1595,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Qualification strictly triggers at score >= 60; score of 59 is unqualified.",
-    "test_timestamp": "2026-09-30T15:57:22.493030+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.727737+00:00"
   },
   {
     "case_id": "P5-AGG-001",
@@ -1624,7 +1624,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Reasons explain qualification truthfully and do not cite irrelevant jobs.",
-    "test_timestamp": "2026-09-30T15:57:22.493934+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.729785+00:00"
   },
   {
     "case_id": "P5-AGG-002",
@@ -1646,7 +1646,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "System tracks raw input jobs, unique deduplicated jobs, and relevant jobs distinctly.",
-    "test_timestamp": "2026-09-30T15:57:22.496256+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.732523+00:00"
   },
   {
     "case_id": "P5-AGG-003",
@@ -1669,7 +1669,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A low-quality or malformed job does not crash company aggregation or corrupt scoring.",
-    "test_timestamp": "2026-09-30T15:57:22.498981+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.733819+00:00"
   },
   {
     "case_id": "P5-ADV-001",
@@ -1692,7 +1692,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Separate legal entities sharing generic names do not collide if domains differ.",
-    "test_timestamp": "2026-09-30T15:57:22.501053+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.735072+00:00"
   },
   {
     "case_id": "P5-ADV-002",
@@ -1713,7 +1713,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain variations resolve to a single canonical domain identity.",
-    "test_timestamp": "2026-09-30T15:57:22.502277+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.736465+00:00"
   },
   {
     "case_id": "P5-ADV-003",
@@ -1739,7 +1739,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "High job count from non-BIM roles does not inflate relevant_job_count or intent.",
-    "test_timestamp": "2026-09-30T15:57:22.503613+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.739111+00:00"
   },
   {
     "case_id": "P5-ADV-004",
@@ -1761,7 +1761,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact duplicate signals do not receive multiple signal count bonuses.",
-    "test_timestamp": "2026-09-30T15:57:22.504517+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.741671+00:00"
   },
   {
     "case_id": "P6-COMPANY-001",
@@ -1795,7 +1795,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Normalizes external provider company data into internal schema without leaking raw provider wrappers.",
-    "test_timestamp": "2026-09-30T15:57:22.524652+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.764881+00:00"
   },
   {
     "case_id": "P6-ROLE-001",
@@ -1848,7 +1848,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Exact and strong buyer role matches strictly outrank irrelevant administrative titles.",
-    "test_timestamp": "2026-09-30T15:57:22.532483+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.771071+00:00"
   },
   {
     "case_id": "P6-ROLE-002",
@@ -1876,7 +1876,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When buyer_roles is empty, system falls back to neutral generic behavior without hallucinating domain titles.",
-    "test_timestamp": "2026-09-30T15:57:22.538566+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.776317+00:00"
   },
   {
     "case_id": "P6-CONTACT-001",
@@ -1914,7 +1914,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All required ContactCandidate fields normalize cleanly, and missing optional fields fall back safely.",
-    "test_timestamp": "2026-09-30T15:57:22.544075+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.782416+00:00"
   },
   {
     "case_id": "P6-DEDUP-001",
@@ -1954,7 +1954,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts with identical work email merge into one record with consolidated data sources.",
-    "test_timestamp": "2026-09-30T15:57:22.550247+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.787837+00:00"
   },
   {
     "case_id": "P6-DEDUP-002",
@@ -1992,7 +1992,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts sharing canonical LinkedIn URL collapse into one logical candidate.",
-    "test_timestamp": "2026-09-30T15:57:22.555144+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.793016+00:00"
   },
   {
     "case_id": "P6-DEDUP-003",
@@ -2024,7 +2024,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contacts sharing identical names but distinct emails must remain separate entities.",
-    "test_timestamp": "2026-09-30T15:57:22.560587+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.798834+00:00"
   },
   {
     "case_id": "P6-DEDUP-004",
@@ -2056,7 +2056,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "In the absence of email or LinkedIn, distinct titles at the same firm are not aggressively collapsed.",
-    "test_timestamp": "2026-09-30T15:57:22.567354+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.805401+00:00"
   },
   {
     "case_id": "P6-EMAIL-001",
@@ -2080,7 +2080,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Statistical confidence from Domain Search produces likely, never verified without an SMTP verifier pass.",
-    "test_timestamp": "2026-09-30T15:57:22.574211+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.810762+00:00"
   },
   {
     "case_id": "P6-EMAIL-002",
@@ -2118,7 +2118,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Standardized verifier status mapping ensures cross-provider consistency.",
-    "test_timestamp": "2026-09-30T15:57:22.655148+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.897283+00:00"
   },
   {
     "case_id": "P6-EMAIL-003",
@@ -2145,7 +2145,7 @@
     ],
     "reason": "Expected vs Actual mismatch: Field `email_status` mismatch: expected `not_found`, got `unknown`",
     "human_notes": "DISCREPANCY FLAGGED FOR HUMAN APPROVAL:\n- Expected: email_status='not_found'\n- Actual: email_status='unknown'\n- Analysis: ContactCandidate defaults to 'unknown' when work_email is None. Golden Ground Truth currently expects 'not_found'. Do not modify Golden Ground Truth without explicit human approval.",
-    "test_timestamp": "2026-09-30T15:57:22.660073+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.902721+00:00"
   },
   {
     "case_id": "P6-EMAIL-004",
@@ -2173,7 +2173,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Free public webmail domains (gmail, yahoo, etc.) are rejected as corporate work emails.",
-    "test_timestamp": "2026-09-30T15:57:22.667045+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.907343+00:00"
   },
   {
     "case_id": "P6-EMAIL-005",
@@ -2200,7 +2200,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Emails matching the verified company domain receive positive domain consistency weighting.",
-    "test_timestamp": "2026-09-30T15:57:22.673438+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.912267+00:00"
   },
   {
     "case_id": "P6-SCORE-001",
@@ -2232,7 +2232,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Contact scores derive purely from deterministic rule evaluation without LLM calls or randomness.",
-    "test_timestamp": "2026-09-30T15:57:22.679163+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.922442+00:00"
   },
   {
     "case_id": "P6-SCORE-002",
@@ -2257,7 +2257,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "All calculated contact scores strictly stay within the 0 to 100 range.",
-    "test_timestamp": "2026-09-30T15:57:22.695981+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.927721+00:00"
   },
   {
     "case_id": "P6-SCORE-003",
@@ -2287,7 +2287,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Strong buyer role relevance combined with usable email outscores irrelevant roles with verified emails.",
-    "test_timestamp": "2026-09-30T15:57:22.703225+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.934136+00:00"
   },
   {
     "case_id": "P6-BEST-001",
@@ -2335,7 +2335,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Top candidate with exact buyer match and verified work email wins best_contact unequivocally.",
-    "test_timestamp": "2026-09-30T15:57:22.708127+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.940251+00:00"
   },
   {
     "case_id": "P6-STATUS-001",
@@ -2358,7 +2358,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Status 'complete' requires company profile, at least one contact, and a verified/likely work email.",
-    "test_timestamp": "2026-09-30T15:57:22.713993+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.945356+00:00"
   },
   {
     "case_id": "P6-STATUS-002",
@@ -2380,7 +2380,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When only company or contact without verified email is resolved, status reflects partial.",
-    "test_timestamp": "2026-09-30T15:57:22.720921+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.952470+00:00"
   },
   {
     "case_id": "P6-STATUS-003",
@@ -2406,7 +2406,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Provider failures are captured as provider_error rather than masquerading as empty success.",
-    "test_timestamp": "2026-09-30T15:57:22.725726+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.957621+00:00"
   },
   {
     "case_id": "P6-PROVIDER-001",
@@ -2438,7 +2438,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Unconfigured environments return an explicit error and are not presented as zero contacts.",
-    "test_timestamp": "2026-09-30T15:57:22.732005+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.963544+00:00"
   },
   {
     "case_id": "P6-PROVIDER-002",
@@ -2461,7 +2461,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 401/403 maps directly to ProviderAuthError.",
-    "test_timestamp": "2026-09-30T15:57:22.737559+00:00"
+    "test_timestamp": "2026-09-30T16:12:06.994457+00:00"
   },
   {
     "case_id": "P6-PROVIDER-003",
@@ -2484,7 +2484,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 429 maps directly to ProviderRateLimitError.",
-    "test_timestamp": "2026-09-30T15:57:22.742592+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.000683+00:00"
   },
   {
     "case_id": "P6-PROVIDER-004",
@@ -2507,7 +2507,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Network timeouts are classified as ProviderTimeoutError.",
-    "test_timestamp": "2026-09-30T15:57:22.748251+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.005384+00:00"
   },
   {
     "case_id": "P6-PROVIDER-005",
@@ -2530,7 +2530,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 500+ maps to standard ProviderError.",
-    "test_timestamp": "2026-09-30T15:57:22.752999+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.010409+00:00"
   },
   {
     "case_id": "P6-PROVIDER-006",
@@ -2553,7 +2553,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "HTTP 200 with zero records or 404 maps to ProviderEmptyResult without crashing.",
-    "test_timestamp": "2026-09-30T15:57:22.757381+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.016214+00:00"
   },
   {
     "case_id": "P6-USAGE-001",
@@ -2590,7 +2590,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "providers_used tracks all invoked providers, including failed calls.",
-    "test_timestamp": "2026-09-30T15:57:23.069515+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.370137+00:00"
   },
   {
     "case_id": "P6-APOLLO-001",
@@ -2615,7 +2615,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Verifies correct URL and query parameters for Apollo organization enrichment.",
-    "test_timestamp": "2026-09-30T15:57:23.109267+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.387321+00:00"
   },
   {
     "case_id": "P6-APOLLO-002",
@@ -2655,7 +2655,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "People search payload strictly scopes domain, buyer titles, and page boundaries.",
-    "test_timestamp": "2026-09-30T15:57:23.128553+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.408019+00:00"
   },
   {
     "case_id": "P6-APOLLO-003",
@@ -2678,7 +2678,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Enforces GDPR data minimization: never requests personal emails or phone numbers.",
-    "test_timestamp": "2026-09-30T15:57:23.146079+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.424678+00:00"
   },
   {
     "case_id": "P6-HUNTER-001",
@@ -2702,7 +2702,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Domain search extracts candidate names, positions, and confidence scores accurately.",
-    "test_timestamp": "2026-09-30T15:57:23.165673+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.443706+00:00"
   },
   {
     "case_id": "P6-HUNTER-002",
@@ -2726,7 +2726,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Email verifier maps valid deliverable state directly to verified status.",
-    "test_timestamp": "2026-09-30T15:57:23.183711+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.462294+00:00"
   },
   {
     "case_id": "P6-LIMIT-001",
@@ -2750,7 +2750,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "API contract strictly bounds lead input batches to 50 items.",
-    "test_timestamp": "2026-09-30T15:57:23.189190+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.470176+00:00"
   },
   {
     "case_id": "P6-LIMIT-002",
@@ -2775,7 +2775,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Final contact candidate list is deterministically truncated to the top 5 highest-ranking records.",
-    "test_timestamp": "2026-09-30T15:57:23.194091+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.475518+00:00"
   },
   {
     "case_id": "P6-LIMIT-003",
@@ -2804,7 +2804,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Unqualified leads bypass expensive enrichment calls unless qualified_only=false is explicitly requested.",
-    "test_timestamp": "2026-09-30T15:57:23.202864+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.481887+00:00"
   },
   {
     "case_id": "P6-PARTIAL-001",
@@ -2832,7 +2832,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "A single provider failure does not abort the entire enrichment pipeline; successful provider data survives.",
-    "test_timestamp": "2026-09-30T15:57:23.457054+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.734371+00:00"
   },
   {
     "case_id": "P6-PARTIAL-002",
@@ -2857,7 +2857,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "When SMTP verifier fails, contact remains available with unknown email status rather than being discarded.",
-    "test_timestamp": "2026-09-30T15:57:23.462508+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.740567+00:00"
   },
   {
     "case_id": "P6-PRIVACY-001",
@@ -2904,7 +2904,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Ensures ContactCandidate model only exposes business work emails and professional contact links.",
-    "test_timestamp": "2026-09-30T15:57:23.468810+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.744733+00:00"
   },
   {
     "case_id": "P6-EXPLAIN-001",
@@ -2933,7 +2933,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Selected best_contact exposes all underlying attributes necessary to audit why it was chosen.",
-    "test_timestamp": "2026-09-30T15:57:23.472888+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.751785+00:00"
   },
   {
     "case_id": "P6-CROSS-001",
@@ -2968,7 +2968,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Enrichment results, scoring, and best-contact selection are completely invariant to provider execution order.",
-    "test_timestamp": "2026-09-30T15:57:23.477453+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.756343+00:00"
   },
   {
     "case_id": "P6-CROSS-002",
@@ -2992,7 +2992,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Mixed casing in email addresses normalizes to identical identity key during deduplication.",
-    "test_timestamp": "2026-09-30T15:57:23.483957+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.761118+00:00"
   },
   {
     "case_id": "P6-LIVE-APOLLO-001",
@@ -3011,7 +3011,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "APOLLO_API_KEY not configured in environment. Test skipped.",
-    "test_timestamp": "2026-09-30T15:57:23.488649+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.767220+00:00"
   },
   {
     "case_id": "P6-LIVE-HUNTER-001",
@@ -3030,7 +3030,7 @@
     "differences": [],
     "reason": "Test skipped / not run in this environment",
     "human_notes": "HUNTER_API_KEY not configured in environment. Test skipped.",
-    "test_timestamp": "2026-09-30T15:57:23.493690+00:00"
+    "test_timestamp": "2026-09-30T16:12:07.771977+00:00"
   },
   {
     "case_id": "P7-EXP-001",
@@ -4778,7 +4778,7 @@
   {
     "case_id": "P8-DRAFT-001",
     "phase": "Phase 8",
-    "title": "Strong BIM automation hiring signal",
+    "title": "Strong BIM Automation Signal",
     "source": "internal",
     "snapshot_path": "",
     "input": {
@@ -4793,17 +4793,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Strong BIM automation hiring signal",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Strong BIM Automation Signal (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-002",
+    "case_id": "P8-ELIG-001",
     "phase": "Phase 8",
-    "title": "BIM Manager hiring signal",
+    "title": "Qualified and Verified Allowed",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-002"
+      "case_id": "P8-ELIG-001"
     },
     "expected": {
       "status": "PASS"
@@ -4814,17 +4814,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: BIM Manager hiring signal",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Qualified and Verified Allowed (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-003",
+    "case_id": "P8-ELIG-002",
     "phase": "Phase 8",
-    "title": "Weak / insufficient evidence skip",
+    "title": "Qualified and Likely Allowed",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-003"
+      "case_id": "P8-ELIG-002"
     },
     "expected": {
       "status": "PASS"
@@ -4835,17 +4835,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Weak / insufficient evidence skip",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Qualified and Likely Allowed (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-004",
+    "case_id": "P8-ELIG-003",
     "phase": "Phase 8",
-    "title": "No usable email skip",
+    "title": "Unqualified Lead Skipped",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-004"
+      "case_id": "P8-ELIG-003"
     },
     "expected": {
       "status": "PASS"
@@ -4856,17 +4856,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: No usable email skip",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Unqualified Lead Skipped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-005",
+    "case_id": "P8-ELIG-004",
     "phase": "Phase 8",
-    "title": "No active service skip",
+    "title": "No Best Contact Skipped",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-005"
+      "case_id": "P8-ELIG-004"
     },
     "expected": {
       "status": "PASS"
@@ -4877,17 +4877,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: No active service skip",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: No Best Contact Skipped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-006",
+    "case_id": "P8-ELIG-005",
     "phase": "Phase 8",
-    "title": "In-development service excluded",
+    "title": "No Work Email Skipped",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-006"
+      "case_id": "P8-ELIG-005"
     },
     "expected": {
       "status": "PASS"
@@ -4898,17 +4898,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: In-development service excluded",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: No Work Email Skipped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-007",
+    "case_id": "P8-ELIG-006",
     "phase": "Phase 8",
-    "title": "Prompt injection inside job text isolation",
+    "title": "Risky Email Skipped by Default",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-007"
+      "case_id": "P8-ELIG-006"
     },
     "expected": {
       "status": "PASS"
@@ -4919,17 +4919,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Prompt injection inside job text isolation",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Risky Email Skipped by Default (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-008",
+    "case_id": "P8-ELIG-007",
     "phase": "Phase 8",
-    "title": "Unsupported claim & unknown evidence ref validation",
+    "title": "Unknown Email Skipped by Default",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-008"
+      "case_id": "P8-ELIG-007"
     },
     "expected": {
       "status": "PASS"
@@ -4940,17 +4940,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Unsupported claim & unknown evidence ref validation",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Unknown Email Skipped by Default (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-009",
+    "case_id": "P8-ELIG-008",
     "phase": "Phase 8",
-    "title": "Unresolved placeholder rejection",
+    "title": "Preview Override Without Fabrication",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-009"
+      "case_id": "P8-ELIG-008"
     },
     "expected": {
       "status": "PASS"
@@ -4961,17 +4961,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Unresolved placeholder rejection",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Preview Override Without Fabrication (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-DRAFT-010",
+    "case_id": "P8-ID-001",
     "phase": "Phase 8",
-    "title": "Batch partial failure isolation",
+    "title": "Lead ID Preserved",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-DRAFT-010"
+      "case_id": "P8-ID-001"
     },
     "expected": {
       "status": "PASS"
@@ -4982,13 +4982,97 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Batch partial failure isolation",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Lead ID Preserved (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-ID-002",
+    "phase": "Phase 8",
+    "title": "Contact ID Preserved",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-ID-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Contact ID Preserved (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-ID-003",
+    "phase": "Phase 8",
+    "title": "Recipient Email Preserved",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-ID-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Recipient Email Preserved (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-ID-004",
+    "phase": "Phase 8",
+    "title": "Recipient Name and Title Bound to Same Contact",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-ID-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Recipient Name and Title Bound to Same Contact (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-ID-005",
+    "phase": "Phase 8",
+    "title": "Explicit Contact ID Belongs to Lead",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-ID-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Explicit Contact ID Belongs to Lead (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
     "case_id": "P8-REG-001",
     "phase": "Phase 8",
-    "title": "Wrong-company same-title job exclusion",
+    "title": "Wrong-Company Same-Title Job Contamination",
     "source": "internal",
     "snapshot_path": "",
     "input": {
@@ -5003,17 +5087,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Wrong-company same-title job exclusion",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Wrong-Company Same-Title Job Contamination (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-REG-002",
+    "case_id": "P8-COMPANY-001",
     "phase": "Phase 8",
-    "title": "Active service substring bypass rejection",
+    "title": "Canonical Domain Match",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-REG-002"
+      "case_id": "P8-COMPANY-001"
     },
     "expected": {
       "status": "PASS"
@@ -5024,17 +5108,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Active service substring bypass rejection",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Canonical Domain Match (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-REG-003",
+    "case_id": "P8-COMPANY-002",
     "phase": "Phase 8",
-    "title": "No fabricated technology fallback",
+    "title": "ATS Namespaced Match",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-REG-003"
+      "case_id": "P8-COMPANY-002"
     },
     "expected": {
       "status": "PASS"
@@ -5045,13 +5129,55 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: No fabricated technology fallback",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: ATS Namespaced Match (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-COMPANY-003",
+    "phase": "Phase 8",
+    "title": "ATS Namespace Mismatch",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-COMPANY-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: ATS Namespace Mismatch (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-COMPANY-004",
+    "phase": "Phase 8",
+    "title": "Conservative Name Fallback",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-COMPANY-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Conservative Name Fallback (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
     "case_id": "P8-REG-004",
     "phase": "Phase 8",
-    "title": "API raw jobs handoff into OutreachContext",
+    "title": "API Raw Jobs Handoff",
     "source": "internal",
     "snapshot_path": "",
     "input": {
@@ -5066,13 +5192,55 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: API raw jobs handoff into OutreachContext",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: API Raw Jobs Handoff (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-JOB-001",
+    "phase": "Phase 8",
+    "title": "Relevant Jobs Filter",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-JOB-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Relevant Jobs Filter (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-JOB-002",
+    "phase": "Phase 8",
+    "title": "No Raw Jobs Safe Fallback",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-JOB-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: No Raw Jobs Safe Fallback (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
     "case_id": "P8-REG-005",
     "phase": "Phase 8",
-    "title": "Phase 5 evidence preservation as EVID-xxx",
+    "title": "Phase 5 Evidence Preservation",
     "source": "internal",
     "snapshot_path": "",
     "input": {
@@ -5087,13 +5255,13 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Phase 5 evidence preservation as EVID-xxx",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Phase 5 Evidence Preservation (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
     "case_id": "P8-REG-006",
     "phase": "Phase 8",
-    "title": "Phase 5 signal schema clean extraction",
+    "title": "Phase 5 Signal Schema",
     "source": "internal",
     "snapshot_path": "",
     "input": {
@@ -5108,17 +5276,17 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Phase 5 signal schema clean extraction",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Phase 5 Signal Schema (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-REG-007",
+    "case_id": "P8-EVID-001",
     "phase": "Phase 8",
-    "title": "SOURCE_DATA delimiter injection escaping",
+    "title": "StructuredJob Signal Evidence Extracted",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-REG-007"
+      "case_id": "P8-EVID-001"
     },
     "expected": {
       "status": "PASS"
@@ -5129,13 +5297,265 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: SOURCE_DATA delimiter injection escaping",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: StructuredJob Signal Evidence Extracted (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-EVID-002",
+    "phase": "Phase 8",
+    "title": "Unknown Evidence Reference Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-EVID-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Unknown Evidence Reference Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-EVID-003",
+    "phase": "Phase 8",
+    "title": "Duplicate Evidence Deterministically Handled",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-EVID-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Duplicate Evidence Deterministically Handled (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-REG-003",
+    "phase": "Phase 8",
+    "title": "No Fabricated BIM/Revit Technology",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-REG-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: No Fabricated BIM/Revit Technology (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-FAB-001",
+    "phase": "Phase 8",
+    "title": "No Fake Metrics in Context",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-FAB-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: No Fake Metrics in Context (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-FAB-002",
+    "phase": "Phase 8",
+    "title": "No Fake Relationship Claims",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-FAB-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: No Fake Relationship Claims (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SVC-001",
+    "phase": "Phase 8",
+    "title": "Active Service Accepted",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SVC-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Active Service Accepted (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SVC-002",
+    "phase": "Phase 8",
+    "title": "In-Development Service Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SVC-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: In-Development Service Rejected (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-REG-002",
+    "phase": "Phase 8",
+    "title": "Active Service Substring Bypass Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-REG-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Active Service Substring Bypass Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SVC-004",
+    "phase": "Phase 8",
+    "title": "CTA Offering Rejected as Active Service",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SVC-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: CTA Offering Rejected as Active Service (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SVC-005",
+    "phase": "Phase 8",
+    "title": "Missing Offering Status Rejected as Active",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SVC-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Missing Offering Status Rejected as Active (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SVC-006",
+    "phase": "Phase 8",
+    "title": "No Active Service Skips Lead",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SVC-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: No Active Service Skips Lead (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-CTX-001",
+    "phase": "Phase 8",
+    "title": "Deterministic Context Generation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-CTX-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Deterministic Context Generation (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
     "case_id": "P8-REG-008",
     "phase": "Phase 8",
-    "title": "Deterministic evidence ordering",
+    "title": "Deterministic Evidence Ordering",
     "source": "internal",
     "snapshot_path": "",
     "input": {
@@ -5150,17 +5570,1025 @@
     "status": "PASS",
     "differences": [],
     "reason": "",
-    "human_notes": "Phase 8: Deterministic evidence ordering",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Deterministic Evidence Ordering (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   },
   {
-    "case_id": "P8-SEM-QUALITY-001",
+    "case_id": "P8-REG-007",
     "phase": "Phase 8",
-    "title": "Semantic LLM Email Naturalness & Prose Quality",
+    "title": "SOURCE_DATA Delimiter Injection Escaping",
     "source": "internal",
     "snapshot_path": "",
     "input": {
-      "case_id": "P8-SEM-QUALITY-001"
+      "case_id": "P8-REG-007"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: SOURCE_DATA Delimiter Injection Escaping (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-INJECT-001",
+    "phase": "Phase 8",
+    "title": "Prompt Injection Ignore Instructions Trapped",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-INJECT-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Prompt Injection Ignore Instructions Trapped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-INJECT-002",
+    "phase": "Phase 8",
+    "title": "Prompt Injection Recipient Override Trapped",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-INJECT-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Prompt Injection Recipient Override Trapped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-INJECT-003",
+    "phase": "Phase 8",
+    "title": "Prompt Injection Auto Approve Trapped",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-INJECT-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Prompt Injection Auto Approve Trapped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-INJECT-004",
+    "phase": "Phase 8",
+    "title": "Prompt Injection Send Immediately Trapped",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-INJECT-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Prompt Injection Send Immediately Trapped (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PROMPT-001",
+    "phase": "Phase 8",
+    "title": "Sales Outreach Environment Isolated",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PROMPT-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Sales Outreach Environment Isolated (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PROMPT-002",
+    "phase": "Phase 8",
+    "title": "Tone Preset Mapping",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PROMPT-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Tone Preset Mapping (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PROMPT-003",
+    "phase": "Phase 8",
+    "title": "Language Preset Supported",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PROMPT-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Language Preset Supported (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PARSE-001",
+    "phase": "Phase 8",
+    "title": "Valid JSON Single Parse",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PARSE-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Valid JSON Single Parse (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PARSE-002",
+    "phase": "Phase 8",
+    "title": "Invalid Then Repaired JSON Retry",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PARSE-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Invalid Then Repaired JSON Retry (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PARSE-003",
+    "phase": "Phase 8",
+    "title": "Two Invalid Responses Fail Safely",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PARSE-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Two Invalid Responses Fail Safely (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-001",
+    "phase": "Phase 8",
+    "title": "Empty Subject Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Empty Subject Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-002",
+    "phase": "Phase 8",
+    "title": "Empty Body Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Empty Body Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-003",
+    "phase": "Phase 8",
+    "title": "Subject Exceeding 60 Characters Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Subject Exceeding 60 Characters Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-004",
+    "phase": "Phase 8",
+    "title": "Body Exceeding 160 Words Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Body Exceeding 160 Words Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-005",
+    "phase": "Phase 8",
+    "title": "Fake Re/Fwd Prefix Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Fake Re/Fwd Prefix Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-006",
+    "phase": "Phase 8",
+    "title": "All Caps Subject Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-006"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: All Caps Subject Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-007",
+    "phase": "Phase 8",
+    "title": "Unresolved Placeholders Rejected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-007"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Unresolved Placeholders Rejected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-008",
+    "phase": "Phase 8",
+    "title": "Identity Mutation Invariant Protected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-008"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Identity Mutation Invariant Protected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-009",
+    "phase": "Phase 8",
+    "title": "Recipient Email Mutation Invariant Protected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-009"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Recipient Email Mutation Invariant Protected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-VAL-010",
+    "phase": "Phase 8",
+    "title": "Workflow Mutation Invariant Protected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-VAL-010"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Workflow Mutation Invariant Protected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-WF-001",
+    "phase": "Phase 8",
+    "title": "Approval Status Always Pending Review",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-WF-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Approval Status Always Pending Review (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-WF-002",
+    "phase": "Phase 8",
+    "title": "Send Status Always Not Sent",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-WF-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Send Status Always Not Sent (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-WF-003",
+    "phase": "Phase 8",
+    "title": "Workflow Projection Draft Ready",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-WF-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Workflow Projection Draft Ready (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-WF-004",
+    "phase": "Phase 8",
+    "title": "Zero Sending Code Path Static Verification",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-WF-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Zero Sending Code Path Static Verification (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-WF-005",
+    "phase": "Phase 8",
+    "title": "Zero Auto Approval Path Static Verification",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-WF-005"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Zero Auto Approval Path Static Verification (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-IDEMP-001",
+    "phase": "Phase 8",
+    "title": "Deterministic Draft ID Generation",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-IDEMP-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Deterministic Draft ID Generation (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-IDEMP-002",
+    "phase": "Phase 8",
+    "title": "Revision Mutation Changes Draft ID",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-IDEMP-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Revision Mutation Changes Draft ID (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-IDEMP-003",
+    "phase": "Phase 8",
+    "title": "Prompt Version Mutation Changes Draft ID",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-IDEMP-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Prompt Version Mutation Changes Draft ID (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-BATCH-001",
+    "phase": "Phase 8",
+    "title": "Multiple Successful Leads Batch Processing",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-BATCH-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Multiple Successful Leads Batch Processing (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-BATCH-002",
+    "phase": "Phase 8",
+    "title": "Partial Failure Batch Resilience",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-BATCH-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Partial Failure Batch Resilience (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-BATCH-003",
+    "phase": "Phase 8",
+    "title": "Max 50 Drafts Respected",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-BATCH-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Max 50 Drafts Respected (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PRIV-001",
+    "phase": "Phase 8",
+    "title": "Personal Contact Data Excluded",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PRIV-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Personal Contact Data Excluded (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PRIV-002",
+    "phase": "Phase 8",
+    "title": "Secrets and Tokens Excluded",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PRIV-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Secrets and Tokens Excluded (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-PRIV-003",
+    "phase": "Phase 8",
+    "title": "Sensitive Personal Attributes Excluded",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-PRIV-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Sensitive Personal Attributes Excluded (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-GROUND-001",
+    "phase": "Phase 8",
+    "title": "Disabled Grounding Checker Explicitly Reported Not Run",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-GROUND-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Disabled Grounding Checker Explicitly Reported Not Run (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-GROUND-002",
+    "phase": "Phase 8",
+    "title": "Grounding Checker Cannot Rewrite Draft",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-GROUND-002"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Grounding Checker Cannot Rewrite Draft (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-GROUND-003",
+    "phase": "Phase 8",
+    "title": "Grounding Checker Cannot Approve Draft",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-GROUND-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Grounding Checker Cannot Approve Draft (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-GROUND-004",
+    "phase": "Phase 8",
+    "title": "Grounding Checker Cannot Send Draft",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-GROUND-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Grounding Checker Cannot Send Draft (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-ERR-001",
+    "phase": "Phase 8",
+    "title": "Error Taxonomy Distinguishable",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-ERR-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Error Taxonomy Distinguishable (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-LLM-001",
+    "phase": "Phase 8",
+    "title": "Model Unavailable Handled Safely",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-LLM-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Model Unavailable Handled Safely (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-LLM-003",
+    "phase": "Phase 8",
+    "title": "Existing LLM Client Reused",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-LLM-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Existing LLM Client Reused (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-HANDOFF-001",
+    "phase": "Phase 8",
+    "title": "Phase 7 Handoff Fields Intact",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-HANDOFF-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Phase 7 Handoff Fields Intact (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-HANDOFF-003",
+    "phase": "Phase 8",
+    "title": "Lead Score and Qualification Immutable",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-HANDOFF-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Lead Score and Qualification Immutable (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-HANDOFF-004",
+    "phase": "Phase 8",
+    "title": "Best Contact Ranking Immutable",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-HANDOFF-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: Best Contact Ranking Immutable (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-API-001",
+    "phase": "Phase 8",
+    "title": "API Generate Drafts Valid Request",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-API-001"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: API Generate Drafts Valid Request (mode: mock_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-API-003",
+    "phase": "Phase 8",
+    "title": "API Missing Sender Returns 422",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-API-003"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: API Missing Sender Returns 422 (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-API-004",
+    "phase": "Phase 8",
+    "title": "API Invalid Tone Returns 422",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-API-004"
+    },
+    "expected": {
+      "status": "PASS"
+    },
+    "actual": {
+      "status": "PASS"
+    },
+    "status": "PASS",
+    "differences": [],
+    "reason": "",
+    "human_notes": "Phase 8: API Invalid Tone Returns 422 (mode: no_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SEM-001",
+    "phase": "Phase 8",
+    "title": "Strong BIM Automation Email Semantic Review",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SEM-001"
     },
     "expected": {
       "status": "NOT_RUN_MODEL_LIMITATION"
@@ -5171,7 +6599,91 @@
     "status": "NOT_RUN_MODEL_LIMITATION",
     "differences": [],
     "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
-    "human_notes": "Phase 8: Semantic LLM Email Naturalness & Prose Quality",
-    "test_timestamp": "2026-09-30T15:56:40.915936+00:00"
+    "human_notes": "Phase 8: Strong BIM Automation Email Semantic Review (mode: local_live_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SEM-002",
+    "phase": "Phase 8",
+    "title": "BIM Manager Hiring Email Semantic Review",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SEM-002"
+    },
+    "expected": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "actual": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "status": "NOT_RUN_MODEL_LIMITATION",
+    "differences": [],
+    "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+    "human_notes": "Phase 8: BIM Manager Hiring Email Semantic Review (mode: local_live_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SEM-003",
+    "phase": "Phase 8",
+    "title": "Executive Brief Tone Semantic Review",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SEM-003"
+    },
+    "expected": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "actual": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "status": "NOT_RUN_MODEL_LIMITATION",
+    "differences": [],
+    "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+    "human_notes": "Phase 8: Executive Brief Tone Semantic Review (mode: local_live_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SEM-004",
+    "phase": "Phase 8",
+    "title": "Italian Draft Semantic Review",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SEM-004"
+    },
+    "expected": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "actual": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "status": "NOT_RUN_MODEL_LIMITATION",
+    "differences": [],
+    "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+    "human_notes": "Phase 8: Italian Draft Semantic Review (mode: local_live_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
+  },
+  {
+    "case_id": "P8-SEM-005",
+    "phase": "Phase 8",
+    "title": "German Draft Semantic Review",
+    "source": "internal",
+    "snapshot_path": "",
+    "input": {
+      "case_id": "P8-SEM-005"
+    },
+    "expected": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "actual": {
+      "status": "NOT_RUN_MODEL_LIMITATION"
+    },
+    "status": "NOT_RUN_MODEL_LIMITATION",
+    "differences": [],
+    "reason": "Deferred for higher-capacity model review; deterministic invariants verified",
+    "human_notes": "Phase 8: German Draft Semantic Review (mode: local_live_llm)",
+    "test_timestamp": "2026-09-30T16:11:32.055730+00:00"
   }
 ]

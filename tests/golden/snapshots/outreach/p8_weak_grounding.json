@@ -1,0 +1,34 @@
+{
+  "lead": {
+    "lead_id": "domain:weaklead.com",
+    "company_name": "Weak Lead Ltd",
+    "company_domain": "weaklead.com",
+    "qualified": true,
+    "qualification_threshold": 60,
+    "lead_score": 62,
+    "job_titles": [],
+    "technologies": [],
+    "signals": [],
+    "evidence": [],
+    "best_contact": {
+      "contact_id": "email:contact@weaklead.com",
+      "full_name": "Alex Low",
+      "job_title": "Manager",
+      "work_email": "contact@weaklead.com",
+      "email_status": "likely"
+    }
+  },
+  "raw_jobs": [],
+  "website_profile": {
+    "company_name": "pyBIM",
+    "services": ["Tech-Enabled BIM Services"],
+    "offerings": [{"name": "Tech-Enabled BIM Services", "status": "active"}]
+  },
+  "sender_profile": {
+    "sender_name": "SalesAI Test Sender",
+    "sender_company": "pyBIM",
+    "sender_role": "Technical Consultant",
+    "sender_email": "sender@pybim.com",
+    "sender_website": "https://pybim.com"
+  }
+}

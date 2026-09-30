@@ -1,0 +1,40 @@
+{
+  "rules": {
+    "empty_subject": false,
+    "empty_body": false,
+    "subject_max_chars": 60,
+    "body_max_words": 160,
+    "fake_prefixes_forbidden": ["Re:", "Fwd:", "RE:", "FWD:"],
+    "all_caps_forbidden": true,
+    "placeholders_forbidden": ["{{", "}}", "[", "]", "<", ">", "{", "}"],
+    "service_match_mode": "exact_normalized",
+    "evidence_refs_exist_in_context": true,
+    "immutable_identities": ["lead_id", "contact_id", "recipient_email"],
+    "immutable_workflow": {
+      "approval_status": "pending_review",
+      "send_status": "not_sent"
+    }
+  },
+  "expected_evaluations": {
+    "p8_strong_bim": {
+      "valid": true,
+      "errors": []
+    },
+    "p8_substring_service_bypass": {
+      "valid": false,
+      "errors": ["service_used 'Tech-Enabled BIM Services + Sovereign Enterprise Edge AI' does not match any active service"]
+    },
+    "p8_fake_prefix": {
+      "valid": false,
+      "errors": ["Subject contains misleading prefix (Re:/Fwd:)"]
+    },
+    "p8_placeholders": {
+      "valid": false,
+      "errors": ["Body contains unresolved placeholders"]
+    },
+    "p8_unknown_evidence_ref": {
+      "valid": false,
+      "errors": ["Unknown evidence reference 'JOB-999'"]
+    }
+  }
+}

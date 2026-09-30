@@ -27,6 +27,13 @@ class GroundingChecker:
     def __init__(self, enabled: bool = False):
         self.enabled = enabled
 
+    def check_draft(self, draft: Any, context: OutreachContext) -> Dict[str, Any]:
+        """Convenience method checking EmailDraft and returning dict summary."""
+        body = getattr(draft, "body", "") or ""
+        evidence_refs = getattr(draft, "evidence_refs", []) or []
+        res = self.check_grounding(body, context, evidence_refs)
+        return res.model_dump()
+
     def check_grounding(
         self,
         draft_text: str,

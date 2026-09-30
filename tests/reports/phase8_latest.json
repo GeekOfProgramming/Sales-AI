@@ -1,15 +1,32 @@
 {
   "phase": "Phase 8",
   "title": "Personalized Cold Email Draft Generation",
-  "run_timestamp": "2026-09-30T15:56:40.915936+00:00",
-  "git_commit": "11250ba",
-  "total_cases": 19,
-  "passed": 18,
+  "run_timestamp": "2026-09-30T16:11:32.055730+00:00",
+  "git_commit": "2bf7620",
+  "prompt_version": "outreach_v1",
+  "default_model": "qwen2.5:1.5b (default)",
+  "total_cases": 91,
+  "passed": 86,
   "failed": 0,
   "review": 0,
   "not_run": 0,
-  "deferred_model": 1,
+  "deferred_model": 5,
   "false_pass_count": 0,
+  "deterministic_cases": 86,
+  "semantic_cases": 5,
+  "mock_llm_cases": 38,
+  "live_llm_cases": 5,
+  "critical_regressions": 8,
+  "eligibility_passed": 8,
+  "identity_passed": 5,
+  "company_job_matching_passed": 5,
+  "active_service_passed": 7,
+  "evidence_grounding_passed": 6,
+  "prompt_injection_passed": 5,
+  "validator_passed": 10,
+  "privacy_passed": 3,
+  "workflow_safety_passed": 5,
+  "batch_resilience_passed": 3,
   "invariants": {
     "approval_status_always_pending_review": true,
     "send_status_always_not_sent": true,
@@ -22,117 +39,730 @@
   "cases": [
     {
       "case_id": "P8-DRAFT-001",
-      "title": "Strong BIM automation hiring signal",
+      "title": "Strong BIM Automation Signal",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-002",
-      "title": "BIM Manager hiring signal",
+      "case_id": "P8-ELIG-001",
+      "title": "Qualified and Verified Allowed",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-003",
-      "title": "Weak / insufficient evidence skip",
+      "case_id": "P8-ELIG-002",
+      "title": "Qualified and Likely Allowed",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-004",
-      "title": "No usable email skip",
+      "case_id": "P8-ELIG-003",
+      "title": "Unqualified Lead Skipped",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-005",
-      "title": "No active service skip",
+      "case_id": "P8-ELIG-004",
+      "title": "No Best Contact Skipped",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-006",
-      "title": "In-development service excluded",
+      "case_id": "P8-ELIG-005",
+      "title": "No Work Email Skipped",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-007",
-      "title": "Prompt injection inside job text isolation",
+      "case_id": "P8-ELIG-006",
+      "title": "Risky Email Skipped by Default",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-008",
-      "title": "Unsupported claim & unknown evidence ref validation",
+      "case_id": "P8-ELIG-007",
+      "title": "Unknown Email Skipped by Default",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-009",
-      "title": "Unresolved placeholder rejection",
+      "case_id": "P8-ELIG-008",
+      "title": "Preview Override Without Fabrication",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-DRAFT-010",
-      "title": "Batch partial failure isolation",
+      "case_id": "P8-ID-001",
+      "title": "Lead ID Preserved",
       "status": "PASS",
-      "type": "deterministic"
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-ID-002",
+      "title": "Contact ID Preserved",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-ID-003",
+      "title": "Recipient Email Preserved",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-ID-004",
+      "title": "Recipient Name and Title Bound to Same Contact",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-ID-005",
+      "title": "Explicit Contact ID Belongs to Lead",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
     },
     {
       "case_id": "P8-REG-001",
-      "title": "Wrong-company same-title job exclusion",
+      "title": "Wrong-Company Same-Title Job Contamination",
       "status": "PASS",
-      "type": "regression"
+      "type": "regression",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-REG-002",
-      "title": "Active service substring bypass rejection",
+      "case_id": "P8-COMPANY-001",
+      "title": "Canonical Domain Match",
       "status": "PASS",
-      "type": "regression"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-REG-003",
-      "title": "No fabricated technology fallback",
+      "case_id": "P8-COMPANY-002",
+      "title": "ATS Namespaced Match",
       "status": "PASS",
-      "type": "regression"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-COMPANY-003",
+      "title": "ATS Namespace Mismatch",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-COMPANY-004",
+      "title": "Conservative Name Fallback",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
       "case_id": "P8-REG-004",
-      "title": "API raw jobs handoff into OutreachContext",
+      "title": "API Raw Jobs Handoff",
       "status": "PASS",
-      "type": "regression"
+      "type": "regression",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-JOB-001",
+      "title": "Relevant Jobs Filter",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-JOB-002",
+      "title": "No Raw Jobs Safe Fallback",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
       "case_id": "P8-REG-005",
-      "title": "Phase 5 evidence preservation as EVID-xxx",
+      "title": "Phase 5 Evidence Preservation",
       "status": "PASS",
-      "type": "regression"
+      "type": "regression",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
       "case_id": "P8-REG-006",
-      "title": "Phase 5 signal schema clean extraction",
+      "title": "Phase 5 Signal Schema",
       "status": "PASS",
-      "type": "regression"
+      "type": "regression",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-REG-007",
-      "title": "SOURCE_DATA delimiter injection escaping",
+      "case_id": "P8-EVID-001",
+      "title": "StructuredJob Signal Evidence Extracted",
       "status": "PASS",
-      "type": "regression"
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-EVID-002",
+      "title": "Unknown Evidence Reference Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-EVID-003",
+      "title": "Duplicate Evidence Deterministically Handled",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-REG-003",
+      "title": "No Fabricated BIM/Revit Technology",
+      "status": "PASS",
+      "type": "regression",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-FAB-001",
+      "title": "No Fake Metrics in Context",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-FAB-002",
+      "title": "No Fake Relationship Claims",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-SVC-001",
+      "title": "Active Service Accepted",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-SVC-002",
+      "title": "In-Development Service Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-REG-002",
+      "title": "Active Service Substring Bypass Rejected",
+      "status": "PASS",
+      "type": "regression",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-SVC-004",
+      "title": "CTA Offering Rejected as Active Service",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-SVC-005",
+      "title": "Missing Offering Status Rejected as Active",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-SVC-006",
+      "title": "No Active Service Skips Lead",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-CTX-001",
+      "title": "Deterministic Context Generation",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
       "case_id": "P8-REG-008",
-      "title": "Deterministic evidence ordering",
+      "title": "Deterministic Evidence Ordering",
       "status": "PASS",
-      "type": "regression"
+      "type": "regression",
+      "mode": "no_llm",
+      "reason": ""
     },
     {
-      "case_id": "P8-SEM-QUALITY-001",
-      "title": "Semantic LLM Email Naturalness & Prose Quality",
+      "case_id": "P8-REG-007",
+      "title": "SOURCE_DATA Delimiter Injection Escaping",
+      "status": "PASS",
+      "type": "regression",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-INJECT-001",
+      "title": "Prompt Injection Ignore Instructions Trapped",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-INJECT-002",
+      "title": "Prompt Injection Recipient Override Trapped",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-INJECT-003",
+      "title": "Prompt Injection Auto Approve Trapped",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-INJECT-004",
+      "title": "Prompt Injection Send Immediately Trapped",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PROMPT-001",
+      "title": "Sales Outreach Environment Isolated",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PROMPT-002",
+      "title": "Tone Preset Mapping",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PROMPT-003",
+      "title": "Language Preset Supported",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PARSE-001",
+      "title": "Valid JSON Single Parse",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PARSE-002",
+      "title": "Invalid Then Repaired JSON Retry",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PARSE-003",
+      "title": "Two Invalid Responses Fail Safely",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-001",
+      "title": "Empty Subject Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-002",
+      "title": "Empty Body Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-003",
+      "title": "Subject Exceeding 60 Characters Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-004",
+      "title": "Body Exceeding 160 Words Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-005",
+      "title": "Fake Re/Fwd Prefix Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-006",
+      "title": "All Caps Subject Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-007",
+      "title": "Unresolved Placeholders Rejected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-008",
+      "title": "Identity Mutation Invariant Protected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-009",
+      "title": "Recipient Email Mutation Invariant Protected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-VAL-010",
+      "title": "Workflow Mutation Invariant Protected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-WF-001",
+      "title": "Approval Status Always Pending Review",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-WF-002",
+      "title": "Send Status Always Not Sent",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-WF-003",
+      "title": "Workflow Projection Draft Ready",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-WF-004",
+      "title": "Zero Sending Code Path Static Verification",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-WF-005",
+      "title": "Zero Auto Approval Path Static Verification",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-IDEMP-001",
+      "title": "Deterministic Draft ID Generation",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-IDEMP-002",
+      "title": "Revision Mutation Changes Draft ID",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-IDEMP-003",
+      "title": "Prompt Version Mutation Changes Draft ID",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-BATCH-001",
+      "title": "Multiple Successful Leads Batch Processing",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-BATCH-002",
+      "title": "Partial Failure Batch Resilience",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-BATCH-003",
+      "title": "Max 50 Drafts Respected",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PRIV-001",
+      "title": "Personal Contact Data Excluded",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PRIV-002",
+      "title": "Secrets and Tokens Excluded",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-PRIV-003",
+      "title": "Sensitive Personal Attributes Excluded",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-GROUND-001",
+      "title": "Disabled Grounding Checker Explicitly Reported Not Run",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-GROUND-002",
+      "title": "Grounding Checker Cannot Rewrite Draft",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-GROUND-003",
+      "title": "Grounding Checker Cannot Approve Draft",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-GROUND-004",
+      "title": "Grounding Checker Cannot Send Draft",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-ERR-001",
+      "title": "Error Taxonomy Distinguishable",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-LLM-001",
+      "title": "Model Unavailable Handled Safely",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-LLM-003",
+      "title": "Existing LLM Client Reused",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-HANDOFF-001",
+      "title": "Phase 7 Handoff Fields Intact",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-HANDOFF-003",
+      "title": "Lead Score and Qualification Immutable",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-HANDOFF-004",
+      "title": "Best Contact Ranking Immutable",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-API-001",
+      "title": "API Generate Drafts Valid Request",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "mock_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-API-003",
+      "title": "API Missing Sender Returns 422",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-API-004",
+      "title": "API Invalid Tone Returns 422",
+      "status": "PASS",
+      "type": "deterministic",
+      "mode": "no_llm",
+      "reason": ""
+    },
+    {
+      "case_id": "P8-SEM-001",
+      "title": "Strong BIM Automation Email Semantic Review",
       "status": "NOT_RUN_MODEL_LIMITATION",
       "type": "semantic_deferred",
+      "mode": "local_live_llm",
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+    },
+    {
+      "case_id": "P8-SEM-002",
+      "title": "BIM Manager Hiring Email Semantic Review",
+      "status": "NOT_RUN_MODEL_LIMITATION",
+      "type": "semantic_deferred",
+      "mode": "local_live_llm",
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+    },
+    {
+      "case_id": "P8-SEM-003",
+      "title": "Executive Brief Tone Semantic Review",
+      "status": "NOT_RUN_MODEL_LIMITATION",
+      "type": "semantic_deferred",
+      "mode": "local_live_llm",
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+    },
+    {
+      "case_id": "P8-SEM-004",
+      "title": "Italian Draft Semantic Review",
+      "status": "NOT_RUN_MODEL_LIMITATION",
+      "type": "semantic_deferred",
+      "mode": "local_live_llm",
+      "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
+    },
+    {
+      "case_id": "P8-SEM-005",
+      "title": "German Draft Semantic Review",
+      "status": "NOT_RUN_MODEL_LIMITATION",
+      "type": "semantic_deferred",
+      "mode": "local_live_llm",
       "reason": "Deferred for higher-capacity model review; deterministic invariants verified"
     }
   ]

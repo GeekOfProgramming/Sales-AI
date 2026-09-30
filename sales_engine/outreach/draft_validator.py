@@ -12,8 +12,11 @@ PLACEHOLDER_PATTERNS = [
 ]
 
 # Sensitive personal data leakage regexes
-PHONE_PATTERN = r"(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}"
-SENSITIVE_KEYWORDS = ["password", "api_key", "secret_key", "credit card", "ssn"]
+SENSITIVE_KEYWORDS = [
+    "password", "api_key", "secret_key", "credit card", "ssn",
+    "access_token", "authorization secrets", "personal_phone",
+    "home_address", "personal_email", "bearer "
+]
 
 # Fake subject prefixes
 FAKE_PREFIXES = ["re:", "fwd:", "fw:"]

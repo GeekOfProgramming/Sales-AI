@@ -1,0 +1,31 @@
+{
+  "lead": {
+    "lead_id": "domain:devservice.com",
+    "company_name": "Dev Service Corp",
+    "company_domain": "devservice.com",
+    "qualified": true,
+    "qualification_threshold": 60,
+    "lead_score": 75,
+    "best_contact": {
+      "contact_id": "email:user@devservice.com",
+      "full_name": "Dev User",
+      "job_title": "BIM Specialist",
+      "work_email": "user@devservice.com",
+      "email_status": "verified"
+    }
+  },
+  "raw_jobs": [],
+  "website_profile": {
+    "company_name": "pyBIM",
+    "services": [],
+    "offerings": [
+      {"name": "pyBIM Cloud Connect", "status": "in_development"},
+      {"name": "Sovereign Enterprise Edge AI", "status": "in_development"}
+    ]
+  },
+  "sender_profile": {
+    "sender_name": "SalesAI Test Sender",
+    "sender_company": "pyBIM",
+    "sender_email": "sender@pybim.com"
+  }
+}

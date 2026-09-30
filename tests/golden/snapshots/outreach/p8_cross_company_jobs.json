@@ -1,0 +1,42 @@
+{
+  "lead": {
+    "lead_id": "domain:acme.com",
+    "company_name": "Acme Inc",
+    "company_domain": "acme.com",
+    "qualified": true,
+    "qualification_threshold": 60,
+    "lead_score": 85,
+    "job_titles": ["BIM Manager"],
+    "technologies": [],
+    "signals": [],
+    "evidence": [],
+    "best_contact": {
+      "contact_id": "email:alice@acme.com",
+      "full_name": "Alice Acme",
+      "job_title": "BIM Manager",
+      "work_email": "alice@acme.com",
+      "email_status": "verified"
+    }
+  },
+  "raw_jobs": [
+    {
+      "company_name": "Totally Different Co",
+      "company_domain": "different.com",
+      "job_title": "BIM Manager",
+      "job_url": "https://different.com/jobs/1",
+      "location": "Remote",
+      "technologies": ["Revit"],
+      "relevant_signals": []
+    }
+  ],
+  "website_profile": {
+    "company_name": "pyBIM",
+    "services": ["Tech-Enabled BIM Services"],
+    "offerings": [{"name": "Tech-Enabled BIM Services", "status": "active"}]
+  },
+  "sender_profile": {
+    "sender_name": "SalesAI Test Sender",
+    "sender_company": "pyBIM",
+    "sender_email": "sender@pybim.com"
+  }
+}
