@@ -6982,7 +6982,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-REVIEW-002",
@@ -7011,7 +7011,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-APPROVE-001",
@@ -7040,7 +7040,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Explicit Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-APPROVE-002",
@@ -7065,7 +7065,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SEND-001",
@@ -7092,7 +7092,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SEND-002",
@@ -7119,7 +7119,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SEND-003",
@@ -7144,7 +7144,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SEND-004",
@@ -7171,7 +7171,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SEND-005",
@@ -7196,7 +7196,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SUPPRESS-001",
@@ -7221,7 +7221,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-IDEMP-001",
@@ -7246,7 +7246,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-BATCH-001",
@@ -7273,7 +7273,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-SEC-001",
@@ -7298,7 +7298,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-WF-001",
@@ -7325,7 +7325,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-NOLLM-001",
@@ -7348,7 +7348,7 @@
     "differences": [],
     "reason": "",
     "human_notes": "Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   },
   {
     "case_id": "P9-LIVE-SMTP-001",
@@ -7375,6 +7375,6 @@
     ],
     "reason": "P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.",
     "human_notes": "Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)",
-    "test_timestamp": "2026-09-30T17:02:11.448303+00:00"
+    "test_timestamp": "2026-09-30T17:02:40.142422+00:00"
   }
 ]

@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-09-30
-- **Time:** 17:02:11 UTC
-- **Git Commit:** `8b5d902`
+- **Time:** 17:02:40 UTC
+- **Git Commit:** `97253ef`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
