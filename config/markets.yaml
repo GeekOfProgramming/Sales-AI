@@ -1,0 +1,89 @@
+# config/markets.yaml
+# Target market configuration for SalesAI Phase 10
+
+markets:
+  - id: italy
+    name: Italy
+    enabled: true
+    languages:
+      - it
+      - en
+    search_locales:
+      - it-IT
+    preferred_source_ids:
+      - italy_engineering_directory
+      - oice_association_directory
+      - public_tender_portal_italy
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+      - mep_engineering
+      - general_contractor
+      - infrastructure
+    standards_context:
+      - UNI 11337
+      - ISO 19650
+    daily_candidate_limit: 100
+
+  - id: germany
+    name: Germany
+    enabled: true
+    languages:
+      - de
+      - en
+    search_locales:
+      - de-DE
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+      - ats_lever
+    company_types:
+      - architecture
+      - engineering
+      - general_contractor
+    standards_context:
+      - ISO 19650
+      - DIN
+    daily_candidate_limit: 80
+
+  - id: united_kingdom
+    name: United Kingdom
+    enabled: true
+    languages:
+      - en
+    search_locales:
+      - en-GB
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+      - ats_lever
+    company_types:
+      - architecture
+      - engineering
+      - multidisciplinary_consultancy
+    standards_context:
+      - ISO 19650
+      - UK BIM Framework
+    daily_candidate_limit: 80
+
+  - id: switzerland
+    name: Switzerland
+    enabled: true
+    languages:
+      - de
+      - fr
+      - it
+      - en
+    search_locales:
+      - de-CH
+      - fr-CH
+    preferred_source_ids:
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+      - SIA
+    daily_candidate_limit: 50

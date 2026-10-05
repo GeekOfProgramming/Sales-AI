@@ -1,0 +1,144 @@
+# config/discovery_sources.yaml
+# Multi-source discovery registry for SalesAI Phase 10
+# Note: Source secrets/credentials remain strictly server/environment-side.
+
+sources:
+  - id: brave_job_search
+    name: Brave Search Engine (Job Discovery)
+    type: search_engine
+    enabled: true
+    countries:
+      - Italy
+      - Germany
+      - United Kingdom
+      - Switzerland
+      - France
+    company_types:
+      - architecture
+      - engineering
+      - mep_engineering
+      - general_contractor
+    discovery_mode:
+      - job_first
+    priority: 95
+    max_results_per_run: 50
+    requires_api_key: true
+    base_url: https://api.search.brave.com/res/v1/web/search
+    notes: Primary web search for hiring signals and careers.
+
+  - id: ats_greenhouse
+    name: Greenhouse ATS Adapter
+    type: ats
+    enabled: true
+    countries:
+      - Italy
+      - Germany
+      - United Kingdom
+      - United States
+    company_types:
+      - architecture
+      - engineering
+      - bim_consultancy
+    discovery_mode:
+      - job_first
+    priority: 90
+    max_results_per_run: 50
+    requires_api_key: false
+    base_url: https://boards-api.greenhouse.io/v1/boards
+    notes: Direct public ATS feed.
+
+  - id: ats_lever
+    name: Lever ATS Adapter
+    type: ats
+    enabled: true
+    countries:
+      - Italy
+      - Germany
+      - United Kingdom
+    company_types:
+      - architecture
+      - engineering
+    discovery_mode:
+      - job_first
+    priority: 90
+    max_results_per_run: 50
+    requires_api_key: false
+    base_url: https://api.lever.co/v0/postings
+    notes: Direct public ATS feed.
+
+  - id: italy_engineering_directory
+    name: Italian Engineering & Architecture Directory
+    type: company_directory
+    enabled: true
+    countries:
+      - Italy
+    company_types:
+      - architecture
+      - engineering
+      - mep_engineering
+    discovery_mode:
+      - company_first
+    priority: 85
+    max_results_per_run: 100
+    requires_api_key: false
+    base_url: null
+    notes: Public regional registry of Italian engineering practices.
+
+  - id: oice_association_directory
+    name: OICE Italian Engineering Association
+    type: professional_association
+    enabled: true
+    countries:
+      - Italy
+    company_types:
+      - engineering
+      - multidisciplinary_consultancy
+      - infrastructure
+    discovery_mode:
+      - company_first
+    priority: 80
+    max_results_per_run: 100
+    requires_api_key: false
+    base_url: null
+    notes: Italian Association of Engineering and Architectural Consulting Organizations.
+
+  - id: public_tender_portal_italy
+    name: ANAC / Public Procurement Tender Portal
+    type: tender_portal
+    enabled: true
+    countries:
+      - Italy
+    company_types:
+      - general_contractor
+      - infrastructure
+      - engineering
+    discovery_mode:
+      - project_first
+    priority: 75
+    max_results_per_run: 50
+    requires_api_key: false
+    base_url: null
+    notes: Public infrastructure, hospital, and rail tenders requiring BIM/ISO 19650.
+
+  - id: manual_seed_importer
+    name: Manual & Historical Seed Importer
+    type: manual_seed
+    enabled: true
+    countries:
+      - Italy
+      - Germany
+      - United Kingdom
+      - Switzerland
+    company_types:
+      - architecture
+      - engineering
+      - mep_engineering
+      - general_contractor
+      - bim_consultancy
+    discovery_mode:
+      - manual_seed
+    priority: 100
+    max_results_per_run: 500
+    requires_api_key: false
+    base_url: null
+    notes: Reads spreadsheet XLSX/CSV and operator seeds with strict idempotency.
