@@ -23,6 +23,8 @@ from sales_engine.candidates.models import (
     RelationshipType,
     OpportunityType,
     DiscoveryStatus,
+    DiscoveryRunRecord,
+    SourceHealthRecord,
 )
 
 
@@ -148,7 +150,8 @@ class CandidateStore:
                     reply_status TEXT,
                     active_conversation INTEGER,
                     suppressed INTEGER,
-                    cold_outreach_allowed INTEGER
+                    cold_outreach_allowed INTEGER,
+                    historical_outreach_events_json TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_candidate_domain ON candidate_companies(company_domain);
@@ -158,20 +161,28 @@ class CandidateStore:
                     observation_id TEXT PRIMARY KEY,
                     candidate_id TEXT NOT NULL,
                     source_id TEXT NOT NULL,
+                    source_name TEXT,
                     source_type TEXT NOT NULL,
                     source_url TEXT,
                     source_external_id TEXT,
+                    discovery_mode TEXT DEFAULT 'company_first',
                     observed_company_name TEXT NOT NULL,
                     observed_domain TEXT,
                     country TEXT,
+                    region TEXT,
                     city TEXT,
                     observation_type TEXT,
+                    observed_company_type TEXT,
                     raw_title TEXT,
                     raw_snippet TEXT,
+                    raw_payload_json TEXT,
+                    extracted_data_json TEXT,
                     observed_at TEXT,
+                    published_at TEXT,
                     fetched_at TEXT,
                     confidence REAL,
                     evidence_refs_json TEXT,
+                    raw_ref_json TEXT,
                     FOREIGN KEY (candidate_id) REFERENCES candidate_companies(candidate_id) ON DELETE CASCADE
                 );
 
@@ -186,6 +197,8 @@ class CandidateStore:
                     source_url TEXT,
                     source_type TEXT,
                     observed_at TEXT,
+                    published_at TEXT,
+                    freshness_status TEXT DEFAULT 'unknown',
                     confidence REAL,
                     is_current INTEGER,
                     raw_ref_json TEXT,
@@ -211,17 +224,83 @@ class CandidateStore:
                     contact_name TEXT,
                     contact_email TEXT,
                     contacted_at TEXT,
+                    follow_up_at TEXT,
                     channel TEXT,
                     reply_status TEXT,
                     reply_at TEXT,
                     respondent_name TEXT,
                     respondent_role TEXT,
                     respondent_email TEXT,
+                    meeting_status TEXT,
+                    opportunity_status TEXT,
+                    intent_evidence TEXT,
+                    relationship_type TEXT,
+                    opportunity_types_json TEXT,
                     notes TEXT,
                     raw_row_hash TEXT UNIQUE,
                     FOREIGN KEY (candidate_id) REFERENCES candidate_companies(candidate_id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS discovery_runs (
+                    run_id TEXT PRIMARY KEY,
+                    mode TEXT NOT NULL,
+                    source_name TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    status TEXT NOT NULL,
+                    observations_found INTEGER DEFAULT 0,
+                    new_candidates INTEGER DEFAULT 0,
+                    updated_candidates INTEGER DEFAULT 0,
+                    known_candidates INTEGER DEFAULT 0,
+                    watchlist_candidates INTEGER DEFAULT 0,
+                    qualified_candidates INTEGER DEFAULT 0,
+                    rejected_candidates INTEGER DEFAULT 0,
+                    candidates_discovered INTEGER DEFAULT 0,
+                    candidates_updated INTEGER DEFAULT 0,
+                    observations_created INTEGER DEFAULT 0,
+                    errors_json TEXT NOT NULL DEFAULT '[]',
+                    config_version TEXT DEFAULT 'v1'
+                );
+
+                CREATE TABLE IF NOT EXISTS source_health (
+                    source_name TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    success_count INTEGER DEFAULT 0,
+                    failure_count INTEGER DEFAULT 0,
+                    last_success_at TEXT,
+                    last_failure_at TEXT,
+                    last_error TEXT
+                );
             """)
+
+            # Safe additive column migrations for existing databases
+            self._migrate_columns(conn)
+
+    def _migrate_columns(self, conn: sqlite3.Connection):
+        def _add_col(table: str, col_def: str):
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
+            except sqlite3.OperationalError:
+                pass
+
+        _add_col("discovery_observations", "source_name TEXT")
+        _add_col("discovery_observations", "discovery_mode TEXT DEFAULT 'company_first'")
+        _add_col("discovery_observations", "region TEXT")
+        _add_col("discovery_observations", "observed_company_type TEXT")
+        _add_col("discovery_observations", "raw_payload_json TEXT")
+        _add_col("discovery_observations", "extracted_data_json TEXT")
+        _add_col("discovery_observations", "published_at TEXT")
+        _add_col("discovery_observations", "raw_ref_json TEXT")
+
+        _add_col("market_evidence", "published_at TEXT")
+        _add_col("market_evidence", "freshness_status TEXT DEFAULT 'unknown'")
+
+        _add_col("historical_outreach_events", "follow_up_at TEXT")
+        _add_col("historical_outreach_events", "meeting_status TEXT")
+        _add_col("historical_outreach_events", "opportunity_status TEXT")
+        _add_col("historical_outreach_events", "intent_evidence TEXT")
+        _add_col("historical_outreach_events", "relationship_type TEXT")
+        _add_col("historical_outreach_events", "opportunity_types_json TEXT")
 
     def _generate_candidate_id(self, domain: Optional[str], name: str, country: Optional[str] = None) -> str:
         if domain:
@@ -309,6 +388,21 @@ class CandidateStore:
 
     def save_candidate(self, cand: CandidateCompany):
         with self._get_connection() as conn:
+            # Monotonic outreach guard enforcement in Python memory
+            existing_row = conn.execute(
+                "SELECT cold_outreach_allowed, suppressed, active_conversation, historical_contact_status FROM candidate_companies WHERE candidate_id = ?",
+                (cand.candidate_id,)
+            ).fetchone()
+            if existing_row:
+                if existing_row["cold_outreach_allowed"] == 0 or cand.cold_outreach_allowed is False:
+                    cand.cold_outreach_allowed = False
+                if existing_row["suppressed"] or cand.suppressed:
+                    cand.suppressed = True
+                if existing_row["active_conversation"] or cand.active_conversation:
+                    cand.active_conversation = True
+                if existing_row["historical_contact_status"] in ('contacted', 'replied', 'converted', 'dnc') and cand.historical_contact_status == 'uncontacted':
+                    cand.historical_contact_status = existing_row["historical_contact_status"]
+
             conn.execute("""
                 INSERT INTO candidate_companies (
                     candidate_id, company_name, normalized_company_name, company_domain,
@@ -362,12 +456,20 @@ class CandidateStore:
                     domain_history_json = excluded.domain_history_json,
                     last_seen_at = excluded.last_seen_at,
                     last_researched_at = COALESCE(excluded.last_researched_at, candidate_companies.last_researched_at),
-                    historical_contact_status = excluded.historical_contact_status,
+                    historical_contact_status = CASE
+                        WHEN candidate_companies.historical_contact_status IN ('contacted', 'replied', 'converted', 'dnc')
+                             AND excluded.historical_contact_status = 'uncontacted'
+                        THEN candidate_companies.historical_contact_status
+                        ELSE excluded.historical_contact_status
+                    END,
                     last_contacted_at = COALESCE(excluded.last_contacted_at, candidate_companies.last_contacted_at),
                     reply_status = COALESCE(excluded.reply_status, candidate_companies.reply_status),
-                    active_conversation = excluded.active_conversation,
-                    suppressed = excluded.suppressed,
-                    cold_outreach_allowed = excluded.cold_outreach_allowed
+                    active_conversation = MAX(candidate_companies.active_conversation, excluded.active_conversation),
+                    suppressed = MAX(candidate_companies.suppressed, excluded.suppressed),
+                    cold_outreach_allowed = CASE
+                        WHEN candidate_companies.cold_outreach_allowed = 0 OR excluded.cold_outreach_allowed = 0 THEN 0
+                        ELSE 1
+                    END
             """, (
                 cand.candidate_id, cand.company_name, cand.normalized_company_name, cand.company_domain,
                 cand.country, cand.region, cand.city,
@@ -489,19 +591,22 @@ class CandidateStore:
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO discovery_observations (
-                    observation_id, candidate_id, source_id, source_type,
-                    source_url, source_external_id, observed_company_name, observed_domain,
-                    country, city, observation_type, raw_title, raw_snippet,
-                    observed_at, fetched_at, confidence, evidence_refs_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    observation_id, candidate_id, source_id, source_name, source_type,
+                    source_url, source_external_id, discovery_mode, observed_company_name, observed_domain,
+                    country, region, city, observation_type, observed_company_type, raw_title, raw_snippet,
+                    raw_payload_json, extracted_data_json, observed_at, published_at, fetched_at,
+                    confidence, evidence_refs_json, raw_ref_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(observation_id) DO UPDATE SET
                     observed_at = excluded.observed_at,
-                    confidence = excluded.confidence
+                    confidence = excluded.confidence,
+                    extracted_data_json = excluded.extracted_data_json
             """, (
-                obs.observation_id, obs.candidate_id, obs.source_id, obs.source_type,
-                obs.source_url, obs.source_external_id, obs.observed_company_name, obs.observed_domain,
-                obs.country, obs.city, obs.observation_type, obs.raw_title, obs.raw_snippet,
-                obs.observed_at, obs.fetched_at, obs.confidence, json.dumps(obs.evidence_refs)
+                obs.observation_id, obs.candidate_id, obs.source_id, obs.source_name, obs.source_type,
+                obs.source_url, obs.source_external_id, obs.discovery_mode, obs.observed_company_name, obs.observed_domain,
+                obs.country, obs.region, obs.city, obs.observation_type, obs.observed_company_type, obs.raw_title, obs.raw_snippet,
+                json.dumps(obs.raw_payload or {}), json.dumps(obs.extracted_data or {}), obs.observed_at, obs.published_at, obs.fetched_at,
+                obs.confidence, json.dumps(obs.evidence_refs or []), json.dumps(obs.raw_ref or {})
             ))
 
     def get_observations(self, candidate_id: str) -> List[DiscoveryObservation]:
@@ -515,20 +620,28 @@ class CandidateStore:
                     observation_id=r["observation_id"],
                     candidate_id=r["candidate_id"],
                     source_id=r["source_id"],
+                    source_name=r["source_name"] if "source_name" in r.keys() else None,
                     source_type=r["source_type"],
                     source_url=r["source_url"],
                     source_external_id=r["source_external_id"],
+                    discovery_mode=r["discovery_mode"] if "discovery_mode" in r.keys() else "company_first",
                     observed_company_name=r["observed_company_name"],
                     observed_domain=r["observed_domain"],
                     country=r["country"],
+                    region=r["region"] if "region" in r.keys() else None,
                     city=r["city"],
                     observation_type=r["observation_type"],
+                    observed_company_type=r["observed_company_type"] if "observed_company_type" in r.keys() else None,
                     raw_title=r["raw_title"],
                     raw_snippet=r["raw_snippet"],
+                    raw_payload=json.loads(r["raw_payload_json"] or "{}") if "raw_payload_json" in r.keys() and r["raw_payload_json"] else {},
+                    extracted_data=json.loads(r["extracted_data_json"] or "{}") if "extracted_data_json" in r.keys() and r["extracted_data_json"] else {},
                     observed_at=r["observed_at"],
+                    published_at=r["published_at"] if "published_at" in r.keys() else None,
                     fetched_at=r["fetched_at"],
                     confidence=r["confidence"],
                     evidence_refs=json.loads(r["evidence_refs_json"] or "[]"),
+                    raw_ref=json.loads(r["raw_ref_json"] or "{}") if "raw_ref_json" in r.keys() and r["raw_ref_json"] else {},
                 )
                 for r in rows
             ]
@@ -538,16 +651,20 @@ class CandidateStore:
             conn.execute("""
                 INSERT INTO market_evidence (
                     evidence_id, candidate_id, category, signal_type,
-                    text, source_url, source_type, observed_at, confidence, is_current, raw_ref_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    text, source_url, source_type, observed_at, confidence, is_current, raw_ref_json,
+                    published_at, freshness_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(evidence_id) DO UPDATE SET
                     text = excluded.text,
                     is_current = excluded.is_current,
-                    confidence = excluded.confidence
+                    confidence = excluded.confidence,
+                    published_at = COALESCE(excluded.published_at, market_evidence.published_at),
+                    freshness_status = excluded.freshness_status
             """, (
                 ev.evidence_id, ev.candidate_id, ev.category, ev.signal_type,
                 ev.text, ev.source_url, ev.source_type, ev.observed_at,
-                ev.confidence, 1 if ev.is_current else 0, json.dumps(ev.raw_ref or {})
+                ev.confidence, 1 if ev.is_current else 0, json.dumps(ev.raw_ref or {}),
+                ev.published_at, ev.freshness_status
             ))
 
     def get_evidence(self, candidate_id: str) -> List[MarketEvidence]:
@@ -569,6 +686,8 @@ class CandidateStore:
                     confidence=r["confidence"],
                     is_current=bool(r["is_current"]),
                     raw_ref=json.loads(r["raw_ref_json"] or "{}"),
+                    published_at=r["published_at"] if "published_at" in r.keys() else None,
+                    freshness_status=r["freshness_status"] if "freshness_status" in r.keys() else "unknown",
                 )
                 for r in rows
             ]
@@ -690,6 +809,12 @@ class CandidateStore:
         respondent_email: Optional[str] = None,
         notes: Optional[str] = None,
         raw_row_hash: Optional[str] = None,
+        follow_up_at: Optional[str] = None,
+        meeting_status: Optional[str] = None,
+        opportunity_status: Optional[str] = None,
+        intent_evidence: Optional[str] = None,
+        relationship_type: Optional[str] = None,
+        opportunity_types: Optional[List[str]] = None,
     ) -> bool:
         """
         Records historical outreach event idempotently.
@@ -703,13 +828,16 @@ class CandidateStore:
                         event_id, candidate_id, source_ref, contact_name, contact_email,
                         contacted_at, channel, reply_status, reply_at,
                         respondent_name, respondent_role, respondent_email,
-                        notes, raw_row_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        notes, raw_row_hash, follow_up_at, meeting_status,
+                        opportunity_status, intent_evidence, relationship_type, opportunity_types_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     event_id, candidate_id, source_ref, contact_name, contact_email,
                     contacted_at, channel, reply_status, reply_at,
                     respondent_name, respondent_role, respondent_email,
-                    notes, raw_row_hash
+                    notes, raw_row_hash, follow_up_at, meeting_status,
+                    opportunity_status, intent_evidence, relationship_type,
+                    json.dumps(opportunity_types or [])
                 ))
                 return True
             except sqlite3.IntegrityError:
@@ -723,6 +851,81 @@ class CandidateStore:
                 (candidate_id,)
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def save_discovery_run(self, run: DiscoveryRunRecord):
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO discovery_runs (
+                    run_id, mode, source_name, started_at, completed_at, status,
+                    observations_found, new_candidates, updated_candidates, known_candidates,
+                    watchlist_candidates, qualified_candidates, rejected_candidates,
+                    candidates_discovered, candidates_updated, observations_created,
+                    errors_json, config_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    completed_at = excluded.completed_at,
+                    status = excluded.status,
+                    observations_found = excluded.observations_found,
+                    new_candidates = excluded.new_candidates,
+                    updated_candidates = excluded.updated_candidates,
+                    known_candidates = excluded.known_candidates,
+                    watchlist_candidates = excluded.watchlist_candidates,
+                    qualified_candidates = excluded.qualified_candidates,
+                    rejected_candidates = excluded.rejected_candidates,
+                    candidates_discovered = excluded.candidates_discovered,
+                    candidates_updated = excluded.candidates_updated,
+                    observations_created = excluded.observations_created,
+                    errors_json = excluded.errors_json
+            """, (
+                run.run_id, run.mode, run.source_name, run.started_at, run.completed_at, run.status,
+                run.observations_found, run.new_candidates, run.updated_candidates, run.known_candidates,
+                run.watchlist_candidates, run.qualified_candidates, run.rejected_candidates,
+                run.candidates_discovered, run.candidates_updated, run.observations_created,
+                json.dumps(run.errors or []), run.config_version
+            ))
+
+    def get_discovery_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM discovery_runs WHERE run_id = ?", (run_id,)).fetchone()
+            if row:
+                d = dict(row)
+                d["errors"] = json.loads(d["errors_json"] or "[]")
+                return d
+        return None
+
+    def list_discovery_runs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM discovery_runs ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
+            res = []
+            for r in rows:
+                d = dict(r)
+                d["errors"] = json.loads(d["errors_json"] or "[]")
+                res.append(d)
+            return res
+
+    def save_source_health(self, health: SourceHealthRecord):
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO source_health (
+                    source_name, status, success_count, failure_count,
+                    last_success_at, last_failure_at, last_error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source_name) DO UPDATE SET
+                    status = excluded.status,
+                    success_count = excluded.success_count,
+                    failure_count = excluded.failure_count,
+                    last_success_at = excluded.last_success_at,
+                    last_failure_at = excluded.last_failure_at,
+                    last_error = excluded.last_error
+            """, (
+                health.source_name, health.status, health.success_count, health.failure_count,
+                health.last_success_at, health.last_failure_at, health.last_error
+            ))
+
+    def get_all_source_health(self) -> Dict[str, Dict[str, Any]]:
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM source_health").fetchall()
+            return {r["source_name"]: dict(r) for r in rows}
 
     # Convenient aliases for compatibility
     def get_by_id(self, candidate_id: str) -> Optional[CandidateCompany]:
@@ -743,4 +946,5 @@ class CandidateStore:
 
     def generate_company_id(self, name: str, domain: Optional[str] = None, country: Optional[str] = None) -> str:
         return self._generate_candidate_id(domain, name, country)
+
 

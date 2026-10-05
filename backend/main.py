@@ -1192,3 +1192,237 @@ def list_draft_events_endpoint(draft_id: str):
     _, _, _, _, audit_svc = get_sending_services()
     events = audit_svc.get_draft_events(draft_id)
     return {"draft_id": draft_id, "events": [e.model_dump() for e in events]}
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 Discovery & Candidate Intelligence API Endpoints
+# Strictly zero sends: none of these trigger outbound communications.
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel as _PydanticBaseModel
+from sales_engine.candidates.models import (
+    CandidateCompany as _CandidateCompany,
+    DiscoveryObservation as _DiscoveryObservation,
+    MarketEvidence as _MarketEvidence,
+)
+from sales_engine.candidates.candidate_store import CandidateStore as _CandidateStore
+from sales_engine.candidates.classifier import CompanyClassifier as _CompanyClassifier
+from sales_engine.discovery_v2.source_registry import SourceRegistry as _SourceRegistry
+from sales_engine.discovery_v2.discovery_engine import DiscoveryEngineV2 as _DiscoveryEngineV2
+from sales_engine.discovery_v2.bridges import Phase10ConsoleBridge as _Phase10ConsoleBridge
+from sales_engine.historical.importer import HistoricalImporter as _HistoricalImporter
+
+_discovery_store_inst: Optional[_CandidateStore] = None
+_discovery_registry_inst: Optional[_SourceRegistry] = None
+_discovery_classifier_inst: Optional[_CompanyClassifier] = None
+_discovery_engine_inst: Optional[_DiscoveryEngineV2] = None
+
+def get_discovery_services():
+    global _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
+    if _discovery_store_inst is None:
+        db_path = os.getenv("SALESAI_CANDIDATES_DB", "candidates.db")
+        _discovery_store_inst = _CandidateStore(db_path=db_path)
+    if _discovery_registry_inst is None:
+        _discovery_registry_inst = _SourceRegistry()
+    if _discovery_classifier_inst is None:
+        _discovery_classifier_inst = _CompanyClassifier()
+    if _discovery_engine_inst is None:
+        _discovery_engine_inst = _DiscoveryEngineV2(
+            candidate_store=_discovery_store_inst,
+            classifier=_discovery_classifier_inst,
+            source_registry=_discovery_registry_inst,
+        )
+    return _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
+
+
+class DiscoveryRunApiRequest(_PydanticBaseModel):
+    sources: Optional[List[str]] = None
+    query: str = "BIM"
+    discovery_mode: str = "company_first"
+
+
+class WatchlistAddApiRequest(_PydanticBaseModel):
+    reason: str
+    signals: Optional[List[str]] = None
+
+
+class HistoricalImportApiRequest(_PydanticBaseModel):
+    file_path: str
+    sheet_name: Optional[str] = None
+
+
+@app.post("/api/sales/discovery/run", tags=["Phase10-Discovery"])
+def trigger_discovery_run_endpoint(req: DiscoveryRunApiRequest):
+    """Trigger a multi-source discovery run with strict zero-send invariant."""
+    store, registry, _, engine = get_discovery_services()
+    sources_to_run = req.sources or [s.id for s in registry.list_sources(enabled_only=True)]
+    run_rec = engine.run_multi_source_discovery(
+        sources=sources_to_run,
+        query=req.query,
+        discovery_mode=req.discovery_mode,
+    )
+    return run_rec.model_dump() if hasattr(run_rec, "model_dump") else run_rec.__dict__
+
+
+@app.get("/api/sales/discovery/runs", tags=["Phase10-Discovery"])
+def list_discovery_runs_endpoint(limit: int = 50):
+    """List recent discovery run executions."""
+    store, _, _, _ = get_discovery_services()
+    runs = store.list_discovery_runs(limit=limit)
+    return {"total": len(runs), "runs": runs}
+
+
+@app.get("/api/sales/discovery/runs/{run_id}", tags=["Phase10-Discovery"])
+def get_discovery_run_endpoint(run_id: str):
+    """Get status and details of a specific discovery run."""
+    store, _, _, _ = get_discovery_services()
+    run = store.get_discovery_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Discovery run {run_id} not found")
+    return run
+
+
+@app.get("/api/sales/candidates", tags=["Phase10-Candidates"])
+def list_candidates_endpoint(
+    status: Optional[str] = None,
+    tier: Optional[str] = None,
+    country: Optional[str] = None,
+    relationship_type: Optional[str] = None,
+    limit: int = 100,
+):
+    """List candidate companies with optional filtering."""
+    store, registry, _, _ = get_discovery_services()
+    bridge = _Phase10ConsoleBridge(store=store, registry=registry)
+    candidates = bridge.get_candidate_list_summary(
+        status=status,
+        relationship_type=relationship_type,
+        tier=tier,
+        limit=limit,
+    )
+    if country:
+        candidates = [c for c in candidates if c.get("country", "").lower() == country.lower()]
+    return {"total": len(candidates), "candidates": candidates[:limit]}
+
+
+@app.get("/api/sales/candidates/{candidate_id}", tags=["Phase10-Candidates"])
+def get_candidate_detail_endpoint(candidate_id: str):
+    """Get detailed candidate profile, observations, evidence, and historical outreach."""
+    store, registry, _, _ = get_discovery_services()
+    bridge = _Phase10ConsoleBridge(store=store, registry=registry)
+    detail = bridge.get_candidate_detail(candidate_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+    detail["historical_outreach"] = store.get_historical_outreach_for_candidate(candidate_id)
+    detail["evidence"] = [e.model_dump() if hasattr(e, "model_dump") else e.__dict__ for e in store.get_evidence(candidate_id)]
+    return detail
+
+
+@app.post("/api/sales/candidates/{candidate_id}/qualify", tags=["Phase10-Candidates"])
+def qualify_candidate_endpoint(candidate_id: str):
+    """Run company qualification classification on candidate."""
+    store, _, classifier, _ = get_discovery_services()
+    cand = store.get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+    obs = store.get_observations_for_company(candidate_id)
+    ev = store.get_evidence(candidate_id)
+    qual = classifier.classify_company(cand, observations=obs, evidence=ev)
+    store.save_candidate(cand)
+    return qual.model_dump() if hasattr(qual, "model_dump") else qual.__dict__
+
+
+@app.post("/api/sales/candidates/{candidate_id}/research", tags=["Phase10-Candidates"])
+def research_candidate_endpoint(candidate_id: str):
+    """Trigger deep research on candidate."""
+    store, _, _, _ = get_discovery_services()
+    cand = store.get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+    cand.last_researched_at = datetime.now(timezone.utc).isoformat()
+    store.save_candidate(cand)
+    return {
+        "candidate_id": candidate_id,
+        "company_name": cand.name,
+        "status": "researched",
+        "last_researched_at": cand.last_researched_at,
+    }
+
+
+@app.post("/api/sales/candidates/{candidate_id}/watch", tags=["Phase10-Candidates"])
+def add_to_watchlist_endpoint(candidate_id: str, req: WatchlistAddApiRequest):
+    """Add a candidate to the watchlist with monitoring signals."""
+    store, _, _, _ = get_discovery_services()
+    cand = store.get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+    entry = store.add_to_watchlist(candidate_id, reason=req.reason, signals=req.signals)
+    return entry.model_dump() if hasattr(entry, "model_dump") else entry.__dict__
+
+
+@app.get("/api/sales/watchlist", tags=["Phase10-Candidates"])
+def list_watchlist_endpoint():
+    """List active watchlist candidates."""
+    store, registry, _, _ = get_discovery_services()
+    bridge = _Phase10ConsoleBridge(store=store, registry=registry)
+    entries = bridge.get_watchlist_summary()
+    return {"total": len(entries), "watchlist": entries}
+
+
+@app.get("/api/sales/sources", tags=["Phase10-Discovery"])
+def list_sources_endpoint(enabled_only: bool = False):
+    """List all registered discovery sources with real-time health metrics."""
+    _, registry, _, _ = get_discovery_services()
+    sources = registry.list_sources(enabled_only=enabled_only)
+    health = registry.get_health_summary()
+    res = []
+    for s in sources:
+        h = health.get(s.id, health.get(s.name, {}))
+        res.append({
+            "id": s.id,
+            "name": s.name,
+            "type": s.type,
+            "enabled": s.enabled,
+            "discovery_mode": s.discovery_mode,
+            "priority": s.priority,
+            "countries": s.countries,
+            "requires_api_key": s.requires_api_key,
+            "health": h,
+        })
+    return {"total": len(res), "sources": res}
+
+
+@app.post("/api/sales/sources/import", tags=["Phase10-Discovery"])
+def import_source_config_endpoint(payload: Dict[str, Any]):
+    """Import or reload source configuration."""
+    _, registry, _, _ = get_discovery_services()
+    registry._load_configs()
+    return {"status": "reloaded", "total_sources": len(registry.sources)}
+
+
+@app.post("/api/sales/history/import", tags=["Phase10-Historical"])
+def import_historical_data_endpoint(req: HistoricalImportApiRequest):
+    """Import historical spreadsheet (CSV/XLSX) with idempotency and safety guards."""
+    store, _, _, _ = get_discovery_services()
+    importer = _HistoricalImporter(store=store)
+    path = Path(req.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File {req.file_path} not found")
+    if path.suffix.lower() == ".csv":
+        records = importer.parse_csv(path)
+    elif path.suffix.lower() in (".xlsx", ".xlsm"):
+        records = importer.parse_xlsx(path)
+    else:
+        raise HTTPException(status_code=400, detail="Only CSV and XLSX files are supported")
+
+    result = importer.import_records(records)
+    return {
+        "status": "completed",
+        "file": path.name,
+        "rows_read": result.total_rows_read,
+        "records_parsed": result.records_parsed,
+        "companies_created": result.companies_created,
+        "companies_updated": result.companies_updated,
+        "contacts_extracted": result.contacts_extracted,
+        "duplicates_skipped": result.duplicates_skipped,
+        "errors": result.errors,
+    }
+

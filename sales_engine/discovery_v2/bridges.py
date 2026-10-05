@@ -105,6 +105,14 @@ class Phase6EnrichmentAdapter:
 # ---------------------------------------------------------------------------
 # Phase 7 Additive Export Bridge
 # ---------------------------------------------------------------------------
+def _get_val(x: Any) -> str:
+    if x is None:
+        return ""
+    if hasattr(x, "value"):
+        return str(x.value)
+    return str(x)
+
+
 class Phase7ExportBridge:
     """
     Additive export transformer. Adds Phase 10 fields while preserving all legacy columns.
@@ -113,21 +121,21 @@ class Phase7ExportBridge:
     @staticmethod
     def enrich_export_row(base_row: Dict[str, Any], candidate: CandidateCompany) -> Dict[str, Any]:
         enriched = dict(base_row)
-        # Additive Phase 10 fields:
+        # Additive Phase 10 fields (safe string/enum handling):
         enriched.update({
-            "company_tier": candidate.company_tier.value,
-            "bim_maturity": candidate.bim_maturity.value,
-            "fit_level": candidate.fit_level.value,
-            "intent_level": candidate.intent_level.value,
-            "outsourcing_potential": candidate.outsourcing_potential.value,
-            "automation_potential": candidate.automation_potential.value,
-            "relationship_type": candidate.relationship_type.value,
-            "opportunity_types": ",".join(o.value for o in candidate.opportunity_types),
+            "company_tier": _get_val(candidate.company_tier),
+            "bim_maturity": _get_val(candidate.bim_maturity),
+            "fit_level": _get_val(candidate.fit_level),
+            "intent_level": _get_val(candidate.intent_level),
+            "outsourcing_potential": _get_val(candidate.outsourcing_potential),
+            "automation_potential": _get_val(candidate.automation_potential),
+            "relationship_type": _get_val(candidate.relationship_type),
+            "opportunity_types": ",".join(_get_val(o) for o in candidate.opportunity_types),
             "discovery_sources": ",".join(candidate.discovery_sources),
-            "historical_contact_status": "contacted" if candidate.previous_outreach_detected else "none",
-            "historical_reply_status": candidate.metadata.get("historical_reply_status", "none"),
-            "watchlist_status": "active" if candidate.status == DiscoveryStatus.watchlist else "inactive",
-            "qualification_route": candidate.status.value,
+            "historical_contact_status": "contacted" if candidate.previous_outreach_detected or candidate.historical_contact_status in ("contacted", "replied", "converted") else "none",
+            "historical_reply_status": candidate.reply_status or candidate.metadata.get("historical_reply_status", "none"),
+            "watchlist_status": "active" if _get_val(candidate.status) == "watchlist" else "inactive",
+            "qualification_route": _get_val(candidate.status),
             "cold_outreach_allowed": candidate.cold_outreach_allowed,
         })
         return enriched
@@ -147,9 +155,24 @@ class Phase8GroundingBridge:
         "likely understaffed",
         "likely pain",
         "probably inefficient",
+        "outsourcing_potential",
+        "automation_potential",
         "outsourcing_potential = high",
         "automation_potential = high",
+        "outsourcing_potential = medium",
+        "automation_potential = medium",
+        "outsourcing_potential = low",
+        "tier_1",
+        "tier_2",
+        "tier_3",
     }
+
+    @classmethod
+    def _is_forbidden(cls, text: Any) -> bool:
+        if not text or not isinstance(text, str):
+            return False
+        lower = text.lower()
+        return any(term in lower for term in cls.FORBIDDEN_FACT_TERMS)
 
     @classmethod
     def extract_grounded_facts(cls, candidate: CandidateCompany, observations: List[Any]) -> Dict[str, Any]:
@@ -164,35 +187,48 @@ class Phase8GroundingBridge:
             "raw_factual_snippets": [],
         }
 
-        # Scan observations for verifiable factual items
+        # Scan observations for verifiable factual items with valid provenance
         for obs in observations:
+            source_type = getattr(obs, "source_type", "")
+            source_url = getattr(obs, "source_url", None)
+            source_id = getattr(obs, "source_id", "")
+
+            # P10-ADV: manual_seed observations cannot produce verified facts without explicit source_url
+            if (source_type == "manual_seed" or source_id == "manual_seed") and not source_url:
+                continue
+
             ext = obs.extracted_data if hasattr(obs, "extracted_data") else {}
+            if not isinstance(ext, dict):
+                ext = {}
+
             # Real technologies
             if "technologies" in ext and isinstance(ext["technologies"], list):
                 for tech in ext["technologies"]:
-                    if tech not in facts["verified_technologies"]:
+                    if isinstance(tech, str) and tech not in facts["verified_technologies"] and not cls._is_forbidden(tech):
                         facts["verified_technologies"].append(tech)
 
             # Standards
             if "standards" in ext and isinstance(ext["standards"], list):
                 for st in ext["standards"]:
-                    if st not in facts["verified_standards"]:
+                    if isinstance(st, str) and st not in facts["verified_standards"] and not cls._is_forbidden(st):
                         facts["verified_standards"].append(st)
 
             # Projects / Tenders
-            if ext.get("project_title"):
+            if ext.get("project_title") and not cls._is_forbidden(ext.get("project_title")):
                 facts["verified_projects"].append({
                     "title": ext.get("project_title"),
                     "category": ext.get("project_category"),
+                    "source_url": source_url,
                 })
             if ext.get("tender_reference"):
                 facts["verified_projects"].append({
                     "reference": ext.get("tender_reference"),
                     "title": ext.get("tender_title"),
+                    "source_url": source_url,
                 })
 
-            # Real job titles (only if real job)
-            if ext.get("job_title") and obs.discovery_mode == "job_first":
+            # Real job titles (only if genuine job-first mode)
+            if ext.get("job_title") and getattr(obs, "discovery_mode", "") == "job_first":
                 facts["verified_jobs"].append(ext.get("job_title"))
 
         return facts
@@ -216,6 +252,7 @@ class Phase8GroundingBridge:
 class Phase9AuthorityBridge:
     """
     Authoritatively checks Phase 9 suppression store and enforces zero-send invariant.
+    Supports real SuppressionStore with domain and email checks without altering frozen Phase 9.
     """
 
     def __init__(self, suppression_store: Optional[Any] = None):
@@ -224,18 +261,76 @@ class Phase9AuthorityBridge:
     def is_suppressed(self, email: Optional[str] = None, domain: Optional[str] = None) -> bool:
         if not self.suppression_store:
             return False
-        # Phase 9 SuppressionStore method
-        if hasattr(self.suppression_store, "is_suppressed"):
-            if email and self.suppression_store.is_suppressed(email):
-                return True
-            if domain and hasattr(self.suppression_store, "is_domain_suppressed"):
-                if self.suppression_store.is_domain_suppressed(domain):
+
+        clean_email = email.strip().lower() if email else None
+        clean_domain = domain.strip().lower() if domain else None
+
+        # 1. Direct connection check if available (safest against real SQLite suppression_list)
+        try:
+            conn_target = None
+            if hasattr(self.suppression_store, "store") and hasattr(self.suppression_store.store, "_get_connection"):
+                conn_target = self.suppression_store.store._get_connection()
+            elif hasattr(self.suppression_store, "_get_connection"):
+                conn_target = self.suppression_store._get_connection()
+
+            if conn_target:
+                with conn_target as conn:
+                    if clean_email:
+                        r = conn.execute("SELECT 1 FROM suppression_list WHERE LOWER(email) = ? LIMIT 1", (clean_email,)).fetchone()
+                        if r:
+                            return True
+                    if clean_domain:
+                        r = conn.execute("SELECT 1 FROM suppression_list WHERE LOWER(company_domain) = ? LIMIT 1", (clean_domain,)).fetchone()
+                        if r:
+                            return True
+                        r_like = conn.execute("SELECT 1 FROM suppression_list WHERE LOWER(email) LIKE ? LIMIT 1", (f"%@{clean_domain}",)).fetchone()
+                        if r_like:
+                            return True
+        except Exception:
+            pass
+
+        # 2. Method check on suppression_store
+        if clean_email and hasattr(self.suppression_store, "is_suppressed"):
+            try:
+                if self.suppression_store.is_suppressed(clean_email, clean_domain):
                     return True
+            except TypeError:
+                if self.suppression_store.is_suppressed(clean_email):
+                    return True
+
+        if clean_domain:
+            if hasattr(self.suppression_store, "is_domain_suppressed"):
+                if self.suppression_store.is_domain_suppressed(clean_domain):
+                    return True
+            # Fallback to is_suppressed with synthetic email on the domain
+            if hasattr(self.suppression_store, "is_suppressed"):
+                try:
+                    if self.suppression_store.is_suppressed(f"domain-check@{clean_domain}", clean_domain):
+                        return True
+                except Exception:
+                    pass
+
+        # 3. Check list_suppressed if available
+        if hasattr(self.suppression_store, "list_suppressed"):
+            try:
+                for entry in self.suppression_store.list_suppressed():
+                    e_dom = getattr(entry, "company_domain", None)
+                    e_mail = getattr(entry, "email", None)
+                    if clean_domain and e_dom and e_dom.lower() == clean_domain:
+                        return True
+                    if clean_email and e_mail and e_mail.lower() == clean_email:
+                        return True
+                    if clean_domain and e_mail and e_mail.lower().endswith(f"@{clean_domain}"):
+                        return True
+            except Exception:
+                pass
+
         return False
 
     def enforce_safety_on_candidate(self, candidate: CandidateCompany) -> CandidateCompany:
         if self.is_suppressed(domain=candidate.canonical_domain):
             candidate.cold_outreach_allowed = False
+            candidate.suppressed = True
             candidate.status = DiscoveryStatus.suppressed
             candidate.suppression_state["phase9_suppression"] = True
         return candidate
@@ -246,7 +341,7 @@ class Phase9AuthorityBridge:
 # ---------------------------------------------------------------------------
 class Phase10ConsoleBridge:
     """
-    Exposes structured backend query APIs for the future Phase 10.5 operator console.
+    Exposes structured backend query APIs for the operator console.
     """
 
     def __init__(self, store: CandidateStore, registry: Optional[SourceRegistry] = None):
@@ -261,7 +356,6 @@ class Phase10ConsoleBridge:
         min_fit: Optional[str] = None,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        # Fetch from CandidateStore
         filters = {}
         if status:
             filters["discovery_status"] = status
@@ -270,21 +364,21 @@ class Phase10ConsoleBridge:
         candidates = self.store.list_candidates(filters=filters if filters else None)
         results = []
         for c in candidates:
-            if relationship_type and c.relationship_type.value != relationship_type:
+            if relationship_type and _get_val(c.relationship_type) != relationship_type:
                 continue
-            fit_val = c.fit_level.value if hasattr(c.fit_level, "value") else str(c.fit_level)
-            intent_val = c.intent_level.value if hasattr(c.intent_level, "value") else str(c.intent_level)
+            fit_val = _get_val(c.fit_level)
+            intent_val = _get_val(c.intent_level)
             results.append({
                 "company_id": c.company_id,
                 "name": c.name,
                 "canonical_domain": c.canonical_domain,
-                "status": c.status.value,
-                "company_tier": c.company_tier.value,
-                "bim_maturity": c.bim_maturity.value,
+                "status": _get_val(c.status),
+                "company_tier": _get_val(c.company_tier),
+                "bim_maturity": _get_val(c.bim_maturity),
                 "fit_level": fit_val,
                 "intent_level": intent_val,
-                "relationship_type": c.relationship_type.value,
-                "opportunity_types": [o.value for o in c.opportunity_types],
+                "relationship_type": _get_val(c.relationship_type),
+                "opportunity_types": [_get_val(o) for o in c.opportunity_types],
                 "cold_outreach_allowed": c.cold_outreach_allowed,
                 "created_at": c.first_seen_at,
             })
@@ -313,15 +407,23 @@ class Phase10ConsoleBridge:
         entries = self.store.get_watchlist()
         results = []
         for w in entries:
-            company = self.store.get_by_id(w.company_id)
+            cand_id = w.get("candidate_id") if isinstance(w, dict) else getattr(w, "candidate_id", getattr(w, "company_id", None))
+            company = self.store.get_by_id(cand_id) if cand_id else None
+            reason = w.get("watch_reason") if isinstance(w, dict) else getattr(w, "watch_reason", getattr(w, "reason", ""))
+            status = w.get("watch_status") if isinstance(w, dict) else getattr(w, "watch_status", getattr(w, "status", "active"))
+            signals = w.get("signals_to_monitor") if isinstance(w, dict) else getattr(w, "signals_to_monitor", [])
             results.append({
-                "watchlist_id": w.watchlist_id,
-                "company_id": w.company_id,
-                "company_name": company.name if company else "Unknown",
-                "canonical_domain": company.canonical_domain if company else None,
-                "reason": w.reason,
-                "priority": w.priority,
-                "review_after": w.review_after,
-                "status": w.status,
+                "watchlist_id": w.get("watchlist_id") if isinstance(w, dict) else getattr(w, "watchlist_id", cand_id),
+                "candidate_id": cand_id,
+                "company_id": cand_id,
+                "company_name": company.company_name if company else (w.get("company_name", "Unknown") if isinstance(w, dict) else "Unknown"),
+                "canonical_domain": company.company_domain if company else None,
+                "reason": reason,
+                "watch_reason": reason,
+                "status": status,
+                "watch_status": status,
+                "signals_to_monitor": signals,
+                "next_check_at": w.get("next_check_at") if isinstance(w, dict) else getattr(w, "next_check_at", None),
             })
         return results
+

@@ -15,13 +15,14 @@ Guarantees:
 - Partial failure resilience: errors in one source do not discard results from other sources.
 - Repeated discovery idempotency: deterministic runs do not duplicate companies or observations.
 - Absolute Zero-Send guarantee: Discovery never triggers or executes email sends.
+- Persistent runs and source health: all runs and source health metrics stored in SQLite CandidateStore.
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -29,30 +30,18 @@ from sales_engine.candidates.models import (
     CandidateCompany,
     CompanyTier,
     DiscoveryObservation,
+    DiscoveryRunRecord,
     DiscoveryStatus,
     MarketEvidence,
     OpportunityType,
     RelationshipType,
+    SourceHealthRecord,
 )
 from sales_engine.candidates.candidate_store import CandidateStore
 from sales_engine.candidates.classifier import CompanyClassifier
-from sales_engine.discovery_v2.source_registry import SourceRegistry
+from sales_engine.discovery_v2.source_registry import SourceRegistry, sanitize_secret_text
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DiscoveryRunRecord:
-    run_id: str
-    mode: str
-    source_name: str
-    started_at: str
-    completed_at: Optional[str] = None
-    status: str = "running"  # running, completed, partial_failure, failed
-    candidates_discovered: int = 0
-    candidates_updated: int = 0
-    observations_created: int = 0
-    errors: List[str] = field(default_factory=list)
 
 
 class DiscoveryEngineV2:
@@ -95,7 +84,7 @@ class DiscoveryEngineV2:
         if canon_domain:
             company = self.store.get_by_domain(canon_domain)
 
-        company_id = company.company_id if company else self.store.generate_company_id(company_name, canon_domain)
+        company_id = company.company_id if company else self.store.generate_company_id(company_name, canon_domain, country)
 
         if not company:
             company = self.store.get_by_id(company_id)
@@ -126,8 +115,14 @@ class DiscoveryEngineV2:
         obs = DiscoveryObservation(
             observation_id=obs_id,
             company_id=company.company_id,
+            source_id=source_name,
             source_name=source_name,
+            source_type=self.registry.get_source(source_name).type if self.registry.get_source(source_name) else "web_source",
             discovery_mode=discovery_mode,
+            observed_company_name=company_name,
+            observed_domain=canon_domain,
+            country=country or company.country,
+            city=city or company.city,
             raw_payload=raw_payload,
             extracted_data=extracted_data,
             observed_at=datetime.now(timezone.utc).isoformat(),
@@ -145,8 +140,11 @@ class DiscoveryEngineV2:
     ) -> DiscoveryRunRecord:
         """
         Execute discovery across multiple registered sources with partial-failure isolation.
+        Persists runs and source health metrics to SQLite CandidateStore.
         """
-        run_id = f"run_{discovery_mode}_{int(datetime.now(timezone.utc).timestamp())}"
+        # Unique timestamp + hex to avoid collision even in rapid parallel tests
+        unique_suffix = f"{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}_{uuid.uuid4().hex[:6]}"
+        run_id = f"run_{discovery_mode}_{unique_suffix}"
         run_rec = DiscoveryRunRecord(
             run_id=run_id,
             mode=discovery_mode,
@@ -154,6 +152,7 @@ class DiscoveryEngineV2:
             started_at=datetime.now(timezone.utc).isoformat(),
         )
         self.runs.append(run_rec)
+        self.store.save_discovery_run(run_rec)
 
         fetcher_funcs = fetcher_funcs or {}
 
@@ -180,6 +179,13 @@ class DiscoveryEngineV2:
                     raw_data = item.get("raw", {})
                     ext_data = {k: v for k, v in item.items() if k not in ("raw", "company_name", "name", "domain", "website")}
 
+                    # Check if candidate already exists
+                    canon = self.store.canonicalize_domain(c_domain) if c_domain else None
+                    existing = self.store.get_by_domain(canon) if canon else None
+                    if not existing:
+                        cid = self.store.generate_company_id(c_name, canon, country)
+                        existing = self.store.get_by_id(cid)
+
                     # NO FAKE JOBS check:
                     # If this is not a job-first mode, never attach job IDs or fake jobs!
                     if discovery_mode != "job_first":
@@ -196,23 +202,53 @@ class DiscoveryEngineV2:
                         country=country,
                         city=city,
                     )
+                    run_rec.observations_found += 1
                     run_rec.observations_created += 1
                     run_rec.candidates_discovered += 1
 
+                    if existing:
+                        run_rec.known_candidates += 1
+                        run_rec.updated_candidates += 1
+                        run_rec.candidates_updated += 1
+                    else:
+                        run_rec.new_candidates += 1
+
+                    # Count outcome categories
+                    if comp.status == DiscoveryStatus.watchlist:
+                        run_rec.watchlist_candidates += 1
+                    elif comp.status == DiscoveryStatus.qualified:
+                        run_rec.qualified_candidates += 1
+                    elif comp.status == DiscoveryStatus.rejected:
+                        run_rec.rejected_candidates += 1
+
                 self.registry.record_success(src)
             except Exception as e:
-                err_msg = f"Source {src} failed during discovery: {str(e)}"
+                clean_err = sanitize_secret_text(str(e))
+                err_msg = f"Source {src} failed during discovery: {clean_err}"
                 logger.error(err_msg)
                 run_rec.errors.append(err_msg)
-                self.registry.record_failure(src, str(e))
+                self.registry.record_failure(src, clean_err)
                 # Partial failure: Do NOT re-raise; allow remaining sources to proceed!
 
         run_rec.completed_at = datetime.now(timezone.utc).isoformat()
-        if run_rec.errors and run_rec.candidates_discovered > 0:
+        if run_rec.errors and run_rec.observations_found > 0:
             run_rec.status = "partial_failure"
         elif run_rec.errors:
             run_rec.status = "failed"
         else:
             run_rec.status = "completed"
+
+        # Persist run and source health to SQLite CandidateStore
+        self.store.save_discovery_run(run_rec)
+        for s_name, s_health in self.registry.health_map.items():
+            self.store.save_source_health(SourceHealthRecord(
+                source_name=s_health.name,
+                status=s_health.status,
+                success_count=s_health.success_count,
+                failure_count=s_health.failure_count,
+                last_success_at=s_health.last_success_at,
+                last_failure_at=s_health.last_failure_at,
+                last_error=s_health.last_error_message,
+            ))
 
         return run_rec

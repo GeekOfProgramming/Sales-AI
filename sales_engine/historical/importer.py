@@ -45,6 +45,25 @@ EMAIL_SPLIT_REGEX = re.compile(r"[,;\n\r\t/|]+")
 EMAIL_BASIC_REGEX = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 
+def parse_bool(val: Any) -> bool:
+    """
+    Deterministically parses boolean values from spreadsheets and strings.
+    Handles 'No', 'False', '0', 'sì', 'si', 'vero', 'falso' correctly.
+    """
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return bool(val)
+    s = str(val).strip().lower()
+    if s in {"true", "yes", "y", "1", "si", "sì", "x", "vero", "v"}:
+        return True
+    if s in {"false", "no", "n", "0", "", "none", "null", "falso", "f"}:
+        return False
+    return False
+
+
 @dataclass
 class HistoricalRecord:
     source_file: str
@@ -72,8 +91,16 @@ class HistoricalRecord:
     import_hash: str = ""
 
     def compute_hash(self) -> str:
-        ident_str = f"{self.source_file}:{self.sheet_name}:{self.row_number}:{self.company_name}:{self.domain}"
+        # Content-stable hash: depends on domain/name and outreach data, NOT on file name or row position
+        c_name = self.company_name.strip().lower() if self.company_name else ""
+        c_dom = self.domain.strip().lower() if self.domain else ""
+        emails_str = ",".join(sorted(self.emails))
+        c_date = self.contact_date or ""
+        r_date = self.reply_date or ""
+        r_status = self.reply_status or ""
+        ident_str = f"{c_name}:{c_dom}:{emails_str}:{c_date}:{r_date}:{r_status}"
         return hashlib.sha256(ident_str.encode("utf-8")).hexdigest()[:16]
+
 
 
 @dataclass
@@ -283,21 +310,22 @@ class HistoricalImporter:
         reply_status = str(reply_status).strip() if reply_status else None
 
         # Flags
-        is_wrong_email = bool(norm_row.get("wrong_email") or norm_row.get("bounce") or norm_row.get("bounced"))
-        is_dnc = bool(
+        is_wrong_email = parse_bool(norm_row.get("wrong_email") or norm_row.get("bounce") or norm_row.get("bounced"))
+        is_dnc = parse_bool(
             norm_row.get("dnc")
             or norm_row.get("do_not_contact")
             or norm_row.get("suppressed")
             or norm_row.get("opt_out")
         )
 
-        has_active_conversation = bool(
+        has_active_conversation = parse_bool(
             norm_row.get("active_conversation")
             or norm_row.get("in_discussion")
-            or (reply_status and "conversation" in str(reply_status).lower())
-            or (reply_status and "meeting" in str(reply_status).lower())
-            or (reply_status and "interested" in str(reply_status).lower())
         )
+        if not has_active_conversation and reply_status:
+            r_low = str(reply_status).lower()
+            if any(term in r_low for term in ("conversation", "meeting", "interested", "in discussion", "call scheduled")):
+                has_active_conversation = True
 
         # Actual respondent
         resp_name = norm_row.get("respondent_name") or norm_row.get("rispondente")
@@ -501,4 +529,27 @@ class HistoricalImporter:
                     )
                     result.contacts_extracted += 1
 
+            # Populate historical_outreach_events table in CandidateStore
+            cand_id = getattr(saved_company, "candidate_id", getattr(saved_company, "company_id", None))
+            if cand_id and (has_past_contact or rec.emails or rec.contact_date or rec.reply_date or rec.notes):
+                self.store.record_historical_outreach(
+                    candidate_id=cand_id,
+                    source_ref=f"historical:{rec.source_file}",
+                    contact_name=rec.contact_name,
+                    contact_email=rec.emails[0] if rec.emails else None,
+                    contacted_at=rec.contact_date,
+                    channel="email",
+                    reply_status=rec.reply_status,
+                    reply_at=rec.reply_date,
+                    respondent_name=rec.respondent_name,
+                    respondent_role=rec.respondent_role,
+                    respondent_email=rec.respondent_email,
+                    notes=rec.notes,
+                    raw_row_hash=import_hash,
+                    follow_up_at=rec.follow_up_date,
+                    meeting_status="scheduled" if "meeting" in (rec.reply_status or "").lower() else None,
+                    opportunity_status="active" if rec.has_active_conversation else None,
+                )
+
         return result
+

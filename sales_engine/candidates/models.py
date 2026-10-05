@@ -36,6 +36,8 @@ class FitLevel(str, Enum):
     low = "low"
     unknown = "unknown"
 
+FitAssessment = FitLevel
+
 
 class IntentLevel(str, Enum):
     high = "high"
@@ -43,6 +45,9 @@ class IntentLevel(str, Enum):
     low = "low"
     none = "none"
     unknown = "unknown"
+
+IntentAssessment = IntentLevel
+
 
 
 class RelationshipType(str, Enum):
@@ -99,6 +104,8 @@ class MarketEvidence(BaseModel):
     source_url: Optional[str] = None
     source_type: str = "unknown"
     observed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    published_at: Optional[str] = None
+    freshness_status: str = "unknown"  # fresh, recent, old, unknown
     confidence: float = 1.0
     is_current: bool = True
     raw_ref: Optional[Dict[str, Any]] = None
@@ -112,20 +119,24 @@ class DiscoveryObservation(BaseModel):
     source_type: str = "unknown"
     source_url: Optional[str] = None
     source_external_id: Optional[str] = None
+    discovery_mode: str = "company_first"
     observed_company_name: str = ""
     observed_domain: Optional[str] = None
     country: Optional[str] = None
+    region: Optional[str] = None
     city: Optional[str] = None
     observation_type: str = "directory_result"
-    discovery_mode: str = "company_first"
+    observed_company_type: Optional[str] = None
     raw_title: Optional[str] = None
     raw_snippet: Optional[str] = None
     raw_payload: Dict[str, Any] = Field(default_factory=dict)
     extracted_data: Dict[str, Any] = Field(default_factory=dict)
     observed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    published_at: Optional[str] = None
     fetched_at: Optional[str] = None
     confidence: float = 1.0
     evidence_refs: List[str] = Field(default_factory=list)
+    raw_ref: Dict[str, Any] = Field(default_factory=dict)
 
     def __init__(self, **data: Any):
         if "company_id" in data and "candidate_id" not in data:
@@ -298,3 +309,35 @@ class CandidateQualificationResult(BaseModel):
     relationship_type: RelationshipType = RelationshipType.unknown
     opportunity_types: List[OpportunityType] = Field(default_factory=list)
     cold_outreach_allowed: bool = True
+
+
+class DiscoveryRunRecord(BaseModel):
+    run_id: str
+    mode: str
+    source_name: str
+    started_at: str
+    completed_at: Optional[str] = None
+    status: str = "running"
+    observations_found: int = 0
+    new_candidates: int = 0
+    updated_candidates: int = 0
+    known_candidates: int = 0
+    watchlist_candidates: int = 0
+    qualified_candidates: int = 0
+    rejected_candidates: int = 0
+    candidates_discovered: int = 0
+    candidates_updated: int = 0
+    observations_created: int = 0
+    errors: List[str] = Field(default_factory=list)
+    config_version: str = "v1"
+
+
+class SourceHealthRecord(BaseModel):
+    source_name: str
+    status: str = "unknown"
+    success_count: int = 0
+    failure_count: int = 0
+    last_success_at: Optional[str] = None
+    last_failure_at: Optional[str] = None
+    last_error: Optional[str] = None
+

@@ -517,3 +517,17 @@ class CompanyClassifier:
                         ))
         return qualify_candidate(candidate, evidence, self.suppression_store)
 
+    def classify_company(
+        self,
+        candidate: CandidateCompany,
+        observations: Optional[List[Any]] = None,
+        evidence: Optional[List[MarketEvidence]] = None,
+    ) -> CandidateQualificationResult:
+        """Convenience method combining observations and explicit evidence for qualification."""
+        ev_list = list(evidence or [])
+        res = self.classify(candidate, observations=observations)
+        if evidence:
+            return self.qualify(candidate, evidence=ev_list)
+        return res
+
+
