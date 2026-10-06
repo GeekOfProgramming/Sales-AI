@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ detail.candidate.company_name }} | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+      <h1 class="page-title">{{ detail.candidate.company_name }}</h1>
+      <span class="badge badge-info">{{ detail.candidate.status }}</span>
+      {% if detail.candidate.is_previously_contacted %}
+      <span class="badge badge-previously-contacted">Previously Contacted</span>
+      {% endif %}
+      {% if detail.candidate.is_suppressed %}
+      <span class="badge badge-danger">Suppressed</span>
+      {% endif %}
+    </div>
+    <p class="page-subtitle">
+      Domain: <code>{{ detail.candidate.domain or 'N/A' }}</code> &bull; 
+      Country: <strong>{{ detail.candidate.country or 'Global' }}</strong> &bull; 
+      Legal Form: <strong>{{ detail.legal_form or 'N/A' }}</strong>
+    </p>
+  </div>
+
+  <!-- Operator Action Buttons -->
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
+      <button type="submit" class="btn btn-secondary btn-sm">🔬 Research Again</button>
+    </form>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/qualify" style="display:inline;">
+      <button type="submit" class="btn btn-primary btn-sm">⭐ Run Qualification</button>
+    </form>
+    <button type="button" class="btn btn-warning btn-sm" onclick="document.getElementById('watch-modal').classList.add('active')">👁️ Add to Watchlist</button>
+    <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('dnc-modal').classList.add('active')">🚫 Do Not Contact</button>
+  </div>
+</div>
+
+<!-- Assessment Summary & Why This Company -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+  <div class="card">
+    <div class="card-title">
+      <span>System Assessment</span>
+      <!-- P10_5-REG-011: Distinguish System Assessment -->
+      <span class="badge badge-assessment">System Assessment</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
+      <div><strong>Company Tier:</strong> {{ detail.candidate.tier or 'Unassigned' }}</div>
+      <div><strong>BIM Maturity:</strong> {{ detail.candidate.bim_maturity }}</div>
+      <div><strong>Fit Level:</strong> {{ detail.candidate.fit or 'N/A' }}</div>
+      <div><strong>Intent Level:</strong> {{ detail.candidate.intent or 'N/A' }}</div>
+      <div><strong>Outsourcing Potential:</strong> {{ detail.candidate.outsourcing_potential or 'Unknown' }}</div>
+      <div><strong>Automation Potential:</strong> {{ detail.candidate.automation_potential or 'Unknown' }}</div>
+    </div>
+    {% if detail.opportunity_types %}
+    <div style="margin-top: 1rem;">
+      <strong style="font-size:0.8rem; color:var(--text-secondary);">Identified Opportunities:</strong>
+      <div style="margin-top: 0.35rem; display: flex; gap: 0.35rem; flex-wrap: wrap;">
+        {% for opp in detail.opportunity_types %}
+        <span class="badge badge-primary">{{ opp }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span>Why This Company?</span>
+    </div>
+    <div style="font-size: 0.875rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.6rem;">
+      <div><strong style="color:var(--text-primary);">Why Found:</strong> {{ detail.why_found or 'Identified through discovery sources.' }}</div>
+      <div><strong style="color:var(--text-primary);">Why Fit:</strong> {{ detail.why_fit or 'Matches BIM and AEC target profile.' }}</div>
+      <div><strong style="color:var(--text-primary);">Why Intent:</strong> {{ detail.why_intent or 'No urgent hiring/tendering detected.' }}</div>
+      <div><strong style="color:var(--text-primary);">Qualification Reason:</strong> {{ detail.why_status or 'Evaluated against ICP rules.' }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Evidence & Provenance Section -->
+<div class="card">
+  <div class="card-title">
+    <span>Market Evidence & Provenance</span>
+    <!-- P10_5-REG-011: Distinguish Verified Evidence -->
+    <span class="badge badge-evidence">Verified Evidence</span>
+  </div>
+  {% if detail.evidence_items %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Signal Type</th>
+          <th>Evidence Snippet</th>
+          <th>Confidence</th>
+          <th>Observed</th>
+          <th>Source Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in detail.evidence_items %}
+        <tr>
+          <td><span class="badge badge-info">{{ ev.category }}</span></td>
+          <td>{{ ev.signal_type }}</td>
+          <td>{{ ev.text }}</td>
+          <td>{{ ev.confidence or '1.0' }}</td>
+          <td>{{ ev.observed_at[:10] if ev.observed_at else 'Recent' }}</td>
+          <td>
+            {% if ev.source_url %}
+            <a href="{{ ev.source_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">View Source ↗</a>
+            {% else %}
+            <span style="color:var(--text-muted);">Internal</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No detailed market evidence items recorded yet.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Historical Outreach & Contacts -->
+<div class="card">
+  <div class="card-title">
+    <span>Historical Outreach & Past Contacts</span>
+    <!-- P10_5-REG-011: Distinguish Historical Data -->
+    <span class="badge badge-historical">Historical Data</span>
+  </div>
+  {% if detail.historical_outreach %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Contact Name</th>
+          <th>Email</th>
+          <th>Channel</th>
+          <th>Contacted At</th>
+          <th>Reply Status</th>
+          <th>Meeting</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in detail.historical_outreach %}
+        <tr>
+          <td><strong>{{ h.contact_name or 'Unknown' }}</strong></td>
+          <td><code>{{ h.contact_email or 'N/A' }}</code></td>
+          <td>{{ h.channel or 'email' }}</td>
+          <td>{{ h.contacted_at or 'Past' }}</td>
+          <td>
+            <span class="badge {% if h.reply_status == 'positive' %}badge-success{% elif h.reply_status == 'bounced' %}badge-danger{% else %}badge-muted{% endif %}">
+              {{ h.reply_status or 'Sent' }}
+            </span>
+          </td>
+          <td>{{ h.meeting_status or 'None' }}</td>
+          <td>{{ h.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No prior outreach recorded for this company.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Unified Chronological Timeline -->
+<div class="card">
+  <div class="card-title">
+    <span>Company Timeline</span>
+  </div>
+  {% if detail.timeline %}
+  <div class="timeline">
+    {% for evt in detail.timeline %}
+    <div class="timeline-item">
+      <div class="timeline-marker"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <span class="timeline-title">{{ evt.title }}</span>
+          <span>{{ evt.occurred_at[:19] if evt.occurred_at else '' }}</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-primary); margin-top: 0.25rem;">
+          {{ evt.summary }}
+        </p>
+        {% if evt.source_ref %}
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+          Ref: <a href="{{ evt.source_ref }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ evt.source_ref }}</a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No timeline events recorded yet.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Watchlist Modal -->
+<div id="watch-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Add to Watchlist</h3>
+    </div>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/watch">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Watch Reason</label>
+          <input type="text" name="reason" class="form-control" placeholder="e.g. Hiring BIM coordinator soon" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Signals to Monitor</label>
+          <input type="text" name="signals" class="form-control" placeholder="e.g. jobs, tenders, bim_news">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('watch-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-warning">Save to Watchlist</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- DNC Modal -->
+<div id="dnc-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Mark Do Not Contact (Suppression)</h3>
+    </div>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/suppress">
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem;">This will permanently suppress the company's domain or email from receiving outreach.</p>
+        <div class="form-group">
+          <label class="form-label">Target Domain or Email</label>
+          <input type="text" name="email" class="form-control" value="{{ detail.candidate.domain or '' }}" placeholder="email@domain.com or domain.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reason</label>
+          <select name="reason" class="form-control">
+            <option value="manual">Manual operator request</option>
+            <option value="opt_out">Opt-out requested</option>
+            <option value="invalid_recipient">Invalid recipient</option>
+            <option value="wrong_person">Wrong person / wrong entity</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('dnc-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Confirm Suppression</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

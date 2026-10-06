@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SalesAI Local Operator Console{% endblock %}</title>
+  <link rel="stylesheet" href="/static/sales/sales.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <a href="/sales" class="brand">
+      <span>pyBIM-LLM</span>
+      <span class="brand-badge">Sales Operator Console</span>
+    </a>
+
+    <div class="header-search">
+      <form method="GET" action="/sales/candidates">
+        <input type="search" name="q" value="{{ search_query or '' }}" placeholder="Search company, domain, contact, or draft..." aria-label="Global Search">
+      </form>
+    </div>
+
+    <div class="header-meta">
+      <span>Bind: <strong>127.0.0.1:8000</strong></span>
+      <span>Mode: <strong>Local-First</strong></span>
+    </div>
+  </header>
+
+  <!-- Main 12-Section Navigation Bar -->
+  <nav class="nav-bar">
+    <a href="/sales/dashboard" class="nav-link {% if active_tab == 'dashboard' %}active{% endif %}">Dashboard</a>
+    <a href="/sales/discoveries" class="nav-link {% if active_tab == 'discoveries' %}active{% endif %}">Discoveries</a>
+    <a href="/sales/sources" class="nav-link {% if active_tab == 'sources' %}active{% endif %}">Sources</a>
+    <a href="/sales/candidates" class="nav-link {% if active_tab == 'candidates' %}active{% endif %}">Candidates</a>
+    <a href="/sales/leads" class="nav-link {% if active_tab == 'leads' %}active{% endif %}">Qualified Leads</a>
+    <a href="/sales/drafts" class="nav-link {% if active_tab == 'drafts' %}active{% endif %}">Draft Review</a>
+    <a href="/sales/approved" class="nav-link {% if active_tab == 'approved' %}active{% endif %}">Approved</a>
+    <a href="/sales/sent" class="nav-link {% if active_tab == 'sent' %}active{% endif %}">Sent</a>
+    <a href="/sales/watchlist" class="nav-link {% if active_tab == 'watchlist' %}active{% endif %}">Watchlist</a>
+    <a href="/sales/do-not-contact" class="nav-link {% if active_tab == 'suppression' %}active{% endif %}">Do Not Contact</a>
+    <a href="/sales/replies" class="nav-link {% if active_tab == 'replies' %}active{% endif %}">Replies</a>
+    <a href="/sales/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}">Settings</a>
+  </nav>
+
+  <!-- Alerts & Banners -->
+  <div class="main-content">
+    {% if email_send_enabled is false %}
+    <div class="alert-banner" role="alert">
+      <span>⚠️ <strong>Real sending is disabled on this server.</strong> (EMAIL_SEND_ENABLED=false). Dry Run validation remains fully functional.</span>
+    </div>
+    {% endif %}
+
+    {% if message %}
+    <div class="alert-banner success" role="alert">
+      <span>✅ {{ message }}</span>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert-banner danger" role="alert">
+      <span>⚠️ {{ error }}</span>
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Send Confirmation Modal (Critical Safety Guard) -->
+  <div id="send-confirm-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Confirm Live Email Send</h3>
+      </div>
+      <div class="modal-body">
+        <p>You are about to execute a live send through the Phase 9 Send Gate.</p>
+        <div id="modal-send-details"></div>
+      </div>
+      <div class="modal-footer">
+        <form id="send-confirm-form" method="POST" action="">
+          <input type="hidden" id="modal-send-draft-id" name="draft_id" value="">
+          <input type="hidden" id="modal-send-revision" name="revision" value="">
+          <input type="hidden" name="confirm_send" value="true">
+          <input type="hidden" name="reviewer" value="local_operator">
+          <button type="button" class="btn btn-secondary" onclick="closeSendModal()">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm & Send Real Email</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/sales/sales.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

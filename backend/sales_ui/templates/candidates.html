@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Candidates | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Candidate Intelligence</h1>
+    <p class="page-subtitle">Discovered companies across all sources with tier, intent, BIM maturity, and contact history.</p>
+  </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card" style="padding: 1rem;">
+  <form method="GET" action="/sales/candidates" class="form-inline">
+    <div style="flex: 1; min-width: 200px;">
+      <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Search company or domain...">
+    </div>
+    <div style="width: 170px;">
+      <select name="status" class="form-control">
+        <option value="">All Statuses</option>
+        <option value="new" {% if status == 'new' %}selected{% endif %}>New</option>
+        <option value="needs_research" {% if status == 'needs_research' %}selected{% endif %}>Needs Research</option>
+        <option value="watchlist" {% if status == 'watchlist' %}selected{% endif %}>Watchlist</option>
+        <option value="qualified_for_enrichment" {% if status == 'qualified_for_enrichment' %}selected{% endif %}>Qualified for Enrichment</option>
+        <option value="known_company" {% if status == 'known_company' %}selected{% endif %}>Known Company</option>
+        <option value="reengagement_review" {% if status == 'reengagement_review' %}selected{% endif %}>Re-engagement Review</option>
+        <option value="rejected" {% if status == 'rejected' %}selected{% endif %}>Rejected</option>
+      </select>
+    </div>
+    <div style="width: 140px;">
+      <select name="tier" class="form-control">
+        <option value="">All Tiers</option>
+        <option value="tier_1" {% if tier == 'tier_1' %}selected{% endif %}>Tier 1</option>
+        <option value="tier_2" {% if tier == 'tier_2' %}selected{% endif %}>Tier 2</option>
+        <option value="tier_3" {% if tier == 'tier_3' %}selected{% endif %}>Tier 3</option>
+      </select>
+    </div>
+    <div style="width: 120px;">
+      <input type="text" name="country" value="{{ country or '' }}" class="form-control" placeholder="Country">
+    </div>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+    <a href="/sales/candidates" class="btn btn-secondary btn-sm" style="padding: 0.55rem 0.75rem;">Reset</a>
+  </form>
+</div>
+
+<!-- Candidates Table -->
+<div class="card">
+  <div class="card-title">
+    <span>Candidates ({{ total }} total, showing page {{ page }})</span>
+  </div>
+  {% if candidates %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Domain</th>
+          <th>Country</th>
+          <th>Tier</th>
+          <th>Fit</th>
+          <th>Intent</th>
+          <th>BIM Maturity</th>
+          <th>Sources</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td>
+            <strong>{{ c.company_name }}</strong>
+            {% if c.is_previously_contacted %}
+            <span class="badge badge-previously-contacted" title="Contacted previously">Previously Contacted</span>
+            {% endif %}
+            {% if c.is_suppressed %}
+            <span class="badge badge-danger">Suppressed</span>
+            {% endif %}
+          </td>
+          <td><code>{{ c.domain or 'N/A' }}</code></td>
+          <td>{{ c.country or 'Global' }}</td>
+          <td>
+            <span class="badge {% if c.tier == 'tier_1' %}badge-primary{% elif c.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}">
+              {{ c.tier or 'Unassigned' }}
+            </span>
+          </td>
+          <td>
+            <span class="badge {% if c.fit == 'high' %}badge-success{% elif c.fit == 'medium' %}badge-warning{% else %}badge-muted{% endif %}">
+              {{ c.fit or 'N/A' }}
+            </span>
+          </td>
+          <td>
+            <span class="badge {% if c.intent == 'high' %}badge-success{% elif c.intent == 'medium' %}badge-warning{% else %}badge-muted{% endif %}">
+              {{ c.intent or 'N/A' }}
+            </span>
+          </td>
+          <td>
+            <!-- P10_5-REG-012: Unknown BIM maturity is not displayed as 'No BIM' -->
+            <span class="badge badge-muted">{{ c.bim_maturity }}</span>
+          </td>
+          <td>
+            {% for src in c.discovery_sources %}
+            <span class="badge badge-muted">{{ src }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            <span class="badge {% if c.status == 'qualified_for_enrichment' %}badge-success{% elif c.status == 'needs_research' %}badge-warning{% elif c.status == 'rejected' %}badge-danger{% else %}badge-info{% endif %}">
+              {{ c.status }}
+            </span>
+          </td>
+          <td>
+            <a href="/sales/candidates/{{ c.candidate_id }}" class="btn btn-secondary btn-sm">Inspect</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination controls -->
+  <div class="pagination">
+    <span>Showing {{ candidates|length }} of {{ total }} results</span>
+    <div class="pagination-controls">
+      {% if page > 1 %}
+      <a href="?page={{ page - 1 }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}" class="btn btn-secondary btn-sm">Previous</a>
+      {% endif %}
+      {% if has_next %}
+      <a href="?page={{ page + 1 }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}" class="btn btn-secondary btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No candidate companies match the selected criteria.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

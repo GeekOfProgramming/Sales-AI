@@ -105,6 +105,14 @@ static_path = Path(__file__).parent / "static"
 if static_path.exists():
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
+# Phase 10.5: Local Sales Operator Console static assets & router
+sales_static_path = Path(__file__).parent.parent / "static" / "sales"
+if sales_static_path.exists():
+    app.mount("/static/sales", StaticFiles(directory=str(sales_static_path)), name="sales_static")
+
+from backend.sales_ui.router import router as sales_ui_router
+app.include_router(sales_ui_router)
+
 
 @app.get("/", tags=["UI"])
 def root_endpoint():

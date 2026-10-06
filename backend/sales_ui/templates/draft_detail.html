@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Draft {{ draft.draft_id }} (r{{ draft.revision }}) | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+      <h1 class="page-title">{{ draft.company_name }}</h1>
+      <span class="badge {% if draft.approval_status == 'approved' %}badge-success{% elif draft.approval_status == 'rejected' %}badge-danger{% else %}badge-warning{% endif %}">
+        {{ draft.approval_status }}
+      </span>
+      <span class="badge badge-info">Revision r{{ draft.revision }}</span>
+      {% if draft.send_status == 'sent' %}
+      <span class="badge badge-success">Sent (Immutable)</span>
+      {% endif %}
+      {% if draft.is_suppressed %}
+      <span class="badge badge-danger">Suppressed</span>
+      {% endif %}
+    </div>
+    <p class="page-subtitle">
+      Recipient: <strong>{{ draft.recipient_name }}</strong> &lt;{{ draft.recipient_email }}&gt; &bull; 
+      Draft ID: <code>{{ draft.draft_id }}</code>
+    </p>
+  </div>
+  <div>
+    <a href="/sales/drafts" class="btn btn-secondary btn-sm">&larr; Back to Queue</a>
+  </div>
+</div>
+
+<!-- Main Review Card -->
+<div class="card">
+  <div class="card-title">
+    <span>Reviewable Payload</span>
+    <span style="font-size: 0.8rem; color: var(--text-muted); font-family: monospace;">Hash: {{ draft.content_hash[:16] }}</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; font-size: 0.875rem;">
+    <div><strong>Sender:</strong> {{ draft.sender_name or 'Configured Sender' }} &lt;{{ draft.sender_email or 'system' }}&gt;</div>
+    <div><strong>Recipient:</strong> {{ draft.recipient_name }} &lt;{{ draft.recipient_email }}&gt;</div>
+    <div><strong>Tone:</strong> {{ draft.tone }}</div>
+    <div><strong>Service Used:</strong> {{ draft.service_used or 'N/A' }}</div>
+  </div>
+
+  <div style="margin-bottom: 1rem;">
+    <strong>Subject:</strong>
+    <div style="padding: 0.5rem; background: var(--bg-hover); border-radius: var(--radius-sm); margin-top: 0.25rem;">{{ draft.subject }}</div>
+  </div>
+
+  <div>
+    <strong>Final Exact Body:</strong>
+    <div class="draft-body-preview">{{ draft.body }}</div>
+  </div>
+
+  <!-- Action Row -->
+  <div class="draft-actions" style="margin-top: 1.5rem;">
+    {% if draft.send_status == 'sent' %}
+      <span class="badge badge-muted">🔒 This revision was sent and is immutable.</span>
+    {% else %}
+      {% if draft.can_approve %}
+      <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/approve" style="display:inline;">
+        <input type="hidden" name="revision" value="{{ draft.revision }}">
+        <input type="hidden" name="reviewer" value="local_operator">
+        <button type="submit" class="btn btn-success">✅ Approve</button>
+      </form>
+      {% endif %}
+
+      {% if draft.can_reject %}
+      <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/reject" style="display:inline;">
+        <input type="hidden" name="revision" value="{{ draft.revision }}">
+        <input type="hidden" name="reviewer" value="local_operator">
+        <button type="submit" class="btn btn-danger">❌ Reject</button>
+      </form>
+      {% endif %}
+
+      <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/dry-run" style="display:inline;">
+        <input type="hidden" name="revision" value="{{ draft.revision }}">
+        <input type="hidden" name="reviewer" value="local_operator">
+        <button type="submit" class="btn btn-secondary">🧪 Dry Run</button>
+      </form>
+
+      {% if draft.can_send and not draft.is_suppressed and email_send_enabled %}
+      <button type="button" class="btn btn-primary" onclick="openSendConfirmation('{{ draft.draft_id }}', {{ draft.revision }}, '{{ draft.recipient_email }}', '{{ draft.subject|replace('\'', '\\\'') }}', '{{ draft.company_name|replace('\'', '\\\'') }}')">
+        📤 Send Real Email...
+      </button>
+      {% elif draft.is_suppressed %}
+      <button type="button" class="btn btn-secondary" disabled>🚫 Send Blocked (Suppressed)</button>
+      {% elif not email_send_enabled %}
+      <button type="button" class="btn btn-secondary" disabled>📤 Send Disabled</button>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Edit Draft Form (P10_5-REG-002: Creates new revision & resets approval) -->
+{% if draft.send_status != 'sent' %}
+<div class="card" id="edit">
+  <div class="card-title">
+    <span>Edit Draft & Create New Revision</span>
+    <span class="badge badge-warning">Resets Approval Status</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Editing this draft will create revision <strong>r{{ draft.revision + 1 }}</strong> through Phase 9. The new revision will require human review before it can be sent.
+  </p>
+  <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/edit">
+    <input type="hidden" name="revision" value="{{ draft.revision }}">
+    <div class="form-group">
+      <label class="form-label">Recipient Email</label>
+      <input type="email" name="recipient_email" class="form-control" value="{{ draft.recipient_email }}" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Subject Line</label>
+      <input type="text" name="subject" class="form-control" value="{{ draft.subject }}" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email Body</label>
+      <textarea name="body" class="form-control" style="min-height: 200px;" required>{{ draft.body }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Reviewer Note (Optional)</label>
+      <input type="text" name="note" class="form-control" placeholder="Describe rationale for changes...">
+    </div>
+    <button type="submit" class="btn btn-primary">Save as Revision r{{ draft.revision + 1 }}</button>
+  </form>
+</div>
+{% endif %}
+
+<!-- Audit Events History -->
+<div class="card">
+  <div class="card-title">
+    <span>Audit History (Phase 9)</span>
+  </div>
+  {% if events %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Revision</th>
+          <th>Previous Status</th>
+          <th>New Status</th>
+          <th>Reviewer</th>
+          <th>Time</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in events %}
+        <tr>
+          <td><strong>{{ ev.action }}</strong></td>
+          <td>r{{ ev.revision }}</td>
+          <td>{{ ev.previous_status or '-' }}</td>
+          <td><span class="badge badge-info">{{ ev.new_status }}</span></td>
+          <td>{{ ev.reviewer }}</td>
+          <td>{{ ev.created_at[:19] }}</td>
+          <td>{{ ev.review_note or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No audit events recorded for this draft yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

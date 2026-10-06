@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Settings & Status | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">System Status & Environment Settings</h1>
+    <p class="page-subtitle">Safe inspection of backend configurations, provider connectivity, and security boundaries.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Local Server & Binding</span>
+    <!-- P10_5-REG-016: localhost is default bind -->
+    <span class="badge badge-success">Localhost Bound</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Host Address:</strong> <code>127.0.0.1</code> (Loopback)</div>
+    <div><strong>Port:</strong> <code>8000</code></div>
+    <div><strong>Console URL:</strong> <code>http://127.0.0.1:8000/sales</code></div>
+    <div><strong>Database File:</strong> <code>{{ db_path }}</code></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Sending Gateway Configuration (Phase 9)</span>
+    <span class="badge {% if email_send_enabled %}badge-success{% else %}badge-warning{% endif %}">
+      {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED' }}
+    </span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Real Send Flag (EMAIL_SEND_ENABLED):</strong> <code>{{ email_send_enabled }}</code></div>
+    <div><strong>Provider Mode:</strong> <code>{{ provider_type }}</code></div>
+    <div><strong>SMTP Configured:</strong> <span class="badge {% if smtp_configured %}badge-success{% else %}badge-muted{% endif %}">{{ 'Configured' if smtp_configured else 'Not configured' }}</span></div>
+    <div><strong>Trusted Sender Email:</strong> <code>{{ trusted_sender_email or 'Not configured' }}</code></div>
+    <div><strong>Sender Display Name:</strong> <code>{{ trusted_sender_name or 'Not configured' }}</code></div>
+    <div><strong>Dry Run Invariant:</strong> <code>0 Provider / Network Calls</code></div>
+  </div>
+  <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">
+    🔒 Security Policy: Credentials, SMTP passwords, and API tokens are never exposed in the UI or rendered into HTML/JS payloads.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Local AI Engine Status</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>LLM Model:</strong> <code>{{ llm_model or 'qwen2.5:1.5b' }}</code></div>
+    <div><strong>Ollama Engine Connectivity:</strong> <span class="badge {% if ollama_reachable %}badge-success{% else %}badge-warning{% endif %}">{{ 'Reachable' if ollama_reachable else 'Offline / Fallback' }}</span></div>
+    <div><strong>Vector Database (ChromaDB):</strong> <span class="badge badge-success">Local / Operational</span></div>
+    <div><strong>UI Rendering Invariant:</strong> <code>Zero LLM Calls for Console Pages</code></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Export & Spreadsheets</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Google Sheets API:</strong> <span class="badge badge-muted">{{ 'Configured' if sheets_configured else 'Not configured' }}</span></div>
+    <div><strong>Phase 7 Workbook Export:</strong> <span class="badge badge-success">Available</span></div>
+    <div><strong>Direct SQLite Access:</strong> <span class="badge badge-primary">Internal Only (No Direct Frontend Writes)</span></div>
+  </div>
+</div>
+{% endblock %}

@@ -124,15 +124,18 @@ def main():
         except Exception as e:
             print(f"⚠️ Cloudflare tunnel notice: {e}", flush=True)
 
+    bind_host = os.getenv("SALESAI_HOST", "127.0.0.1")
+    bind_port = int(os.getenv("SALESAI_PORT", "8000"))
+
     print("\n" + "-" * 70, flush=True)
-    print("⚡ Starting Uvicorn Gateway on 0.0.0.0:8000 ... (Press Ctrl+C to stop)", flush=True)
+    print(f"⚡ Starting Uvicorn Gateway on {bind_host}:{bind_port} ... (Press Ctrl+C to stop)", flush=True)
     print("-" * 70 + "\n", flush=True)
 
     try:
         uvicorn.run(
             "backend.main:app",
-            host="0.0.0.0",
-            port=8000,
+            host=bind_host,
+            port=bind_port,
             reload=True,
             log_level="info",
         )

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Do Not Contact | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Do Not Contact (Suppression List)</h1>
+    <p class="page-subtitle">Authoritative suppression records enforced by Phase 9. Suppressed recipients can never be emailed.</p>
+  </div>
+</div>
+
+<!-- Add Suppression Form -->
+<div class="card">
+  <div class="card-title">
+    <span>Add Suppression Entry</span>
+  </div>
+  <form method="POST" action="/sales/do-not-contact/add" class="form-inline">
+    <div style="flex: 2; min-width: 220px;">
+      <input type="text" name="email" class="form-control" placeholder="Email address or domain (e.g. user@domain.com or domain.com)" required>
+    </div>
+    <div style="flex: 1; min-width: 180px;">
+      <input type="text" name="company_domain" class="form-control" placeholder="Company Domain (optional)">
+    </div>
+    <div style="width: 180px;">
+      <select name="reason" class="form-control">
+        <option value="manual">Manual operator request</option>
+        <option value="opt_out">Opt-out requested</option>
+        <option value="invalid_recipient">Invalid recipient</option>
+        <option value="complaint">Complaint / Unsubscribe</option>
+        <option value="competitor">Competitor</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-danger">Add to Suppression</button>
+  </form>
+</div>
+
+<!-- Suppression List Table -->
+<div class="card">
+  <div class="card-title">
+    <span>Suppressed Entities ({{ items|length }})</span>
+  </div>
+  {% if items %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Target (Email / Pattern)</th>
+          <th>Domain</th>
+          <th>Reason</th>
+          <th>Source</th>
+          <th>Created At</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in items %}
+        <tr>
+          <td><strong>{{ s.email }}</strong></td>
+          <td><code>{{ s.company_domain or 'N/A' }}</code></td>
+          <td><span class="badge badge-danger">{{ s.reason }}</span></td>
+          <td>{{ s.source }}</td>
+          <td>{{ s.created_at[:19] }}</td>
+          <td>
+            <form method="POST" action="/sales/do-not-contact/remove" style="display:inline;">
+              <input type="hidden" name="email" value="{{ s.email }}">
+              <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Remove suppression for {{ s.email }}?');">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No suppression entries currently active.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

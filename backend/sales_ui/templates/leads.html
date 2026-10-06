@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Qualified Leads | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Qualified Leads</h1>
+    <p class="page-subtitle">Candidates that have passed automated ICP qualification and are ready for outreach or draft review.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Qualified Leads ({{ leads|length }})</span>
+  </div>
+  {% if leads %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Domain</th>
+          <th>Country</th>
+          <th>Tier</th>
+          <th>Fit</th>
+          <th>Intent</th>
+          <th>BIM Maturity</th>
+          <th>Primary Opportunity</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in leads %}
+        <tr>
+          <td>
+            <strong>{{ l.company_name }}</strong>
+            {% if l.is_previously_contacted %}
+            <span class="badge badge-previously-contacted">Previously Contacted</span>
+            {% endif %}
+          </td>
+          <td><code>{{ l.domain or 'N/A' }}</code></td>
+          <td>{{ l.country or 'Global' }}</td>
+          <td><span class="badge badge-primary">{{ l.tier or 'Unassigned' }}</span></td>
+          <td><span class="badge badge-success">{{ l.fit or 'high' }}</span></td>
+          <td><span class="badge badge-success">{{ l.intent or 'medium' }}</span></td>
+          <td><span class="badge badge-muted">{{ l.bim_maturity }}</span></td>
+          <td><span class="badge badge-info">{{ l.outsourcing_potential or 'BIM Delivery' }}</span></td>
+          <td>
+            <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm">Inspect</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No companies currently qualified for outreach.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

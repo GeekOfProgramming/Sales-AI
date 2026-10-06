@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Sent History | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Sent Email History</h1>
+    <p class="page-subtitle">Immutable log of live emails delivered through the Phase 9 Send Gate.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Delivered Messages ({{ sent_items|length }})</span>
+    <span class="badge badge-success">Immutable History</span>
+  </div>
+  {% if sent_items %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Recipient</th>
+          <th>Subject</th>
+          <th>Revision</th>
+          <th>Provider</th>
+          <th>Sent Time</th>
+          <th>Provider Message ID</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sent_items %}
+        <tr>
+          <td><strong>{{ s.company_name }}</strong></td>
+          <td>{{ s.recipient_email }}</td>
+          <td>{{ s.subject }}</td>
+          <td><span class="badge badge-info">r{{ s.revision }}</span></td>
+          <td>{{ s.provider }}</td>
+          <td>{{ s.attempted_at[:19] }}</td>
+          <td><code>{{ s.provider_message_id or s.attempt_id[:12] }}</code></td>
+          <td><span class="badge badge-success">{{ s.status }}</span></td>
+          <td>
+            <a href="/sales/drafts/{{ s.draft_id }}" class="btn btn-secondary btn-sm">Inspect</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No sent messages yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

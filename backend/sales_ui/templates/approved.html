@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Approved Drafts | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Approved Drafts (Awaiting Send)</h1>
+    <p class="page-subtitle">Human-approved outreach emails ready for explicit live transmission through Phase 9.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Approved Queue ({{ drafts|length }})</span>
+  </div>
+  {% if drafts %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Recipient</th>
+          <th>Subject</th>
+          <th>Revision</th>
+          <th>Approved At</th>
+          <th>Reviewer</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in drafts %}
+        <tr>
+          <td><strong>{{ d.company_name }}</strong></td>
+          <td>{{ d.recipient_email }}</td>
+          <td>{{ d.subject }}</td>
+          <td><span class="badge badge-info">r{{ d.revision }}</span></td>
+          <td>{{ d.approved_at[:19] if d.approved_at else 'Approved' }}</td>
+          <td>{{ d.reviewer or 'operator' }}</td>
+          <td>
+            {% if d.is_suppressed %}
+            <span class="badge badge-danger">Suppressed</span>
+            {% elif not email_send_enabled %}
+            <span class="badge badge-warning">Server Disabled</span>
+            {% else %}
+            <span class="badge badge-success">Eligible to Send</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.35rem;">
+              <form method="POST" action="/sales/drafts/{{ d.draft_id }}/dry-run" style="display:inline;">
+                <input type="hidden" name="revision" value="{{ d.revision }}">
+                <input type="hidden" name="reviewer" value="local_operator">
+                <button type="submit" class="btn btn-secondary btn-sm">Dry Run</button>
+              </form>
+              {% if not d.is_suppressed and email_send_enabled %}
+              <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'') }}', '{{ d.company_name|replace('\'', '\\\'') }}')">
+                Send...
+              </button>
+              {% else %}
+              <button type="button" class="btn btn-secondary btn-sm" disabled>Send</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No approved drafts are currently awaiting send.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

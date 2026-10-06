@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Sources | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Discovery Sources & Provenance</h1>
+    <p class="page-subtitle">Configure discovery engines, monitor crawler health, and import manual seeds.</p>
+  </div>
+</div>
+
+<!-- Manual Seed Input Form -->
+<div class="card">
+  <div class="card-title">
+    <span>Manual Candidate Seed Input</span>
+    <span class="badge badge-info">Standard Research Flow</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Manually entered companies enter the normal Phase 10 research, deduplication, and qualification pipeline. They are never automatically qualified or contacted.
+  </p>
+  <form method="POST" action="/sales/sources/manual-seed" class="form-inline">
+    <div style="flex: 1; min-width: 180px;">
+      <input type="text" name="company_name" class="form-control" placeholder="Company Name (e.g. Acme BIM Studio)" required>
+    </div>
+    <div style="flex: 1; min-width: 180px;">
+      <input type="text" name="domain" class="form-control" placeholder="Domain (e.g. acme-bim.com)">
+    </div>
+    <div style="width: 140px;">
+      <input type="text" name="country" class="form-control" placeholder="Country (e.g. IT, DE)">
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <input type="url" name="source_url" class="form-control" placeholder="Source URL / Directory Link">
+    </div>
+    <button type="submit" class="btn btn-primary">Add Candidate Seed</button>
+  </form>
+</div>
+
+<!-- Historical Spreadsheet Import -->
+<div class="card">
+  <div class="card-title">
+    <span>Import Historical Spreadsheet</span>
+    <span class="badge badge-muted">CSV / XLSX</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Import historical outreach, company lists, or past contacts with root restriction, deduplication, and safety guards.
+  </p>
+  <form method="POST" action="/sales/sources/import-history" class="form-inline">
+    <div style="flex: 2; min-width: 280px;">
+      <input type="text" name="file_path" class="form-control" placeholder="Relative file path (e.g. data/historical_leads.csv)" required>
+    </div>
+    <div style="flex: 1; min-width: 140px;">
+      <input type="text" name="sheet_name" class="form-control" placeholder="Sheet Name (for XLSX)">
+    </div>
+    <button type="submit" class="btn btn-secondary">Import File</button>
+  </form>
+</div>
+
+<!-- Source Registry Table -->
+<div class="card">
+  <div class="card-title">
+    <span>Registered Discovery Sources ({{ sources|length }})</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Source Name</th>
+          <th>Type</th>
+          <th>Mode</th>
+          <th>Priority</th>
+          <th>Countries</th>
+          <th>Credential Status</th>
+          <th>Health Status</th>
+          <th>Success / Failure</th>
+          <th>Last Run</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sources %}
+        <tr>
+          <td><strong>{{ s.name }}</strong></td>
+          <td><span class="badge badge-muted">{{ s.type }}</span></td>
+          <td>{{ s.discovery_mode }}</td>
+          <td>{{ s.priority }}</td>
+          <td>{{ s.countries|join(', ') if s.countries else 'Global' }}</td>
+          <td>
+            {% if s.requires_api_key %}
+              <span class="badge badge-info">Configured</span>
+            {% else %}
+              <span class="badge badge-muted">Public / Open</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {% if s.status == 'operational' or s.status == 'healthy' %}badge-success{% else %}badge-warning{% endif %}">
+              {{ s.status }}
+            </span>
+          </td>
+          <td>{{ s.success_count }} / {{ s.failure_count }}</td>
+          <td>{{ s.last_success_at[:19] if s.last_success_at else 'Never' }}</td>
+          <td>
+            <form method="POST" action="/sales/discoveries/run" style="display:inline;">
+              <input type="hidden" name="sources" value="{{ s.id }}">
+              <button type="submit" class="btn btn-secondary btn-sm">Run Now</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
