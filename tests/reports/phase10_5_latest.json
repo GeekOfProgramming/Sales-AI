@@ -1,9 +1,9 @@
 {
   "phase": "Phase 10.5",
   "description": "Sales Console & Human Review Interface (Acceptance & Golden QA)",
-  "run_timestamp": "2026-10-06T13:51:33.629645+00:00",
-  "generated_at": "2026-10-06T13:51:33.629645+00:00",
-  "git_commit": "e93cd20",
+  "run_timestamp": "2026-10-06T13:52:13.420694+00:00",
+  "generated_at": "2026-10-06T13:52:13.420694+00:00",
+  "git_commit": "14ee427",
   "llm_model": "qwen2.5:1.5b",
   "weak_llm_policy": "Semantic email-quality limitations deferred without blocking Phase 10.5 acceptance",
   "total_cases": 71,
