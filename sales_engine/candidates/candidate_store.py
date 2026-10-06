@@ -22,6 +22,7 @@ from sales_engine.candidates.models import (
     BIMMaturity,
     RelationshipType,
     OpportunityType,
+    QualificationOutcome,
     DiscoveryStatus,
     DiscoveryRunRecord,
     SourceHealthRecord,
@@ -151,6 +152,8 @@ class CandidateStore:
                     active_conversation INTEGER,
                     suppressed INTEGER,
                     cold_outreach_allowed INTEGER,
+                    qualification_outcome TEXT,
+                    qualification_reasons_json TEXT,
                     historical_outreach_events_json TEXT
                 );
 
@@ -302,6 +305,9 @@ class CandidateStore:
         _add_col("historical_outreach_events", "relationship_type TEXT")
         _add_col("historical_outreach_events", "opportunity_types_json TEXT")
 
+        _add_col("candidate_companies", "qualification_outcome TEXT")
+        _add_col("candidate_companies", "qualification_reasons_json TEXT")
+
     def _generate_candidate_id(self, domain: Optional[str], name: str, country: Optional[str] = None) -> str:
         if domain:
             clean_dom = re.sub(r'[^a-z0-9.-]', '', domain.lower())
@@ -416,9 +422,10 @@ class CandidateStore:
                     source_refs_json, evidence_refs_json, aliases_json, source_identities_json,
                     domain_history_json, first_seen_at, last_seen_at, last_researched_at,
                     historical_contact_status, last_contacted_at, reply_status,
-                    active_conversation, suppressed, cold_outreach_allowed
+                    active_conversation, suppressed, cold_outreach_allowed,
+                    qualification_outcome, qualification_reasons_json
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 ON CONFLICT(candidate_id) DO UPDATE SET
                     company_name = excluded.company_name,
@@ -469,6 +476,11 @@ class CandidateStore:
                     cold_outreach_allowed = CASE
                         WHEN candidate_companies.cold_outreach_allowed = 0 OR excluded.cold_outreach_allowed = 0 THEN 0
                         ELSE 1
+                    END,
+                    qualification_outcome = COALESCE(excluded.qualification_outcome, candidate_companies.qualification_outcome),
+                    qualification_reasons_json = CASE
+                        WHEN excluded.qualification_reasons_json != '[]' THEN excluded.qualification_reasons_json
+                        ELSE candidate_companies.qualification_reasons_json
                     END
             """, (
                 cand.candidate_id, cand.company_name, cand.normalized_company_name, cand.company_domain,
@@ -490,7 +502,9 @@ class CandidateStore:
                 json.dumps(cand.aliases), json.dumps(cand.source_identities), json.dumps(cand.domain_history),
                 cand.first_seen_at, cand.last_seen_at, cand.last_researched_at,
                 cand.historical_contact_status, cand.last_contacted_at, cand.reply_status,
-                1 if cand.active_conversation else 0, 1 if cand.suppressed else 0, 1 if cand.cold_outreach_allowed else 0
+                1 if cand.active_conversation else 0, 1 if cand.suppressed else 0, 1 if cand.cold_outreach_allowed else 0,
+                cand.qualification_outcome.value if hasattr(cand.qualification_outcome, 'value') else (cand.qualification_outcome or None),
+                json.dumps(cand.qualification_reasons or [])
             ))
 
     def _row_to_candidate(self, row: sqlite3.Row) -> CandidateCompany:
@@ -538,6 +552,8 @@ class CandidateStore:
             active_conversation=bool(row["active_conversation"]),
             suppressed=bool(row["suppressed"]),
             cold_outreach_allowed=bool(row["cold_outreach_allowed"]),
+            qualification_outcome=QualificationOutcome(row["qualification_outcome"]) if ("qualification_outcome" in row.keys() and row["qualification_outcome"] in QualificationOutcome._value2member_map_) else None,
+            qualification_reasons=json.loads(row["qualification_reasons_json"] or "[]") if ("qualification_reasons_json" in row.keys() and row["qualification_reasons_json"]) else [],
             metadata={
                 "active_conversation": bool(row["active_conversation"]),
                 "has_historical_outreach": (row["historical_contact_status"] or "uncontacted") in ("contacted", "replied", "converted"),
@@ -587,8 +603,12 @@ class CandidateStore:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_candidate(r) for r in rows]
 
-    def add_observation(self, obs: DiscoveryObservation):
+    def add_observation(self, obs: DiscoveryObservation) -> bool:
         with self._get_connection() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM discovery_observations WHERE observation_id = ?",
+                (obs.observation_id,)
+            ).fetchone()
             conn.execute("""
                 INSERT INTO discovery_observations (
                     observation_id, candidate_id, source_id, source_name, source_type,
@@ -608,6 +628,7 @@ class CandidateStore:
                 json.dumps(obs.raw_payload or {}), json.dumps(obs.extracted_data or {}), obs.observed_at, obs.published_at, obs.fetched_at,
                 obs.confidence, json.dumps(obs.evidence_refs or []), json.dumps(obs.raw_ref or {})
             ))
+            return existing is None
 
     def get_observations(self, candidate_id: str) -> List[DiscoveryObservation]:
         with self._get_connection() as conn:
@@ -666,6 +687,9 @@ class CandidateStore:
                 ev.confidence, 1 if ev.is_current else 0, json.dumps(ev.raw_ref or {}),
                 ev.published_at, ev.freshness_status
             ))
+
+    def save_evidence(self, ev: MarketEvidence):
+        return self.add_evidence(ev)
 
     def get_evidence(self, candidate_id: str) -> List[MarketEvidence]:
         with self._get_connection() as conn:

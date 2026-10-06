@@ -23,6 +23,7 @@ sources:
     priority: 95
     max_results_per_run: 50
     requires_api_key: true
+    credential_env_var: BRAVE_SEARCH_API_KEY
     base_url: https://api.search.brave.com/res/v1/web/search
     notes: Primary web search for hiring signals and careers.
 

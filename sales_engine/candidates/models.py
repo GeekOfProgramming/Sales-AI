@@ -209,6 +209,8 @@ class CandidateCompany(BaseModel):
     active_conversation: bool = False
     suppressed: bool = False
     cold_outreach_allowed: bool = True
+    qualification_outcome: Optional[QualificationOutcome] = None
+    qualification_reasons: List[str] = Field(default_factory=list)
 
     # Metadata & State
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -287,6 +289,10 @@ class CandidateCompany(BaseModel):
     @property
     def discovery_sources(self) -> List[str]:
         return self.source_refs
+
+    @property
+    def qualification_reason(self) -> str:
+        return "; ".join(self.qualification_reasons) if self.qualification_reasons else ""
 
 
 class WatchlistEntry(BaseModel):

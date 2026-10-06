@@ -96,9 +96,16 @@ class HistoricalRecord:
         c_dom = self.domain.strip().lower() if self.domain else ""
         emails_str = ",".join(sorted(self.emails))
         c_date = self.contact_date or ""
+        f_date = self.follow_up_date or ""
         r_date = self.reply_date or ""
         r_status = self.reply_status or ""
-        ident_str = f"{c_name}:{c_dom}:{emails_str}:{c_date}:{r_date}:{r_status}"
+        resp_name = (self.respondent_name or "").strip().lower()
+        resp_email = (self.respondent_email or "").strip().lower()
+        resp_role = (self.respondent_role or "").strip().lower()
+        dnc_flag = "1" if self.is_dnc else "0"
+        act_flag = "1" if self.has_active_conversation else "0"
+        wrong_flag = "1" if self.is_wrong_email else "0"
+        ident_str = f"{c_name}:{c_dom}:{emails_str}:{c_date}:{f_date}:{r_date}:{r_status}:{resp_name}:{resp_email}:{resp_role}:{dnc_flag}:{act_flag}:{wrong_flag}"
         return hashlib.sha256(ident_str.encode("utf-8")).hexdigest()[:16]
 
 

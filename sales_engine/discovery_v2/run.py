@@ -29,10 +29,12 @@ logger = logging.getLogger(__name__)
 
 
 def get_cli_services(db_path: Optional[str] = None):
-    db = db_path or os.getenv("SALESAI_CANDIDATES_DB", "candidates.db")
+    db = db_path or os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db"))
     store = CandidateStore(db_path=db)
     registry = SourceRegistry()
-    classifier = CompanyClassifier()
+    from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge
+    authority_bridge = Phase9AuthorityBridge(db_path=store.db_path)
+    classifier = CompanyClassifier(suppression_store=authority_bridge)
     engine = DiscoveryEngineV2(
         candidate_store=store,
         classifier=classifier,

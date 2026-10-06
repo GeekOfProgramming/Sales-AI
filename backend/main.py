@@ -5,6 +5,7 @@ Coordinates requests from Revit Addin (C# / pyRevit) with local ChromaDB RAG and
 import os
 import sys
 import io
+import json
 import re
 import ast
 import time
@@ -18,7 +19,7 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
-from fastapi import FastAPI, HTTPException, status, BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -1219,12 +1220,14 @@ _discovery_engine_inst: Optional[_DiscoveryEngineV2] = None
 def get_discovery_services():
     global _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
     if _discovery_store_inst is None:
-        db_path = os.getenv("SALESAI_CANDIDATES_DB", "candidates.db")
+        db_path = os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db"))
         _discovery_store_inst = _CandidateStore(db_path=db_path)
     if _discovery_registry_inst is None:
         _discovery_registry_inst = _SourceRegistry()
     if _discovery_classifier_inst is None:
-        _discovery_classifier_inst = _CompanyClassifier()
+        from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge
+        authority_bridge = Phase9AuthorityBridge(db_path=_discovery_store_inst.db_path)
+        _discovery_classifier_inst = _CompanyClassifier(suppression_store=authority_bridge)
     if _discovery_engine_inst is None:
         _discovery_engine_inst = _DiscoveryEngineV2(
             candidate_store=_discovery_store_inst,
@@ -1248,6 +1251,18 @@ class WatchlistAddApiRequest(_PydanticBaseModel):
 class HistoricalImportApiRequest(_PydanticBaseModel):
     file_path: str
     sheet_name: Optional[str] = None
+
+
+class SourceImportApiRequest(_PydanticBaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    sources: Optional[List[Dict[str, Any]]] = None
+    api_secret: Optional[str] = None
+    client_secret: Optional[str] = None
+    password: Optional[str] = None
+    extra_fields: Optional[Dict[str, Any]] = None
+    model_config = {"extra": "allow"}
 
 
 @app.post("/api/sales/discovery/run", tags=["Phase10-Discovery"])
@@ -1391,32 +1406,86 @@ def list_sources_endpoint(enabled_only: bool = False):
 
 
 @app.post("/api/sales/sources/import", tags=["Phase10-Discovery"])
-def import_source_config_endpoint(payload: Dict[str, Any]):
-    """Import or reload source configuration."""
+async def import_source_config_endpoint(request: Request):
+    """Import or reload source configuration with taxonomy and secrets validation."""
     _, registry, _, _ = get_discovery_services()
-    registry._load_configs()
-    return {"status": "reloaded", "total_sources": len(registry.sources)}
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = None
+
+    if not payload:
+        registry._load_configs()
+        return {"status": "reloaded", "total_sources": len(registry.sources)}
+
+    # Check for secrets or token leakage in payload
+    payload_str = json.dumps(payload)
+    forbidden_tokens = ["sk-", "Bearer ", "password", "api_secret", "client_secret"]
+    for tok in forbidden_tokens:
+        if tok in payload_str:
+            raise HTTPException(status_code=400, detail=f"Source configuration payload must not contain secrets or credentials: '{tok}'")
+
+    sources_list = payload.get("sources", [payload] if "id" in payload or "name" in payload else [])
+    registered = []
+    for s_dict in sources_list:
+        if isinstance(s_dict, dict) and ("id" in s_dict or "name" in s_dict):
+            try:
+                sc = registry.register_source(s_dict)
+                registered.append(sc.id)
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+
+    return {"status": "imported", "registered_sources": registered, "total_sources": len(registry.sources)}
 
 
 @app.post("/api/sales/history/import", tags=["Phase10-Historical"])
 def import_historical_data_endpoint(req: HistoricalImportApiRequest):
-    """Import historical spreadsheet (CSV/XLSX) with idempotency and safety guards."""
+    """Import historical spreadsheet (CSV/XLSX) with idempotency, root restriction, and safety guards."""
     store, _, _, _ = get_discovery_services()
     importer = _HistoricalImporter(store=store)
-    path = Path(req.file_path)
-    if not path.exists():
+
+    # Path traversal protection: resolve path and verify within allowed roots
+    raw_path_str = req.file_path.strip()
+    if not raw_path_str:
+        raise HTTPException(status_code=400, detail="file_path cannot be empty")
+
+    base_dir = Path(__file__).resolve().parent.parent
+    try:
+        resolved_path = Path(raw_path_str).resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    # Allowed roots: workspace base directory or data directory
+    allowed_roots = [base_dir.resolve(), (base_dir / "data").resolve()]
+    is_allowed = False
+    for root in allowed_roots:
+        try:
+            resolved_path.relative_to(root)
+            is_allowed = True
+            break
+        except ValueError:
+            continue
+
+    if not is_allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Access denied: file_path must reside within repository or data directory. Path traversal outside root is forbidden."
+        )
+
+    if not resolved_path.exists():
         raise HTTPException(status_code=404, detail=f"File {req.file_path} not found")
-    if path.suffix.lower() == ".csv":
-        records = importer.parse_csv(path)
-    elif path.suffix.lower() in (".xlsx", ".xlsm"):
-        records = importer.parse_xlsx(path)
+
+    if resolved_path.suffix.lower() == ".csv":
+        records = importer.parse_csv(resolved_path)
+    elif resolved_path.suffix.lower() in (".xlsx", ".xlsm"):
+        records = importer.parse_xlsx(resolved_path)
     else:
         raise HTTPException(status_code=400, detail="Only CSV and XLSX files are supported")
 
     result = importer.import_records(records)
     return {
         "status": "completed",
-        "file": path.name,
+        "file": resolved_path.name,
         "rows_read": result.total_rows_read,
         "records_parsed": result.records_parsed,
         "companies_created": result.companies_created,

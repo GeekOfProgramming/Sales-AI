@@ -24,6 +24,14 @@ from sales_engine.candidates.models import (
 )
 
 
+def get_default_suppression_bridge() -> Optional[Any]:
+    try:
+        from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge
+        return Phase9AuthorityBridge()
+    except Exception:
+        return None
+
+
 def classify_tier(
     legal_form: Optional[str] = None,
     employee_hint: Optional[str] = None,
@@ -90,17 +98,28 @@ def classify_tier(
     return CompanyTier.unknown, 0.0, ["Insufficient evidence to determine tier"]
 
 
-def classify_bim_maturity(evidence: Optional[List[MarketEvidence]] = None) -> Tuple[BIMMaturity, float]:
+def get_default_suppression_bridge():
+    try:
+        from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge
+        return Phase9AuthorityBridge()
+    except Exception:
+        return None
+
+
+def classify_bim_maturity(
+    evidence: Optional[List[MarketEvidence]] = None,
+    technologies: Optional[List[str]] = None,
+    services: Optional[List[str]] = None,
+) -> Tuple[BIMMaturity, float]:
     """
     Classifies BIM maturity.
     CRITICAL: Absence of BIM evidence must NOT become: no BIM, low BIM, false BIM.
     Missing evidence -> BIMMaturity.unknown (P10-REG-004)
     """
     evidence = evidence or []
-    if not evidence:
+    all_text = " ".join([e.text.lower() for e in evidence] + [t.lower() for t in (technologies or [])] + [s.lower() for s in (services or [])])
+    if not all_text.strip():
         return BIMMaturity.unknown, 0.0
-
-    all_text = " ".join([e.text.lower() for e in evidence])
 
     enterprise_signals = [
         "iso 19650", "uni 11337", "bim manager", "head of digital delivery",
@@ -245,6 +264,11 @@ def evaluate_fit_and_intent(
     # Intent Assessment (Hiring, tender, new project, digital transformation)
     intent_score = 0
     for ev in evidence:
+        # Blocker 3: Stale / non-current evidence cannot produce current high intent
+        is_stale = (ev.is_current is False) or (getattr(ev, "freshness_status", "").lower() in ("old", "expired", "stale"))
+        if is_stale:
+            continue
+
         cat = ev.category.lower()
         if cat in ["job", "hiring"] or "job" in ev.signal_type.lower() or "hiring" in ev.signal_type.lower():
             intent_score += 3
@@ -307,15 +331,31 @@ def qualify_candidate(
     candidate.relationship_type = rel_type
     candidate.opportunity_types = opps
 
-    # 2. Authority Check: Phase 9 Suppression (P10-REG-010)
-    if suppression_store and candidate.company_domain:
-        if suppression_store.is_suppressed(email=None, company_domain=candidate.company_domain):
+    # 2. Authority Check: Phase 9 Suppression (P10-REG-010 / P10-ADV2-001)
+    cand_domain = candidate.canonical_domain or candidate.company_domain
+    if cand_domain:
+        checker = suppression_store or get_default_suppression_bridge()
+        is_supp = False
+        if checker:
+            if hasattr(checker, "is_domain_suppressed"):
+                is_supp = checker.is_domain_suppressed(cand_domain)
+            elif hasattr(checker, "is_suppressed"):
+                try:
+                    is_supp = checker.is_suppressed(domain=cand_domain)
+                except TypeError:
+                    try:
+                        is_supp = checker.is_suppressed(company_domain=cand_domain)
+                    except Exception:
+                        pass
+        if is_supp:
             candidate.suppressed = True
             candidate.cold_outreach_allowed = False
+            candidate.qualification_outcome = QualificationOutcome.suppressed
+            candidate.qualification_reasons = ["Domain is suppressed on authoritative Phase 9 suppression list"]
             return CandidateQualificationResult(
                 candidate_id=candidate.candidate_id,
                 outcome=QualificationOutcome.suppressed,
-                reasons=["Domain is listed on authoritative Phase 9 suppression list"],
+                reasons=candidate.qualification_reasons,
                 company_tier=tier,
                 bim_maturity=bim_mat,
                 relationship_type=rel_type,
@@ -325,10 +365,12 @@ def qualify_candidate(
 
     if candidate.suppressed:
         candidate.cold_outreach_allowed = False
+        candidate.qualification_outcome = QualificationOutcome.suppressed
+        candidate.qualification_reasons = ["Candidate marked suppressed"]
         return CandidateQualificationResult(
             candidate_id=candidate.candidate_id,
             outcome=QualificationOutcome.suppressed,
-            reasons=["Candidate marked suppressed"],
+            reasons=candidate.qualification_reasons,
             company_tier=tier,
             bim_maturity=bim_mat,
             relationship_type=rel_type,
@@ -339,10 +381,12 @@ def qualify_candidate(
     # 3. Active Conversation Guard
     if candidate.active_conversation:
         candidate.cold_outreach_allowed = False
+        candidate.qualification_outcome = QualificationOutcome.known_company
+        candidate.qualification_reasons = ["Candidate has an active conversation ongoing; cold sequence blocked"]
         return CandidateQualificationResult(
             candidate_id=candidate.candidate_id,
-            outcome=QualificationOutcome.known_company,
-            reasons=["Candidate has an active conversation ongoing; cold sequence blocked"],
+            outcome=candidate.qualification_outcome,
+            reasons=candidate.qualification_reasons,
             company_tier=tier,
             bim_maturity=bim_mat,
             relationship_type=rel_type,
@@ -354,10 +398,13 @@ def qualify_candidate(
     if candidate.historical_contact_status in ["contacted", "replied", "converted"]:
         candidate.cold_outreach_allowed = False
         outcome = QualificationOutcome.reengagement_review if candidate.reply_status else QualificationOutcome.known_company
+        reasons = [f"Previously contacted candidate ({candidate.historical_contact_status}); fresh cold outreach blocked"]
+        candidate.qualification_outcome = outcome
+        candidate.qualification_reasons = reasons
         return CandidateQualificationResult(
             candidate_id=candidate.candidate_id,
             outcome=outcome,
-            reasons=[f"Previously contacted candidate ({candidate.historical_contact_status}); fresh cold outreach blocked"],
+            reasons=reasons,
             company_tier=tier,
             bim_maturity=bim_mat,
             relationship_type=rel_type,
@@ -375,10 +422,13 @@ def qualify_candidate(
     # 6. Qualification Routing
     # High fit + Medium/High Intent -> qualified for enrichment
     if fit_level == "high" and intent_level in ["medium", "high"]:
+        candidate.qualification_outcome = QualificationOutcome.qualified_for_enrichment
+        candidate.qualification_reasons = fit_reasons + intent_signals
+        candidate.cold_outreach_allowed = True
         return CandidateQualificationResult(
             candidate_id=candidate.candidate_id,
-            outcome=QualificationOutcome.qualified_for_enrichment,
-            reasons=fit_reasons + intent_signals,
+            outcome=candidate.qualification_outcome,
+            reasons=candidate.qualification_reasons,
             company_tier=tier,
             bim_maturity=bim_mat,
             fit_level=fit_level,
@@ -390,10 +440,13 @@ def qualify_candidate(
 
     # Good fit + Weak/Unknown/None Intent -> Watchlist (P10-REG-008)
     if fit_level in ["high", "medium"] and intent_level in ["none", "unknown", "low"]:
+        candidate.qualification_outcome = QualificationOutcome.watchlist
+        candidate.qualification_reasons = fit_reasons + ["Good fit with low/unknown current intent; routing to watchlist"]
+        candidate.cold_outreach_allowed = False
         return CandidateQualificationResult(
             candidate_id=candidate.candidate_id,
-            outcome=QualificationOutcome.watchlist,
-            reasons=fit_reasons + ["Good fit with low/unknown current intent; routing to watchlist"],
+            outcome=candidate.qualification_outcome,
+            reasons=candidate.qualification_reasons,
             company_tier=tier,
             bim_maturity=bim_mat,
             fit_level=fit_level,
@@ -404,10 +457,13 @@ def qualify_candidate(
         )
 
     # Low fit or unknown -> Reject
+    candidate.qualification_outcome = QualificationOutcome.reject
+    candidate.qualification_reasons = fit_reasons or ["Insufficient fit criteria matched"]
+    candidate.cold_outreach_allowed = False
     return CandidateQualificationResult(
         candidate_id=candidate.candidate_id,
-        outcome=QualificationOutcome.reject,
-        reasons=fit_reasons or ["Insufficient fit criteria matched"],
+        outcome=candidate.qualification_outcome,
+        reasons=candidate.qualification_reasons,
         company_tier=tier,
         bim_maturity=bim_mat,
         fit_level=fit_level,
@@ -422,7 +478,7 @@ class CompanyClassifier:
     """OOP interface wrapper for Phase 10 deterministic classification."""
 
     def __init__(self, suppression_store: Optional[Any] = None):
-        self.suppression_store = suppression_store
+        self.suppression_store = suppression_store or get_default_suppression_bridge()
 
     def classify_tier(
         self,

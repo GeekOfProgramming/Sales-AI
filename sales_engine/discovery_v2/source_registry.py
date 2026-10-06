@@ -36,6 +36,30 @@ def sanitize_secret_text(text: Optional[str]) -> str:
     return s
 
 
+SUPPORTED_SOURCE_TYPES = {
+    "job_board",
+    "ats",
+    "company_directory",
+    "business_directory",
+    "map_business",
+    "professional_association",
+    "tender_portal",
+    "project_database",
+    "industry_news",
+    "company_website",
+    "manual_seed",
+    "historical_import",
+    "search_engine",
+    "directory",
+    "registry",
+    "social",
+    "jobs",
+    "custom",
+    "manual",
+    "external_file",
+}
+
+
 @dataclass
 class SourceConfig:
     id: str
@@ -205,6 +229,48 @@ class SourceRegistry:
             or self.markets.get(code.lower())
             or self.markets.get(code.upper())
         )
+
+    def register_source(self, config: Union[SourceConfig, Dict[str, Any]]) -> SourceConfig:
+        """
+        Dynamically registers or updates a source configuration.
+        Enforces taxonomy validation and rejects secrets.
+        """
+        if isinstance(config, dict):
+            sid = config.get("id") or config.get("name")
+            if not sid:
+                raise ValueError("Source configuration must specify 'id' or 'name'")
+            stype = config.get("type", "custom")
+            if stype not in SUPPORTED_SOURCE_TYPES:
+                raise ValueError(f"Unsupported source type '{stype}'. Must be one of: {sorted(SUPPORTED_SOURCE_TYPES)}")
+            sc = SourceConfig(
+                id=sid,
+                name=config.get("name", sid),
+                type=stype,
+                priority=config.get("priority", 100),
+                rate_limit_per_minute=config.get("rate_limit_per_minute", 60),
+                enabled=config.get("enabled", True),
+                discovery_mode=config.get("discovery_mode", "company_first"),
+                description=config.get("description", config.get("notes", "")),
+                countries=config.get("countries", []),
+                company_types=config.get("company_types", []),
+                requires_api_key=config.get("requires_api_key", False),
+                credential_env_var=config.get("credential_env_var"),
+                base_url=config.get("base_url"),
+                max_results_per_run=config.get("max_results_per_run", 50),
+                notes=config.get("notes", ""),
+                params=config.get("params", {}),
+            )
+        elif isinstance(config, SourceConfig):
+            if config.type not in SUPPORTED_SOURCE_TYPES:
+                raise ValueError(f"Unsupported source type '{config.type}'. Must be one of: {sorted(SUPPORTED_SOURCE_TYPES)}")
+            sc = config
+        else:
+            raise TypeError("config must be a SourceConfig or dict")
+
+        self.sources[sc.id] = sc
+        if sc.id not in self.health_map:
+            self.health_map[sc.id] = SourceHealth(name=sc.id)
+        return sc
 
     def record_success(self, source_name: str) -> None:
         if source_name not in self.health_map:

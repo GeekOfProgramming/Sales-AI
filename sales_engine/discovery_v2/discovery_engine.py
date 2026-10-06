@@ -76,7 +76,12 @@ class DiscoveryEngineV2:
         Enforces canonical domain deduplication and observation recording.
         """
         raw_payload = raw_payload or {}
-        extracted_data = extracted_data or {}
+        extracted_data = dict(extracted_data or {})
+        # Strip synthetic job fields if not genuine job-first mode
+        if discovery_mode != "job_first":
+            extracted_data.pop("structured_job_id", None)
+            extracted_data.pop("job_id", None)
+
         canon_domain = self.store.canonicalize_domain(domain) if domain else None
 
         # Lookup or generate
@@ -162,13 +167,36 @@ class DiscoveryEngineV2:
                 logger.info(f"Skipping disabled source: {src}")
                 continue
 
+            # Check credentials if source requires API key
+            if cfg and cfg.requires_api_key:
+                env_var = cfg.credential_env_var or f"{cfg.id.upper()}_API_KEY"
+                import os
+                if not os.environ.get(env_var):
+                    err_msg = f"Source {src} requires credential '{env_var}' which is not set"
+                    logger.warning(err_msg)
+                    run_rec.errors.append(err_msg)
+                    self.registry.record_failure(src, err_msg)
+                    continue
+
             fetcher = fetcher_funcs.get(src)
             if not fetcher:
-                # Default mock/noop fetcher if none passed in
-                continue
+                # Try built-in default adapter
+                if cfg:
+                    from sales_engine.discovery_v2.adapters import get_default_adapter_for_source
+                    fetcher = get_default_adapter_for_source(cfg)
+                if not fetcher:
+                    err_msg = f"Source {src} has no registered adapter"
+                    logger.warning(err_msg)
+                    run_rec.errors.append(err_msg)
+                    self.registry.record_failure(src, err_msg)
+                    continue
 
             try:
-                items = fetcher(query)
+                raw_items = fetcher(query)
+                # Enforce max_results_per_run contract
+                max_results = cfg.max_results_per_run if cfg and cfg.max_results_per_run else 50
+                items = raw_items[:max_results]
+
                 for item in items:
                     c_name = item.get("company_name") or item.get("name")
                     if not c_name:
@@ -203,7 +231,11 @@ class DiscoveryEngineV2:
                         city=city,
                     )
                     run_rec.observations_found += 1
-                    run_rec.observations_created += 1
+                    # Check whether observation was genuinely newly added
+                    is_new_obs = self.store.add_observation(obs)
+                    if is_new_obs:
+                        run_rec.observations_created += 1
+
                     run_rec.candidates_discovered += 1
 
                     if existing:

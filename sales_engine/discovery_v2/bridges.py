@@ -11,8 +11,11 @@ Integration Bridges for Phase 10:
 from __future__ import annotations
 
 import logging
+import os
+import sqlite3
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sales_engine.candidates.models import (
     CandidateCompany,
@@ -167,6 +170,19 @@ class Phase8GroundingBridge:
         "tier_3",
     }
 
+    TRUSTED_FACT_SOURCE_TYPES: Set[str] = {
+        "job_board",
+        "ats",
+        "company_directory",
+        "business_directory",
+        "tender_portal",
+        "project_database",
+        "industry_news",
+        "company_website",
+        "search_engine",
+        "web_source",
+    }
+
     @classmethod
     def _is_forbidden(cls, text: Any) -> bool:
         if not text or not isinstance(text, str):
@@ -193,8 +209,16 @@ class Phase8GroundingBridge:
             source_url = getattr(obs, "source_url", None)
             source_id = getattr(obs, "source_id", "")
 
-            # P10-ADV: manual_seed observations cannot produce verified facts without explicit source_url
-            if (source_type == "manual_seed" or source_id == "manual_seed") and not source_url:
+            # Blocker 8: Arbitrary/internal observation cannot become verified Phase 8 fact.
+            # Reject internal, manual, unverified, or unknown source types.
+            if source_type in ("internal_note", "internal_manual", "internal_assessment", "scratchpad", "unknown", "") or source_id in ("internal_note", "internal_manual"):
+                continue
+
+            if source_type not in cls.TRUSTED_FACT_SOURCE_TYPES:
+                continue
+
+            # Must have valid external public source URL or reference
+            if not source_url or not (source_url.startswith("http://") or source_url.startswith("https://")):
                 continue
 
             ext = obs.extracted_data if hasattr(obs, "extracted_data") else {}
@@ -255,80 +279,135 @@ class Phase9AuthorityBridge:
     Supports real SuppressionStore with domain and email checks without altering frozen Phase 9.
     """
 
-    def __init__(self, suppression_store: Optional[Any] = None):
+    def __init__(self, suppression_store: Optional[Any] = None, db_path: Optional[str] = None):
         self.suppression_store = suppression_store
+        self.db_path = db_path or os.getenv("SALESAI_DB_PATH", "data/sales_outreach.db")
 
-    def is_suppressed(self, email: Optional[str] = None, domain: Optional[str] = None) -> bool:
-        if not self.suppression_store:
+    def _get_db_conn(self) -> Optional[sqlite3.Connection]:
+        if hasattr(self.suppression_store, "store") and hasattr(self.suppression_store.store, "_get_connection"):
+            return self.suppression_store.store._get_connection()
+        elif hasattr(self.suppression_store, "_get_connection"):
+            return self.suppression_store._get_connection()
+        elif self.db_path and Path(self.db_path).exists():
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            return conn
+        return None
+
+    def is_domain_suppressed(self, domain: Optional[str]) -> bool:
+        """
+        Checks explicit domain-level suppression ONLY.
+        Does NOT suppress a domain based on single email addresses on that domain.
+        """
+        if not domain:
+            return False
+        clean_domain = domain.strip().lower()
+        if not clean_domain:
             return False
 
-        clean_email = email.strip().lower() if email else None
-        clean_domain = domain.strip().lower() if domain else None
-
-        # 1. Direct connection check if available (safest against real SQLite suppression_list)
-        try:
-            conn_target = None
-            if hasattr(self.suppression_store, "store") and hasattr(self.suppression_store.store, "_get_connection"):
-                conn_target = self.suppression_store.store._get_connection()
-            elif hasattr(self.suppression_store, "_get_connection"):
-                conn_target = self.suppression_store._get_connection()
-
-            if conn_target:
-                with conn_target as conn:
-                    if clean_email:
-                        r = conn.execute("SELECT 1 FROM suppression_list WHERE LOWER(email) = ? LIMIT 1", (clean_email,)).fetchone()
-                        if r:
-                            return True
-                    if clean_domain:
-                        r = conn.execute("SELECT 1 FROM suppression_list WHERE LOWER(company_domain) = ? LIMIT 1", (clean_domain,)).fetchone()
-                        if r:
-                            return True
-                        r_like = conn.execute("SELECT 1 FROM suppression_list WHERE LOWER(email) LIKE ? LIMIT 1", (f"%@{clean_domain}",)).fetchone()
-                        if r_like:
-                            return True
-        except Exception:
-            pass
-
-        # 2. Method check on suppression_store
-        if clean_email and hasattr(self.suppression_store, "is_suppressed"):
+        # 1. Direct DB check against real Phase 9 suppression_list table
+        conn = self._get_db_conn()
+        if conn:
             try:
-                if self.suppression_store.is_suppressed(clean_email, clean_domain):
+                cur = conn.cursor()
+                r = cur.execute(
+                    "SELECT 1 FROM suppression_list WHERE (company_domain IS NOT NULL AND LOWER(company_domain) = ?) OR (scope = 'domain' AND LOWER(value) = ?) LIMIT 1",
+                    (clean_domain, clean_domain)
+                ).fetchone()
+                if r:
                     return True
-            except TypeError:
-                if self.suppression_store.is_suppressed(clean_email):
-                    return True
-
-        if clean_domain:
-            if hasattr(self.suppression_store, "is_domain_suppressed"):
-                if self.suppression_store.is_domain_suppressed(clean_domain):
-                    return True
-            # Fallback to is_suppressed with synthetic email on the domain
-            if hasattr(self.suppression_store, "is_suppressed"):
-                try:
-                    if self.suppression_store.is_suppressed(f"domain-check@{clean_domain}", clean_domain):
-                        return True
-                except Exception:
-                    pass
-
-        # 3. Check list_suppressed if available
-        if hasattr(self.suppression_store, "list_suppressed"):
-            try:
-                for entry in self.suppression_store.list_suppressed():
-                    e_dom = getattr(entry, "company_domain", None)
-                    e_mail = getattr(entry, "email", None)
-                    if clean_domain and e_dom and e_dom.lower() == clean_domain:
-                        return True
-                    if clean_email and e_mail and e_mail.lower() == clean_email:
-                        return True
-                    if clean_domain and e_mail and e_mail.lower().endswith(f"@{clean_domain}"):
-                        return True
             except Exception:
                 pass
 
+        # 2. Store method if available
+        if self.suppression_store:
+            if hasattr(self.suppression_store, "is_domain_suppressed"):
+                try:
+                    if self.suppression_store.is_domain_suppressed(clean_domain):
+                        return True
+                except Exception:
+                    pass
+            # list_suppressed check
+            if hasattr(self.suppression_store, "list_suppressed"):
+                try:
+                    for entry in self.suppression_store.list_suppressed():
+                        e_dom = getattr(entry, "company_domain", None)
+                        scope = getattr(entry, "scope", None)
+                        val = getattr(entry, "value", None)
+                        if e_dom and e_dom.lower() == clean_domain:
+                            return True
+                        if scope == "domain" and val and val.lower() == clean_domain:
+                            return True
+                except Exception:
+                    pass
+        return False
+
+    def is_email_suppressed(self, email: Optional[str]) -> bool:
+        """
+        Checks if an email is suppressed (either directly or via its domain).
+        """
+        if not email:
+            return False
+        clean_email = email.strip().lower()
+        if not clean_email:
+            return False
+
+        # First check if the email's domain is domain-suppressed
+        if "@" in clean_email:
+            domain_part = clean_email.split("@", 1)[1]
+            if self.is_domain_suppressed(domain_part):
+                return True
+
+        # Check exact email in database
+        conn = self._get_db_conn()
+        if conn:
+            try:
+                cur = conn.cursor()
+                r = cur.execute(
+                    "SELECT 1 FROM suppression_list WHERE LOWER(email) = ? OR (scope = 'email' AND LOWER(value) = ?) LIMIT 1",
+                    (clean_email, clean_email)
+                ).fetchone()
+                if r:
+                    return True
+            except Exception:
+                pass
+
+        if self.suppression_store:
+            if hasattr(self.suppression_store, "is_suppressed"):
+                try:
+                    if self.suppression_store.is_suppressed(clean_email):
+                        return True
+                except TypeError:
+                    pass
+            if hasattr(self.suppression_store, "list_suppressed"):
+                try:
+                    for entry in self.suppression_store.list_suppressed():
+                        e_mail = getattr(entry, "email", None)
+                        scope = getattr(entry, "scope", None)
+                        val = getattr(entry, "value", None)
+                        if e_mail and e_mail.lower() == clean_email:
+                            return True
+                        if scope == "email" and val and val.lower() == clean_email:
+                            return True
+                except Exception:
+                    pass
+        return False
+
+    def is_suppressed(self, email: Optional[str] = None, domain: Optional[str] = None, company_domain: Optional[str] = None) -> bool:
+        """
+        Universal read-only check.
+        If email is provided, checks email suppression.
+        If domain / company_domain is provided, checks domain suppression.
+        """
+        eff_domain = domain or company_domain
+        if email and self.is_email_suppressed(email):
+            return True
+        if eff_domain and self.is_domain_suppressed(eff_domain):
+            return True
         return False
 
     def enforce_safety_on_candidate(self, candidate: CandidateCompany) -> CandidateCompany:
-        if self.is_suppressed(domain=candidate.canonical_domain):
+        if self.is_domain_suppressed(candidate.canonical_domain):
             candidate.cold_outreach_allowed = False
             candidate.suppressed = True
             candidate.status = DiscoveryStatus.suppressed
@@ -372,6 +451,7 @@ class Phase10ConsoleBridge:
                 "company_id": c.company_id,
                 "name": c.name,
                 "canonical_domain": c.canonical_domain,
+                "country": c.country,
                 "status": _get_val(c.status),
                 "company_tier": _get_val(c.company_tier),
                 "bim_maturity": _get_val(c.bim_maturity),
@@ -380,6 +460,9 @@ class Phase10ConsoleBridge:
                 "relationship_type": _get_val(c.relationship_type),
                 "opportunity_types": [_get_val(o) for o in c.opportunity_types],
                 "cold_outreach_allowed": c.cold_outreach_allowed,
+                "qualification_outcome": _get_val(c.qualification_outcome) if c.qualification_outcome else None,
+                "qualification_reason": c.qualification_reason,
+                "historical_outreach_summary": c.historical_contact_status,
                 "created_at": c.first_seen_at,
             })
         return results
@@ -389,18 +472,31 @@ class Phase10ConsoleBridge:
         if not company:
             return None
         obs = self.store.get_observations_for_company(company_id)
+        ev = self.store.get_evidence(company_id)
         comp_dict = company.model_dump() if hasattr(company, "model_dump") else dict(company)
         comp_dict["name"] = comp_dict.get("company_name")
         comp_dict["company_id"] = comp_dict.get("candidate_id")
         comp_dict["canonical_domain"] = comp_dict.get("company_domain")
         obs_dicts = [o.model_dump() if hasattr(o, "model_dump") else dict(o) for o in obs]
+        ev_dicts = [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in ev]
         return {
             "company": comp_dict,
             "observations": obs_dicts,
             "observation_count": len(obs),
+            "evidence": ev_dicts,
+            "evidence_count": len(ev),
         }
 
     def get_source_health_summary(self) -> Dict[str, Any]:
+        persisted_health = self.store.get_all_source_health()
+        if persisted_health:
+            res = {}
+            for name, h in persisted_health.items():
+                if isinstance(h, dict):
+                    res[name] = h
+                else:
+                    res[name] = h.model_dump() if hasattr(h, "model_dump") else dict(h)
+            return res
         return self.registry.get_health_summary()
 
     def get_watchlist_summary(self) -> List[Dict[str, Any]]:
@@ -426,4 +522,5 @@ class Phase10ConsoleBridge:
                 "next_check_at": w.get("next_check_at") if isinstance(w, dict) else getattr(w, "next_check_at", None),
             })
         return results
+
 
