@@ -3,7 +3,7 @@
   "description": "Deterministic Candidate Discovery, Multi-Source Ingestion & Qualification Engine",
   "run_timestamp": "2026-10-06T08:48:40.524650+00:00",
   "generated_at": "2026-10-06T08:48:40.524650+00:00",
-  "git_commit": "d36c3f4",
+  "git_commit": "1786acf",
   "total_catalog_cases": 245,
   "total_cases": 245,
   "mapped_executable_cases": 245,
