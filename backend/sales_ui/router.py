@@ -56,6 +56,13 @@ from sales_engine.sending import (
     AuditService,
     DraftEditRequest,
 )
+from sales_engine.sending.approval_service import get_trusted_senders
+
+# Phase 8 Outreach Stack and Phase 6 Schemas
+from backend.schemas import CompanyLead, EnrichedLead, ContactCandidate
+from sales_engine.outreach.outreach_orchestrator import OutreachOrchestrator
+from sales_engine.outreach.schemas import SenderProfile, GenerateDraftsRequest
+from sales_engine.candidates.models import QualificationOutcome, DiscoveryStatus
 
 router = APIRouter(prefix="/sales", tags=["Sales-Console"])
 
@@ -190,6 +197,53 @@ def check_authoritative_suppression(
     if clean_email and not clean_domain and "@" in clean_email:
         clean_domain = clean_email.split("@", 1)[1].strip().lower()
     return supp_store.is_suppressed(email=clean_email, company_domain=clean_domain)
+
+
+def is_candidate_outreach_eligible(cand: Any) -> bool:
+    """
+    Authoritative eligibility for outreach draft generation:
+    - qualification_outcome == 'qualified_for_enrichment' (or legacy discovery_status == 'qualified' / outcome == 'qualified')
+    - cold_outreach_allowed == True
+    - suppressed == False
+    - active_conversation == False
+    - historical_contact_status in ('uncontacted', None, '')
+    - not watchlist
+    - non-qualified outcomes (watchlist, known_company, reengagement_review, suppressed, reject, research_more) strictly ineligible
+    """
+    outcome = getattr(cand, "qualification_outcome", None)
+    if hasattr(outcome, "value"):
+        outcome = outcome.value
+    outcome_str = str(outcome) if outcome else ""
+
+    disc_status = getattr(cand, "discovery_status", "")
+    if hasattr(disc_status, "value"):
+        disc_status = disc_status.value
+    disc_status_str = str(disc_status)
+
+    is_qual = (outcome_str == "qualified_for_enrichment" or disc_status_str == "qualified" or outcome_str == "qualified")
+    if not is_qual:
+        return False
+
+    # Block non-eligible outcomes explicitly
+    if outcome_str in ("watchlist", "known_company", "reengagement_review", "suppressed", "reject", "research_more"):
+        if outcome_str != "qualified_for_enrichment":
+            return False
+
+    if disc_status_str == "watchlist" or outcome_str == "watchlist":
+        return False
+
+    if not getattr(cand, "cold_outreach_allowed", True):
+        return False
+    if getattr(cand, "suppressed", False):
+        return False
+    if getattr(cand, "active_conversation", False):
+        return False
+    if getattr(cand, "historical_contact_status", "uncontacted") in ("contacted", "replied", "converted", "dnc"):
+        return False
+    if getattr(cand, "previous_outreach_detected", False):
+        return False
+
+    return True
 
 
 def resolve_safe_import_path(file_path: str) -> Path:
@@ -367,16 +421,17 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
     for s in sources_raw:
         h = health.get(s.id, health.get(s.name, {}))
         
-        # P10_5-ADV-018: Truthful credential configuration check
-        is_conf = True
+        # P10_5-FINAL-012: Truthful credential configuration check using SourceConfig.credential_env_var
+        is_conf = False
+        config_error = False
         if s.requires_api_key:
-            env_key_patterns = [
-                f"{s.id.upper()}_API_KEY",
-                f"{s.name.upper()}_API_KEY",
-                f"{s.id.upper()}_KEY",
-                f"{s.id.upper()}_TOKEN",
-            ]
-            is_conf = any(os.getenv(k) for k in env_key_patterns)
+            if not getattr(s, "credential_env_var", None):
+                config_error = True
+                is_conf = False
+            else:
+                is_conf = bool(os.getenv(s.credential_env_var))
+        else:
+            is_conf = True
 
         sources.append(
             SourceItemView(
@@ -389,6 +444,7 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
                 countries=s.countries,
                 requires_api_key=s.requires_api_key,
                 is_configured=is_conf,
+                config_error=config_error,
                 status=h.get("status", "operational"),
                 success_count=h.get("success_count", 0),
                 failure_count=h.get("failure_count", 0),
@@ -609,7 +665,7 @@ async def candidates_list_view(
                 automation_potential=c.get("automation_potential"),
                 discovery_sources=c.get("discovery_sources", []),
                 status=c.get("status") or c.get("discovery_status", "new"),
-                is_previously_contacted=bool(c.get("historical_contact_status") or c.get("historical_outreach_summary")),
+                is_previously_contacted=c.get("historical_contact_status") in ("contacted", "replied", "converted", "dnc") or c.get("historical_outreach_summary") in ("contacted", "replied", "converted", "dnc"),
                 is_suppressed=is_supp,
             )
         )
@@ -661,7 +717,7 @@ async def candidate_detail_view(
     
     # Authoritative domain suppression check
     is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand_domain)
-    is_contacted = bool(cand.historical_contact_status or hist_outreach)
+    is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or bool(hist_outreach)
 
     raw_bim = cand.bim_maturity
     bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
@@ -713,10 +769,23 @@ async def candidate_detail_view(
         timeline=timeline_events,
     )
 
-    # Determine draft generation eligibility
-    is_qualified = (cand.discovery_status == "qualified" or getattr(cand, "qualification_outcome", "") == "qualified")
-    is_on_watchlist = (cand.discovery_status == "watchlist")
-    can_generate_draft = is_qualified and not is_supp and not is_contacted and not is_on_watchlist
+    # Determine draft generation eligibility (P10_5-FINAL-005 / 006)
+    can_generate_draft = is_candidate_outreach_eligible(cand) and not is_supp and not is_contacted
+
+    raw_contacts = svcs["cand_store"].get_contacts_for_candidate(candidate_id)
+    contacts_view = []
+    for c in raw_contacts:
+        st = (getattr(c, "email_status", None) or "unknown").strip().lower()
+        w_email = (getattr(c, "work_email", None) or "").strip().lower()
+        is_usable = bool(w_email and EMAIL_REGEX.match(w_email) and st in ("verified", "likely"))
+        contacts_view.append({
+            "contact_id": getattr(c, "contact_id", None) or f"email:{w_email}",
+            "full_name": getattr(c, "full_name", None) or f"{c.first_name or ''} {c.last_name or ''}".strip() or "Unnamed Contact",
+            "job_title": getattr(c, "job_title", None) or "Unknown Title",
+            "work_email": w_email,
+            "email_status": st,
+            "is_eligible": is_usable,
+        })
 
     return render_console_template(
         request=request,
@@ -725,6 +794,7 @@ async def candidate_detail_view(
             "request": request,
             "active_tab": "candidates",
             "detail": view,
+            "contacts": contacts_view,
             "email_send_enabled": is_email_send_enabled(),
             "can_generate_draft": can_generate_draft,
             "message": message,
@@ -805,14 +875,15 @@ async def suppress_candidate_action(
     return RedirectResponse(f"/sales/candidates/{candidate_id}?message=Recipient and domain added to suppression list.", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# P10_5-ADV-022 / ADV-023 / ADV-024: Operator Draft Generation Workflow
+# P10_5-ADV-022 / P10_5-FINAL-001..009: Phase 8 Outreach Generation Delegation
 @router.post("/candidates/{candidate_id}/generate-draft")
 async def generate_candidate_draft_action(
     candidate_id: str,
-    contact_email: str = Form(...),
-    contact_name: Optional[str] = Form(None),
-    contact_title: Optional[str] = Form(None),
+    contact_id: Optional[str] = Form(None),
+    contact_email: Optional[str] = Form(None),
     reviewer: str = Form("local_operator"),
+    language: str = Form("en"),
+    tone: str = Form("professional_concise"),
     csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
@@ -820,72 +891,168 @@ async def generate_candidate_draft_action(
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate company not found")
 
-    cand_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
     cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
 
-    clean_recip = contact_email.strip().lower()
+    # BLOCKER 2: Authoritative Qualification & Safety Guards
+    if not is_candidate_outreach_eligible(cand):
+        disc_status = getattr(cand, "discovery_status", "")
+        if hasattr(disc_status, "value"):
+            disc_status = disc_status.value
+        outcome = getattr(cand, "qualification_outcome", "")
+        if hasattr(outcome, "value"):
+            outcome = outcome.value
 
-    # Guard 1: Email validity
+        if disc_status == "watchlist" or str(outcome) == "watchlist":
+            err_msg = "Candidate is currently watchlisted; fresh cold draft blocked."
+        elif getattr(cand, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc") or getattr(cand, "active_conversation", False) or getattr(cand, "previous_outreach_detected", False):
+            err_msg = "Candidate was historically contacted; fresh cold outreach blocked."
+        elif getattr(cand, "suppressed", False):
+            err_msg = "Candidate is marked as suppressed."
+        elif not getattr(cand, "cold_outreach_allowed", True):
+            err_msg = "Cold outreach is not allowed for this candidate."
+        else:
+            err_msg = f"Candidate is not qualified for outreach (status: {disc_status}, outcome: {outcome})."
+
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={urllib.parse.quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # BLOCKER 3: Contact Resolution & Phase 6 Eligibility Checks
+    # Server resolves contact strictly by contact_id. Arbitrary browser-typed emails cannot bypass Phase 6.
+    if not contact_id or not contact_id.strip():
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Missing contact selection. Must select an existing backend contact.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    resolved_contact = svcs["cand_store"].get_contact_by_id(contact_id.strip(), candidate_id=candidate_id)
+    if not resolved_contact:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Selected contact '{contact_id}' not found in backend records.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    clean_recip = (getattr(resolved_contact, "work_email", None) or "").strip().lower()
     if not clean_recip or not EMAIL_REGEX.match(clean_recip):
         return RedirectResponse(
-            f"/sales/candidates/{candidate_id}?error=Invalid or missing recipient email for draft generation.",
+            f"/sales/candidates/{candidate_id}?error=Contact has missing or invalid work email.",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    # Guard 2: Qualification
-    is_qualified = (cand.discovery_status == "qualified" or getattr(cand, "qualification_outcome", "") == "qualified")
-    if not is_qualified:
+    # Status must be verified or likely (risky, unknown, not_found blocked)
+    contact_status = (getattr(resolved_contact, "email_status", None) or "unknown").strip().lower()
+    if contact_status not in ("verified", "likely"):
         return RedirectResponse(
-            f"/sales/candidates/{candidate_id}?error=Candidate is not qualified for outreach.",
+            f"/sales/candidates/{candidate_id}?error=Contact status '{contact_status}' is not eligible for outreach (verified or likely required).",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    # Guard 3: Watchlist
-    if cand.discovery_status == "watchlist":
-        return RedirectResponse(
-            f"/sales/candidates/{candidate_id}?error=Candidate is currently watchlisted; fresh cold draft blocked.",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
-    # Guard 4: Historically contacted / active conversation
-    if getattr(cand, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc") or getattr(cand, "active_conversation", False):
-        return RedirectResponse(
-            f"/sales/candidates/{candidate_id}?error=Candidate was historically contacted; fresh cold outreach blocked.",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
-    # Guard 5: Suppression
+    # Server-side suppression check
     if check_authoritative_suppression(svcs["suppression_svc"], email=clean_recip, domain=cand_domain):
         return RedirectResponse(
             f"/sales/candidates/{candidate_id}?error=Recipient or company domain is suppressed. Draft generation blocked.",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    # Generate draft into Phase 9 pending_review
-    draft_id = f"draft:{candidate_id[:10]}_{uuid.uuid4().hex[:6]}" if "uuid" in globals() else f"draft:{secrets.token_hex(6)}"
-    new_draft_dict = {
-        "draft_id": draft_id,
-        "revision": 1,
-        "lead_id": f"domain:{cand_domain or candidate_id}",
-        "contact_id": f"email:{clean_recip}",
-        "recipient_name": (contact_name or "BIM Lead").strip(),
-        "recipient_title": (contact_title or "BIM Director").strip(),
-        "recipient_email": clean_recip,
-        "subject": f"BIM & Automation Workflow at {cand_name}",
-        "body": f"Hi {(contact_name or 'there').strip()},\n\nWe noticed {cand_name} is advancing BIM delivery. pyBIM provides Tech-Enabled BIM Services.\n\nOpen to a brief conversation?",
-        "service_used": "Tech-Enabled BIM Services",
-        "personalization_notes": f"Generated from qualified market discovery {cand_name}",
-        "language": "en",
-        "tone": "professional_concise",
+    # BLOCKER 1: Delegate to Frozen Phase 8 Outreach Stack
+    market_ev = svcs["cand_store"].get_evidence(candidate_id)
+    ev_texts = [e.text.strip() for e in market_ev if e.text and e.text.strip()]
+    if getattr(cand, "evidence_refs", None):
+        for er in cand.evidence_refs:
+            if er and er.strip() and er.strip() not in ev_texts:
+                ev_texts.append(er.strip())
+    if getattr(cand, "fit_reasons", None):
+        for fr in cand.fit_reasons:
+            if fr and fr.strip() and fr.strip() not in ev_texts:
+                ev_texts.append(fr.strip())
+
+    lead_signals = []
+    if getattr(cand, "intent_signals", None):
+        for sig in cand.intent_signals:
+            if sig and str(sig).strip():
+                lead_signals.append({"name": "Market Signal", "value": str(sig).strip()})
+
+    base_lead = CompanyLead(
+        company_name=cand.company_name or getattr(cand, "name", "Company"),
+        company_domain=cand_domain,
+        qualified=True,
+        evidence=ev_texts,
+        signals=lead_signals,
+    )
+
+    enriched_lead = EnrichedLead(
+        base_lead=base_lead,
+        best_contact=resolved_contact,
+        contacts=[resolved_contact],
+    )
+
+    trusted_senders = get_trusted_senders()
+    primary_sender = trusted_senders[0] if trusted_senders else (os.environ.get("SMTP_FROM_EMAIL") or os.environ.get("SALES_SENDER_EMAIL") or "outreach@pybim-studio.com")
+    primary_sender_name = os.environ.get("SMTP_FROM_NAME") or "pyBIM Team"
+
+    sender_prof = SenderProfile(
+        sender_name=primary_sender_name,
+        sender_company="pyBIM",
+        sender_role="Technical Consultant",
+        sender_email=primary_sender,
+        sender_website="https://pybim.com",
+    )
+
+    website_prof = {
+        "company_name": "pyBIM",
+        "services": ["Tech-Enabled BIM Services"],
+        "offerings": [{"name": "Tech-Enabled BIM Services", "status": "active"}],
     }
 
-    imported = svcs["approval_svc"].import_drafts([new_draft_dict], reviewer=reviewer)
+    gen_req = GenerateDraftsRequest(
+        leads=[enriched_lead],
+        sender_profile=sender_prof,
+        website_profile=website_prof,
+        language=language if language in ("en", "it", "de") else "en",
+        tone=tone if tone in ("professional_concise", "technical_consultative", "executive_brief") else "professional_concise",
+    )
+
+    orchestrator = svcs.get("outreach_orchestrator") or OutreachOrchestrator()
+    gen_resp = orchestrator.generate_drafts(gen_req)
+
+    if gen_resp.skipped:
+        skip = gen_resp.skipped[0]
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Draft generation skipped: {skip.reason}.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    if gen_resp.errors:
+        err_item = gen_resp.errors[0]
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Phase 8 draft generation error: {err_item.message}.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    if not gen_resp.drafts:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Phase 8 produced no draft.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    p8_draft = gen_resp.drafts[0]
+
+    # Import into Phase 9 Pending Review
+    imported = svcs["approval_svc"].import_drafts([p8_draft.model_dump()], reviewer=reviewer)
     if not imported:
-        return RedirectResponse(f"/sales/candidates/{candidate_id}?error=Failed to import draft into review queue.", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Failed to import Phase 8 draft into review queue.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     created_draft = imported[0]
-    msg = f"Generated draft r{created_draft.revision} for {cand_name}. It is staged in Pending Review."
-    return RedirectResponse(f"/sales/drafts/{created_draft.draft_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+    cand_name = cand.company_name or getattr(cand, "name", "Company")
+    msg = f"Generated Phase 8 draft r{created_draft.revision} for {cand_name}. It is staged in Pending Review."
+    return RedirectResponse(
+        f"/sales/drafts/{created_draft.draft_id}?message={urllib.parse.quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 # ---------------------------------------------------------------------------

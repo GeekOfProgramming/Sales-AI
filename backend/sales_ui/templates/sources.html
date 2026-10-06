@@ -117,7 +117,9 @@
           <td>{{ s.countries|join(', ') if s.countries else 'Global' }}</td>
           <td>
             {% if s.requires_api_key %}
-              {% if s.is_configured %}
+              {% if s.config_error %}
+                <span class="badge badge-warning">Configuration error</span>
+              {% elif s.is_configured %}
                 <span class="badge badge-info">Configured</span>
               {% else %}
                 <span class="badge badge-warning">Not configured</span>

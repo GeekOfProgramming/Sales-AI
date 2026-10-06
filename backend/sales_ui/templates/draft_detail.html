@@ -30,8 +30,8 @@
     <div><strong>Recipient Name:</strong> {{ draft.recipient_name }}</div>
     <div><strong>Recipient Title:</strong> {{ draft.recipient_title or 'N/A' }}</div>
     <div><strong>Recipient Email:</strong> <code>{{ draft.recipient_email }}</code></div>
-    <div><strong>Sender Name:</strong> {{ draft.sender_name or 'pyBIM Team' }}</div>
-    <div><strong>Sender Email:</strong> <code>{{ draft.sender_email or 'sales@pybim.it' }}</code></div>
+    <div><strong>Sender Name:</strong> {{ draft.sender_name or 'Sender not configured' }}</div>
+    <div><strong>Sender Email:</strong> <code>{{ draft.sender_email or 'Sender not configured' }}</code></div>
     <div><strong>Service Pitched:</strong> {{ draft.service_used or 'Tech-Enabled BIM Services' }}</div>
     <div><strong>Approved Hash:</strong> <code>{{ draft.approved_fingerprint_short or 'None' }}</code></div>
   </div>
@@ -84,8 +84,10 @@
         <button type="submit" class="btn btn-secondary">🧪 Dry Run</button>
       </form>
 
-      {% if draft.can_send and not draft.is_suppressed and email_send_enabled %}
-      <button type="button" class="btn btn-primary" onclick="openSendConfirmation('{{ draft.draft_id }}', {{ draft.revision }}, '{{ draft.recipient_email }}', '{{ draft.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ draft.company_name|replace('\'', '\\\'') }}', '{{ draft.sender_name|replace('\'', '\\\'') or 'pyBIM Team' }}', '{{ draft.sender_email or 'sales@pybim.it' }}', '{{ draft.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
+      {% if not draft.sender_email %}
+      <button type="button" class="btn btn-secondary" disabled title="Sender email not configured">🚫 Sender Not Configured</button>
+      {% elif draft.can_send and not draft.is_suppressed and email_send_enabled %}
+      <button type="button" class="btn btn-primary" onclick="openSendConfirmation('{{ draft.draft_id }}', {{ draft.revision }}, '{{ draft.recipient_email }}', '{{ draft.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ draft.company_name|replace('\'', '\\\'') }}', '{{ draft.sender_name|replace('\'', '\\\'') if draft.sender_name else '' }}', '{{ draft.sender_email if draft.sender_email else '' }}', '{{ draft.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
         📤 Send Real Email...
       </button>
       {% elif draft.is_suppressed %}

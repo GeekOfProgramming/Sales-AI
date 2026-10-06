@@ -13,8 +13,9 @@ import pytest
 from starlette.testclient import TestClient
 
 from backend.main import app
+from backend.schemas import ContactCandidate
 from sales_engine.candidates.candidate_store import CandidateStore
-from sales_engine.candidates.models import CandidateCompany, MarketEvidence
+from sales_engine.candidates.models import CandidateCompany, MarketEvidence, QualificationOutcome
 from sales_engine.sending.review_store import ReviewStore
 from sales_engine.sending.approval_service import ApprovalService, compute_content_fingerprint
 from sales_engine.sending.suppression_store import SuppressionStore
@@ -92,6 +93,16 @@ def adv_data():
         discovery_status="qualified",
     )
     cand_store.save_candidate(c_blocked)
+    cand_store.save_contact(
+        ContactCandidate(
+            contact_id="contact_blocked_ceo",
+            full_name="Blocked CEO",
+            job_title="Chief Executive",
+            work_email="ceo@blocked.test",
+            email_status="verified",
+        ),
+        candidate_id="cand_blocked_co",
+    )
 
     # Candidate 2: Qualified company ready for draft generation
     c_qual = CandidateCompany(
@@ -102,8 +113,29 @@ def adv_data():
         company_tier="tier_1",
         bim_maturity="high",
         discovery_status="qualified",
+        qualification_outcome=QualificationOutcome.qualified_for_enrichment,
     )
     cand_store.save_candidate(c_qual)
+    cand_store.save_evidence(
+        MarketEvidence(
+            evidence_id="ev_qual_01",
+            candidate_id="cand_qual_studio",
+            category="service",
+            signal_type="bim_service",
+            text="Studio Qualificato BIM provides automated Revit drafting and model validation.",
+        )
+    )
+    cand_store.save_contact(
+        ContactCandidate(
+            contact_id="contact_elena_rossi",
+            full_name="Elena Rossi",
+            job_title="BIM Director",
+            work_email="elena@studio-qualificato.it",
+            email_status="verified",
+            email_confidence=95,
+        ),
+        candidate_id="cand_qual_studio",
+    )
 
     # Candidate 3: Watchlist candidate (not qualified)
     c_watch = CandidateCompany(
@@ -113,8 +145,19 @@ def adv_data():
         country="IT",
         company_tier="tier_2",
         discovery_status="watchlist",
+        qualification_outcome=QualificationOutcome.watchlist,
     )
     cand_store.save_candidate(c_watch)
+    cand_store.save_contact(
+        ContactCandidate(
+            contact_id="contact_watchlist_director",
+            full_name="Watchlist Director",
+            job_title="Director",
+            work_email="director@watchlist-ing.it",
+            email_status="verified",
+        ),
+        candidate_id="cand_watchlist_co",
+    )
 
     # Seed Draft 1: Belonging to blocked domain
     draft_blocked = StoredDraft(
@@ -558,16 +601,36 @@ def test_adv_021_safe_evidence_urls_clickable(client, adv_data):
 # ===========================================================================
 
 def test_adv_022_qualified_lead_generates_draft_pending_review(client, adv_data):
-    """P10_5-ADV-022: Qualified lead with contact generates draft into pending_review."""
-    res = client.post(
-        "/sales/candidates/cand_qual_studio/generate-draft",
-        data={
-            "contact_email": "elena@studio-qualificato.it",
-            "contact_name": "Elena Rossi",
-            "contact_title": "BIM Director",
-        },
-        follow_redirects=False,
+    """P10_5-ADV-022: Qualified lead with contact generates draft into pending_review via Phase 8."""
+    from unittest.mock import patch
+    from sales_engine.outreach.email_generator import EmailGenerator
+    from sales_engine.outreach.schemas import EmailDraft
+
+    p8_draft = EmailDraft(
+        draft_id="draft:cand_qual_studio:contact_elena_rossi:outreach_v1:r1",
+        revision=1,
+        lead_id="domain:studio-qualificato.it",
+        contact_id="email:elena@studio-qualificato.it",
+        recipient_name="Elena Rossi",
+        recipient_title="BIM Director",
+        recipient_email="elena@studio-qualificato.it",
+        subject="BIM Automation for Studio Qualificato",
+        body="Hi Elena, We noticed your BIM automation practice. Tech-Enabled BIM Services can accelerate delivery. Open to a brief call?",
+        service_used="Tech-Enabled BIM Services",
+        personalization_notes="Grounded in BIM service evidence",
+        evidence_refs=["SERVICE-001"],
+        generation_model="qwen2.5:1.5b",
+        prompt_version="outreach_v1",
     )
+
+    with patch.object(EmailGenerator, "generate_draft", return_value=(p8_draft, None, None)):
+        res = client.post(
+            "/sales/candidates/cand_qual_studio/generate-draft",
+            data={
+                "contact_id": "contact_elena_rossi",
+            },
+            follow_redirects=False,
+        )
     assert res.status_code == 303
     loc = res.headers.get("location", "")
     assert "/sales/drafts/draft" in loc
@@ -586,7 +649,7 @@ def test_adv_023_non_qualified_or_suppressed_lead_blocks_draft_generation(client
     # 1. Non-qualified watchlist lead
     res_w = client.post(
         "/sales/candidates/cand_watchlist_co/generate-draft",
-        data={"contact_email": "director@watchlist-ing.it"},
+        data={"contact_id": "contact_watchlist_director"},
         follow_redirects=False,
     )
     assert res_w.status_code == 303
@@ -595,7 +658,7 @@ def test_adv_023_non_qualified_or_suppressed_lead_blocks_draft_generation(client
     # 2. Suppressed company
     res_s = client.post(
         "/sales/candidates/cand_blocked_co/generate-draft",
-        data={"contact_email": "ceo@blocked.test"},
+        data={"contact_id": "contact_blocked_ceo"},
         follow_redirects=False,
     )
     assert res_s.status_code == 303

@@ -17,11 +17,14 @@ document.addEventListener("DOMContentLoaded", function () {
     if (sendDraftIdInput) sendDraftIdInput.value = draftId;
     if (sendRevisionInput) sendRevisionInput.value = revision;
     if (sendConfirmForm) sendConfirmForm.action = `/sales/drafts/${encodeURIComponent(draftId)}/send`;
+    const senderDisplay = fromEmail ? escapeHtml(fromEmail) : '<span style="color:#ef4444; font-weight:bold;">Sender not configured</span>';
+    const nameDisplay = fromName ? escapeHtml(fromName) : '<span style="color:#94a3b8;">Sender not configured</span>';
+    const canSubmit = Boolean(fromEmail && fromEmail.trim());
     if (sendDetailsDiv) {
       sendDetailsDiv.innerHTML = `
         <div style="background:#111827; padding:0.85rem; border-radius:6px; margin:0.75rem 0; font-size:0.875rem;">
-          <p><strong>From Name:</strong> ${escapeHtml(fromName || 'pyBIM Team')}</p>
-          <p><strong>From Email:</strong> <code>${escapeHtml(fromEmail || 'sales@pybim.it')}</code></p>
+          <p><strong>From Name:</strong> ${nameDisplay}</p>
+          <p><strong>From Email:</strong> <code>${senderDisplay}</code></p>
           <p><strong>To:</strong> <code>${escapeHtml(recipient)}</code></p>
           <p><strong>Company:</strong> ${escapeHtml(company || 'N/A')}</p>
           <p><strong>Subject:</strong> ${escapeHtml(subject)}</p>
@@ -29,10 +32,12 @@ document.addEventListener("DOMContentLoaded", function () {
           <p style="margin-top:0.5rem;"><strong>Full Body:</strong></p>
           <pre style="background:#0b0f19; padding:0.6rem; border-radius:4px; max-height:160px; overflow-y:auto; white-space:pre-wrap; font-family:monospace; font-size:0.8rem; color:#cbd5e1; border:1px solid #1e293b;">${escapeHtml(fullBody || '')}</pre>
         </div>
-        <p style="color:#ef4444; font-weight:700; margin-top:0.75rem;">
-          ⚠️ This will send one real email.
-        </p>
+        ${!canSubmit ? '<p style="color:#ef4444; font-weight:700; margin-top:0.75rem;">⛔ Cannot send: Sender email is not configured.</p>' : '<p style="color:#ef4444; font-weight:700; margin-top:0.75rem;">⚠️ This will send one real email.</p>'}
       `;
+    }
+    const submitBtn = sendModal.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = !canSubmit;
     }
     sendModal.classList.add("active");
   };

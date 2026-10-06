@@ -183,6 +183,7 @@ class SourceItemView(BaseModel):
     countries: List[str] = Field(default_factory=list)
     requires_api_key: bool = False
     is_configured: bool = True
+    config_error: bool = False
     status: str = "operational"
     success_count: int = 0
     failure_count: int = 0

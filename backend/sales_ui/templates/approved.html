@@ -55,8 +55,10 @@
                 <input type="hidden" name="reviewer" value="local_operator">
                 <button type="submit" class="btn btn-secondary btn-sm">Dry Run</button>
               </form>
-              {% if not d.is_suppressed and email_send_enabled %}
-              <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ d.company_name|replace('\'', '\\\'') }}', '{{ d.sender_name|replace('\'', '\\\'') or 'pyBIM Team' }}', '{{ d.sender_email or 'sales@pybim.it' }}', '{{ d.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
+              {% if not d.sender_email %}
+              <button type="button" class="btn btn-secondary btn-sm" disabled title="Sender email not configured">Send</button>
+              {% elif not d.is_suppressed and email_send_enabled %}
+              <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ d.company_name|replace('\'', '\\\'') }}', '{{ d.sender_name|replace('\'', '\\\'') if d.sender_name else '' }}', '{{ d.sender_email if d.sender_email else '' }}', '{{ d.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
                 Send...
               </button>
               {% else %}

@@ -79,7 +79,7 @@
   </div>
 </div>
 
-<!-- Operator Draft Generation Section (P10_5-ADV-022) -->
+<!-- Operator Draft Generation Section (P10_5-ADV-022 / P10_5-FINAL-007..009) -->
 {% if can_generate_draft %}
 <div class="card" id="generate-draft-section">
   <div class="card-title">
@@ -87,26 +87,29 @@
     <span class="badge badge-success">Eligible for Outreach</span>
   </div>
   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-    This company is qualified and clear of historical contacts, active conversations, or suppression. Select or enter a business contact to create an initial outreach draft staged in <strong>Pending Review</strong>.
+    This company is qualified and clear of historical contacts, active conversations, or suppression. Select an existing backend contact with a <strong>verified</strong> or <strong>likely</strong> email to generate an initial outreach draft staged in <strong>Pending Review</strong>.
   </p>
+  {% if contacts %}
   <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/generate-draft">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-      <div class="form-group">
-        <label class="form-label">Contact Name</label>
-        <input type="text" name="contact_name" class="form-control" placeholder="e.g. Marco Rossi" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Contact Title</label>
-        <input type="text" name="contact_title" class="form-control" placeholder="e.g. BIM Director">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Work Email</label>
-        <input type="email" name="contact_email" class="form-control" placeholder="e.g. m.rossi@{{ detail.candidate.domain or 'company.com' }}" required>
-      </div>
+    <div style="margin-bottom: 1rem; max-width: 550px;">
+      <label class="form-label">Target Phase 6 Contact</label>
+      <select name="contact_id" class="form-control" required style="width: 100%;">
+        <option value="" disabled selected>-- Select an eligible verified/likely contact --</option>
+        {% for c in contacts %}
+          <option value="{{ c.contact_id }}" {% if not c.is_eligible %}disabled{% endif %}>
+            {{ c.full_name }} ({{ c.job_title }}) — {{ c.work_email }} [{{ c.email_status|upper }}]{% if not c.is_eligible %} (Ineligible){% endif %}
+          </option>
+        {% endfor %}
+      </select>
     </div>
-    <button type="submit" class="btn btn-primary">⚡ Generate Draft (Enters Pending Review)</button>
+    <button type="submit" class="btn btn-primary" id="btn-generate-draft">⚡ Generate Draft (Delegates to Phase 8)</button>
   </form>
+  {% else %}
+  <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 0.85rem; color: #fca5a5; font-size: 0.875rem;">
+    ⚠️ No Phase 6 contacts discovered for this candidate company yet. Enrichment is required before generating outreach drafts.
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 

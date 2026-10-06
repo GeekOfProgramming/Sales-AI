@@ -9,9 +9,12 @@ import json
 import sqlite3
 import re
 import urllib.parse
+import uuid
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 from datetime import datetime, timezone
+
+from backend.schemas import ContactCandidate
 
 from sales_engine.candidates.models import (
     CandidateCompany,
@@ -245,6 +248,29 @@ class CandidateStore:
                     raw_row_hash TEXT UNIQUE,
                     FOREIGN KEY (candidate_id) REFERENCES candidate_companies(candidate_id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS candidate_contacts (
+                    contact_id TEXT PRIMARY KEY,
+                    candidate_id TEXT NOT NULL,
+                    first_name TEXT,
+                    last_name TEXT,
+                    full_name TEXT,
+                    job_title TEXT,
+                    work_email TEXT,
+                    email_status TEXT DEFAULT 'unknown',
+                    email_confidence INTEGER DEFAULT 0,
+                    seniority TEXT,
+                    department TEXT,
+                    linkedin_url TEXT,
+                    provider TEXT,
+                    provider_person_id TEXT,
+                    buyer_role_match TEXT,
+                    contact_score INTEGER DEFAULT 0,
+                    created_at TEXT,
+                    FOREIGN KEY (candidate_id) REFERENCES candidate_companies(candidate_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_contact_cand ON candidate_contacts(candidate_id);
 
                 CREATE TABLE IF NOT EXISTS discovery_runs (
                     run_id TEXT PRIMARY KEY,
@@ -1010,5 +1036,148 @@ class CandidateStore:
 
     def generate_company_id(self, name: str, domain: Optional[str] = None, country: Optional[str] = None) -> str:
         return self._generate_candidate_id(domain, name, country)
+
+    def save_contact(self, contact: Union[ContactCandidate, Dict[str, Any]], candidate_id: str) -> ContactCandidate:
+        """Persist a Phase 6 contact candidate linked to a candidate company."""
+        if isinstance(contact, dict):
+            c_dict = dict(contact)
+            cid = c_dict.get("contact_id") or f"contact:{c_dict.get('work_email') or uuid.uuid4().hex[:8]}"
+            c_dict["contact_id"] = cid
+            obj = ContactCandidate(**c_dict)
+        else:
+            obj = contact
+            if not getattr(obj, "contact_id", None):
+                obj.contact_id = f"contact:{obj.work_email or uuid.uuid4().hex[:8]}"
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO candidate_contacts (
+                    contact_id, candidate_id, first_name, last_name, full_name,
+                    job_title, work_email, email_status, email_confidence,
+                    seniority, department, linkedin_url, provider,
+                    provider_person_id, buyer_role_match, contact_score, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(contact_id) DO UPDATE SET
+                    full_name = excluded.full_name,
+                    job_title = excluded.job_title,
+                    work_email = excluded.work_email,
+                    email_status = excluded.email_status,
+                    email_confidence = excluded.email_confidence,
+                    linkedin_url = excluded.linkedin_url
+                """,
+                (
+                    obj.contact_id,
+                    candidate_id,
+                    obj.first_name,
+                    obj.last_name,
+                    obj.full_name or f"{obj.first_name or ''} {obj.last_name or ''}".strip(),
+                    obj.job_title,
+                    obj.work_email,
+                    obj.email_status or "unknown",
+                    obj.email_confidence or 0,
+                    obj.seniority,
+                    obj.department,
+                    obj.linkedin_url,
+                    obj.provider,
+                    obj.provider_person_id,
+                    obj.buyer_role_match,
+                    obj.contact_score or 0,
+                    now_iso,
+                ),
+            )
+        return obj
+
+    def get_contacts_for_candidate(self, candidate_id: str) -> List[ContactCandidate]:
+        """Retrieve all registered Phase 6 contacts for a candidate company."""
+        results: List[ContactCandidate] = []
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM candidate_contacts WHERE candidate_id = ? ORDER BY contact_score DESC, created_at ASC",
+                (candidate_id,),
+            ).fetchall()
+            for r in rows:
+                results.append(
+                    ContactCandidate(
+                        contact_id=r["contact_id"],
+                        first_name=r["first_name"],
+                        last_name=r["last_name"],
+                        full_name=r["full_name"],
+                        job_title=r["job_title"],
+                        work_email=r["work_email"],
+                        email_status=r["email_status"],
+                        email_confidence=r["email_confidence"],
+                        seniority=r["seniority"],
+                        department=r["department"],
+                        linkedin_url=r["linkedin_url"],
+                        provider=r["provider"],
+                        provider_person_id=r["provider_person_id"],
+                        buyer_role_match=r["buyer_role_match"],
+                        contact_score=r["contact_score"],
+                    )
+                )
+
+        # Fallback to candidate metadata if no DB rows
+        if not results:
+            cand = self.get_candidate(candidate_id)
+            if cand and isinstance(cand.metadata, dict):
+                meta_contacts = cand.metadata.get("contacts") or []
+                if not meta_contacts and cand.metadata.get("best_contact"):
+                    meta_contacts = [cand.metadata["best_contact"]]
+                for mc in meta_contacts:
+                    if isinstance(mc, dict):
+                        mc_copy = dict(mc)
+                        if "contact_id" not in mc_copy:
+                            mc_copy["contact_id"] = f"contact:{mc_copy.get('work_email') or uuid.uuid4().hex[:8]}"
+                        results.append(ContactCandidate(**mc_copy))
+                    elif isinstance(mc, ContactCandidate):
+                        if not mc.contact_id:
+                            mc.contact_id = f"contact:{mc.work_email or uuid.uuid4().hex[:8]}"
+                        results.append(mc)
+
+        return results
+
+    def get_contact_by_id(self, contact_id: str, candidate_id: Optional[str] = None) -> Optional[ContactCandidate]:
+        """Resolve a specific contact by contact_id or work_email."""
+        clean_cid = contact_id.strip()
+        with self._get_connection() as conn:
+            if candidate_id:
+                row = conn.execute(
+                    "SELECT * FROM candidate_contacts WHERE (contact_id = ? OR work_email = ?) AND candidate_id = ?",
+                    (clean_cid, clean_cid, candidate_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM candidate_contacts WHERE contact_id = ? OR work_email = ?",
+                    (clean_cid, clean_cid),
+                ).fetchone()
+
+            if row:
+                return ContactCandidate(
+                    contact_id=row["contact_id"],
+                    first_name=row["first_name"],
+                    last_name=row["last_name"],
+                    full_name=row["full_name"],
+                    job_title=row["job_title"],
+                    work_email=row["work_email"],
+                    email_status=row["email_status"],
+                    email_confidence=row["email_confidence"],
+                    seniority=row["seniority"],
+                    department=row["department"],
+                    linkedin_url=row["linkedin_url"],
+                    provider=row["provider"],
+                    provider_person_id=row["provider_person_id"],
+                    buyer_role_match=row["buyer_role_match"],
+                    contact_score=row["contact_score"],
+                )
+
+        # Fallback to candidate metadata
+        if candidate_id:
+            all_c = self.get_contacts_for_candidate(candidate_id)
+            for c in all_c:
+                if c.contact_id == clean_cid or c.work_email == clean_cid:
+                    return c
+        return None
 
 
