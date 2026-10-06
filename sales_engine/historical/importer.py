@@ -64,6 +64,26 @@ def parse_bool(val: Any) -> bool:
     return False
 
 
+def normalize_emails(email_cell: Optional[str]) -> List[str]:
+    """
+    Splits multi-email cells and normalizes each valid email to lowercase.
+    """
+    if not email_cell:
+        return []
+    chunks = EMAIL_SPLIT_REGEX.split(str(email_cell))
+    clean_emails = []
+    for ch in chunks:
+        ch = ch.strip().strip("'\"<>")
+        if not ch:
+            continue
+        matches = EMAIL_BASIC_REGEX.findall(ch)
+        for m in matches:
+            m_clean = m.lower().strip()
+            if m_clean and m_clean not in clean_emails:
+                clean_emails.append(m_clean)
+    return clean_emails
+
+
 @dataclass
 class HistoricalRecord:
     source_file: str

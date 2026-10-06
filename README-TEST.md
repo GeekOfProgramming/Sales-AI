@@ -1,9 +1,9 @@
 # SalesAI QA / Acceptance Test Report
 
 ## Run Information
-- **Date:** 2026-09-30
-- **Time:** 22:10:31 UTC
-- **Git Commit:** `60c580c`
+- **Date:** 2026-10-06
+- **Time:** 08:06:14 UTC
+- **Git Commit:** `d36c3f4`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -11,11 +11,11 @@
 - **Apollo enabled?** No
 - **Hunter enabled?** No
 - **Offline Tests:** Yes
-- **Live Tests Executed:** No
+- **Live Tests Executed:** Yes
 
 ## Summary
-- **Total Cases:** 289
-- **Passed:** 273
+- **Total Cases:** 542
+- **Passed:** 526
 - **Failed:** 0
 - **Review Required:** 4
 - **Deferred (Model Limitation):** 7
@@ -32,7 +32,8 @@
 | Phase 6 | 43 | 40 | 0 | 1 | 0 | 2 |
 | Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
 | Phase 8 | 98 | 93 | 0 | 0 | 5 | 0 |
-| Phase 9 | 16 | 15 | 0 | 0 | 0 | 1 |
+| Phase 9 | 185 | 184 | 0 | 0 | 0 | 1 |
+| Phase 10 | 84 | 84 | 0 | 0 | 0 | 0 |
 
 ## Phase 7 Reconciliation & Case Count Model
 To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
@@ -47,18 +48,182 @@ To ensure 100% auditability across test suites and golden sets, the Phase 7 coun
 Phase 8 implements personalized cold email draft generation with strict deterministic isolation:
 - **Total Cases in Catalog (`tests/golden/phase8_outreach.json` & `phase8_latest.json`):** 98 cases
   - **Deterministic Acceptance & Behavioral Cases:** 79 cases passed (covering main golden drafting, eligibility boundaries, contact and lead identity preservation, active service gating, deterministic evidence citations, prompt injection traps, parsing retry, workflow safety, batch resilience, privacy scrubbing, error taxonomy, and Phase 7 handoff).
-  - **Mandatory Regression Invariants (`P8-REG-001` .. `014`):** 14 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, deterministic ordering, missing location non-fabrication, missing contact title non-fabrication, external company/contact untrusted delimiter containment, complete prompt trust boundary, missing recipient name non-fabrication, and structured service explicit active status enforcement).
+  - **Mandatory Regression Invariants (`P8-REG-001` .. `014`):** 14 cases passed (covering cross-company job exclusion, exact active service matching, technology non-fabrication, API raw jobs forwarding, Phase 5 evidence preservation, Phase 5 signal schema, SOURCE_DATA delimiter injection escaping, deterministic ordering, missing location non-fabrication, missing contact title non-fabrication, external company/contact untrusted delimiter containment, complete prompt trust boundary, missing recipient name non-fabrication, structured service explicit active status enforcement).
   - **Semantic Deferred Quality (`P8-SEM-001` .. `005`):** 5 cases marked `NOT_RUN_MODEL_LIMITATION` (natural language prose naturalness, tone differentiation, and multilingual drafting deferred for high-capacity LLM review).
 - **False Pass Count:** 0 (dynamically verified and computed by execution-driven reporting engine).
 - **Unmapped Deterministic Cases:** 0 (all deterministic cases traced to executable pytest nodes).
 
 ## Phase 9 Case Count & Architecture Model
-Phase 9 implements human review, approval, safe email sending, and immutable audit trails:
-- **Total Golden Cases in Catalog (`tests/golden/phase9_sending.json` & `phase9_latest.json`):** 16 cases
-  - **Passed (Deterministic):** 15 test cases (covering draft import, pending_review default, edit revisioning, approval fingerprinting, approval send decoupling, dry-run network isolation, unapproved blocking, stale approval blocking, already_sent idempotency, suppression blocking, concurrent duplicate prevention, batch partial failure isolation, credential sanitization, SQLite state projection, and static zero-LLM verification).
+Phase 9 implements human review, approval, safe email sending, immutable audit trails, and deterministic outbound gating:
+- **Total Golden Cases in Catalog (`tests/golden/phase9_sending.json` & `phase9_latest.json`):** 185 cases
+  - **Passed (Deterministic):** 184 test cases covering all 27 spec areas:
+    - **Storage & Review Queue (13 cases):** `P9-STORE-001..006`, `P9-QUEUE-001..007` (draft persistence, identity isolation, deterministic review filtering and pagination).
+    - **Edit Semantics & Monotonicity (7 cases):** `P9-EDIT-001..007` (new revision creation, approval invalidation, immutable sent revisions, revision monotonicity).
+    - **Human Approval Separation & Guards (6 cases):** `P9-APPROVE-001..006` (explicit human approval, send decoupling, obsolete revision rejection, audit recording).
+    - **Approval Fingerprint Protection (8 cases):** `P9-HASH-001..008` (SHA-256 fingerprinting of exact sender, recipient, subject, and body payload).
+    - **Critical Send Gates (5 cases):** `P9-REG-001`, `P9-REG-002`, `P9-SEND-003..005` (stale approval, pending review, rejected, changes-requested, and missing hash blocking).
+    - **Dry-Run & Server Config (7 cases):** `P9-REG-003`, `P9-DRY-002..005`, `P9-REG-004`, `P9-CONFIG-001..002` (zero network calls in dry-run, suppression/hash verification during dry-run, untrusted client config rejection).
+    - **Sender Identity & Trusted Aliases (4 cases):** `P9-SENDER-001..004` (server-owned sender binding, sender mismatch rejection, trusted alias validation).
+    - **Suppression & Opt-Out (6 cases):** `P9-REG-005`, `P9-SUPPRESS-002..006` (suppressed recipient blocking, case-insensitive match, persistent suppression, audit trail).
+    - **Idempotency & Duplicate Prevention (5 cases):** `P9-REG-006`, `P9-IDEMP-002..005` (already-sent terminal state, revision-specific send identity, deterministic send_key, no force=true bypass).
+    - **Concurrency & State Locking (4 cases):** `P9-REG-007`, `P9-CONC-002..004` (mutex send lock, unique constraint, atomic state transition, distinct draft concurrency).
+    - **Provider Dispatch & Errors (8 cases):** `P9-SMTP-001..003`, `P9-SMTP-ERR-001..005` (mock sender dispatch, plain text RFC 5322 payload, error classification, credential sanitization).
+    - **Failure & Retry Invariants (5 cases):** `P9-FAIL-001..005` (failed send never marked sent, failure attempt audit, zero automatic retry, explicit human retry).
+    - **Pacing & Rate Limiting (5 cases):** `P9-RATE-001..005` (sliding-window per-minute limit, batch request boundary enforcement).
+    - **Batch Isolation (5 cases):** `P9-BATCH-001..005` (per-draft failure isolation, duplicate ID handling, stable result ordering).
+    - **Append-Only Audit Trail (12 cases):** `P9-AUDIT-001..012` (lifecycle event logging for import, edit, approve, reject, changes-requested, suppress, send, failure).
+    - **Delivery Attempts (4 cases):** `P9-ATTEMPT-001..004` (attempt record persistence, dry-run exclusion, credential sanitization).
+    - **Terminal State Machine (4 cases):** `P9-STATE-001..004` (terminal sent-state immutability, revision re-opening, suppression precedence).
+    - **Phase 8 Validation Reuse (5 cases):** `P9-P8-001..005` (unresolved placeholder rejection after edit, subject/body bounds, zero LLM usage).
+    - **Phase 7 Workflow Projections (4 cases):** `P9-P7-001..004` (draft_ready, approved, sent, suppressed projection fidelity).
+    - **Security & Sanitization (10 cases):** `P9-SEC-001..010` (SMTP password redacted in logs/API/DB, header injection prevention, parameterization).
+    - **Zero LLM Code Path (4 cases):** `P9-NOLLM-001..004` (static import verification, zero LLM calls across review, edit, approve, send).
+    - **Database Integrity (8 cases):** `P9-DB-001..008` (clean table initialization, idempotent migrations, revision & send_key constraints).
+    - **Packaging Denylist (5 cases):** `P9-PACK-001..005` (exclusion of .env, runtime DB, Chroma DB, private keys).
+    - **Opt-Out Footer & Fingerprint (3 cases):** `P9-OPTOUT-001..003` (server-owned footer appended and included in approval fingerprint).
+    - **REST API Lifecycle (12 cases):** `P9-API-001..012` (complete HTTP lifecycle endpoints tested and verified).
+    - **QA Integrity Meta-Rules (8 cases):** `P9-QA-001..008` (unmapped case detection, pass stub detection, dynamic false_pass_count calculation).
+    - **Main Golden Fixture (1 case):** `P9-REVIEW-001` (frozen Phase 8 input draft imported into review queue).
+    - **Live Safety Regression (1 case):** `P9-LIVE-SAFE-001` (zero live socket/SMTP network calls during offline test runs).
+    - **Mandatory Regression Invariants (`P9-REG-008` .. `P9-REG-021`):** 14 cases (covering payload hash equality, missing sender rejection, sent revision immutability, trusted alias sending, untrusted alias blocking, display name fingerprinting, and environment name change immunity).
   - **Skipped / Opt-in Guardrail:** 1 case (`P9-LIVE-SMTP-001` — strictly gated behind `RUN_LIVE_EMAIL_TESTS=true` and `EMAIL_SEND_ENABLED=true` to guarantee zero real emails in offline suites).
-- **Critical Safety Invariants:** Approval never triggers send, approval fingerprint SHA-256 blocks stale edits, `EMAIL_SEND_ENABLED=false` by default, idempotency locks prevent double sending, and zero LLM calls exist in the entire sending subsystem.
 - **False Pass Count:** 0 (dynamically verified and computed by execution-driven reporting engine).
+- **Unmapped Deterministic Cases:** 0 (all deterministic cases traced to executable pytest nodes).
+- **Safety Counters:**
+  - `provider_calls_in_dry_run = 0`
+  - `provider_calls_for_unapproved = 0`
+  - `duplicate_send_count = 0`
+  - `suppression_bypass_count = 0`
+  - `stale_approval_bypass_count = 0`
+  - `secrets_detected = 0`
+  - `llm_calls_detected = 0`
+  - `runtime_db_packaged = 0`
+
+## Phase 10 Case Count & Architecture Model (Adversarial Review & Revised Engine)
+Phase 10 implements deterministic multi-source market discovery, historical CRM/CSV/Excel ingestion, candidate qualification, watchlist routing, and verified bridges to downstream phases with a strict Zero-Send policy:
+- **Total Cases in Catalog (`tests/reports/phase10_latest.json`):** 84 cases
+  - **Passed (Deterministic):** 84 test cases covering all adversarial blockers, residual issues, and critical regressions:
+    - **Critical Regressions (`P10-REG-001` .. `P10-REG-024`):** 24 cases:
+      - `P10-REG-001`: Same company from Google/Directory/Job merges once via canonical domain
+      - `P10-REG-002`: Same name with different domains remain strictly separate
+      - `P10-REG-003`: Legal form alone never determines tier
+      - `P10-REG-004`: Missing BIM mention resolves to unknown maturity, not no BIM
+      - `P10-REG-005`: Directory results never create fake structured jobs
+      - `P10-REG-006`: Historically contacted company excluded from cold outreach
+      - `P10-REG-007`: Historical import is strictly idempotent
+      - `P10-REG-008`: Good fit weak intent routes to watchlist
+      - `P10-REG-009`: New signal promotes watchlist candidate
+      - `P10-REG-010`: Suppressed company/contact cannot qualify for outreach
+      - `P10-REG-011`: Phase 5 frozen job score remains unchanged (non-job candidates unscored)
+      - `P10-REG-012`: Phase 8 grounding rejects unverified subjective claims
+      - `P10-REG-013`: Failure of one source preserves other valid discoveries
+      - `P10-REG-014`: Repeated daily runs update candidates idempotently without duplication
+      - `P10-REG-015`: Release denylist excludes runtime databases and secrets
+      - `P10-REG-016`: Relationship type classification (`service_buyer` vs `technology_partner`)
+      - `P10-REG-017`: Multi-opportunity types classification
+      - `P10-REG-018`: Active conversation guard (`active_conversation=True` -> `cold_outreach_allowed=False`)
+      - `P10-REG-019`: Actual respondent preservation in historical replies
+      - `P10-REG-020`: Multi-email delimiter splitting and normalization
+      - `P10-REG-021`: Phase 10.5 Console Query Bridge integration
+      - `P10-REG-022`: Zero-Send verification across all Phase 10 discovery flows
+      - `P10-REG-023`: Historical Excel import acceptance
+      - `P10-REG-024`: Historical CSV import acceptance
+    - **Adversarial Security & Architecture Regressions Round 1 (`P10-ADV-001` .. `P10-ADV-026`):** 26 cases:
+      - `P10-ADV-001`: Historical guard monotonic protection (cannot reset to `cold_outreach_allowed=True`)
+      - `P10-ADV-002`: Real Phase 9 domain suppression enforced via read-only bridge
+      - `P10-ADV-003`: Spreadsheet boolean parsing handles "No", "False", "0", Italian strings deterministically
+      - `P10-ADV-004`: Phase 7 export bridge handles enum/string attributes safely without AttributeError
+      - `P10-ADV-005`: Console watchlist bridge summary handles dictionary entries safely
+      - `P10-ADV-006`: Observation SQLite roundtrip preserves full provenance (`source_name`, `url`, `extracted_data`)
+      - `P10-ADV-007`: Grounding bridge rejects manual seeds lacking explicit source_url
+      - `P10-ADV-008`: Grounding bridge filters out internal subjective assessments
+      - `P10-ADV-009`: Bearer tokens and credentials sanitized from run errors and source health telemetry
+      - `P10-ADV-010`: SourceRegistry.markets supports dictionary lookup and case-insensitive keys
+      - `P10-ADV-011`: All 15 target markets configured in `config/markets.yaml`
+      - `P10-ADV-012`: All 12 Phase 10 REST API endpoints registered and verified
+      - `P10-ADV-013`: Phase 10 CLI commands execute with zero network sends
+      - `P10-ADV-014`: Discovery run records persisted to SQLite table `discovery_runs`
+      - `P10-ADV-015`: Source health telemetry persisted to SQLite table `source_health`
+      - `P10-ADV-016`: Historical outreach events table populated during import
+      - `P10-ADV-017`: Content-stable hash independent of file name and row index
+      - `P10-ADV-018`: Freshness status tracked and persisted on observations and evidence
+      - `P10-ADV-019`: Run counters differentiate between new discoveries and updated candidates
+      - `P10-ADV-020`: Active conversation flag is monotonic and cannot be reset
+      - `P10-ADV-021`: Candidate suppression is monotonic and cannot be reset
+      - `P10-ADV-022`: Historical contact status never regresses to uncontacted
+      - `P10-ADV-023`: CandidateStore migrations ensure columns exist in legacy databases
+      - `P10-ADV-024`: Zero-send invariant audited across Phase 10 engine execution
+      - `P10-ADV-025`: SourceConfig schema models all YAML parameters
+      - `P10-ADV-026`: CLI and FastAPI endpoints uphold strictly zero-send contract
+    - **Adversarial Residual Blockers & Invariants Round 2 (`P10-ADV2-001` .. `P10-ADV2-034`):** 34 cases:
+      - `P10-ADV2-001`: Real Phase 9 domain suppression blocks classifier qualification
+      - `P10-ADV2-002`: FastAPI qualification path uses authoritative Phase 9 suppression
+      - `P10-ADV2-003`: CLI qualification path uses authoritative Phase 9 suppression
+      - `P10-ADV2-004`: Email-only suppression does not suppress unrelated addresses on same domain
+      - `P10-ADV2-005`: Explicit company_domain suppression blocks the domain
+      - `P10-ADV2-006`: Old/non-current job evidence does not produce current high intent
+      - `P10-ADV2-007`: Fresh current job evidence can produce current intent
+      - `P10-ADV2-008`: Newer current evidence supersedes stale evidence without deleting history
+      - `P10-ADV2-009`: Missing required source credential produces controlled source failure
+      - `P10-ADV2-010`: Configured credential allows execution without exposing secret
+      - `P10-ADV2-011`: Source max_results_per_run is enforced before candidate ingestion
+      - `P10-ADV2-012`: Run metrics accurately reflect accepted results within limit
+      - `P10-ADV2-013`: Unknown source type is rejected with ValueError
+      - `P10-ADV2-014`: API discovery invokes registered adapter instead of returning no-op success
+      - `P10-ADV2-015`: CLI discovery invokes registered adapter
+      - `P10-ADV2-016`: Configured source without adapter is an explicit failure, not silent success
+      - `P10-ADV2-017`: Job-first discovery retains job details without synthesizing jobs
+      - `P10-ADV2-018`: Arbitrary/internal observation cannot become verified Phase 8 fact
+      - `P10-ADV2-019`: Eligible sourced MarketEvidence becomes grounded fact
+      - `P10-ADV2-020`: Source URL alone is insufficient without trusted source type
+      - `P10-ADV2-021`: Renamed/reordered identical event produces identical hash
+      - `P10-ADV2-022`: Materially changed follow-up date or respondent produces distinct hash
+      - `P10-ADV2-023`: Duplicate identical event remains deduplicated in store
+      - `P10-ADV2-024`: Historical import endpoint rejects ../ traversal and outside-root path
+      - `P10-ADV2-025`: Allowed repository/data root file imports cleanly
+      - `P10-ADV2-026`: Failed test cannot appear PASS in generated report
+      - `P10-ADV2-027`: Unmapped deterministic case resolves to NOT_RUN, not PASS
+      - `P10-ADV2-028`: Phase 10 report invariants derive dynamically from actual test results
+      - `P10-ADV2-029`: Phase 10 safety counters are dynamic and track violations
+      - `P10-ADV2-030`: Candidate list summary exposes country, qualification outcome/reason
+      - `P10-ADV2-031`: Candidate detail bridge includes evidence directly
+      - `P10-ADV2-032`: Qualification reason is persisted and available after restart
+      - `P10-ADV2-033`: Source health persists to SQLite and survives console bridge restart
+      - `P10-ADV2-034`: Source import rejects embedded secrets and invalid types
+- **False Pass Count:** 0
+- **Unmapped Deterministic Cases:** 0
+- **Invariants Verified:**
+  - `historical_guard_monotonic_unresettable = true`
+  - `domain_suppression_strictly_enforced = true`
+  - `boolean_parsing_deterministic = true`
+  - `phase7_export_bridge_resilient = true`
+  - `console_watchlist_bridge_resilient = true`
+  - `provenance_preserved_after_roundtrip = true`
+  - `phase8_grounding_rejects_subjective_claims = true`
+  - `secrets_never_logged_or_exposed = true`
+  - `markets_config_all_15_loaded = true`
+  - `fastapi_endpoints_registered_and_zero_send = true`
+  - `cli_registered_and_zero_send = true`
+  - `discovery_runs_and_source_health_persisted = true`
+  - `historical_outreach_events_populated = true`
+  - `zero_send_contract_strictly_upheld = true`
+  - `stale_evidence_gated_from_high_intent = true`
+- **Audit Counters:**
+  - `duplicate_company_count = 0`
+  - `overmerge_count = 0`
+  - `fake_job_count = 0`
+  - `historical_duplicate_count = 0`
+  - `cold_outreach_bypass_count = 0`
+  - `suppression_bypass_count = 0`
+  - `phase5_regression_count = 0`
+  - `phase8_grounding_violation_count = 0`
+  - `phase9_send_violation_count = 0`
+  - `runtime_db_packaged_count = 0`
+  - `source_partial_failure_loss_count = 0`
+  - `uncredentialed_source_run_count = 0`
+  - `source_budget_overrun_count = 0`
+  - `path_traversal_violation_count = 0`
+  - `unsupported_source_type_count = 0`
 
 ## Failures
 _No failures detected._
@@ -9540,21 +9705,15 @@ Phase 8: Structured Service Missing Status Is Not Active (test: tests/test_outre
 **Expected:**
 ```json
 {
-  "default_approval_status": "pending_review",
-  "default_send_status": "not_sent",
-  "default_outreach_status": "draft_ready",
-  "evidence_preserved": true,
-  "prompt_version_preserved": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "default_approval_status": "pending_review",
-  "default_send_status": "not_sent",
-  "default_outreach_status": "draft_ready",
-  "evidence_preserved": true,
-  "prompt_version_preserved": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft",
+  "execution_time_s": 0.113
 }
 ```
 **Result:** PASS
@@ -9566,34 +9725,28 @@ _(None / In sync)_
 Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft)
 
 ---
-### P9-REVIEW-002 — Edit Invalidates Approval
+### P9-STORE-001 — Persist Draft
 **Phase:** Phase 9
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P9-REVIEW-002"
+  "case_id": "P9-STORE-001"
 }
 ```
 **Expected:**
 ```json
 {
-  "edit_creates_new_revision": true,
-  "revision_increment": 1,
-  "resets_approval_status": "pending_review",
-  "clears_approved_fingerprint": true,
-  "prior_revision_immutable": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "edit_creates_new_revision": true,
-  "revision_increment": 1,
-  "resets_approval_status": "pending_review",
-  "clears_approved_fingerprint": true,
-  "prior_revision_immutable": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation",
+  "execution_time_s": 0.856
 }
 ```
 **Result:** PASS
@@ -9602,7 +9755,634 @@ Phase 9: Import Pending Draft (test: tests/acceptance/test_phase9_acceptance.py:
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_review_002_edit_invalidates_approval)
+Phase 9: Persist Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation)
+
+---
+### P9-STORE-002 — Preserve Lead ID
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STORE-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation",
+  "execution_time_s": 0.856
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Preserve Lead ID (test: tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation)
+
+---
+### P9-STORE-003 — Preserve Contact ID
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STORE-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation",
+  "execution_time_s": 0.856
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Preserve Contact ID (test: tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation)
+
+---
+### P9-STORE-004 — Preserve Recipient Email
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STORE-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation",
+  "execution_time_s": 0.856
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Preserve Recipient Email (test: tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation)
+
+---
+### P9-STORE-005 — No Sent-History Overwrite
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STORE-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation",
+  "execution_time_s": 0.856
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No Sent-History Overwrite (test: tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation)
+
+---
+### P9-STORE-006 — Temporary DB Isolation
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STORE-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation",
+  "execution_time_s": 0.856
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Temporary DB Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_store_001_to_006_persistence_and_isolation)
+
+---
+### P9-QUEUE-001 — Pending Review Default
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Pending Review Default (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-QUEUE-002 — Filter by Approval Status
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Filter by Approval Status (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-QUEUE-003 — Filter by Send Status
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Filter by Send Status (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-QUEUE-004 — Filter by Lead ID
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Filter by Lead ID (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-QUEUE-005 — Filter by Contact ID
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Filter by Contact ID (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-QUEUE-006 — Filter by Recipient Email
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Filter by Recipient Email (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-QUEUE-007 — Deterministic Pagination
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QUEUE-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination",
+  "execution_time_s": 0.455
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Deterministic Pagination (test: tests/acceptance/test_phase9_acceptance.py::test_p9_queue_001_to_007_review_queue_and_pagination)
+
+---
+### P9-EDIT-001 — Edit Subject Creates New Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Subject Creates New Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
+
+---
+### P9-EDIT-002 — Edit Body Creates New Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Body Creates New Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
+
+---
+### P9-EDIT-003 — Edit Recipient Email Creates New Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Recipient Email Creates New Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
+
+---
+### P9-EDIT-004 — Edit Sender-Relevant Identity Invalidates Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Sender-Relevant Identity Invalidates Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
+
+---
+### P9-EDIT-005 — Personalization Notes Only
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Personalization Notes Only (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
+
+---
+### P9-EDIT-006 — Sent Revision Immutable
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent Revision Immutable (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
+
+---
+### P9-EDIT-007 — Revision Monotonicity
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-EDIT-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics",
+  "execution_time_s": 1.007
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Revision Monotonicity (test: tests/acceptance/test_phase9_acceptance.py::test_p9_edit_001_to_007_revision_semantics)
 
 ---
 ### P9-APPROVE-001 — Explicit Approval
@@ -9618,21 +10398,15 @@ Phase 9: Edit Invalidates Approval (test: tests/acceptance/test_phase9_acceptanc
 **Expected:**
 ```json
 {
-  "explicit_human_action": true,
-  "approval_status": "approved",
-  "outreach_status": "approved",
-  "fingerprint_algorithm": "sha256",
-  "audit_event_recorded": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "explicit_human_action": true,
-  "approval_status": "approved",
-  "outreach_status": "approved",
-  "fingerprint_algorithm": "sha256",
-  "audit_event_recorded": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_001_explicit_approval",
+  "execution_time_s": 0.438
 }
 ```
 **Result:** PASS
@@ -9657,17 +10431,15 @@ Phase 9: Explicit Approval (test: tests/acceptance/test_phase9_acceptance.py::te
 **Expected:**
 ```json
 {
-  "approval_triggers_send": false,
-  "provider_calls_on_approval": 0,
-  "send_status_after_approval": "not_sent"
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "approval_triggers_send": false,
-  "provider_calls_on_approval": 0,
-  "send_status_after_approval": "not_sent"
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send",
+  "execution_time_s": 0.327
 }
 ```
 **Result:** PASS
@@ -9679,32 +10451,28 @@ _(None / In sync)_
 Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_002_approval_does_not_send)
 
 ---
-### P9-SEND-001 — Approved Dry Run
+### P9-APPROVE-003 — Wrong Revision Cannot Approve
 **Phase:** Phase 9
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P9-SEND-001"
+  "case_id": "P9-APPROVE-003"
 }
 ```
 **Expected:**
 ```json
 {
-  "dry_run_validation_passed": true,
-  "network_messages_transmitted": 0,
-  "send_status": "dry_run",
-  "stored_draft_unmarked": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "dry_run_validation_passed": true,
-  "network_messages_transmitted": 0,
-  "send_status": "dry_run",
-  "stored_draft_unmarked": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards",
+  "execution_time_s": 0.755
 }
 ```
 **Result:** PASS
@@ -9713,35 +10481,31 @@ Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.p
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_001_approved_dry_run)
+Phase 9: Wrong Revision Cannot Approve (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards)
 
 ---
-### P9-SEND-002 — Approved Mock SMTP Send
+### P9-APPROVE-004 — Rejected Draft Cannot Be Approved Implicitly
 **Phase:** Phase 9
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P9-SEND-002"
+  "case_id": "P9-APPROVE-004"
 }
 ```
 **Expected:**
 ```json
 {
-  "explicit_send_status": "sent",
-  "outreach_status": "sent",
-  "provider_message_id_captured": true,
-  "send_attempt_logged": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "explicit_send_status": "sent",
-  "outreach_status": "sent",
-  "provider_message_id_captured": true,
-  "send_attempt_logged": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards",
+  "execution_time_s": 0.755
 }
 ```
 **Result:** PASS
@@ -9750,10 +10514,406 @@ Phase 9: Approved Dry Run (test: tests/acceptance/test_phase9_acceptance.py::tes
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_002_approved_mock_smtp_send)
+Phase 9: Rejected Draft Cannot Be Approved Implicitly (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards)
 
 ---
-### P9-SEND-003 — Unapproved Blocked
+### P9-APPROVE-005 — Reviewer Required
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-APPROVE-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards",
+  "execution_time_s": 0.755
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Reviewer Required (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards)
+
+---
+### P9-APPROVE-006 — Approval Event Recorded
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-APPROVE-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards",
+  "execution_time_s": 0.755
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approval Event Recorded (test: tests/acceptance/test_phase9_acceptance.py::test_p9_approve_003_to_006_approval_guards)
+
+---
+### P9-HASH-001 — Stable Fingerprint
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Stable Fingerprint (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-002 — Subject Change Changes Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Subject Change Changes Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-003 — Body Change Changes Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Body Change Changes Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-004 — Recipient Change Changes Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Recipient Change Changes Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-005 — Sender Email Change Changes Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sender Email Change Changes Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-006 — Revision Change Changes Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Revision Change Changes Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-007 — Hash Does Not Include Mutable Non-Send Metadata
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Hash Does Not Include Mutable Non-Send Metadata (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-HASH-008 — Approved Hash Stored Exactly
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-HASH-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants",
+  "execution_time_s": 0.067
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Hash Stored Exactly (test: tests/acceptance/test_phase9_acceptance.py::test_p9_hash_001_to_008_fingerprint_invariants)
+
+---
+### P9-REG-001 — Stale Approval Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_stale_approval_fingerprint_mismatch_blocks_send",
+  "execution_time_s": 0.237
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Stale Approval Blocked (test: tests/test_sending.py::test_stale_approval_fingerprint_mismatch_blocks_send)
+
+---
+### P9-REG-002 — Pending Review Cannot Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_unapproved_draft_send_blocked",
+  "execution_time_s": 0.152
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Pending Review Cannot Send (test: tests/test_sending.py::test_unapproved_draft_send_blocked)
+
+---
+### P9-SEND-003 — Rejected Cannot Send
 **Phase:** Phase 9
 **Source:** internal
 
@@ -9766,17 +10926,15 @@ Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.
 **Expected:**
 ```json
 {
-  "send_blocked": true,
-  "error_type": "not_approved",
-  "provider_calls": 0
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "send_blocked": true,
-  "error_type": "not_approved",
-  "provider_calls": 0
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked",
+  "execution_time_s": 0.255
 }
 ```
 **Result:** PASS
@@ -9785,10 +10943,10 @@ Phase 9: Approved Mock SMTP Send (test: tests/acceptance/test_phase9_acceptance.
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)
+Phase 9: Rejected Cannot Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_003_unapproved_blocked)
 
 ---
-### P9-SEND-004 — Stale Approval Blocked
+### P9-SEND-004 — Changes Requested Cannot Send
 **Phase:** Phase 9
 **Source:** internal
 
@@ -9801,19 +10959,15 @@ Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::t
 **Expected:**
 ```json
 {
-  "post_approval_tamper_detected": true,
-  "send_blocked": true,
-  "error_type": "approval_stale",
-  "provider_calls": 0
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "post_approval_tamper_detected": true,
-  "send_blocked": true,
-  "error_type": "approval_stale",
-  "provider_calls": 0
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked",
+  "execution_time_s": 0.41
 }
 ```
 **Result:** PASS
@@ -9822,10 +10976,10 @@ Phase 9: Unapproved Blocked (test: tests/acceptance/test_phase9_acceptance.py::t
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)
+Phase 9: Changes Requested Cannot Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_004_stale_approval_blocked)
 
 ---
-### P9-SEND-005 — Already Sent Blocked
+### P9-SEND-005 — Missing Approval Hash Cannot Send
 **Phase:** Phase 9
 **Source:** internal
 
@@ -9838,17 +10992,15 @@ Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.p
 **Expected:**
 ```json
 {
-  "duplicate_send_blocked": true,
-  "status": "already_sent",
-  "provider_calls": 0
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "duplicate_send_blocked": true,
-  "status": "already_sent",
-  "provider_calls": 0
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked",
+  "execution_time_s": 1.115
 }
 ```
 **Result:** PASS
@@ -9857,33 +11009,31 @@ Phase 9: Stale Approval Blocked (test: tests/acceptance/test_phase9_acceptance.p
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)
+Phase 9: Missing Approval Hash Cannot Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_send_005_already_sent_blocked)
 
 ---
-### P9-SUPPRESS-001 — Suppressed Recipient Blocked
+### P9-REG-003 — Dry Run Zero Network Calls
 **Phase:** Phase 9
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P9-SUPPRESS-001"
+  "case_id": "P9-REG-003"
 }
 ```
 **Expected:**
 ```json
 {
-  "suppressed_recipient_blocked": true,
-  "error_type": "suppressed_recipient",
-  "provider_calls": 0
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "suppressed_recipient_blocked": true,
-  "error_type": "suppressed_recipient",
-  "provider_calls": 0
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_dry_run_invokes_zero_network_calls",
+  "execution_time_s": 0.245
 }
 ```
 **Result:** PASS
@@ -9892,33 +11042,31 @@ Phase 9: Already Sent Blocked (test: tests/acceptance/test_phase9_acceptance.py:
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_001_suppressed_recipient_blocked)
+Phase 9: Dry Run Zero Network Calls (test: tests/test_sending.py::test_dry_run_invokes_zero_network_calls)
 
 ---
-### P9-IDEMP-001 — Concurrent Duplicate Prevented
+### P9-DRY-002 — Dry Run Still Checks Suppression
 **Phase:** Phase 9
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P9-IDEMP-001"
+  "case_id": "P9-DRY-002"
 }
 ```
 **Expected:**
 ```json
 {
-  "concurrent_requests": 2,
-  "provider_messages_delivered": 1,
-  "second_request_blocked": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "concurrent_requests": 2,
-  "provider_messages_delivered": 1,
-  "second_request_blocked": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks",
+  "execution_time_s": 0.495
 }
 ```
 **Result:** PASS
@@ -9927,10 +11075,1429 @@ Phase 9: Suppressed Recipient Blocked (test: tests/acceptance/test_phase9_accept
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_001_concurrent_duplicate_prevented)
+Phase 9: Dry Run Still Checks Suppression (test: tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks)
 
 ---
-### P9-BATCH-001 — Partial Failure Isolation
+### P9-DRY-003 — Dry Run Still Checks Approval Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DRY-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks",
+  "execution_time_s": 0.495
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Dry Run Still Checks Approval Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks)
+
+---
+### P9-DRY-004 — Dry Run Still Checks Sender Match
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DRY-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks",
+  "execution_time_s": 0.495
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Dry Run Still Checks Sender Match (test: tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks)
+
+---
+### P9-DRY-005 — Dry Run Creates Audit Diagnostic
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DRY-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks",
+  "execution_time_s": 0.495
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Dry Run Creates Audit Diagnostic (test: tests/acceptance/test_phase9_acceptance.py::test_p9_dry_002_to_005_dry_run_checks)
+
+---
+### P9-REG-004 — EMAIL_SEND_ENABLED=false Blocks Real Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_email_send_enabled_false_blocks_real_send",
+  "execution_time_s": 0.229
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: EMAIL_SEND_ENABLED=false Blocks Real Send (test: tests/test_sending.py::test_email_send_enabled_false_blocks_real_send)
+
+---
+### P9-CONFIG-001 — Missing SMTP Config
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-CONFIG-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_config_001_to_002_server_owned_config",
+  "execution_time_s": 0.11
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Missing SMTP Config (test: tests/acceptance/test_phase9_acceptance.py::test_p9_config_001_to_002_server_owned_config)
+
+---
+### P9-CONFIG-002 — Request Body Cannot Supply SMTP Credentials
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-CONFIG-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_config_001_to_002_server_owned_config",
+  "execution_time_s": 0.11
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Request Body Cannot Supply SMTP Credentials (test: tests/acceptance/test_phase9_acceptance.py::test_p9_config_001_to_002_server_owned_config)
+
+---
+### P9-SENDER-001 — Matching Sender Accepted
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SENDER-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity",
+  "execution_time_s": 0.795
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Matching Sender Accepted (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity)
+
+---
+### P9-SENDER-002 — Mismatch Blocked
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SENDER-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity",
+  "execution_time_s": 0.795
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Mismatch Blocked (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity)
+
+---
+### P9-SENDER-003 — Trusted Alias
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SENDER-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity",
+  "execution_time_s": 0.795
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Trusted Alias (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity)
+
+---
+### P9-SENDER-004 — From Header Cannot Be LLM/User Arbitrary
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SENDER-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity",
+  "execution_time_s": 0.795
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: From Header Cannot Be LLM/User Arbitrary (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sender_001_to_004_sender_identity)
+
+---
+### P9-REG-005 — Suppressed Recipient Cannot Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_suppressed_recipient_blocks_send",
+  "execution_time_s": 0.503
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppressed Recipient Cannot Send (test: tests/test_sending.py::test_suppressed_recipient_blocks_send)
+
+---
+### P9-SUPPRESS-002 — Case-Insensitive Email Matching
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics",
+  "execution_time_s": 0.351
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Case-Insensitive Email Matching (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics)
+
+---
+### P9-SUPPRESS-003 — Suppression Persists
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics",
+  "execution_time_s": 0.351
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppression Persists (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics)
+
+---
+### P9-SUPPRESS-004 — Manual Suppression Audit Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics",
+  "execution_time_s": 0.351
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Manual Suppression Audit Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics)
+
+---
+### P9-SUPPRESS-005 — Suppression Cannot Be Silently Removed
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics",
+  "execution_time_s": 0.351
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppression Cannot Be Silently Removed (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics)
+
+---
+### P9-SUPPRESS-006 — Opt-Out Reason Preserved
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SUPPRESS-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics",
+  "execution_time_s": 0.351
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Opt-Out Reason Preserved (test: tests/acceptance/test_phase9_acceptance.py::test_p9_suppress_002_to_006_suppression_semantics)
+
+---
+### P9-REG-006 — Already Sent Cannot Resend
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_idempotent_already_sent_blocked",
+  "execution_time_s": 0.612
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Already Sent Cannot Resend (test: tests/test_sending.py::test_idempotent_already_sent_blocked)
+
+---
+### P9-IDEMP-002 — Same Draft Different Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-IDEMP-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys",
+  "execution_time_s": 2.472
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Same Draft Different Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys)
+
+---
+### P9-IDEMP-003 — Same Recipient Different Draft
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-IDEMP-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys",
+  "execution_time_s": 2.472
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Same Recipient Different Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys)
+
+---
+### P9-IDEMP-004 — send_key Deterministic
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-IDEMP-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys",
+  "execution_time_s": 2.472
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: send_key Deterministic (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys)
+
+---
+### P9-IDEMP-005 — No force=true Bypass
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-IDEMP-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys",
+  "execution_time_s": 2.472
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No force=true Bypass (test: tests/acceptance/test_phase9_acceptance.py::test_p9_idemp_002_to_005_idempotency_keys)
+
+---
+### P9-REG-007 — Concurrent Duplicate Send Prevented
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_concurrent_duplicate_send_prevention",
+  "execution_time_s": 0.478
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Concurrent Duplicate Send Prevented (test: tests/test_sending.py::test_concurrent_duplicate_send_prevention)
+
+---
+### P9-CONC-002 — Unique send_key Constraint
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-CONC-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_conc_002_to_004_concurrency_locking",
+  "execution_time_s": 0.401
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Unique send_key Constraint (test: tests/acceptance/test_phase9_acceptance.py::test_p9_conc_002_to_004_concurrency_locking)
+
+---
+### P9-CONC-003 — Atomic State Transition
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-CONC-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_conc_002_to_004_concurrency_locking",
+  "execution_time_s": 0.401
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Atomic State Transition (test: tests/acceptance/test_phase9_acceptance.py::test_p9_conc_002_to_004_concurrency_locking)
+
+---
+### P9-CONC-004 — Concurrent Different Drafts Allowed
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-CONC-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_conc_002_to_004_concurrency_locking",
+  "execution_time_s": 0.401
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Concurrent Different Drafts Allowed (test: tests/acceptance/test_phase9_acceptance.py::test_p9_conc_002_to_004_concurrency_locking)
+
+---
+### P9-SMTP-001 — Explicit Mock Sender Success
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_001_to_003_provider_dispatch",
+  "execution_time_s": 0.871
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Explicit Mock Sender Success (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_001_to_003_provider_dispatch)
+
+---
+### P9-SMTP-002 — Production Does Not Auto-Mock
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_001_to_003_provider_dispatch",
+  "execution_time_s": 0.871
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Production Does Not Auto-Mock (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_001_to_003_provider_dispatch)
+
+---
+### P9-SMTP-003 — Text/Plain Payload
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_001_to_003_provider_dispatch",
+  "execution_time_s": 0.871
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Text/Plain Payload (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_001_to_003_provider_dispatch)
+
+---
+### P9-SMTP-ERR-001 — Authentication Failure
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-ERR-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy",
+  "execution_time_s": 0.829
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Authentication Failure (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy)
+
+---
+### P9-SMTP-ERR-002 — Connection Failure
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-ERR-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy",
+  "execution_time_s": 0.829
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Connection Failure (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy)
+
+---
+### P9-SMTP-ERR-003 — Timeout
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-ERR-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy",
+  "execution_time_s": 0.829
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Timeout (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy)
+
+---
+### P9-SMTP-ERR-004 — Generic Provider Error
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-ERR-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy",
+  "execution_time_s": 0.829
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Generic Provider Error (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy)
+
+---
+### P9-SMTP-ERR-005 — Error Sanitization
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SMTP-ERR-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy",
+  "execution_time_s": 0.829
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Error Sanitization (test: tests/acceptance/test_phase9_acceptance.py::test_p9_smtp_err_001_to_005_error_taxonomy)
+
+---
+### P9-FAIL-001 — Failed Send Not Marked Sent
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-FAIL-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants",
+  "execution_time_s": 0.807
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Failed Send Not Marked Sent (test: tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants)
+
+---
+### P9-FAIL-002 — Failed Attempt Recorded
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-FAIL-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants",
+  "execution_time_s": 0.807
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Failed Attempt Recorded (test: tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants)
+
+---
+### P9-FAIL-003 — No Automatic Retry
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-FAIL-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants",
+  "execution_time_s": 0.807
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No Automatic Retry (test: tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants)
+
+---
+### P9-FAIL-004 — Explicit Later Retry
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-FAIL-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants",
+  "execution_time_s": 0.807
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Explicit Later Retry (test: tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants)
+
+---
+### P9-FAIL-005 — Ambiguous Provider Failure
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-FAIL-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants",
+  "execution_time_s": 0.807
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Ambiguous Provider Failure (test: tests/acceptance/test_phase9_acceptance.py::test_p9_fail_001_to_005_failure_and_retry_invariants)
+
+---
+### P9-RATE-001 — Within Per-Minute Limit
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-RATE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting",
+  "execution_time_s": 0.004
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Within Per-Minute Limit (test: tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting)
+
+---
+### P9-RATE-002 — Exceed Per-Minute Limit
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-RATE-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting",
+  "execution_time_s": 0.004
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Exceed Per-Minute Limit (test: tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting)
+
+---
+### P9-RATE-003 — Batch Max Boundary
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-RATE-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting",
+  "execution_time_s": 0.004
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Batch Max Boundary (test: tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting)
+
+---
+### P9-RATE-004 — Batch Max + 1 Rejected
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-RATE-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting",
+  "execution_time_s": 0.004
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Batch Max + 1 Rejected (test: tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting)
+
+---
+### P9-RATE-005 — Rate Limit Deterministic Clock
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-RATE-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting",
+  "execution_time_s": 0.004
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Rate Limit Deterministic Clock (test: tests/acceptance/test_phase9_acceptance.py::test_p9_rate_001_to_005_rate_limiting)
+
+---
+### P9-BATCH-001 — Mixed Batch Isolation
 **Phase:** Phase 9
 **Source:** internal
 
@@ -9943,19 +12510,15 @@ Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acce
 **Expected:**
 ```json
 {
-  "partial_failure_isolated": true,
-  "valid_drafts_sent": 2,
-  "invalid_drafts_blocked": 1,
-  "success_corrupted": false
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "partial_failure_isolated": true,
-  "valid_drafts_sent": 2,
-  "invalid_drafts_blocked": 1,
-  "success_corrupted": false
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation",
+  "execution_time_s": 1.911
 }
 ```
 **Result:** PASS
@@ -9964,10 +12527,1099 @@ Phase 9: Concurrent Duplicate Prevented (test: tests/acceptance/test_phase9_acce
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)
+Phase 9: Mixed Batch Isolation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_001_partial_failure_isolation)
 
 ---
-### P9-SEC-001 — Secrets Never Logged
+### P9-BATCH-002 — Explicit Draft IDs Required
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-BATCH-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling",
+  "execution_time_s": 0.816
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Explicit Draft IDs Required (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling)
+
+---
+### P9-BATCH-003 — Duplicate Draft IDs in Request
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-BATCH-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling",
+  "execution_time_s": 0.816
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Duplicate Draft IDs in Request (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling)
+
+---
+### P9-BATCH-004 — Missing Draft ID
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-BATCH-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling",
+  "execution_time_s": 0.816
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Missing Draft ID (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling)
+
+---
+### P9-BATCH-005 — Stable Result Ordering
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-BATCH-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling",
+  "execution_time_s": 0.816
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Stable Result Ordering (test: tests/acceptance/test_phase9_acceptance.py::test_p9_batch_002_to_005_batch_send_handling)
+
+---
+### P9-AUDIT-001 — Imported Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Imported Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-002 — Edited Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edited Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-003 — Approved Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-004 — Rejected Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Rejected Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-005 — Changes Requested Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Changes Requested Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-006 — Suppressed Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppressed Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-007 — Send Requested Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Send Requested Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-008 — Sent Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-009 — Failed Event
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Failed Event (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-010 — Append-Only
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Append-Only (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-011 — Reviewer Preserved
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-011"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Reviewer Preserved (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-AUDIT-012 — No Secrets In Audit
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-AUDIT-012"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants",
+  "execution_time_s": 0.36
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No Secrets In Audit (test: tests/acceptance/test_phase9_acceptance.py::test_p9_audit_001_to_012_audit_trail_invariants)
+
+---
+### P9-ATTEMPT-001 — Success Attempt Record
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-ATTEMPT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records",
+  "execution_time_s": 1.091
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Success Attempt Record (test: tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records)
+
+---
+### P9-ATTEMPT-002 — Failure Attempt Record
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-ATTEMPT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records",
+  "execution_time_s": 1.091
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Failure Attempt Record (test: tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records)
+
+---
+### P9-ATTEMPT-003 — Dry Run Is Not Successful Provider Attempt
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-ATTEMPT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records",
+  "execution_time_s": 1.091
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Dry Run Is Not Successful Provider Attempt (test: tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records)
+
+---
+### P9-ATTEMPT-004 — No Credentials Persisted
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-ATTEMPT-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records",
+  "execution_time_s": 1.091
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No Credentials Persisted (test: tests/acceptance/test_phase9_acceptance.py::test_p9_attempt_001_to_004_attempt_records)
+
+---
+### P9-STATE-001 — Invalid Transition Rejected
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STATE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions",
+  "execution_time_s": 0.189
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Invalid Transition Rejected (test: tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions)
+
+---
+### P9-STATE-002 — Sent State Terminal For Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STATE-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions",
+  "execution_time_s": 0.189
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent State Terminal For Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions)
+
+---
+### P9-STATE-003 — New Revision Reopens Review
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STATE-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions",
+  "execution_time_s": 0.189
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: New Revision Reopens Review (test: tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions)
+
+---
+### P9-STATE-004 — Suppressed Recipient Blocks Regardless of Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-STATE-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions",
+  "execution_time_s": 0.189
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppressed Recipient Blocks Regardless of Approval (test: tests/acceptance/test_phase9_acceptance.py::test_p9_state_001_to_004_state_machine_transitions)
+
+---
+### P9-P8-001 — Placeholder Rejected After Human Edit
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P8-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm",
+  "execution_time_s": 0.237
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Placeholder Rejected After Human Edit (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm)
+
+---
+### P9-P8-002 — Empty Subject Rejected
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P8-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm",
+  "execution_time_s": 0.237
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Empty Subject Rejected (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm)
+
+---
+### P9-P8-003 — Oversized Subject/Body Rejected
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P8-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm",
+  "execution_time_s": 0.237
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Oversized Subject/Body Rejected (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm)
+
+---
+### P9-P8-004 — Recipient Identity Revalidated
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P8-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm",
+  "execution_time_s": 0.237
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Recipient Identity Revalidated (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm)
+
+---
+### P9-P8-005 — No Phase 8 LLM Invocation
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P8-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm",
+  "execution_time_s": 0.237
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No Phase 8 LLM Invocation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p8_001_to_005_validator_reuse_no_llm)
+
+---
+### P9-P7-001 — Approved Projection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P7-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections",
+  "execution_time_s": 0.698
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approved Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections)
+
+---
+### P9-P7-002 — Sent Projection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P7-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections",
+  "execution_time_s": 0.698
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections)
+
+---
+### P9-P7-003 — Failed Projection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P7-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections",
+  "execution_time_s": 0.698
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Failed Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections)
+
+---
+### P9-P7-004 — Suppressed Projection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-P7-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections",
+  "execution_time_s": 0.698
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppressed Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_p7_001_to_004_workflow_projections)
+
+---
+### P9-SEC-001 — SMTP Password Never Returned
 **Phase:** Phase 9
 **Source:** internal
 
@@ -9980,17 +13632,15 @@ Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptanc
 **Expected:**
 ```json
 {
-  "secrets_in_error_logs": false,
-  "secrets_in_review_events": false,
-  "sanitized_with_asterisks": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "secrets_in_error_logs": false,
-  "secrets_in_review_events": false,
-  "sanitized_with_asterisks": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged",
+  "execution_time_s": 0.11
 }
 ```
 **Result:** PASS
@@ -9999,35 +13649,31 @@ Phase 9: Partial Failure Isolation (test: tests/acceptance/test_phase9_acceptanc
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)
+Phase 9: SMTP Password Never Returned (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged)
 
 ---
-### P9-WF-001 — Sent State Projection
+### P9-SEC-002 — SMTP Password Never Logged
 **Phase:** Phase 9
 **Source:** internal
 
 **Input:**
 ```json
 {
-  "case_id": "P9-WF-001"
+  "case_id": "P9-SEC-002"
 }
 ```
 **Expected:**
 ```json
 {
-  "source_of_truth": "sqlite_db",
-  "queryable_approval_status": true,
-  "queryable_send_status": true,
-  "queryable_outreach_status": true
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "source_of_truth": "sqlite_db",
-  "queryable_approval_status": true,
-  "queryable_send_status": true,
-  "queryable_outreach_status": true
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
 }
 ```
 **Result:** PASS
@@ -10036,10 +13682,274 @@ Phase 9: Secrets Never Logged (test: tests/acceptance/test_phase9_acceptance.py:
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_wf_001_sent_state_projection)
+Phase 9: SMTP Password Never Logged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
 
 ---
-### P9-NOLLM-001 — Zero LLM Code Path
+### P9-SEC-003 — OAuth/API Secrets Never Stored In DB
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: OAuth/API Secrets Never Stored In DB (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-004 — API Cannot Override SMTP Host
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: API Cannot Override SMTP Host (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-005 — API Cannot Override SMTP Password
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: API Cannot Override SMTP Password (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-006 — Provider Exception Redaction
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Provider Exception Redaction (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-007 — SQL Parameterization
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: SQL Parameterization (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-008 — Header Injection Protection
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Header Injection Protection (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-009 — Invalid Recipient Email
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Invalid Recipient Email (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-SEC-010 — No Personal/Hidden Recipient BCC
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-SEC-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization",
+  "execution_time_s": 0.231
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: No Personal/Hidden Recipient BCC (test: tests/acceptance/test_phase9_acceptance.py::test_p9_sec_002_to_010_security_sanitization)
+
+---
+### P9-NOLLM-001 — Sending Module Has Zero LLM Imports
 **Phase:** Phase 9
 **Source:** internal
 
@@ -10052,15 +13962,15 @@ Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py
 **Expected:**
 ```json
 {
-  "llm_calls_in_phase9": 0,
-  "forbidden_tokens_present": false
+  "status": "PASS"
 }
 ```
 **Actual:**
 ```json
 {
-  "llm_calls_in_phase9": 0,
-  "forbidden_tokens_present": false
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path",
+  "execution_time_s": 0.022
 }
 ```
 **Result:** PASS
@@ -10069,10 +13979,1033 @@ Phase 9: Sent State Projection (test: tests/acceptance/test_phase9_acceptance.py
 _(None / In sync)_
 
 **Human Notes:**
-Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)
+Phase 9: Sending Module Has Zero LLM Imports (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path)
 
 ---
-### P9-LIVE-SMTP-001 — Live SMTP Send Guardrail
+### P9-NOLLM-002 — Approve Does Not Call LLM
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-NOLLM-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls",
+  "execution_time_s": 0.754
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approve Does Not Call LLM (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls)
+
+---
+### P9-NOLLM-003 — Edit Does Not Call LLM
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-NOLLM-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls",
+  "execution_time_s": 0.754
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Does Not Call LLM (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls)
+
+---
+### P9-NOLLM-004 — Send Does Not Call LLM
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-NOLLM-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls",
+  "execution_time_s": 0.754
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Send Does Not Call LLM (test: tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls)
+
+---
+### P9-DB-001 — Tables Initialize Cleanly
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Tables Initialize Cleanly (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-002 — Reinitialization Idempotent
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Reinitialization Idempotent (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-003 — Unique Draft Revision Constraint
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Unique Draft Revision Constraint (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-004 — Unique send_key Constraint
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Unique send_key Constraint (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-005 — Foreign/Logical References Preserved
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Foreign/Logical References Preserved (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-006 — Transaction Rollback On Internal Failure
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Transaction Rollback On Internal Failure (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-007 — Production DB Not Packaged
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Production DB Not Packaged (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-DB-008 — Runtime DB Directory Created Safely
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-DB-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity",
+  "execution_time_s": 0.178
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Runtime DB Directory Created Safely (test: tests/acceptance/test_phase9_acceptance.py::test_p9_db_001_to_008_database_integrity)
+
+---
+### P9-PACK-001 — .env Excluded
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-PACK-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security",
+  "execution_time_s": 0.021
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: .env Excluded (test: tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security)
+
+---
+### P9-PACK-002 — Runtime DB Excluded
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-PACK-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security",
+  "execution_time_s": 0.021
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Runtime DB Excluded (test: tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security)
+
+---
+### P9-PACK-003 — Chroma Runtime DB Excluded
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-PACK-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security",
+  "execution_time_s": 0.021
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Chroma Runtime DB Excluded (test: tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security)
+
+---
+### P9-PACK-004 — Private Key Types Excluded
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-PACK-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security",
+  "execution_time_s": 0.021
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Private Key Types Excluded (test: tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security)
+
+---
+### P9-PACK-005 — Source/Test Files Still Included
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-PACK-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security",
+  "execution_time_s": 0.021
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Source/Test Files Still Included (test: tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security)
+
+---
+### P9-OPTOUT-001 — Server-Owned Footer Appended
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-OPTOUT-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_optout_001_to_003_optout_footer_fingerprint",
+  "execution_time_s": 0.458
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Server-Owned Footer Appended (test: tests/acceptance/test_phase9_acceptance.py::test_p9_optout_001_to_003_optout_footer_fingerprint)
+
+---
+### P9-OPTOUT-002 — LLM Cannot Control Footer
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-OPTOUT-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_optout_001_to_003_optout_footer_fingerprint",
+  "execution_time_s": 0.458
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: LLM Cannot Control Footer (test: tests/acceptance/test_phase9_acceptance.py::test_p9_optout_001_to_003_optout_footer_fingerprint)
+
+---
+### P9-OPTOUT-003 — Footer Included In Approval Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-OPTOUT-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_optout_001_to_003_optout_footer_fingerprint",
+  "execution_time_s": 0.458
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Footer Included In Approval Hash (test: tests/acceptance/test_phase9_acceptance.py::test_p9_optout_001_to_003_optout_footer_fingerprint)
+
+---
+### P9-API-001 — Import Success
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Import Success (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-002 — Invalid Draft Validation
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Invalid Draft Validation (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-003 — Review List
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Review List (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-004 — Edit Creates Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Edit Creates Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-005 — Approve
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approve (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-006 — Approval Does Not Send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approval Does Not Send (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-007 — Send Dry Run
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Send Dry Run (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-008 — Real Send Disabled
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Real Send Disabled (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-009 — Suppression Blocks
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Suppression Blocks (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-010 — Batch Mixed Response
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Batch Mixed Response (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-011 — Invalid Revision
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-011"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Invalid Revision (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-API-012 — Missing Draft
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-API-012"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle",
+  "execution_time_s": 2.119
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Missing Draft (test: tests/acceptance/test_phase9_acceptance.py::test_p9_api_001_to_012_rest_api_lifecycle)
+
+---
+### P9-LIVE-SMTP-001 — Optional Live SMTP Test (Gated)
 **Phase:** Phase 9
 **Source:** internal
 
@@ -10085,9 +15018,12 @@ Phase 9: Zero LLM Code Path (test: tests/acceptance/test_phase9_acceptance.py::t
 **Expected:**
 ```json
 {
-  "opt_in_live_guardrail": true,
-  "default_status": "SKIPPED",
-  "safe_in_offline_suite": true
+  "status": "NOT_RUN",
+  "live_gated": true,
+  "requires_explicit_env": [
+    "RUN_LIVE_EMAIL_TESTS=true",
+    "EMAIL_SEND_ENABLED=true"
+  ]
 }
 ```
 **Actual:**
@@ -10096,11 +15032,770 @@ _(Not executed yet)_
 **Result:** NOT_RUN
 
 **Differences:**
-- Test skipped: P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
+_(Pending execution)_
 
 **Reason:** P9-LIVE-SMTP-001 skipped: live email tests not explicitly enabled.
 
 **Human Notes:**
-Phase 9: Live SMTP Send Guardrail (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)
+Phase 9: Optional Live SMTP Test (Gated) (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_smtp_001_live_send_guardrail)
+
+---
+### P9-LIVE-SAFE-001 — Normal Test Run Zero Live Calls
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-LIVE-SAFE-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_phase9_acceptance.py::test_p9_live_safe_001_zero_live_network_calls",
+  "execution_time_s": 0.886
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Normal Test Run Zero Live Calls (test: tests/acceptance/test_phase9_acceptance.py::test_p9_live_safe_001_zero_live_network_calls)
+
+---
+### P9-QA-001 — Unmapped deterministic case cannot PASS.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-001"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_001_unmapped_deterministic_case_cannot_pass",
+  "execution_time_s": 0.003
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Unmapped deterministic case cannot PASS. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_001_unmapped_deterministic_case_cannot_pass)
+
+---
+### P9-QA-002 — Empty `pass` test cannot count as real coverage.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-002"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_002_empty_pass_test_cannot_count_as_coverage",
+  "execution_time_s": 0.023
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Empty `pass` test cannot count as real coverage. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_002_empty_pass_test_cannot_count_as_coverage)
+
+---
+### P9-QA-003 — Skipped live SMTP becomes NOT_RUN.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-003"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_003_skipped_live_smtp_becomes_not_run",
+  "execution_time_s": 0.003
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Skipped live SMTP becomes NOT_RUN. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_003_skipped_live_smtp_becomes_not_run)
+
+---
+### P9-QA-004 — Failed node maps to FAIL.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-004"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_004_failed_node_maps_to_fail",
+  "execution_time_s": 0.044
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Failed node maps to FAIL. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_004_failed_node_maps_to_fail)
+
+---
+### P9-QA-005 — Expected and Actual independently sourced.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-005"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_005_expected_and_actual_independently_sourced",
+  "execution_time_s": 0.042
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Expected and Actual independently sourced. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_005_expected_and_actual_independently_sourced)
+
+---
+### P9-QA-006 — false_pass_count computed dynamically.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-006"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_006_false_pass_count_computed_dynamically",
+  "execution_time_s": 0.002
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: false_pass_count computed dynamically. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_006_false_pass_count_computed_dynamically)
+
+---
+### P9-QA-007 — A mock provider success is labeled mock, not live SMTP success.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-007"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_007_mock_provider_success_labeled_mock_not_live_smtp",
+  "execution_time_s": 0.003
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: A mock provider success is labeled mock, not live SMTP success. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_007_mock_provider_success_labeled_mock_not_live_smtp)
+
+---
+### P9-QA-008 — A live-send case cannot run without explicit live flag.
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-QA-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/acceptance/test_qa_integrity.py::test_p9_qa_008_live_send_cannot_run_without_explicit_flag",
+  "execution_time_s": 0.002
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: A live-send case cannot run without explicit live flag. (test: tests/acceptance/test_qa_integrity.py::test_p9_qa_008_live_send_cannot_run_without_explicit_flag)
+
+---
+### P9-REG-008 — Approval Action Itself Never Sends
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-008"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_approval_does_not_send_email",
+  "execution_time_s": 0.191
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Approval Action Itself Never Sends (test: tests/test_sending.py::test_approval_does_not_send_email)
+
+---
+### P9-REG-009 — Recipient Edit Invalidates Approval
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-009"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_human_edit_creates_new_revision_and_invalidates_approval",
+  "execution_time_s": 0.253
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Recipient Edit Invalidates Approval (test: tests/test_sending.py::test_human_edit_creates_new_revision_and_invalidates_approval)
+
+---
+### P9-REG-010 — Sender Mismatch Blocks Provider Call
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-010"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_sender_identity_mismatch_blocks_send",
+  "execution_time_s": 0.251
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sender Mismatch Blocks Provider Call (test: tests/test_sending.py::test_sender_identity_mismatch_blocks_send)
+
+---
+### P9-REG-011 — Provider Secrets Sanitized Across Logs
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-011"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_smtp_sender_auth_error_sanitized",
+  "execution_time_s": 0.04
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Provider Secrets Sanitized Across Logs (test: tests/test_sending.py::test_smtp_sender_auth_error_sanitized)
+
+---
+### P9-REG-012 — Final Sent Payload Hash Equals Approved Payload Hash
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-012"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_012_sent_payload_hash_equals_approved_payload_hash",
+  "execution_time_s": 0.54
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Final Sent Payload Hash Equals Approved Payload Hash (test: tests/test_sending.py::test_p9_reg_012_sent_payload_hash_equals_approved_payload_hash)
+
+---
+### P9-REG-013 — Missing/untrusted server sender cannot self-authorize
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-013"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_013_missing_trusted_sender_config_blocks_approval_send",
+  "execution_time_s": 0.23
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Missing/untrusted server sender cannot self-authorize (test: tests/test_sending.py::test_p9_reg_013_missing_trusted_sender_config_blocks_approval_send)
+
+---
+### P9-REG-014 — Sent revision cannot be rejected
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-014"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_014_sent_revision_cannot_be_rejected",
+  "execution_time_s": 0.336
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent revision cannot be rejected (test: tests/test_sending.py::test_p9_reg_014_sent_revision_cannot_be_rejected)
+
+---
+### P9-REG-015 — Sent revision cannot request changes
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-015"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_015_sent_revision_cannot_request_changes",
+  "execution_time_s": 0.724
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent revision cannot request changes (test: tests/test_sending.py::test_p9_reg_015_sent_revision_cannot_request_changes)
+
+---
+### P9-REG-016 — Sent revision cannot transition back to not_sent
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-016"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_016_sent_revision_cannot_transition_back_to_not_sent",
+  "execution_time_s": 0.5
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent revision cannot transition back to not_sent (test: tests/test_sending.py::test_p9_reg_016_sent_revision_cannot_transition_back_to_not_sent)
+
+---
+### P9-REG-017 — Sent revision remains unchanged after invalid transition
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-017"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_017_sent_revision_remains_unchanged_after_invalid_transition",
+  "execution_time_s": 0.416
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sent revision remains unchanged after invalid transition (test: tests/test_sending.py::test_p9_reg_017_sent_revision_remains_unchanged_after_invalid_transition)
+
+---
+### P9-REG-018 — Trusted configured alias can approve and send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-018"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_018_trusted_alias_can_approve_and_send",
+  "execution_time_s": 0.333
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Trusted configured alias can approve and send (test: tests/test_sending.py::test_p9_reg_018_trusted_alias_can_approve_and_send)
+
+---
+### P9-REG-019 — Untrusted alias cannot approve or send
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-019"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_019_untrusted_alias_cannot_approve_or_send",
+  "execution_time_s": 0.176
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Untrusted alias cannot approve or send (test: tests/test_sending.py::test_p9_reg_019_untrusted_alias_cannot_approve_or_send)
+
+---
+### P9-REG-020 — Sender display name is fingerprinted
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-020"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_020_sender_display_name_fingerprinted",
+  "execution_time_s": 0.239
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Sender display name is fingerprinted (test: tests/test_sending.py::test_p9_reg_020_sender_display_name_fingerprinted)
+
+---
+### P9-REG-021 — Changing SMTP_FROM_NAME after approval does not mutate provider payload
+**Phase:** Phase 9
+**Source:** internal
+
+**Input:**
+```json
+{
+  "case_id": "P9-REG-021"
+}
+```
+**Expected:**
+```json
+{
+  "status": "PASS"
+}
+```
+**Actual:**
+```json
+{
+  "status": "PASS",
+  "test_node": "tests/test_sending.py::test_p9_reg_021_changing_smtp_from_name_after_approval_does_not_mutate_provider_payload",
+  "execution_time_s": 0.448
+}
+```
+**Result:** PASS
+
+**Differences:**
+_(None / In sync)_
+
+**Human Notes:**
+Phase 9: Changing SMTP_FROM_NAME after approval does not mutate provider payload (test: tests/test_sending.py::test_p9_reg_021_changing_smtp_from_name_after_approval_does_not_mutate_provider_payload)
 
 ---

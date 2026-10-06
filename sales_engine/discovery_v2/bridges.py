@@ -71,22 +71,25 @@ class Phase6EnrichmentAdapter:
         # Lookup historical contacts first
         historical_contacts = []
         with self.store._get_connection() as conn:
-            rows = conn.execute(
-                """
-                SELECT contact_name, contact_role, email, email_status, is_respondent
-                FROM historical_contacts
-                WHERE canonical_domain = ?
-                """,
-                (candidate.canonical_domain,),
-            ).fetchall()
-            for r in rows:
-                historical_contacts.append({
-                    "name": r["contact_name"],
-                    "role": r["contact_role"],
-                    "email": r["email"],
-                    "email_status": r["email_status"],
-                    "is_respondent": bool(r["is_respondent"]),
-                })
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT contact_name, contact_role, email, email_status, is_respondent
+                    FROM historical_contacts
+                    WHERE canonical_domain = ?
+                    """,
+                    (candidate.canonical_domain,),
+                ).fetchall()
+                for r in rows:
+                    historical_contacts.append({
+                        "name": r["contact_name"],
+                        "role": r["contact_role"],
+                        "email": r["email"],
+                        "email_status": r["email_status"],
+                        "is_respondent": bool(r["is_respondent"]),
+                    })
+            except Exception:
+                pass
 
         return {
             "company_id": candidate.company_id,
@@ -100,7 +103,7 @@ class Phase6EnrichmentAdapter:
     def _recommend_target_roles(self, candidate: CandidateCompany) -> List[str]:
         if candidate.relationship_type == RelationshipType.technology_partner:
             return ["CTO", "Head of Product", "VP Engineering", "Software Partnerships"]
-        if candidate.bim_maturity.value in ("mature", "advanced"):
+        if candidate.bim_maturity.value in ("mature", "advanced", "high", "enterprise"):
             return ["BIM Manager", "Director of BIM", "Digital Practice Leader", "Technical Director"]
         return ["Managing Director", "Principal", "Owner", "Technical Director"]
 
@@ -142,6 +145,17 @@ class Phase7ExportBridge:
             "cold_outreach_allowed": candidate.cold_outreach_allowed,
         })
         return enriched
+
+    @classmethod
+    def build_lead_export_row(cls, candidate: CandidateCompany) -> Dict[str, Any]:
+        base = {
+            "company_name": candidate.name,
+            "company_domain": candidate.canonical_domain,
+            "domain": candidate.canonical_domain,
+            "country": candidate.country or "",
+            "city": candidate.city or "",
+        }
+        return cls.enrich_export_row(base, candidate)
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +494,8 @@ class Phase10ConsoleBridge:
         obs_dicts = [o.model_dump() if hasattr(o, "model_dump") else dict(o) for o in obs]
         ev_dicts = [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in ev]
         return {
+            "candidate_id": company_id,
+            "company_id": company_id,
             "company": comp_dict,
             "observations": obs_dicts,
             "observation_count": len(obs),

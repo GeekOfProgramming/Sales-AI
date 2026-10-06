@@ -1,0 +1,20 @@
+[
+  {
+    "source_id": "uk_directory",
+    "source_type": "company_directory",
+    "source_url": "https://uk-dir.test/abc-eng",
+    "observed_company_name": "ABC Engineering Ltd",
+    "observed_domain": "abcengineering.co.uk",
+    "country": "United Kingdom",
+    "city": "London"
+  },
+  {
+    "source_id": "it_directory",
+    "source_type": "company_directory",
+    "source_url": "https://it-dir.test/abc-eng",
+    "observed_company_name": "ABC Engineering S.r.l.",
+    "observed_domain": "abc-engineering.com",
+    "country": "Italy",
+    "city": "Milan"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "candidate_id": "domain:alfa-progetti.it",
+  "company_name": "Alfa Progetti",
+  "company_domain": "alfa-progetti.it",
+  "company_types": [
+    "engineering",
+    "architecture"
+  ],
+  "country": "Italy",
+  "employee_size_hint": "80",
+  "fit_assessment": "high",
+  "intent_assessment": "unknown",
+  "qualification_outcome": "watchlist",
+  "qualification_reasons": [
+    "Target engineering company with scale but no active job/tender intent signals"
+  ],
+  "cold_outreach_allowed": false
+}

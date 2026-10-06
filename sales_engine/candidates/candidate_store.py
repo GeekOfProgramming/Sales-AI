@@ -82,14 +82,16 @@ def normalize_company_name(name: str) -> str:
     if not name:
         return ""
     n = name.strip().lower()
+    # Normalize dotted abbreviations e.g. s.r.l. -> srl, s.p.a. -> spa
+    n = re.sub(r'\b([a-z])\.([a-z])\.([a-z])\.?', r'\1\2\3', n)
+    n = re.sub(r'\b([a-z])\.([a-z])\.?', r'\1\2', n)
     # Strip common legal suffixes
     suffixes = [
-        "s.r.l.", "srl", "s.p.a.", "spa", "gmbh", "ltd", "llc", "inc.", "inc",
-        "s.a.s.", "sas", "s.n.c.", "snc", "soc. coop.", "coop", "corp.", "corp"
+        "srl", "spa", "gmbh", "ltd", "llc", "inc",
+        "sas", "snc", "soc coop", "coop", "corp"
     ]
     for s in suffixes:
-        pattern = r'\b' + re.escape(s) + r'\b\.?'
-        n = re.sub(pattern, '', n)
+        n = re.sub(r'\b' + re.escape(s) + r'\b', '', n)
     n = re.sub(r'[^a-zA-Z0-9\s]', ' ', n)
     return " ".join(n.split())
 
@@ -577,6 +579,29 @@ class CandidateStore:
                 return self._row_to_candidate(row)
         return None
 
+    get_by_domain = get_candidate_by_domain
+
+    def get_by_source_identity(self, identity: str) -> Optional[CandidateCompany]:
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM candidate_companies").fetchall()
+            for r in rows:
+                sids = json.loads(r["source_identities_json"] or "[]")
+                if identity in sids:
+                    return self._row_to_candidate(r)
+        return None
+
+    def add_alias_to_candidate(self, candidate_id: str, alias: str) -> None:
+        cand = self.get_candidate(candidate_id)
+        if cand and alias not in cand.aliases:
+            cand.aliases.append(alias)
+            self.save_candidate(cand)
+
+    def add_domain_history_to_candidate(self, candidate_id: str, old_domain: str) -> None:
+        cand = self.get_candidate(candidate_id)
+        if cand and old_domain not in cand.domain_history:
+            cand.domain_history.append(old_domain)
+            self.save_candidate(cand)
+
     def list_candidates(self, filters: Optional[Dict[str, Any]] = None) -> List[CandidateCompany]:
         filters = filters or {}
         query = "SELECT * FROM candidate_companies WHERE 1=1"
@@ -629,6 +654,8 @@ class CandidateStore:
                 obs.confidence, json.dumps(obs.evidence_refs or []), json.dumps(obs.raw_ref or {})
             ))
             return existing is None
+
+    save_observation = add_observation
 
     def get_observations(self, candidate_id: str) -> List[DiscoveryObservation]:
         with self._get_connection() as conn:
@@ -770,6 +797,14 @@ class CandidateStore:
                 }
                 for r in rows
             ]
+
+    def is_on_watchlist(self, candidate_id: str) -> bool:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM watchlist WHERE candidate_id = ? AND watch_status = 'active'",
+                (candidate_id,)
+            ).fetchone()
+            return row is not None
 
     def promote_from_watchlist(
         self,
@@ -957,6 +992,11 @@ class CandidateStore:
 
     def get_by_domain(self, domain: str) -> Optional[CandidateCompany]:
         return self.get_candidate_by_domain(domain)
+
+    find_or_create_candidate = get_or_create_candidate
+    get_observations_for_candidate = get_observations
+    save_market_evidence = add_evidence
+    get_evidence_for_candidate = get_evidence
 
     def upsert_company(self, cand: CandidateCompany, observation: Optional[DiscoveryObservation] = None) -> CandidateCompany:
         self.save_candidate(cand)

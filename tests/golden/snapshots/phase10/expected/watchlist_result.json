@@ -1,0 +1,5 @@
+{
+  "outcome": "watchlist",
+  "cold_outreach_allowed": false,
+  "requires_reevaluation_on_new_signal": true
+}

@@ -217,8 +217,11 @@ class SourceRegistry:
 
     def list_sources(self, enabled_only: bool = True) -> List[SourceConfig]:
         if enabled_only:
-            return [s for s in self.sources.values() if s.enabled]
-        return list(self.sources.values())
+            return sorted([s for s in self.sources.values() if s.enabled], key=lambda s: s.priority)
+        return sorted(list(self.sources.values()), key=lambda s: s.priority)
+
+    def get_enabled_sources(self) -> List[SourceConfig]:
+        return self.list_sources(enabled_only=True)
 
     def get_market(self, market_code: str) -> Optional[Dict[str, Any]]:
         if not market_code or not isinstance(self.markets, dict):
