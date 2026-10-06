@@ -14,11 +14,11 @@
 - **Live Tests Executed:** Yes
 
 ## Summary
-- **Total Cases:** 703
-- **Passed:** 687
+- **Total Cases:** 774
+- **Passed:** 755
 - **Failed:** 0
 - **Review Required:** 4
-- **Deferred (Model Limitation):** 7
+- **Deferred (Model Limitation):** 10
 - **Skipped / Not Run:** 5
 - **Source Changed:** 0
 
@@ -34,6 +34,8 @@
 | Phase 8 | 98 | 93 | 0 | 0 | 5 | 0 |
 | Phase 9 | 185 | 184 | 0 | 0 | 0 | 1 |
 | Phase 10 | 245 | 245 | 0 | 0 | 0 | 0 |
+| Phase 10.5 | 71 | 68 | 0 | 0 | 3 | 0 |
+
 
 ## Phase 7 Reconciliation & Case Count Model
 To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
@@ -226,6 +228,58 @@ Phase 10 implements deterministic multi-source market discovery, historical CRM/
   - `source_budget_overrun_count = 0`
   - `path_traversal_violation_count = 0`
   - `unsupported_source_type_count = 0`
+
+## Phase 10.5 Case Count & Architecture Model (Sales Console & Operator Review Golden QA)
+Phase 10.5 implements the browser-based local Sales Console UI, human review and approval workflows, historical import preview/confirm boundaries, and strict outbound delivery gates:
+- **Total Golden Cases in Catalog (`tests/golden/phase10_5_console.json` & `tests/reports/phase10_5_latest.json`):** 71 cases
+  - **Passed (Deterministic):** 68 test cases covering all console safety gates, integration contracts, workflows, and smoke screens:
+    - **Critical Safety Gates (`P10_5-GOLD-001` .. `012`):** 12/12 PASS
+      - `P10_5-GOLD-001`: Operator approval never initiates provider send
+      - `P10_5-GOLD-002`: Human edit generates new revision and invalidates prior approval
+      - `P10_5-GOLD-003`: Sent revisions are immutable and terminal
+      - `P10_5-GOLD-004`: Exact email and company-domain suppression strictly block send
+      - `P10_5-GOLD-005`: Dry Run makes zero provider/network delivery calls
+      - `P10_5-GOLD-006`: Real send requires explicit confirmation modal
+      - `P10_5-GOLD-007`: EMAIL_SEND_ENABLED flag cannot be bypassed
+      - `P10_5-GOLD-008`: Sender trust cannot be bypassed (rejects untrusted/unconfigured senders)
+      - `P10_5-GOLD-009`: CSRF token and Same-Origin protections strictly enforced
+      - `P10_5-GOLD-010`: Zero secrets, API keys, or SMTP passwords exposed in UI
+      - `P10_5-GOLD-011`: Zero autonomous re-engagement of historical contacts
+      - `P10_5-GOLD-012`: Zero autonomous send across all console endpoints
+    - **Phase 8 / 6 / 9 Integration Gates (`P10_5-GOLD-013` .. `020`):** 8/8 PASS
+      - `P10_5-GOLD-013`: Real Phase 10 `qualified_for_enrichment` candidate recognized
+      - `P10_5-GOLD-014`: Ineligible qualification outcomes remain blocked from drafting
+      - `P10_5-GOLD-015`: Draft generation requires pre-existing backend contact candidate
+      - `P10_5-GOLD-016`: Verified and likely contact email statuses permitted; risky/unknown blocked
+      - `P10_5-GOLD-017`: Console delegates draft generation to Phase 8 stack (never independently authors)
+      - `P10_5-GOLD-018`: Phase 8 evidence, service, and model metadata preserved in Phase 9 draft
+      - `P10_5-GOLD-019`: Newly generated draft lands in Phase 9 queue as `pending_review`
+      - `P10_5-GOLD-020`: Insufficient market grounding safely prevents draft creation
+    - **Operator Review Workflows (`P10_5-WORKFLOW-001` .. `007`):** 7/7 PASS (Approve, Edit, Reject, Request Changes, DNC, Dry Run, Confirmed Send)
+    - **DNC & Suppression UI (`P10_5-SUPP-001` .. `003`):** 3/3 PASS (Suppression state creation, UI/Gate enforcement, no unsuppress bypass)
+    - **Historical Import (`P10_5-IMPORT-001` .. `005`):** 5/5 PASS (Preview non-mutating, Confirm idempotent, path traversal / root escape / invalid extensions blocked)
+    - **Candidate & BIM Presentation (`P10_5-CAND-001` .. `002`, `BIM-001`, `WATCH-001` .. `002`):** 5/5 PASS (Evidence vs assessment separation, Unknown BIM preserved, Watchlist isolation)
+    - **Sources, URL Safety, Settings, Replies (`SRC-001` .. `002`, `URL-001` .. `002`, `SET-001`, `REP-001`):** 6/6 PASS (Safe URL schemes, credential status truthful, live mailbox banner truthful)
+    - **Boundaries & Audit (`NET-001`, `LLM-001`, `REV-001`, `AUDIT-001`, `SENT-001`, `SEC-001`):** 6/6 PASS (Localhost bind, 0 UI LLM calls, stale revision rejection, immutable audit, clean release package)
+    - **Core Screen Smoke Tests (`P10_5-SMOKE-001` .. `014`):** 14/14 PASS (Dashboard, Discoveries, Sources, Candidates, Detail, Leads, Drafts, Draft Detail, Approved, Sent, Watchlist, Suppression, Replies, Settings)
+    - **Deterministic Semantic Grounding (`P10_5-SEM-001` .. `002`):** 2/2 PASS (Structural shape, active service matching, zero fabricated claims)
+  - **Weak-LLM Deferred Quality (`P10_5-SEM-003` .. `005`):** 3 cases marked `DEFERRED_MODEL` under `qwen2.5:1.5b` policy (persuasive CTA nuance, generic personalization, AEC idiom naturalness deferred for larger model without blocking release).
+- **Critical Safety Results:** 12/12 PASS (100%)
+- **Deterministic Pass Rate:** 100.0% (68 / 68 deterministic cases pass)
+- **False Pass Count:** 0
+- **Unmapped Deterministic Cases:** 0
+- **Audit & Safety Counters:**
+  - `provider_calls_in_dry_run = 0`
+  - `provider_calls_for_approve = 0`
+  - `unauthorized_send_count = 0`
+  - `suppression_bypass_count = 0`
+  - `stale_revision_bypass_count = 0`
+  - `csrf_bypass_count = 0`
+  - `secret_exposure_count = 0`
+  - `mutating_get_count = 0`
+  - `autonomous_reengagement_count = 0`
+  - `ui_llm_render_call_count = 0`
+  - `runtime_db_packaged_count = 0`
 
 ## Failures
 _No failures detected._

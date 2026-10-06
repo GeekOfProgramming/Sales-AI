@@ -42,6 +42,7 @@ EXCLUDED_EXTENSIONS: Set[str] = {
     ".crt",
     ".cer",
     ".log",
+    ".zip",
 }
 
 # Explicit sensitive filenames or tokens to reject
@@ -147,7 +148,10 @@ def build_release_zip(
 
 
 if __name__ == "__main__":
+    import shutil
     src = Path(__file__).parent.parent
     dest = src.parent / "SalesAI_export.zip"
     count = build_release_zip(src, dest)
-    print(f"Successfully packaged {count} files into {dest}")
+    shutil.copy2(dest, src / "SalesAI_export.zip")
+    print(f"Successfully packaged {count} files into {dest} and {src / 'SalesAI_export.zip'}")
+

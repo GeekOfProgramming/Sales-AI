@@ -43,3 +43,5 @@ PUBLIC_URL.txt
 # Large binaries
 cloudflared.exe
 *.exe
+*.zip
+

@@ -280,6 +280,9 @@ def resolve_safe_import_path(file_path: str) -> Path:
             detail="Access denied: file_path must reside within repository or data directory. Path traversal outside root is forbidden.",
         )
 
+    if resolved.suffix.lower() not in (".csv", ".xlsx", ".xlsm"):
+        raise HTTPException(status_code=400, detail="Unsupported file format (CSV/XLSX only)")
+
     if not resolved.exists():
         raise HTTPException(status_code=404, detail=f"File {file_path} not found")
 
@@ -491,6 +494,7 @@ async def manual_seed_action(
 
 
 # P10_5-ADV-009 / ADV-012 / ADV-013: Preview Historical Import (Zero Mutations)
+@router.post("/import/historical/preview")
 @router.post("/sources/import-history/preview")
 @router.post("/sources/historical/preview")
 async def preview_historical_import_action(
@@ -556,6 +560,7 @@ async def preview_historical_import_action(
 
 
 # P10_5-ADV-010 / ADV-011: Confirm and Execute Historical Import
+@router.post("/import/historical/confirm")
 @router.post("/sources/import-history/confirm")
 @router.post("/sources/historical/confirm")
 async def confirm_historical_import_action(
@@ -1414,8 +1419,11 @@ async def send_draft_action(
             dry_run=False,
             reviewer=reviewer,
         )
+        if res.status != "sent":
+            err_detail = f"Send blocked ({res.error_type or res.status}): {res.error_message or 'Delivery aborted'}"
+            return RedirectResponse(f"/sales/drafts/{draft_id}?error={urllib.parse.quote(err_detail)}", status_code=status.HTTP_303_SEE_OTHER)
         msg = f"Email sent successfully to {latest.recipient_email} (Status: {res.status})."
-        return RedirectResponse(f"/sales/drafts/{draft_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(f"/sales/drafts/{draft_id}?message={urllib.parse.quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
         return RedirectResponse(f"/sales/drafts/{draft_id}?error=Send failed: {str(e)}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1423,21 +1431,30 @@ async def send_draft_action(
 @router.post("/drafts/{draft_id}/suppress")
 async def suppress_draft_recipient_action(
     draft_id: str,
-    email: str = Form(...),
+    email: Optional[str] = Form(None),
     reason: str = Form("manual"),
     csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     draft = svcs["rev_store"].get_draft(draft_id)
+    target_email = email.strip().lower() if (email and email.strip()) else (draft.recipient_email if draft else "")
+    if not target_email:
+        return RedirectResponse(f"/sales/drafts/{draft_id}?error=Missing recipient email for suppression.", status_code=status.HTTP_303_SEE_OTHER)
     company_dom = draft.lead_id.replace("domain:", "") if draft else None
     
+    valid_reasons = {"manual", "opt_out", "bounce", "spam_complaint", "competitor"}
+    clean_reason = reason.strip().lower() if reason else "manual"
+    if clean_reason not in valid_reasons:
+        clean_reason = "manual"
+
     svcs["suppression_svc"].add_suppression(
-        email=email.strip().lower(),
+        email=target_email,
         company_domain=company_dom,
-        reason=reason,
+        reason=clean_reason,
         source="sales_console_draft",
     )
     return RedirectResponse(f"/sales/drafts/{draft_id}?message=Recipient suppressed.", status_code=status.HTTP_303_SEE_OTHER)
+
 
 
 # ---------------------------------------------------------------------------
@@ -1598,6 +1615,7 @@ async def watchlist_view(request: Request):
 # ---------------------------------------------------------------------------
 # 10. DO NOT CONTACT / SUPPRESSION
 # ---------------------------------------------------------------------------
+@router.get("/suppression", response_class=HTMLResponse)
 @router.get("/do-not-contact", response_class=HTMLResponse)
 async def suppression_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
     svcs = get_console_services()
@@ -1629,31 +1647,34 @@ async def suppression_view(request: Request, message: Optional[str] = None, erro
     )
 
 
+@router.post("/suppression/add")
 @router.post("/do-not-contact/add")
 async def add_suppression_action(
     scope: str = Form("email"),
-    target: str = Form(...),
+    target: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
     company_domain: Optional[str] = Form(None),
     reason: str = Form("manual"),
     csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
-    clean_target = target.strip().lower()
+    clean_target = (target or email or "").strip().lower()
     clean_domain = company_domain.strip().lower() if company_domain else None
+    clean_reason = reason if reason in ("manual", "opt_out", "bounce", "complaint", "invalid_recipient") else "manual"
 
     if scope == "domain" or "@" not in clean_target:
         domain_val = clean_target if "@" not in clean_target else (clean_domain or clean_target.split("@", 1)[1])
         svcs["suppression_svc"].add_suppression(
             email=f"*@{domain_val}",
             company_domain=domain_val,
-            reason=reason,
+            reason=clean_reason,
             source="sales_console",
         )
     else:
         svcs["suppression_svc"].add_suppression(
             email=clean_target,
             company_domain=clean_domain,
-            reason=reason,
+            reason=clean_reason,
             source="sales_console",
         )
     return RedirectResponse("/sales/do-not-contact?message=Suppression+entry+added.", status_code=status.HTTP_303_SEE_OTHER)

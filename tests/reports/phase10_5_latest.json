@@ -1,0 +1,704 @@
+{
+  "phase": "Phase 10.5",
+  "description": "Sales Console & Human Review Interface (Acceptance & Golden QA)",
+  "run_timestamp": "2026-10-06T13:51:33.629645+00:00",
+  "generated_at": "2026-10-06T13:51:33.629645+00:00",
+  "git_commit": "e93cd20",
+  "llm_model": "qwen2.5:1.5b",
+  "weak_llm_policy": "Semantic email-quality limitations deferred without blocking Phase 10.5 acceptance",
+  "total_cases": 71,
+  "mapped_cases": 71,
+  "executed_cases": 71,
+  "pass_count": 68,
+  "fail_count": 0,
+  "review_count": 0,
+  "not_run_count": 0,
+  "deferred_model_count": 3,
+  "total cases": 71,
+  "mapped cases": 71,
+  "executed cases": 71,
+  "PASS": 68,
+  "FAIL": 0,
+  "REVIEW": 0,
+  "NOT_RUN": 0,
+  "DEFERRED_MODEL": 3,
+  "overall_deterministic_pass_rate": "100.0%",
+  "overall deterministic pass rate": "100.0%",
+  "critical_safety_total": 12,
+  "critical_safety_passed": 12,
+  "critical_safety_failed": 0,
+  "critical safety total": 12,
+  "critical safety passed": 12,
+  "critical safety failed": 0,
+  "false_pass_count": 0,
+  "unmapped_deterministic_cases": 0,
+  "provider_calls_in_dry_run": 0,
+  "provider_calls_for_approve": 0,
+  "unauthorized_send_count": 0,
+  "suppression_bypass_count": 0,
+  "stale_revision_bypass_count": 0,
+  "csrf_bypass_count": 0,
+  "secret_exposure_count": 0,
+  "mutating_get_count": 0,
+  "autonomous_reengagement_count": 0,
+  "ui_llm_render_call_count": 0,
+  "runtime_db_packaged_count": 0,
+  "invariants": {
+    "approve_never_sends": true,
+    "edit_creates_new_revision_invalidates_approval": true,
+    "sent_revision_immutable": true,
+    "exact_and_domain_suppression_blocks_send": true,
+    "dry_run_zero_provider_calls": true,
+    "real_send_requires_explicit_confirmation": true,
+    "email_send_enabled_cannot_be_bypassed": true,
+    "sender_trust_cannot_be_bypassed": true,
+    "csrf_and_same_origin_enforced": true,
+    "secrets_never_render_in_console": true,
+    "no_autonomous_reengagement": true,
+    "zero_autonomous_send": true,
+    "console_delegates_draft_to_phase8": true,
+    "phase8_metadata_preserved_in_phase9": true,
+    "unauthorized_path_traversal_blocked": true
+  },
+  "cases": {
+    "P10_5-GOLD-001": {
+      "case_id": "P10_5-GOLD-001",
+      "title": "Approve Never Sends",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_001_approve_never_sends"
+    },
+    "P10_5-GOLD-002": {
+      "case_id": "P10_5-GOLD-002",
+      "title": "Edit Invalidates Approval",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_002_edit_invalidates_approval"
+    },
+    "P10_5-GOLD-003": {
+      "case_id": "P10_5-GOLD-003",
+      "title": "Sent Revision Is Immutable",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_003_sent_revision_immutable"
+    },
+    "P10_5-GOLD-004": {
+      "case_id": "P10_5-GOLD-004",
+      "title": "Suppressed Recipient Cannot Send (Email and Domain)",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_004_suppressed_recipient_cannot_send"
+    },
+    "P10_5-GOLD-005": {
+      "case_id": "P10_5-GOLD-005",
+      "title": "Dry Run Has Zero Network Delivery",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_005_dry_run_zero_network_delivery"
+    },
+    "P10_5-GOLD-006": {
+      "case_id": "P10_5-GOLD-006",
+      "title": "Real Send Requires Explicit Confirmation",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_006_real_send_requires_explicit_confirmation"
+    },
+    "P10_5-GOLD-007": {
+      "case_id": "P10_5-GOLD-007",
+      "title": "Send-Disabled Flag Cannot Be Bypassed",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_007_send_disabled_flag_cannot_be_bypassed"
+    },
+    "P10_5-GOLD-008": {
+      "case_id": "P10_5-GOLD-008",
+      "title": "Sender Trust Cannot Be Bypassed",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_008_sender_trust_cannot_be_bypassed"
+    },
+    "P10_5-GOLD-009": {
+      "case_id": "P10_5-GOLD-009",
+      "title": "CSRF / Same-Origin Protection Enforced",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_009_csrf_and_same_origin_enforced"
+    },
+    "P10_5-GOLD-010": {
+      "case_id": "P10_5-GOLD-010",
+      "title": "Secrets Never Render In Console UI",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_010_secrets_never_render_in_console"
+    },
+    "P10_5-GOLD-011": {
+      "case_id": "P10_5-GOLD-011",
+      "title": "No Autonomous Re-Engagement Of Historical Contacts",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_011_no_autonomous_reengagement"
+    },
+    "P10_5-GOLD-012": {
+      "case_id": "P10_5-GOLD-012",
+      "title": "Zero Autonomous Send Across All Console Actions",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_012_zero_autonomous_send"
+    },
+    "P10_5-GOLD-013": {
+      "case_id": "P10_5-GOLD-013",
+      "title": "Real Phase 10 Qualified For Enrichment Recognized",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_013_real_phase10_qualification_recognized"
+    },
+    "P10_5-GOLD-014": {
+      "case_id": "P10_5-GOLD-014",
+      "title": "Ineligible Qualification Routes Remain Blocked",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_014_ineligible_qualification_routes_stay_blocked"
+    },
+    "P10_5-GOLD-015": {
+      "case_id": "P10_5-GOLD-015",
+      "title": "Draft Generation Requires Existing Backend Contact",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_015_existing_contact_required"
+    },
+    "P10_5-GOLD-016": {
+      "case_id": "P10_5-GOLD-016",
+      "title": "Contact Email Status Eligibility (Verified/Likely vs Risky/Unknown)",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_016_contact_email_status_eligibility"
+    },
+    "P10_5-GOLD-017": {
+      "case_id": "P10_5-GOLD-017",
+      "title": "Console Delegates Draft Generation To Phase 8 Stack",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_017_generate_draft_uses_phase8"
+    },
+    "P10_5-GOLD-018": {
+      "case_id": "P10_5-GOLD-018",
+      "title": "Phase 8 Evidence, Service And Model Metadata Preserved",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_018_phase8_metadata_preserved_in_phase9"
+    },
+    "P10_5-GOLD-019": {
+      "case_id": "P10_5-GOLD-019",
+      "title": "Generated Draft Lands As Pending Review Not Sent",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_019_new_draft_enters_pending_review"
+    },
+    "P10_5-GOLD-020": {
+      "case_id": "P10_5-GOLD-020",
+      "title": "Insufficient Grounding Safely Yields No Draft",
+      "section": "Phase 8 / 6 / 9 Integration",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_gold_020_insufficient_grounding_is_safe"
+    },
+    "P10_5-WORKFLOW-001": {
+      "case_id": "P10_5-WORKFLOW-001",
+      "title": "Operator Approve Action Transitions To Approved",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-WORKFLOW-002": {
+      "case_id": "P10_5-WORKFLOW-002",
+      "title": "Operator Edit Action Creates Revision 2 Pending Review",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-WORKFLOW-003": {
+      "case_id": "P10_5-WORKFLOW-003",
+      "title": "Operator Reject Action Transitions To Rejected",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-WORKFLOW-004": {
+      "case_id": "P10_5-WORKFLOW-004",
+      "title": "Operator Request Changes Action Transitions Through Phase 9",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-WORKFLOW-005": {
+      "case_id": "P10_5-WORKFLOW-005",
+      "title": "Operator DNC / Suppress Action Registers In Store",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-WORKFLOW-006": {
+      "case_id": "P10_5-WORKFLOW-006",
+      "title": "Operator Dry Run Action Performs Validation Safely",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-WORKFLOW-007": {
+      "case_id": "P10_5-WORKFLOW-007",
+      "title": "Confirmed Send Executes Outbound Delivery Through Phase 9",
+      "section": "Human Review Workflow",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_workflow_actions"
+    },
+    "P10_5-SUPP-001": {
+      "case_id": "P10_5-SUPP-001",
+      "title": "DNC Action Creates Phase 9 Suppression State",
+      "section": "DNC / Suppression UI",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_supp_actions"
+    },
+    "P10_5-SUPP-002": {
+      "case_id": "P10_5-SUPP-002",
+      "title": "DNC Blocks Subsequent Send In Both UI And Gate",
+      "section": "DNC / Suppression UI",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_supp_actions"
+    },
+    "P10_5-SUPP-003": {
+      "case_id": "P10_5-SUPP-003",
+      "title": "Console Forbids Silent Unsuppression Bypass",
+      "section": "DNC / Suppression UI",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_supp_actions"
+    },
+    "P10_5-IMPORT-001": {
+      "case_id": "P10_5-IMPORT-001",
+      "title": "Historical Import Preview Mutates Zero Database Records",
+      "section": "Historical Import",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_import_workflow_and_security"
+    },
+    "P10_5-IMPORT-002": {
+      "case_id": "P10_5-IMPORT-002",
+      "title": "Historical Import Confirm Executes Idempotently",
+      "section": "Historical Import",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_import_workflow_and_security"
+    },
+    "P10_5-IMPORT-003": {
+      "case_id": "P10_5-IMPORT-003",
+      "title": "Path Traversal (../) In Import Path Rejected (HTTP 400)",
+      "section": "Historical Import",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_import_workflow_and_security"
+    },
+    "P10_5-IMPORT-004": {
+      "case_id": "P10_5-IMPORT-004",
+      "title": "Outside-Repository Absolute Path In Import Path Rejected",
+      "section": "Historical Import",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_import_workflow_and_security"
+    },
+    "P10_5-IMPORT-005": {
+      "case_id": "P10_5-IMPORT-005",
+      "title": "Unsupported File Extensions In Import Path Rejected",
+      "section": "Historical Import",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_import_workflow_and_security"
+    },
+    "P10_5-CAND-001": {
+      "case_id": "P10_5-CAND-001",
+      "title": "Candidate Detail Distinguishes Evidence From Assessments",
+      "section": "Candidate Page",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_candidate_presentation_and_bim"
+    },
+    "P10_5-CAND-002": {
+      "case_id": "P10_5-CAND-002",
+      "title": "Internal Assessments Not Presented As External Facts",
+      "section": "Candidate Page",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_candidate_presentation_and_bim"
+    },
+    "P10_5-BIM-001": {
+      "case_id": "P10_5-BIM-001",
+      "title": "Unknown BIM Maturity Rendered As Unknown Never No BIM",
+      "section": "BIM Display",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_candidate_presentation_and_bim"
+    },
+    "P10_5-WATCH-001": {
+      "case_id": "P10_5-WATCH-001",
+      "title": "Watchlist Candidate Displays Reason Without Send Action",
+      "section": "Watchlist",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_candidate_presentation_and_bim"
+    },
+    "P10_5-WATCH-002": {
+      "case_id": "P10_5-WATCH-002",
+      "title": "Watchlist Blocks Autonomous Outreach Draft Generation",
+      "section": "Watchlist",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_candidate_presentation_and_bim"
+    },
+    "P10_5-SRC-001": {
+      "case_id": "P10_5-SRC-001",
+      "title": "Source Credential Health Uses Configured credential_env_var",
+      "section": "Source Health",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sources_url_safety_and_replies"
+    },
+    "P10_5-SRC-002": {
+      "case_id": "P10_5-SRC-002",
+      "title": "Source Failure Visible Without Hiding Historical Discoveries",
+      "section": "Source Health",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sources_url_safety_and_replies"
+    },
+    "P10_5-URL-001": {
+      "case_id": "P10_5-URL-001",
+      "title": "HTTP and HTTPS Evidence URLs Render As Safe Links",
+      "section": "Evidence URL Safety",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sources_url_safety_and_replies"
+    },
+    "P10_5-URL-002": {
+      "case_id": "P10_5-URL-002",
+      "title": "Unsafe Schemes (javascript, data, file) Render As Unclickable Text",
+      "section": "Evidence URL Safety",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sources_url_safety_and_replies"
+    },
+    "P10_5-SET-001": {
+      "case_id": "P10_5-SET-001",
+      "title": "Settings Page Displays Truthful System Availability",
+      "section": "Settings",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sources_url_safety_and_replies"
+    },
+    "P10_5-REP-001": {
+      "case_id": "P10_5-REP-001",
+      "title": "Replies Page Displays Disconnected Live Mailbox Banner",
+      "section": "Replies Page",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sources_url_safety_and_replies"
+    },
+    "P10_5-NET-001": {
+      "case_id": "P10_5-NET-001",
+      "title": "Default Console Server Binds Exclusively To Localhost",
+      "section": "Localhost Boundary",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_boundaries_and_audit"
+    },
+    "P10_5-LLM-001": {
+      "case_id": "P10_5-LLM-001",
+      "title": "Console Page Renders Make Exactly Zero LLM Calls",
+      "section": "UI Rendering / LLM Boundary",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_boundaries_and_audit"
+    },
+    "P10_5-REV-001": {
+      "case_id": "P10_5-REV-001",
+      "title": "Stale Browser Draft Revision Protection Rejects Outdated Edits",
+      "section": "Stale Revision Protection",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_boundaries_and_audit"
+    },
+    "P10_5-AUDIT-001": {
+      "case_id": "P10_5-AUDIT-001",
+      "title": "Operator Actions Produce Immutable Timeline Events",
+      "section": "Audit Trail",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_boundaries_and_audit"
+    },
+    "P10_5-SENT-001": {
+      "case_id": "P10_5-SENT-001",
+      "title": "Sent History Is Read-Only And Displays Immutable Payload",
+      "section": "Sent Page",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_boundaries_and_audit"
+    },
+    "P10_5-SEC-001": {
+      "case_id": "P10_5-SEC-001",
+      "title": "Release Packager Excludes Runtime State, Databases And Secrets",
+      "section": "Release Security",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_boundaries_and_audit"
+    },
+    "P10_5-SMOKE-001": {
+      "case_id": "P10_5-SMOKE-001",
+      "title": "Dashboard /sales Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales]"
+    },
+    "P10_5-SMOKE-002": {
+      "case_id": "P10_5-SMOKE-002",
+      "title": "Discoveries /sales/discoveries Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/discoveries]"
+    },
+    "P10_5-SMOKE-003": {
+      "case_id": "P10_5-SMOKE-003",
+      "title": "Sources /sales/sources Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/sources]"
+    },
+    "P10_5-SMOKE-004": {
+      "case_id": "P10_5-SMOKE-004",
+      "title": "Candidates /sales/candidates Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/candidates]"
+    },
+    "P10_5-SMOKE-005": {
+      "case_id": "P10_5-SMOKE-005",
+      "title": "Candidate Detail /sales/candidates/{id} Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/candidates/cand_milano]"
+    },
+    "P10_5-SMOKE-006": {
+      "case_id": "P10_5-SMOKE-006",
+      "title": "Leads /sales/leads Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/leads]"
+    },
+    "P10_5-SMOKE-007": {
+      "case_id": "P10_5-SMOKE-007",
+      "title": "Drafts Review Queue /sales/drafts Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/drafts]"
+    },
+    "P10_5-SMOKE-008": {
+      "case_id": "P10_5-SMOKE-008",
+      "title": "Draft Detail /sales/drafts/{id} Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/drafts/d_gold_001]"
+    },
+    "P10_5-SMOKE-009": {
+      "case_id": "P10_5-SMOKE-009",
+      "title": "Approved Queue /sales/approved Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/approved]"
+    },
+    "P10_5-SMOKE-010": {
+      "case_id": "P10_5-SMOKE-010",
+      "title": "Sent History /sales/sent Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/sent]"
+    },
+    "P10_5-SMOKE-011": {
+      "case_id": "P10_5-SMOKE-011",
+      "title": "Watchlist /sales/watchlist Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/watchlist]"
+    },
+    "P10_5-SMOKE-012": {
+      "case_id": "P10_5-SMOKE-012",
+      "title": "Suppression /sales/suppression Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/suppression]"
+    },
+    "P10_5-SMOKE-013": {
+      "case_id": "P10_5-SMOKE-013",
+      "title": "Replies /sales/replies Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/replies]"
+    },
+    "P10_5-SMOKE-014": {
+      "case_id": "P10_5-SMOKE-014",
+      "title": "Settings /sales/settings Renders HTTP 200",
+      "section": "Core Screen Smoke Tests",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_smoke_endpoints[/sales/settings]"
+    },
+    "P10_5-SEM-001": {
+      "case_id": "P10_5-SEM-001",
+      "title": "Outreach Draft Structural Shape & Grounded Claim Alignment",
+      "section": "Weak-LLM Semantic Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sem_001_structural_shape_and_grounded_claims"
+    },
+    "P10_5-SEM-002": {
+      "case_id": "P10_5-SEM-002",
+      "title": "Active Service Matching And Zero Fabricated Company Facts",
+      "section": "Weak-LLM Semantic Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "status": "PASS",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sem_002_active_service_matching_and_zero_fabrication"
+    },
+    "P10_5-SEM-003": {
+      "case_id": "P10_5-SEM-003",
+      "title": "Weak-LLM Generic Personalization & Nuance Evaluation",
+      "section": "Weak-LLM Semantic Evaluation",
+      "mode": "semantic",
+      "critical_safety": false,
+      "status": "DEFERRED_MODEL",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sem_003_weak_llm_personalization_nuance_evaluation"
+    },
+    "P10_5-SEM-004": {
+      "case_id": "P10_5-SEM-004",
+      "title": "Weak-LLM Call-To-Action & Persuasive Angle Evaluation",
+      "section": "Weak-LLM Semantic Evaluation",
+      "mode": "semantic",
+      "critical_safety": false,
+      "status": "DEFERRED_MODEL",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sem_004_weak_llm_call_to_action_persuasiveness"
+    },
+    "P10_5-SEM-005": {
+      "case_id": "P10_5-SEM-005",
+      "title": "Weak-LLM Complex AEC Domain Idiom Naturalness",
+      "section": "Weak-LLM Semantic Evaluation",
+      "mode": "semantic",
+      "critical_safety": false,
+      "status": "DEFERRED_MODEL",
+      "test_node": "tests/acceptance/test_phase10_5_acceptance.py::test_p10_5_sem_005_weak_llm_multilingual_aec_idiom_naturalness"
+    }
+  }
+}
