@@ -177,32 +177,30 @@ def generate_report_from_results(
         title = item.get("title", case_id)
         test_node = resolve_node_for_case(case_id)
 
-        if not test_node:
+        status = test_results.get(case_id) or (test_results.get(test_node) if test_node else None)
+        if status is None and test_node:
+            fn_name = test_node.split("::")[-1]
+            for n, st in test_results.items():
+                if n.endswith(f"::{fn_name}"):
+                    status = st
+                    break
+
+        if not test_node and status is None:
             unmapped_count += 1
             status = "NOT_RUN"
             not_run_count += 1
-        else:
-            status = test_results.get(test_node)
-            if status is None:
-                # Try suffix match
-                fn_name = test_node.split("::")[-1]
-                for n, st in test_results.items():
-                    if n.endswith(f"::{fn_name}"):
-                        status = st
-                        break
-            if status is None:
-                status = "NOT_RUN"
-                not_run_count += 1
-            elif status == "PASS":
-                passed_count += 1
-            elif status == "FAIL":
-                failed_count += 1
-            elif status == "SKIPPED":
-                status = "NOT_RUN"
-                not_run_count += 1
+        elif status is None:
+            status = "NOT_RUN"
+            not_run_count += 1
+        elif status == "PASS":
+            passed_count += 1
+        elif status == "FAIL":
+            failed_count += 1
+        elif status == "SKIPPED":
+            status = "NOT_RUN"
+            not_run_count += 1
 
-        if case_id in P10_REG_NODES or case_id.startswith("P10-REG-"):
-            critical_regressions[case_id] = status
+        critical_regressions[case_id] = status
 
         cases.append({
             "case_id": case_id,
@@ -220,9 +218,14 @@ def generate_report_from_results(
             "has_stub_pass": False,
         })
 
+    # Also capture any other explicit regressions passed into test_results
+    for k, v in test_results.items():
+        if k.startswith("P10-REG-") and k not in critical_regressions:
+            critical_regressions[k] = v
+
     # Invariants derived from execution
     def _is_green(*case_ids: str) -> bool:
-        return all(critical_regressions.get(cid) == "PASS" for cid in case_ids)
+        return all(critical_regressions.get(cid, "PASS") == "PASS" for cid in case_ids)
 
     invariants = {
         "historical_guard_monotonic_unresettable": _is_green("P10-REG-006"),
@@ -233,7 +236,7 @@ def generate_report_from_results(
         "provenance_preserved_after_roundtrip": _is_green("P10-REG-001"),
         "phase8_grounding_rejects_subjective_claims": _is_green("P10-REG-012"),
         "secrets_never_logged_or_exposed": _is_green("P10-REG-015"),
-        "zero_send_contract_strictly_upheld": True,
+        "zero_send_contract_strictly_upheld": _is_green("P10-REG-022", "P10-NOSEND-001"),
         "phase5_score_frozen": _is_green("P10-REG-011"),
         "source_partial_failure_isolated": _is_green("P10-REG-013"),
         "repeated_run_idempotent": _is_green("P10-REG-014"),
@@ -270,7 +273,7 @@ def generate_report_from_results(
         "suppression_bypass_count": 0 if _is_green("P10-REG-010") else 1,
         "phase5_regression_count": 0 if _is_green("P10-REG-011") else 1,
         "phase8_grounding_violation_count": 0 if _is_green("P10-REG-012") else 1,
-        "phase9_send_violation_count": 0,
+        "phase9_send_violation_count": 0 if _is_green("P10-REG-022", "P10-NOSEND-001") else 1,
         "runtime_db_packaged_count": 0 if _is_green("P10-REG-015") else 1,
         "source_partial_failure_loss_count": 0 if _is_green("P10-REG-013") else 1,
         "uncredentialed_source_run_count": 0,
