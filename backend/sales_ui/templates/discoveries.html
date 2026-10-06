@@ -16,6 +16,7 @@
     <span>Trigger New Discovery</span>
   </div>
   <form method="POST" action="/sales/discoveries/run">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
       <div class="form-group">
         <label class="form-label">Search Query</label>

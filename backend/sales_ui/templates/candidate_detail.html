@@ -5,58 +5,60 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-      <h1 class="page-title">{{ detail.candidate.company_name }}</h1>
-      <span class="badge badge-info">{{ detail.candidate.status }}</span>
-      {% if detail.candidate.is_previously_contacted %}
-      <span class="badge badge-previously-contacted">Previously Contacted</span>
-      {% endif %}
-      {% if detail.candidate.is_suppressed %}
-      <span class="badge badge-danger">Suppressed</span>
-      {% endif %}
-    </div>
-    <p class="page-subtitle">
-      Domain: <code>{{ detail.candidate.domain or 'N/A' }}</code> &bull; 
-      Country: <strong>{{ detail.candidate.country or 'Global' }}</strong> &bull; 
-      Legal Form: <strong>{{ detail.legal_form or 'N/A' }}</strong>
-    </p>
+    <h1 class="page-title">{{ detail.candidate.company_name }}</h1>
+    <p class="page-subtitle">Candidate ID: <code>{{ detail.candidate.candidate_id }}</code> | Domain: <code>{{ detail.candidate.domain or 'None' }}</code></p>
   </div>
-
-  <!-- Operator Action Buttons -->
-  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/candidates" class="btn btn-secondary">← Back to Candidates</a>
+    {% if detail.can_research %}
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
-      <button type="submit" class="btn btn-secondary btn-sm">🔬 Research Again</button>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-secondary">🔍 Research Again</button>
     </form>
+    {% endif %}
+    {% if detail.can_qualify %}
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/qualify" style="display:inline;">
-      <button type="submit" class="btn btn-primary btn-sm">⭐ Run Qualification</button>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">⚡ Re-Qualify</button>
     </form>
-    <button type="button" class="btn btn-warning btn-sm" onclick="document.getElementById('watch-modal').classList.add('active')">👁️ Add to Watchlist</button>
-    <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('dnc-modal').classList.add('active')">🚫 Do Not Contact</button>
+    {% endif %}
+    {% if detail.can_watch %}
+    <button type="button" class="btn btn-warning" onclick="document.getElementById('watch-modal').classList.add('active')">👁️ Add to Watchlist</button>
+    {% endif %}
+    {% if detail.can_suppress %}
+    <button type="button" class="btn btn-danger" onclick="document.getElementById('dnc-modal').classList.add('active')">🚫 Do Not Contact</button>
+    {% endif %}
   </div>
 </div>
 
-<!-- Assessment Summary & Why This Company -->
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+<!-- Candidate Overview Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
   <div class="card">
     <div class="card-title">
-      <span>System Assessment</span>
-      <!-- P10_5-REG-011: Distinguish System Assessment -->
-      <span class="badge badge-assessment">System Assessment</span>
+      <span>Company Profile & Signals</span>
+      <!-- P10_5-REG-013: Visibly indicate historical contact status -->
+      {% if detail.candidate.is_previously_contacted %}
+      <span class="badge badge-historical">Previously Contacted</span>
+      {% endif %}
     </div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
-      <div><strong>Company Tier:</strong> {{ detail.candidate.tier or 'Unassigned' }}</div>
-      <div><strong>BIM Maturity:</strong> {{ detail.candidate.bim_maturity }}</div>
-      <div><strong>Fit Level:</strong> {{ detail.candidate.fit or 'N/A' }}</div>
-      <div><strong>Intent Level:</strong> {{ detail.candidate.intent or 'N/A' }}</div>
-      <div><strong>Outsourcing Potential:</strong> {{ detail.candidate.outsourcing_potential or 'Unknown' }}</div>
-      <div><strong>Automation Potential:</strong> {{ detail.candidate.automation_potential or 'Unknown' }}</div>
+      <div><strong>Country:</strong> {{ detail.candidate.country or 'Global' }}</div>
+      <div><strong>City:</strong> {{ detail.candidate.city or '-' }}</div>
+      <div><strong>Legal Form:</strong> {{ detail.legal_form or '-' }}</div>
+      <div><strong>Employee Size:</strong> {{ detail.employee_size_hint or 'Unknown' }}</div>
+      <div><strong>Tier:</strong> <span class="badge badge-tier">{{ detail.candidate.tier or 'unknown' }}</span></div>
+      <div><strong>BIM Maturity:</strong> <span class="badge badge-bim">{{ detail.candidate.bim_maturity }}</span></div>
+      <div><strong>Fit Level:</strong> <span class="badge badge-fit">{{ detail.candidate.fit or 'unknown' }}</span></div>
+      <div><strong>Intent Level:</strong> <span class="badge badge-intent">{{ detail.candidate.intent or 'unknown' }}</span></div>
+      <div><strong>Discovery Status:</strong> <span class="badge badge-info">{{ detail.candidate.status }}</span></div>
+      <div><strong>Suppression:</strong> <span class="badge {% if detail.candidate.is_suppressed %}badge-suppressed{% else %}badge-muted{% endif %}">{{ 'Suppressed' if detail.candidate.is_suppressed else 'Clear' }}</span></div>
     </div>
-    {% if detail.opportunity_types %}
-    <div style="margin-top: 1rem;">
-      <strong style="font-size:0.8rem; color:var(--text-secondary);">Identified Opportunities:</strong>
-      <div style="margin-top: 0.35rem; display: flex; gap: 0.35rem; flex-wrap: wrap;">
-        {% for opp in detail.opportunity_types %}
-        <span class="badge badge-primary">{{ opp }}</span>
+    {% if detail.candidate.discovery_sources %}
+    <div style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">
+      <strong>Discovery Sources:</strong>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.35rem;">
+        {% for src in detail.candidate.discovery_sources %}
+        <span class="badge badge-muted">{{ src }}</span>
         {% endfor %}
       </div>
     </div>
@@ -66,6 +68,7 @@
   <div class="card">
     <div class="card-title">
       <span>Why This Company?</span>
+      <span class="badge badge-info">System Assessment</span>
     </div>
     <div style="font-size: 0.875rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.6rem;">
       <div><strong style="color:var(--text-primary);">Why Found:</strong> {{ detail.why_found or 'Identified through discovery sources.' }}</div>
@@ -76,11 +79,41 @@
   </div>
 </div>
 
-<!-- Evidence & Provenance Section -->
+<!-- Operator Draft Generation Section (P10_5-ADV-022) -->
+{% if can_generate_draft %}
+<div class="card" id="generate-draft-section">
+  <div class="card-title">
+    <span>Generate Outreach Draft (Discovery-to-Draft Workflow)</span>
+    <span class="badge badge-success">Eligible for Outreach</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    This company is qualified and clear of historical contacts, active conversations, or suppression. Select or enter a business contact to create an initial outreach draft staged in <strong>Pending Review</strong>.
+  </p>
+  <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/generate-draft">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+      <div class="form-group">
+        <label class="form-label">Contact Name</label>
+        <input type="text" name="contact_name" class="form-control" placeholder="e.g. Marco Rossi" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contact Title</label>
+        <input type="text" name="contact_title" class="form-control" placeholder="e.g. BIM Director">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Work Email</label>
+        <input type="email" name="contact_email" class="form-control" placeholder="e.g. m.rossi@{{ detail.candidate.domain or 'company.com' }}" required>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">⚡ Generate Draft (Enters Pending Review)</button>
+  </form>
+</div>
+{% endif %}
+
+<!-- Evidence & Provenance Section (P10_5-ADV-020 / ADV-021 Safe-Scheme Check) -->
 <div class="card">
   <div class="card-title">
     <span>Market Evidence & Provenance</span>
-    <!-- P10_5-REG-011: Distinguish Verified Evidence -->
     <span class="badge badge-evidence">Verified Evidence</span>
   </div>
   {% if detail.evidence_items %}
@@ -105,8 +138,10 @@
           <td>{{ ev.confidence or '1.0' }}</td>
           <td>{{ ev.observed_at[:10] if ev.observed_at else 'Recent' }}</td>
           <td>
-            {% if ev.source_url %}
+            {% if ev.source_url and (ev.source_url.startswith('http://') or ev.source_url.startswith('https://')) %}
             <a href="{{ ev.source_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">View Source ↗</a>
+            {% elif ev.source_url %}
+            <span class="badge badge-muted" title="{{ ev.source_url }}">Non-Web Source</span>
             {% else %}
             <span style="color:var(--text-muted);">Internal</span>
             {% endif %}
@@ -123,11 +158,10 @@
   {% endif %}
 </div>
 
-<!-- Historical Outreach & Contacts -->
+<!-- Historical Outreach & Past Contacts -->
 <div class="card">
   <div class="card-title">
     <span>Historical Outreach & Past Contacts</span>
-    <!-- P10_5-REG-011: Distinguish Historical Data -->
     <span class="badge badge-historical">Historical Data</span>
   </div>
   {% if detail.historical_outreach %}
@@ -138,26 +172,20 @@
           <th>Contact Name</th>
           <th>Email</th>
           <th>Channel</th>
-          <th>Contacted At</th>
+          <th>Contact Date</th>
           <th>Reply Status</th>
           <th>Meeting</th>
-          <th>Notes</th>
         </tr>
       </thead>
       <tbody>
         {% for h in detail.historical_outreach %}
         <tr>
-          <td><strong>{{ h.contact_name or 'Unknown' }}</strong></td>
-          <td><code>{{ h.contact_email or 'N/A' }}</code></td>
+          <td><strong>{{ h.recipient_name or '-' }}</strong></td>
+          <td><code>{{ h.recipient_email }}</code></td>
           <td>{{ h.channel or 'email' }}</td>
-          <td>{{ h.contacted_at or 'Past' }}</td>
-          <td>
-            <span class="badge {% if h.reply_status == 'positive' %}badge-success{% elif h.reply_status == 'bounced' %}badge-danger{% else %}badge-muted{% endif %}">
-              {{ h.reply_status or 'Sent' }}
-            </span>
-          </td>
-          <td>{{ h.meeting_status or 'None' }}</td>
-          <td>{{ h.notes or '' }}</td>
+          <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
+          <td><span class="badge badge-info">{{ h.reply_status or 'no_reply' }}</span></td>
+          <td>{{ h.meeting_status or 'none' }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -165,15 +193,15 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <p class="empty-state-text">No prior outreach recorded for this company.</p>
+    <p class="empty-state-text">No prior outreach recorded for this company (First Contact Safe).</p>
   </div>
   {% endif %}
 </div>
 
-<!-- Unified Chronological Timeline -->
+<!-- Chronological Audit Timeline -->
 <div class="card">
   <div class="card-title">
-    <span>Company Timeline</span>
+    <span>Company Timeline & Audit History</span>
   </div>
   {% if detail.timeline %}
   <div class="timeline">
@@ -188,9 +216,13 @@
         <p style="font-size: 0.85rem; color: var(--text-primary); margin-top: 0.25rem;">
           {{ evt.summary }}
         </p>
-        {% if evt.source_ref %}
+        {% if evt.source_ref and (evt.source_ref.startswith('http://') or evt.source_ref.startswith('https://')) %}
         <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
           Ref: <a href="{{ evt.source_ref }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ evt.source_ref }}</a>
+        </div>
+        {% elif evt.source_ref %}
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+          Ref: {{ evt.source_ref }}
         </div>
         {% endif %}
       </div>
@@ -211,6 +243,7 @@
       <h3 class="modal-title">Add to Watchlist</h3>
     </div>
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/watch">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">Watch Reason</label>
@@ -236,6 +269,7 @@
       <h3 class="modal-title">Mark Do Not Contact (Suppression)</h3>
     </div>
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/suppress">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <div class="modal-body">
         <p style="margin-bottom: 1rem;">This will permanently suppress the company's domain or email from receiving outreach.</p>
         <div class="form-group">

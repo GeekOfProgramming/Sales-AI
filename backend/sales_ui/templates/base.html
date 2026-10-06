@@ -15,8 +15,8 @@
     </a>
 
     <div class="header-search">
-      <form method="GET" action="/sales/candidates">
-        <input type="search" name="q" value="{{ search_query or '' }}" placeholder="Search company, domain, contact, or draft..." aria-label="Global Search">
+      <form method="GET" action="/sales/search">
+        <input type="search" name="q" value="{{ query or '' }}" placeholder="Search company, domain, contact, or draft..." aria-label="Global Search">
       </form>
     </div>
 
@@ -77,6 +77,7 @@
       </div>
       <div class="modal-footer">
         <form id="send-confirm-form" method="POST" action="">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" id="modal-send-draft-id" name="draft_id" value="">
           <input type="hidden" id="modal-send-revision" name="revision" value="">
           <input type="hidden" name="confirm_send" value="true">

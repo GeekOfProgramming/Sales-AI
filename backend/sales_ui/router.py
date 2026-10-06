@@ -3,16 +3,24 @@ FastAPI Router for SalesAI Phase 10.5 Local Sales Operator Console.
 Prefix: /sales
 Strictly local-first, zero autonomous sends, zero direct writes.
 All mutations delegate directly to Phase 9 and Phase 10 domain services.
+Enforces CSRF / Same-Origin protections, authoritative suppression,
+safe path resolution, and explicit human confirmation.
 """
 
 import os
+import re
 import json
+import secrets
+import hashlib
+import hmac
+import urllib.request
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Form, Query, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Request, Form, Query, HTTPException, status, Depends
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from backend.sales_ui.view_models import (
@@ -26,6 +34,7 @@ from backend.sales_ui.view_models import (
     SuppressionItemView,
     SourceItemView,
     DiscoveryRunItemView,
+    HistoricalImportPreviewResult,
 )
 from backend.sales_ui.dashboard_service import DashboardService
 from backend.sales_ui.timeline_service import TimelineService
@@ -52,6 +61,9 @@ router = APIRouter(prefix="/sales", tags=["Sales-Console"])
 
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+
+CSRF_COOKIE_NAME = "sales_csrf_token"
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def get_console_services():
@@ -98,52 +110,182 @@ def is_email_send_enabled() -> bool:
     return val in ("true", "1", "yes", "t")
 
 
+def get_or_create_csrf_token(request: Request) -> str:
+    """Retrieve or generate secure CSRF token for local session."""
+    token = request.cookies.get(CSRF_COOKIE_NAME)
+    if not token:
+        token = secrets.token_hex(32)
+    return token
+
+
+def is_same_origin(request: Request) -> bool:
+    """Verify request Origin or Referer against allowed local origins."""
+    origin = request.headers.get("origin")
+    host = request.headers.get("host")
+    allowed_hosts = {"127.0.0.1", "localhost", "testserver"}
+    if host:
+        allowed_hosts.add(host.split(":")[0].lower())
+
+    if origin:
+        try:
+            parsed = urlparse(origin)
+            origin_host = (parsed.hostname or "").lower()
+            if origin_host not in allowed_hosts:
+                return False
+        except Exception:
+            return False
+
+    referer = request.headers.get("referer")
+    if not origin and referer:
+        try:
+            parsed_ref = urlparse(referer)
+            ref_host = (parsed_ref.hostname or "").lower()
+            if ref_host not in allowed_hosts:
+                return False
+        except Exception:
+            return False
+
+    return True
+
+
+async def validate_csrf(request: Request):
+    """Dependency enforcing Same-Origin and CSRF token on mutating routes."""
+    # 1. Same-Origin Check
+    if not is_same_origin(request):
+        raise HTTPException(status_code=403, detail="Cross-origin mutation rejected")
+
+    # 2. CSRF Token Check
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get("x-csrf-token")
+    form_token = None
+    try:
+        form = await request.form()
+        form_token = form.get("csrf_token")
+    except Exception:
+        pass
+
+    submitted_token = form_token or header_token
+    if not cookie_token or not submitted_token or not hmac.compare_digest(str(cookie_token), str(submitted_token)):
+        raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
+
+
+def render_console_template(request: Request, name: str, context: Dict[str, Any]) -> HTMLResponse:
+    """Renders Jinja2 template ensuring CSRF token is provided in context and cookie."""
+    csrf_token = get_or_create_csrf_token(request)
+    context["csrf_token"] = csrf_token
+    resp = templates.TemplateResponse(request=request, name=name, context=context)
+    if request.cookies.get(CSRF_COOKIE_NAME) != csrf_token:
+        resp.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
+    return resp
+
+
+def check_authoritative_suppression(
+    supp_store: SuppressionStore,
+    email: Optional[str] = None,
+    domain: Optional[str] = None,
+) -> bool:
+    """Consistent backend-derived suppression evaluation across email and domain scopes."""
+    clean_email = email.strip().lower() if email else None
+    clean_domain = domain.strip().lower() if domain else None
+    if clean_email and not clean_domain and "@" in clean_email:
+        clean_domain = clean_email.split("@", 1)[1].strip().lower()
+    return supp_store.is_suppressed(email=clean_email, company_domain=clean_domain)
+
+
+def resolve_safe_import_path(file_path: str) -> Path:
+    """Path traversal and repository-root validation for historical file imports."""
+    raw_str = file_path.strip()
+    if not raw_str:
+        raise HTTPException(status_code=400, detail="file_path cannot be empty")
+    if ".." in raw_str:
+        raise HTTPException(status_code=400, detail="Access denied: Path traversal outside root is forbidden.")
+
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    try:
+        resolved = Path(raw_str)
+        if not resolved.is_absolute():
+            resolved = (base_dir / resolved).resolve()
+        else:
+            resolved = resolved.resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    allowed_roots = [base_dir.resolve(), (base_dir / "data").resolve()]
+    is_allowed = False
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            is_allowed = True
+            break
+        except ValueError:
+            continue
+
+    if not is_allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Access denied: file_path must reside within repository or data directory. Path traversal outside root is forbidden.",
+        )
+
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail=f"File {file_path} not found")
+
+    return resolved
+
+
 # ---------------------------------------------------------------------------
 # 1. DASHBOARD
 # ---------------------------------------------------------------------------
 @router.get("", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
+async def dashboard_view(request: Request):
     svcs = get_console_services()
-    summary = svcs["dash_svc"].get_summary()
+    dash_svc = svcs["dash_svc"]
+    summary = dash_svc.get_summary()
 
-    # Get recent pending drafts (up to 5)
-    pending_drafts_raw, _ = svcs["rev_store"].list_drafts(
-        filters={"approval_status": "pending_review"}, limit=5
-    )
-    pending_cards = []
-    for d in pending_drafts_raw:
-        pending_cards.append(
-            DraftReviewCard(
-                draft_id=d.draft_id,
-                revision=d.revision,
-                lead_id=d.lead_id,
-                contact_id=d.contact_id,
-                company_name=d.lead_id,
-                recipient_name=d.recipient_name,
-                recipient_email=d.recipient_email,
-                subject=d.subject,
-                body=d.body,
-                approval_status=d.approval_status,
-                send_status=d.send_status,
-                outreach_status=d.outreach_status,
-                content_hash=d.content_hash,
-                created_at=d.created_at,
-            )
-        )
+    raw_drafts, _ = svcs["rev_store"].list_drafts(filters={"approval_status": "pending_review"}, limit=5)
+    pending_drafts = []
+    for d in raw_drafts:
+        c_name = d.lead_id
+        if "cand_store" in svcs:
+            c = svcs["cand_store"].get_candidate(d.lead_id)
+            if c:
+                c_name = getattr(c, "company_name", getattr(c, "name", c_name))
+        pending_drafts.append({
+            "draft_id": d.draft_id,
+            "revision": d.revision,
+            "company_name": c_name,
+            "recipient_email": d.recipient_email,
+            "subject": d.subject,
+        })
 
-    # Get recent discovery runs (up to 5)
-    recent_runs = svcs["cand_store"].list_discovery_runs(limit=5)
+    recent_runs = []
+    if "cand_store" in svcs and hasattr(svcs["cand_store"], "list_discovery_runs"):
+        raw_runs = svcs["cand_store"].list_discovery_runs(limit=5)
+        for r in raw_runs:
+            recent_runs.append({
+                "run_id": r.get("run_id", "run_unknown"),
+                "source_name": r.get("source_id") or "multi-source",
+                "status": r.get("status", "completed"),
+                "new_candidates": r.get("new_candidates", 0),
+                "observations_found": r.get("observations_found", 0),
+            })
 
-    return templates.TemplateResponse(request=request, name="dashboard.html", context={
+    # Safe SMTP check: never expose credentials
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_configured = bool(smtp_host and smtp_user)
+
+    return render_console_template(
+        request=request,
+        name="dashboard.html",
+        context={
             "request": request,
             "active_tab": "dashboard",
             "summary": summary,
-            "pending_drafts": pending_cards,
+            "pending_drafts": pending_drafts,
             "recent_runs": recent_runs,
             "email_send_enabled": is_email_send_enabled(),
-            "message": message,
-            "error": error,
+            "smtp_configured": smtp_configured,
         },
     )
 
@@ -154,16 +296,16 @@ async def dashboard_view(request: Request, message: Optional[str] = None, error:
 @router.get("/discoveries", response_class=HTMLResponse)
 async def discoveries_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
     svcs = get_console_services()
-    runs_raw = svcs["cand_store"].list_discovery_runs(limit=50)
-    
+    cand_store = svcs.get("cand_store")
+    raw_runs = cand_store.list_discovery_runs(limit=30) if cand_store and hasattr(cand_store, "list_discovery_runs") else []
     runs = []
-    for r in runs_raw:
+    for r in raw_runs:
         runs.append(
             DiscoveryRunItemView(
-                run_id=r.get("run_id", ""),
-                mode=r.get("mode", "company_first"),
-                source_name=r.get("source_name", "Multi-Source"),
-                started_at=r.get("started_at", ""),
+                run_id=r.get("run_id", "run_unknown"),
+                mode=r.get("discovery_mode", "standard"),
+                source_name=r.get("source_id") or "multi-source",
+                started_at=r.get("started_at", "N/A"),
                 completed_at=r.get("completed_at"),
                 status=r.get("status", "completed"),
                 observations_found=r.get("observations_found", 0),
@@ -176,7 +318,10 @@ async def discoveries_view(request: Request, message: Optional[str] = None, erro
             )
         )
 
-    return templates.TemplateResponse(request=request, name="discoveries.html", context={
+    return render_console_template(
+        request=request,
+        name="discoveries.html",
+        context={
             "request": request,
             "active_tab": "discoveries",
             "runs": runs,
@@ -192,6 +337,7 @@ async def trigger_discovery_run_action(
     query: str = Form("BIM"),
     discovery_mode: str = Form("company_first"),
     sources: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     source_list = [s.strip() for s in sources.split(",")] if sources else None
@@ -220,6 +366,18 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
     sources = []
     for s in sources_raw:
         h = health.get(s.id, health.get(s.name, {}))
+        
+        # P10_5-ADV-018: Truthful credential configuration check
+        is_conf = True
+        if s.requires_api_key:
+            env_key_patterns = [
+                f"{s.id.upper()}_API_KEY",
+                f"{s.name.upper()}_API_KEY",
+                f"{s.id.upper()}_KEY",
+                f"{s.id.upper()}_TOKEN",
+            ]
+            is_conf = any(os.getenv(k) for k in env_key_patterns)
+
         sources.append(
             SourceItemView(
                 id=s.id,
@@ -230,7 +388,7 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
                 priority=s.priority,
                 countries=s.countries,
                 requires_api_key=s.requires_api_key,
-                is_configured=True,
+                is_configured=is_conf,
                 status=h.get("status", "operational"),
                 success_count=h.get("success_count", 0),
                 failure_count=h.get("failure_count", 0),
@@ -240,7 +398,10 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
             )
         )
 
-    return templates.TemplateResponse(request=request, name="sources.html", context={
+    return render_console_template(
+        request=request,
+        name="sources.html",
+        context={
             "request": request,
             "active_tab": "sources",
             "sources": sources,
@@ -257,6 +418,7 @@ async def manual_seed_action(
     domain: Optional[str] = Form(None),
     country: Optional[str] = Form(None),
     source_url: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     store = svcs["cand_store"]
@@ -272,30 +434,115 @@ async def manual_seed_action(
     return RedirectResponse(f"/sales/candidates/{saved.candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.post("/sources/import-history")
-async def import_historical_data_action(
+# P10_5-ADV-009 / ADV-012 / ADV-013: Preview Historical Import (Zero Mutations)
+@router.post("/sources/import-history/preview")
+@router.post("/sources/historical/preview")
+async def preview_historical_import_action(
+    request: Request,
     file_path: str = Form(...),
     sheet_name: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
+    resolved = resolve_safe_import_path(file_path)
+    file_bytes = resolved.read_bytes()
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
     svcs = get_console_services()
     importer = HistoricalImporter(store=svcs["cand_store"])
-    path_obj = Path(file_path.strip())
-    if not path_obj.exists():
-        return RedirectResponse(f"/sales/sources?error=File not found: {file_path}", status_code=status.HTTP_303_SEE_OTHER)
 
-    try:
-        if path_obj.suffix.lower() == ".csv":
-            records = importer.parse_csv(path_obj)
-        elif path_obj.suffix.lower() in (".xlsx", ".xlsm"):
-            records = importer.parse_xlsx(path_obj, sheet_name=sheet_name)
-        else:
-            return RedirectResponse("/sales/sources?error=Unsupported file format (CSV/XLSX only)", status_code=status.HTTP_303_SEE_OTHER)
+    if resolved.suffix.lower() == ".csv":
+        records = importer.parse_csv(resolved)
+    elif resolved.suffix.lower() in (".xlsx", ".xlsm"):
+        records = importer.parse_xlsx(resolved, sheet_name=sheet_name)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format (CSV/XLSX only)")
 
-        result = importer.import_records(records)
-        msg = f"Imported: {result.companies_created} new companies, {result.records_parsed} records, {result.duplicates_skipped} duplicates skipped."
-        return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
-    except Exception as e:
-        return RedirectResponse(f"/sales/sources?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+    # Stable preview token
+    token_payload = f"{str(resolved)}:{file_hash}:{sheet_name or ''}"
+    preview_token = hmac.new(b"salesai_preview_salt", token_payload.encode(), hashlib.sha256).hexdigest()
+
+    unique_comps = set(r.domain or r.company_name for r in records)
+    total_contacts = sum(len(r.emails) for r in records)
+    has_outreach_count = sum(1 for r in records if (r.contact_date or r.reply_status or r.notes))
+    dnc_count = sum(1 for r in records if r.is_dnc)
+    active_conv_count = sum(1 for r in records if r.has_active_conversation)
+
+    preview_res = HistoricalImportPreviewResult(
+        file_path=str(resolved),
+        file_hash=file_hash,
+        sheet_name=sheet_name,
+        preview_token=preview_token,
+        rows_detected=len(records),
+        companies_detected=len(unique_comps),
+        contacts_detected=total_contacts,
+        historical_outreach_events=has_outreach_count,
+        dnc_count=dnc_count,
+        active_conversations=active_conv_count,
+    )
+
+    # Check if request prefers JSON (e.g. from test or API client)
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept:
+        return JSONResponse(preview_res.model_dump())
+
+    return render_console_template(
+        request=request,
+        name="sources.html",
+        context={
+            "request": request,
+            "active_tab": "sources",
+            "sources": [],
+            "email_send_enabled": is_email_send_enabled(),
+            "preview": preview_res,
+            "message": f"Preview ready: {len(records)} rows parsed. Review statistics below and confirm import.",
+        },
+    )
+
+
+# P10_5-ADV-010 / ADV-011: Confirm and Execute Historical Import
+@router.post("/sources/import-history/confirm")
+@router.post("/sources/historical/confirm")
+async def confirm_historical_import_action(
+    request: Request,
+    file_path: str = Form(...),
+    file_hash: Optional[str] = Form(None),
+    preview_token: str = Form(...),
+    sheet_name: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    resolved = resolve_safe_import_path(file_path)
+    current_bytes = resolved.read_bytes()
+    current_hash = hashlib.sha256(current_bytes).hexdigest()
+
+    # Content change verification
+    if file_hash and current_hash != file_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="File content has changed since preview. Please generate a new preview.",
+        )
+    effective_hash = file_hash or current_hash
+
+    # Token verification
+    expected_payload = f"{str(resolved)}:{effective_hash}:{sheet_name or ''}"
+    expected_token = hmac.new(b"salesai_preview_salt", expected_payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(preview_token, expected_token):
+        raise HTTPException(status_code=400, detail="Invalid preview confirmation token.")
+
+    svcs = get_console_services()
+    importer = HistoricalImporter(store=svcs["cand_store"])
+    if resolved.suffix.lower() == ".csv":
+        records = importer.parse_csv(resolved)
+    else:
+        records = importer.parse_xlsx(resolved, sheet_name=sheet_name)
+
+    result = importer.import_records(records)
+    msg = f"Import completed: {result.companies_created} new companies, {result.records_parsed} records, {result.duplicates_skipped} duplicates skipped."
+
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept:
+        return JSONResponse({"status": "completed", "companies_created": result.companies_created, "records_parsed": result.records_parsed})
+
+    return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +569,6 @@ async def candidates_list_view(
         limit=1000,
     )
     
-    # In-memory filter for search query and country
     filtered = all_summaries
     if country:
         filtered = [c for c in filtered if (c.get("country") or "").lower() == country.lower()]
@@ -341,11 +587,10 @@ async def candidates_list_view(
 
     candidates: List[CandidateListItem] = []
     for c in page_items:
-        # Check suppression
         dom = c.get("canonical_domain") or c.get("company_domain") or ""
-        is_supp = svcs["suppression_svc"].is_suppressed(dom)
+        # Authoritative domain suppression check
+        is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
         
-        # P10_5-REG-012: Unknown BIM maturity is not displayed as 'No BIM'
         raw_bim = c.get("bim_maturity")
         bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
 
@@ -371,7 +616,10 @@ async def candidates_list_view(
 
     has_next = end_idx < total
 
-    return templates.TemplateResponse(request=request, name="candidates.html", context={
+    return render_console_template(
+        request=request,
+        name="candidates.html",
+        context={
             "request": request,
             "active_tab": "candidates",
             "candidates": candidates,
@@ -404,18 +652,17 @@ async def candidate_detail_view(
     bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
     detail_data = bridge.get_candidate_detail(candidate_id) or {}
     
-    # Evidence & observations
     ev_items = [e.model_dump() if hasattr(e, "model_dump") else e.__dict__ for e in svcs["cand_store"].get_evidence(candidate_id)]
     obs_items = [o.model_dump() if hasattr(o, "model_dump") else o.__dict__ for o in svcs["cand_store"].get_observations_for_company(candidate_id)]
     hist_outreach = svcs["cand_store"].get_historical_outreach_for_candidate(candidate_id)
 
-    # Suppression & past outreach check
     cand_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
     cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
-    is_supp = svcs["suppression_svc"].is_suppressed(cand_domain or "")
+    
+    # Authoritative domain suppression check
+    is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand_domain)
     is_contacted = bool(cand.historical_contact_status or hist_outreach)
 
-    # BIM maturity display rule (P10_5-REG-012)
     raw_bim = cand.bim_maturity
     bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
 
@@ -440,7 +687,6 @@ async def candidate_detail_view(
 
     timeline_events = svcs["timeline_svc"].get_company_timeline(candidate_id)
 
-    # Why this company?
     why_found = f"Discovered via {', '.join(detail_data.get('discovery_sources', [])) or 'crawler'}."
     why_fit = f"Assessed as fit '{cand.fit_assessment or 'normal'}' based on architectural & BIM profile."
     why_intent = f"Assessed intent '{cand.intent_assessment or 'normal'}': {', '.join(cand.intent_signals) if cand.intent_signals else 'No urgent signals'}."
@@ -467,11 +713,20 @@ async def candidate_detail_view(
         timeline=timeline_events,
     )
 
-    return templates.TemplateResponse(request=request, name="candidate_detail.html", context={
+    # Determine draft generation eligibility
+    is_qualified = (cand.discovery_status == "qualified" or getattr(cand, "qualification_outcome", "") == "qualified")
+    is_on_watchlist = (cand.discovery_status == "watchlist")
+    can_generate_draft = is_qualified and not is_supp and not is_contacted and not is_on_watchlist
+
+    return render_console_template(
+        request=request,
+        name="candidate_detail.html",
+        context={
             "request": request,
             "active_tab": "candidates",
             "detail": view,
             "email_send_enabled": is_email_send_enabled(),
+            "can_generate_draft": can_generate_draft,
             "message": message,
             "error": error,
         },
@@ -479,7 +734,7 @@ async def candidate_detail_view(
 
 
 @router.post("/candidates/{candidate_id}/research")
-async def research_candidate_action(candidate_id: str):
+async def research_candidate_action(candidate_id: str, csrf: None = Depends(validate_csrf)):
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -491,7 +746,7 @@ async def research_candidate_action(candidate_id: str):
 
 
 @router.post("/candidates/{candidate_id}/qualify")
-async def qualify_candidate_action(candidate_id: str):
+async def qualify_candidate_action(candidate_id: str, csrf: None = Depends(validate_csrf)):
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -509,6 +764,7 @@ async def add_candidate_to_watchlist_action(
     candidate_id: str,
     reason: str = Form(...),
     signals: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
@@ -526,106 +782,184 @@ async def suppress_candidate_action(
     candidate_id: str,
     email: str = Form(...),
     reason: str = Form("manual"),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
-    domain = (getattr(cand, "company_domain", None) or getattr(cand, "domain", None)) if cand else None
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) if cand else None
+
+    clean_email = email.strip().lower()
+    clean_domain = cand_domain.strip().lower() if cand_domain else None
+
     svcs["suppression_svc"].add_suppression(
-        email=email,
+        email=clean_email,
+        company_domain=clean_domain,
         reason=reason,
-        source="sales_console",
-        company_domain=domain,
+        source="sales_console_candidate",
     )
     if cand:
         cand.suppressed = True
-        cand.discovery_status = "suppressed"
+        cand.cold_outreach_allowed = False
         svcs["cand_store"].save_candidate(cand)
-    return RedirectResponse(f"/sales/candidates/{candidate_id}?message=Target suppressed.", status_code=status.HTTP_303_SEE_OTHER)
+
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message=Recipient and domain added to suppression list.", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ---------------------------------------------------------------------------
-# 5. QUALIFIED LEADS
-# ---------------------------------------------------------------------------
-@router.get("/leads", response_class=HTMLResponse)
-async def qualified_leads_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
+# P10_5-ADV-022 / ADV-023 / ADV-024: Operator Draft Generation Workflow
+@router.post("/candidates/{candidate_id}/generate-draft")
+async def generate_candidate_draft_action(
+    candidate_id: str,
+    contact_email: str = Form(...),
+    contact_name: Optional[str] = Form(None),
+    contact_title: Optional[str] = Form(None),
+    reviewer: str = Form("local_operator"),
+    csrf: None = Depends(validate_csrf),
+):
     svcs = get_console_services()
-    bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
-    all_cands = bridge.get_candidate_list_summary(limit=500)
-    leads_raw = [
-        c for c in all_cands
-        if c.get("status") in ("qualified", "qualified_for_enrichment")
-        or c.get("discovery_status") in ("qualified", "qualified_for_enrichment")
-        or c.get("qualification_outcome") in ("qualified", "qualified_for_enrichment")
-    ]
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate company not found")
 
-    leads: List[CandidateListItem] = []
-    for c in leads_raw:
-        raw_bim = c.get("bim_maturity")
-        bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
-        leads.append(
-            CandidateListItem(
-                candidate_id=c.get("company_id") or c.get("candidate_id", ""),
-                company_name=c.get("name") or c.get("company_name", ""),
-                domain=c.get("canonical_domain") or c.get("company_domain"),
-                country=c.get("country"),
-                tier=c.get("company_tier"),
-                fit=c.get("fit_assessment") or c.get("fit_level"),
-                intent=c.get("intent_assessment") or c.get("intent_level"),
-                bim_maturity=bim_display,
-                outsourcing_potential=c.get("outsourcing_potential"),
-                status=c.get("status") or c.get("discovery_status", "qualified"),
-                is_previously_contacted=bool(c.get("historical_contact_status") or c.get("historical_outreach_summary")),
-            )
+    cand_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+
+    clean_recip = contact_email.strip().lower()
+
+    # Guard 1: Email validity
+    if not clean_recip or not EMAIL_REGEX.match(clean_recip):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Invalid or missing recipient email for draft generation.",
+            status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    return templates.TemplateResponse(request=request, name="leads.html", context={
+    # Guard 2: Qualification
+    is_qualified = (cand.discovery_status == "qualified" or getattr(cand, "qualification_outcome", "") == "qualified")
+    if not is_qualified:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate is not qualified for outreach.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Guard 3: Watchlist
+    if cand.discovery_status == "watchlist":
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate is currently watchlisted; fresh cold draft blocked.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Guard 4: Historically contacted / active conversation
+    if getattr(cand, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc") or getattr(cand, "active_conversation", False):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate was historically contacted; fresh cold outreach blocked.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Guard 5: Suppression
+    if check_authoritative_suppression(svcs["suppression_svc"], email=clean_recip, domain=cand_domain):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Recipient or company domain is suppressed. Draft generation blocked.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Generate draft into Phase 9 pending_review
+    draft_id = f"draft:{candidate_id[:10]}_{uuid.uuid4().hex[:6]}" if "uuid" in globals() else f"draft:{secrets.token_hex(6)}"
+    new_draft_dict = {
+        "draft_id": draft_id,
+        "revision": 1,
+        "lead_id": f"domain:{cand_domain or candidate_id}",
+        "contact_id": f"email:{clean_recip}",
+        "recipient_name": (contact_name or "BIM Lead").strip(),
+        "recipient_title": (contact_title or "BIM Director").strip(),
+        "recipient_email": clean_recip,
+        "subject": f"BIM & Automation Workflow at {cand_name}",
+        "body": f"Hi {(contact_name or 'there').strip()},\n\nWe noticed {cand_name} is advancing BIM delivery. pyBIM provides Tech-Enabled BIM Services.\n\nOpen to a brief conversation?",
+        "service_used": "Tech-Enabled BIM Services",
+        "personalization_notes": f"Generated from qualified market discovery {cand_name}",
+        "language": "en",
+        "tone": "professional_concise",
+    }
+
+    imported = svcs["approval_svc"].import_drafts([new_draft_dict], reviewer=reviewer)
+    if not imported:
+        return RedirectResponse(f"/sales/candidates/{candidate_id}?error=Failed to import draft into review queue.", status_code=status.HTTP_303_SEE_OTHER)
+
+    created_draft = imported[0]
+    msg = f"Generated draft r{created_draft.revision} for {cand_name}. It is staged in Pending Review."
+    return RedirectResponse(f"/sales/drafts/{created_draft.draft_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------------------------------------------------------------------------
+# 5. LEADS
+# ---------------------------------------------------------------------------
+@router.get("/leads", response_class=HTMLResponse)
+async def leads_view(request: Request, q: Optional[str] = Query(None)):
+    svcs = get_console_services()
+    store = svcs["cand_store"]
+    cands = store.list_candidates()
+    
+    leads = []
+    for c in cands:
+        name = getattr(c, "company_name", None) or getattr(c, "name", "Company")
+        dom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
+        is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
+
+        if q:
+            ql = q.lower()
+            if ql not in name.lower() and (not dom or ql not in dom.lower()):
+                continue
+
+        leads.append({
+            "lead_id": f"domain:{dom}" if dom else c.candidate_id,
+            "company_name": name,
+            "domain": dom,
+            "country": c.country,
+            "tier": c.company_tier,
+            "discovery_status": c.discovery_status,
+            "bim_maturity": c.bim_maturity if c.bim_maturity and c.bim_maturity.lower() != "unknown" else "Unknown",
+            "is_suppressed": is_supp,
+            "candidate_id": c.candidate_id,
+        })
+
+    return render_console_template(
+        request=request,
+        name="leads.html",
+        context={
             "request": request,
             "active_tab": "leads",
             "leads": leads,
             "email_send_enabled": is_email_send_enabled(),
-            "message": message,
-            "error": error,
         },
     )
 
 
 # ---------------------------------------------------------------------------
-# 6. DRAFTS REVIEW, APPROVAL, EDIT, REJECT, DRY RUN, SEND
+# 6. DRAFTS REVIEW QUEUE & DETAIL
 # ---------------------------------------------------------------------------
 @router.get("/drafts", response_class=HTMLResponse)
-async def drafts_queue_view(
-    request: Request,
-    status: Optional[str] = Query(None),
-    message: Optional[str] = None,
-    error: Optional[str] = None,
-):
+async def draft_review_queue_view(request: Request, status_filter: Optional[str] = Query(None)):
     svcs = get_console_services()
+    rev_store = svcs["rev_store"]
     filters = {}
-    if status and status != "all":
-        filters["approval_status"] = status
-    elif not status:
-        filters["approval_status"] = "pending_review"
+    target_status = status_filter or "pending_review"
+    if target_status and target_status != "all":
+        filters["approval_status"] = target_status
+    raw_drafts, _ = rev_store.list_drafts(filters=filters, limit=100)
 
-    raw_drafts, _ = svcs["rev_store"].list_drafts(filters=filters, limit=100)
-
-    draft_cards: List[DraftReviewCard] = []
+    cards = []
     for d in raw_drafts:
-        is_supp = svcs["suppression_svc"].is_suppressed(d.recipient_email)
-        
-        # Check action availability
-        is_sent = d.send_status == "sent"
-        can_app = (d.approval_status != "approved") and not is_sent
-        can_ed = not is_sent
-        can_rej = (d.approval_status != "rejected") and not is_sent
-        can_send_flag = (d.approval_status == "approved") and not is_sent and not is_supp
+        is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=d.recipient_email)
+        cand_id = d.lead_id.replace("domain:", "")
+        c = svcs["cand_store"].get_by_domain(cand_id)
+        comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
 
-        draft_cards.append(
+        cards.append(
             DraftReviewCard(
                 draft_id=d.draft_id,
                 revision=d.revision,
                 lead_id=d.lead_id,
                 contact_id=d.contact_id,
-                company_name=d.lead_id,
+                company_name=comp_name,
+                company_domain=cand_id,
                 recipient_name=d.recipient_name,
                 recipient_title=d.recipient_title,
                 recipient_email=d.recipient_email,
@@ -634,34 +968,36 @@ async def drafts_queue_view(
                 subject=d.subject,
                 body=d.body,
                 service_used=d.service_used,
-                generation_model=d.generation_model,
-                tone=d.tone,
                 approval_status=d.approval_status,
                 send_status=d.send_status,
                 outreach_status=d.outreach_status,
                 content_hash=d.content_hash,
                 approved_content_hash=d.approved_content_hash,
+                approved_fingerprint_short=d.approved_content_hash[:12] if d.approved_content_hash else None,
                 reviewer=d.reviewer,
+                review_note=d.review_note,
                 created_at=d.created_at,
                 approved_at=d.approved_at,
                 sent_at=d.sent_at,
                 is_suppressed=is_supp,
-                can_approve=can_app,
-                can_edit=can_ed,
-                can_reject=can_rej,
-                can_dry_run=not is_sent,
-                can_send=can_send_flag,
+                can_approve=(d.approval_status in ("pending_review", "changes_requested") and d.send_status != "sent"),
+                can_edit=(d.send_status != "sent"),
+                can_reject=(d.send_status != "sent"),
+                can_request_changes=(d.send_status != "sent"),
+                can_dry_run=True,
+                can_send=(d.approval_status == "approved" and d.send_status != "sent" and not is_supp),
             )
         )
 
-    return templates.TemplateResponse(request=request, name="drafts.html", context={
+    return render_console_template(
+        request=request,
+        name="drafts.html",
+        context={
             "request": request,
             "active_tab": "drafts",
-            "drafts": draft_cards,
-            "status_filter": status,
+            "drafts": cards,
+            "status_filter": status_filter or "pending_review",
             "email_send_enabled": is_email_send_enabled(),
-            "message": message,
-            "error": error,
         },
     )
 
@@ -675,20 +1011,25 @@ async def draft_detail_view(
     error: Optional[str] = None,
 ):
     svcs = get_console_services()
-    draft = svcs["rev_store"].get_draft(draft_id, revision)
+    rev_store = svcs["rev_store"]
+    draft = rev_store.get_draft(draft_id, revision)
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
 
-    events = svcs["audit_svc"].get_draft_events(draft_id)
-    is_supp = svcs["suppression_svc"].is_suppressed(draft.recipient_email)
-    is_sent = draft.send_status == "sent"
+    events = rev_store.get_review_events(draft_id)
+    cand_id = draft.lead_id.replace("domain:", "")
+    c = svcs["cand_store"].get_by_domain(cand_id)
+    comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
+
+    is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=draft.recipient_email)
 
     card = DraftReviewCard(
         draft_id=draft.draft_id,
         revision=draft.revision,
         lead_id=draft.lead_id,
         contact_id=draft.contact_id,
-        company_name=draft.lead_id,
+        company_name=comp_name,
+        company_domain=cand_id,
         recipient_name=draft.recipient_name,
         recipient_title=draft.recipient_title,
         recipient_email=draft.recipient_email,
@@ -697,26 +1038,30 @@ async def draft_detail_view(
         subject=draft.subject,
         body=draft.body,
         service_used=draft.service_used,
-        generation_model=draft.generation_model,
-        tone=draft.tone,
         approval_status=draft.approval_status,
         send_status=draft.send_status,
         outreach_status=draft.outreach_status,
         content_hash=draft.content_hash,
         approved_content_hash=draft.approved_content_hash,
+        approved_fingerprint_short=draft.approved_content_hash[:12] if draft.approved_content_hash else None,
         reviewer=draft.reviewer,
+        review_note=draft.review_note,
         created_at=draft.created_at,
         approved_at=draft.approved_at,
         sent_at=draft.sent_at,
         is_suppressed=is_supp,
-        can_approve=(draft.approval_status != "approved") and not is_sent,
-        can_edit=not is_sent,
-        can_reject=(draft.approval_status != "rejected") and not is_sent,
-        can_dry_run=not is_sent,
-        can_send=(draft.approval_status == "approved") and not is_sent and not is_supp,
+        can_approve=(draft.approval_status in ("pending_review", "changes_requested") and draft.send_status != "sent"),
+        can_edit=(draft.send_status != "sent"),
+        can_reject=(draft.send_status != "sent"),
+        can_request_changes=(draft.send_status != "sent"),
+        can_dry_run=True,
+        can_send=(draft.approval_status == "approved" and draft.send_status != "sent" and not is_supp),
     )
 
-    return templates.TemplateResponse(request=request, name="draft_detail.html", context={
+    return render_console_template(
+        request=request,
+        name="draft_detail.html",
+        context={
             "request": request,
             "active_tab": "drafts",
             "draft": card,
@@ -735,6 +1080,7 @@ async def approve_draft_action(
     revision: int = Form(...),
     reviewer: str = Form("local_operator"),
     note: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     latest = svcs["rev_store"].get_draft(draft_id)
@@ -768,6 +1114,7 @@ async def edit_draft_action(
     recipient_email: Optional[str] = Form(None),
     reviewer: str = Form("local_operator"),
     note: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     latest = svcs["rev_store"].get_draft(draft_id)
@@ -800,6 +1147,7 @@ async def reject_draft_action(
     revision: int = Form(...),
     reviewer: str = Form("local_operator"),
     note: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     try:
@@ -815,12 +1163,36 @@ async def reject_draft_action(
         return RedirectResponse(f"/sales/drafts/{draft_id}?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+# P10_5-ADV-016 / ADV-017: Request Changes through Phase 9
+@router.post("/drafts/{draft_id}/request-changes")
+async def request_changes_draft_action(
+    draft_id: str,
+    revision: int = Form(...),
+    reviewer: str = Form("local_operator"),
+    note: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    try:
+        updated = svcs["approval_svc"].request_changes(
+            draft_id=draft_id,
+            revision=revision,
+            reviewer=reviewer,
+            note=note,
+        )
+        msg = f"Changes requested for revision r{updated.revision}."
+        return RedirectResponse(f"/sales/drafts/{draft_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+    except ValueError as e:
+        return RedirectResponse(f"/sales/drafts/{draft_id}?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 # P10_5-REG-005: Dry Run creates zero provider/network calls
 @router.post("/drafts/{draft_id}/dry-run")
 async def dry_run_draft_action(
     draft_id: str,
     revision: int = Form(...),
     reviewer: str = Form("local_operator"),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
     try:
@@ -843,6 +1215,7 @@ async def send_draft_action(
     revision: int = Form(...),
     confirm_send: bool = Form(False),
     reviewer: str = Form("local_operator"),
+    csrf: None = Depends(validate_csrf),
 ):
     if not confirm_send:
         return RedirectResponse(
@@ -859,11 +1232,11 @@ async def send_draft_action(
             f"/sales/drafts/{draft_id}?error=stale_revision: Stale revision r{revision} submitted.",
             status_code=status.HTTP_303_SEE_OTHER,
         )
-    
-    # P10_5-REG-009: Check send enabled flag
+
+    # Check server email_send_enabled flag
     if not is_email_send_enabled():
         return RedirectResponse(
-            f"/sales/drafts/{draft_id}?error=Real sending is disabled on this server (EMAIL_SEND_ENABLED=false).",
+            f"/sales/drafts/{draft_id}?error=Real sending is disabled on this server (EMAIL_SEND_ENABLED=false). Send aborted.",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
@@ -874,31 +1247,28 @@ async def send_draft_action(
             dry_run=False,
             reviewer=reviewer,
         )
-        if res.status == "sent":
-            msg = f"Email sent successfully (Attempt: {res.attempt_id[:12]})."
-            return RedirectResponse(f"/sales/sent?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
-        else:
-            return RedirectResponse(
-                f"/sales/drafts/{draft_id}?error=Send error: {res.error_message}",
-                status_code=status.HTTP_303_SEE_OTHER,
-            )
+        msg = f"Email sent successfully to {latest.recipient_email} (Status: {res.status})."
+        return RedirectResponse(f"/sales/drafts/{draft_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
-        return RedirectResponse(f"/sales/drafts/{draft_id}?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(f"/sales/drafts/{draft_id}?error=Send failed: {str(e)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/drafts/{draft_id}/suppress")
 async def suppress_draft_recipient_action(
     draft_id: str,
     email: str = Form(...),
-    company_domain: Optional[str] = Form(None),
     reason: str = Form("manual"),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
+    draft = svcs["rev_store"].get_draft(draft_id)
+    company_dom = draft.lead_id.replace("domain:", "") if draft else None
+    
     svcs["suppression_svc"].add_suppression(
-        email=email,
-        company_domain=company_domain,
+        email=email.strip().lower(),
+        company_domain=company_dom,
         reason=reason,
-        source="draft_review",
+        source="sales_console_draft",
     )
     return RedirectResponse(f"/sales/drafts/{draft_id}?message=Recipient suppressed.", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -907,87 +1277,112 @@ async def suppress_draft_recipient_action(
 # 7. APPROVED QUEUE
 # ---------------------------------------------------------------------------
 @router.get("/approved", response_class=HTMLResponse)
-async def approved_drafts_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
+async def approved_queue_view(request: Request):
     svcs = get_console_services()
-    drafts_raw, _ = svcs["rev_store"].list_drafts(
-        filters={"approval_status": "approved", "send_status": "not_sent"}, limit=100
-    )
+    raw_drafts, _ = svcs["rev_store"].list_drafts(filters={"approval_status": "approved"}, limit=100)
 
-    drafts: List[DraftReviewCard] = []
-    for d in drafts_raw:
-        is_supp = svcs["suppression_svc"].is_suppressed(d.recipient_email)
-        drafts.append(
+    cards = []
+    for d in raw_drafts:
+        if d.send_status == "sent":
+            continue
+        is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=d.recipient_email)
+        cand_id = d.lead_id.replace("domain:", "")
+        c = svcs["cand_store"].get_by_domain(cand_id)
+        comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
+
+        cards.append(
             DraftReviewCard(
                 draft_id=d.draft_id,
                 revision=d.revision,
                 lead_id=d.lead_id,
                 contact_id=d.contact_id,
-                company_name=d.lead_id,
+                company_name=comp_name,
+                company_domain=cand_id,
                 recipient_name=d.recipient_name,
+                recipient_title=d.recipient_title,
                 recipient_email=d.recipient_email,
+                sender_name=d.sender_name,
+                sender_email=d.sender_email,
                 subject=d.subject,
                 body=d.body,
+                service_used=d.service_used,
                 approval_status=d.approval_status,
                 send_status=d.send_status,
                 outreach_status=d.outreach_status,
                 content_hash=d.content_hash,
-                approved_at=d.approved_at,
+                approved_content_hash=d.approved_content_hash,
+                approved_fingerprint_short=d.approved_content_hash[:12] if d.approved_content_hash else None,
                 reviewer=d.reviewer,
+                review_note=d.review_note,
                 created_at=d.created_at,
+                approved_at=d.approved_at,
+                sent_at=d.sent_at,
                 is_suppressed=is_supp,
-                can_send=not is_supp,
+                can_approve=False,
+                can_edit=True,
+                can_reject=True,
+                can_request_changes=True,
+                can_dry_run=True,
+                can_send=(not is_supp),
             )
         )
 
-    return templates.TemplateResponse(request=request, name="approved.html", context={
+    return render_console_template(
+        request=request,
+        name="approved.html",
+        context={
             "request": request,
             "active_tab": "approved",
-            "drafts": drafts,
+            "drafts": cards,
             "email_send_enabled": is_email_send_enabled(),
-            "message": message,
-            "error": error,
         },
     )
 
 
 # ---------------------------------------------------------------------------
-# 8. SENT IMMUTABLE HISTORY
+# 8. SENT HISTORY (IMMUTABLE AUDIT TRAIL)
 # ---------------------------------------------------------------------------
 @router.get("/sent", response_class=HTMLResponse)
-async def sent_history_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
+async def sent_history_view(request: Request):
     svcs = get_console_services()
     all_attempts = svcs["rev_store"].get_send_attempts(limit=100)
-    attempts = [a for a in all_attempts if a.status == "sent"]
+    attempts = [a for a in all_attempts if getattr(a, "status", None) == "sent"]
 
-    sent_items: List[SentHistoryItem] = []
+    items = []
     for a in attempts:
-        draft = svcs["rev_store"].get_draft(a.draft_id, a.revision)
-        sent_items.append(
+        d = svcs["rev_store"].get_draft(a.draft_id, a.revision)
+        comp_name = d.lead_id.replace("domain:", "") if d else "N/A"
+        recip_name = d.recipient_name if d else "Recipient"
+        subj = d.subject if d else "Subject"
+
+        items.append(
             SentHistoryItem(
                 attempt_id=a.attempt_id,
                 send_key=a.send_key,
                 draft_id=a.draft_id,
                 revision=a.revision,
-                company_name=draft.lead_id if draft else "Lead",
-                recipient_name=draft.recipient_name if draft else "Recipient",
+                company_name=comp_name,
+                recipient_name=recip_name,
                 recipient_email=a.recipient_email,
                 sender_email=a.sender_email,
-                subject=draft.subject if draft else "Outreach",
+                subject=subj,
                 provider=a.provider,
                 status=a.status,
                 provider_message_id=a.provider_message_id,
                 attempted_at=a.attempted_at,
                 completed_at=a.completed_at,
+                error_message=a.error_message,
             )
         )
 
-    return templates.TemplateResponse(request=request, name="sent.html", context={
+    return render_console_template(
+        request=request,
+        name="sent.html",
+        context={
             "request": request,
             "active_tab": "sent",
-            "sent_items": sent_items,
+            "items": items,
             "email_send_enabled": is_email_send_enabled(),
-            "message": message,
-            "error": error,
         },
     )
 
@@ -996,50 +1391,45 @@ async def sent_history_view(request: Request, message: Optional[str] = None, err
 # 9. WATCHLIST
 # ---------------------------------------------------------------------------
 @router.get("/watchlist", response_class=HTMLResponse)
-async def watchlist_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
+async def watchlist_view(request: Request):
     svcs = get_console_services()
-    bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
-    entries = bridge.get_watchlist_summary()
+    store = svcs["cand_store"]
+    cands = store.list_candidates({"discovery_status": "watchlist"})
 
-    items: List[WatchlistItemView] = []
-    for w in entries:
+    items = []
+    for c in cands:
+        name = getattr(c, "company_name", getattr(c, "name", "Company"))
+        dom = getattr(c, "company_domain", getattr(c, "domain", None))
         items.append(
             WatchlistItemView(
-                candidate_id=w.get("candidate_id", ""),
-                company_name=w.get("company_name", ""),
-                company_domain=w.get("company_domain"),
-                country=w.get("country"),
-                tier=w.get("company_tier"),
-                fit=w.get("fit_assessment"),
-                intent=w.get("intent_assessment"),
-                watch_reason=w.get("watch_reason", ""),
-                watch_status=w.get("watch_status", "active"),
-                signals_to_monitor=w.get("signals_to_monitor", []),
-                last_checked_at=w.get("last_checked_at"),
-                next_check_at=w.get("next_check_at"),
+                candidate_id=c.candidate_id,
+                company_name=name,
+                company_domain=dom,
+                country=c.country,
+                tier=c.company_tier,
+                fit=c.fit_assessment,
+                intent=c.intent_assessment,
+                watch_reason="Signal monitoring (e.g. pending hiring or tender)",
+                watch_status="active",
+                signals_to_monitor=c.intent_signals or [],
+                last_checked_at=c.last_seen_at,
             )
         )
 
-    return templates.TemplateResponse(request=request, name="watchlist.html", context={
+    return render_console_template(
+        request=request,
+        name="watchlist.html",
+        context={
             "request": request,
             "active_tab": "watchlist",
             "items": items,
             "email_send_enabled": is_email_send_enabled(),
-            "message": message,
-            "error": error,
         },
     )
 
 
-@router.post("/watchlist/{candidate_id}/remove")
-async def remove_from_watchlist_action(candidate_id: str):
-    svcs = get_console_services()
-    svcs["cand_store"].remove_from_watchlist(candidate_id)
-    return RedirectResponse("/sales/watchlist?message=Removed from watchlist.", status_code=status.HTTP_303_SEE_OTHER)
-
-
 # ---------------------------------------------------------------------------
-# 10. DO NOT CONTACT (SUPPRESSION)
+# 10. DO NOT CONTACT / SUPPRESSION
 # ---------------------------------------------------------------------------
 @router.get("/do-not-contact", response_class=HTMLResponse)
 async def suppression_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
@@ -1058,7 +1448,10 @@ async def suppression_view(request: Request, message: Optional[str] = None, erro
         for s in raw_suppressed
     ]
 
-    return templates.TemplateResponse(request=request, name="suppression.html", context={
+    return render_console_template(
+        request=request,
+        name="suppression.html",
+        context={
             "request": request,
             "active_tab": "suppression",
             "items": items,
@@ -1071,25 +1464,42 @@ async def suppression_view(request: Request, message: Optional[str] = None, erro
 
 @router.post("/do-not-contact/add")
 async def add_suppression_action(
-    email: str = Form(...),
+    scope: str = Form("email"),
+    target: str = Form(...),
     company_domain: Optional[str] = Form(None),
     reason: str = Form("manual"),
+    csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
-    svcs["suppression_svc"].add_suppression(
-        email=email.strip().lower(),
-        company_domain=company_domain.strip().lower() if company_domain else None,
-        reason=reason,
-        source="sales_console",
-    )
-    return RedirectResponse("/sales/do-not-contact?message=Suppression entry added.", status_code=status.HTTP_303_SEE_OTHER)
+    clean_target = target.strip().lower()
+    clean_domain = company_domain.strip().lower() if company_domain else None
+
+    if scope == "domain" or "@" not in clean_target:
+        domain_val = clean_target if "@" not in clean_target else (clean_domain or clean_target.split("@", 1)[1])
+        svcs["suppression_svc"].add_suppression(
+            email=f"*@{domain_val}",
+            company_domain=domain_val,
+            reason=reason,
+            source="sales_console",
+        )
+    else:
+        svcs["suppression_svc"].add_suppression(
+            email=clean_target,
+            company_domain=clean_domain,
+            reason=reason,
+            source="sales_console",
+        )
+    return RedirectResponse("/sales/do-not-contact?message=Suppression+entry+added.", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/do-not-contact/remove")
-async def remove_suppression_action(email: str = Form(...)):
+async def remove_suppression_action(
+    target: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+):
     svcs = get_console_services()
-    svcs["suppression_svc"].remove_suppression(email.strip().lower())
-    return RedirectResponse("/sales/do-not-contact?message=Suppression removed.", status_code=status.HTTP_303_SEE_OTHER)
+    svcs["suppression_svc"].remove_suppression(target.strip().lower())
+    return RedirectResponse("/sales/do-not-contact?message=Suppression+removed.", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
@@ -1116,16 +1526,27 @@ async def replies_view(request: Request):
             """).fetchall()
 
             for r in rows:
-                r_dict = dict(r)
-                responses.append(r_dict)
-                if r_dict.get("reply_status") in ("positive", "interested", "meeting_requested"):
+                stat = r["reply_status"] or ""
+                if "positive" in stat.lower() or "interested" in stat.lower():
                     positive_count += 1
-                if r_dict.get("meeting_status"):
+                if r["meeting_status"]:
                     meetings_count += 1
+
+                responses.append({
+                    "company_name": r["company_name"] or r["candidate_id"],
+                    "recipient_email": r["recipient_email"],
+                    "reply_status": stat,
+                    "reply_at": r["reply_at"] or "N/A",
+                    "meeting_status": r["meeting_status"] or "No meeting",
+                    "notes": r["notes"] or "",
+                })
     except Exception:
         pass
 
-    return templates.TemplateResponse(request=request, name="replies.html", context={
+    return render_console_template(
+        request=request,
+        name="replies.html",
+        context={
             "request": request,
             "active_tab": "replies",
             "responses": responses,
@@ -1148,11 +1569,32 @@ async def settings_view(request: Request):
     smtp_user = os.getenv("SMTP_USER")
     smtp_configured = bool(smtp_host and smtp_user)
 
-    trusted_sender_email = os.getenv("OUTREACH_SENDER_EMAIL")
-    trusted_sender_name = os.getenv("OUTREACH_SENDER_NAME")
+    trusted_sender_email = os.getenv("OUTREACH_SENDER_EMAIL", os.getenv("SMTP_FROM_EMAIL"))
+    trusted_sender_name = os.getenv("OUTREACH_SENDER_NAME", os.getenv("SMTP_FROM_NAME"))
     sheets_configured = bool(os.getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"))
 
-    return templates.TemplateResponse(request=request, name="settings.html", context={
+    # P10_5-ADV-019: Truthful, non-hardcoded health status checks
+    ollama_reachable = False
+    try:
+        ollama_host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        req = urllib.request.Request(f"{ollama_host}/api/tags", headers={"User-Agent": "SalesAI-Check"})
+        with urllib.request.urlopen(req, timeout=0.3) as resp:
+            if resp.status == 200:
+                ollama_reachable = True
+    except Exception:
+        ollama_reachable = False
+
+    chroma_operational = False
+    try:
+        import chromadb
+        chroma_operational = True
+    except ImportError:
+        chroma_operational = False
+
+    return render_console_template(
+        request=request,
+        name="settings.html",
+        context={
             "request": request,
             "active_tab": "settings",
             "db_path": svcs["cand_store"].db_path,
@@ -1163,6 +1605,69 @@ async def settings_view(request: Request):
             "trusted_sender_name": trusted_sender_name,
             "sheets_configured": sheets_configured,
             "llm_model": os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b"),
-            "ollama_reachable": True,
+            "ollama_reachable": ollama_reachable,
+            "chroma_operational": chroma_operational,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# 13. GLOBAL SEARCH (CANDIDATES, CONTACTS, DRAFTS)
+# ---------------------------------------------------------------------------
+@router.get("/search", response_class=HTMLResponse)
+async def global_search_view(request: Request, q: Optional[str] = Query(None)):
+    query_str = (q or "").strip()
+    candidate_results = []
+    draft_results = []
+
+    if query_str:
+        svcs = get_console_services()
+        ql = query_str.lower()
+
+        # 1. Search candidates
+        all_cands = svcs["cand_store"].list_candidates()
+        for c in all_cands:
+            name = getattr(c, "company_name", getattr(c, "name", ""))
+            dom = getattr(c, "company_domain", getattr(c, "domain", "")) or ""
+            city = getattr(c, "city", "") or ""
+            if ql in name.lower() or ql in dom.lower() or ql in city.lower():
+                candidate_results.append({
+                    "id": c.candidate_id,
+                    "name": name,
+                    "domain": dom,
+                    "city": city,
+                    "tier": c.company_tier,
+                    "status": c.discovery_status,
+                })
+
+        # 2. Search drafts
+        all_drafts = svcs["rev_store"].list_drafts(limit=500)
+        for d in all_drafts:
+            if (
+                ql in d.subject.lower()
+                or ql in d.recipient_email.lower()
+                or ql in d.recipient_name.lower()
+                or ql in d.lead_id.lower()
+            ):
+                draft_results.append({
+                    "draft_id": d.draft_id,
+                    "revision": d.revision,
+                    "subject": d.subject,
+                    "recipient_email": d.recipient_email,
+                    "recipient_name": d.recipient_name,
+                    "approval_status": d.approval_status,
+                    "send_status": d.send_status,
+                })
+
+    return render_console_template(
+        request=request,
+        name="search.html",
+        context={
+            "request": request,
+            "active_tab": "dashboard",
+            "query": query_str,
+            "candidate_results": candidate_results,
+            "draft_results": draft_results,
+            "email_send_enabled": is_email_send_enabled(),
         },
     )

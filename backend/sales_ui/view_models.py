@@ -263,3 +263,31 @@ class SuppressionAddUiRequest(BaseModel):
     company_domain: Optional[str] = None
     reason: str = "manual"
     source: str = "sales_console"
+
+
+class HistoricalImportPreviewResult(BaseModel):
+    file_path: str
+    file_hash: str
+    sheet_name: Optional[str] = None
+    preview_token: str
+    rows_detected: int = 0
+    companies_detected: int = 0
+    contacts_detected: int = 0
+    historical_outreach_events: int = 0
+    dnc_count: int = 0
+    active_conversations: int = 0
+    warnings: List[str] = Field(default_factory=list)
+
+
+class DraftRequestChangesUiRequest(BaseModel):
+    revision: int
+    reviewer: str = "local_operator"
+    note: str
+
+
+class GenerateDraftUiRequest(BaseModel):
+    contact_name: Optional[str] = None
+    contact_title: Optional[str] = None
+    contact_email: str
+    reviewer: str = "local_operator"
+

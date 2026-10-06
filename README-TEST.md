@@ -2,8 +2,8 @@
 
 ## Run Information
 - **Date:** 2026-10-06
-- **Time:** 08:06:14 UTC
-- **Git Commit:** `d36c3f4`
+- **Time:** 11:01:00 UTC
+- **Git Commit:** `ac5e51d`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,8 +14,8 @@
 - **Live Tests Executed:** Yes
 
 ## Summary
-- **Total Cases:** 542
-- **Passed:** 526
+- **Total Cases:** 703
+- **Passed:** 687
 - **Failed:** 0
 - **Review Required:** 4
 - **Deferred (Model Limitation):** 7
@@ -33,7 +33,7 @@
 | Phase 7 | 83 | 81 | 0 | 1 | 0 | 1 |
 | Phase 8 | 98 | 93 | 0 | 0 | 5 | 0 |
 | Phase 9 | 185 | 184 | 0 | 0 | 0 | 1 |
-| Phase 10 | 84 | 84 | 0 | 0 | 0 | 0 |
+| Phase 10 | 245 | 245 | 0 | 0 | 0 | 0 |
 
 ## Phase 7 Reconciliation & Case Count Model
 To ensure 100% auditability across test suites and golden sets, the Phase 7 count structure is unified as follows:
@@ -99,10 +99,12 @@ Phase 9 implements human review, approval, safe email sending, immutable audit t
   - `llm_calls_detected = 0`
   - `runtime_db_packaged = 0`
 
-## Phase 10 Case Count & Architecture Model (Adversarial Review & Revised Engine)
+## Phase 10 Case Count & Architecture Model (Comprehensive Deterministic Golden QA)
 Phase 10 implements deterministic multi-source market discovery, historical CRM/CSV/Excel ingestion, candidate qualification, watchlist routing, and verified bridges to downstream phases with a strict Zero-Send policy:
-- **Total Cases in Catalog (`tests/reports/phase10_latest.json`):** 84 cases
-  - **Passed (Deterministic):** 84 test cases covering all adversarial blockers, residual issues, and critical regressions:
+- **Total Cases in Catalog (`tests/reports/phase10_latest.json` & `tests/golden/phase10_discovery.json`):** 245 cases
+  - **Passed (Deterministic):** 245 test cases mapped to real executable pytest nodes (0 failed, 0 review, 0 not_run, false_pass_count = 0, unmapped_deterministic_cases = 0):
+    - **Mandatory Critical Regressions (`P10-REG-001` .. `P10-REG-015`):** 15/15 PASS
+    - **Full Deterministic Golden Suites (Identity, Provenance, Sources, Markets, Tier/BIM/Fit/Intent, Historical Outreach Guards, Discovery Modes, Qualification, Watchlist, Bridges, Runs, Health, Security):** All PASS
     - **Critical Regressions (`P10-REG-001` .. `P10-REG-024`):** 24 cases:
       - `P10-REG-001`: Same company from Google/Directory/Job merges once via canonical domain
       - `P10-REG-002`: Same name with different domains remain strictly separate

@@ -38,9 +38,40 @@ from sales_engine.sending import (
 from sales_engine.sending.schemas import SendAttempt
 
 
+class CsrfAwareClient(TestClient):
+    def post(self, url, *args, **kwargs):
+        token = self.cookies.get("sales_csrf_token") or "test_csrf_token_secret_12345"
+        if "sales_csrf_token" not in self.cookies:
+            self.cookies.set("sales_csrf_token", token)
+        
+        data = kwargs.get("data")
+        if isinstance(data, dict) and "csrf_token" not in data:
+            data_copy = dict(data)
+            data_copy["csrf_token"] = token
+            kwargs["data"] = data_copy
+        
+        headers = kwargs.get("headers")
+        if headers is None:
+            kwargs["headers"] = {"Origin": "http://testserver"}
+        elif "Origin" not in headers:
+            headers_copy = dict(headers)
+            headers_copy["Origin"] = "http://testserver"
+            kwargs["headers"] = headers_copy
+
+        return super().post(url, *args, **kwargs)
+
+
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(app)
+    return CsrfAwareClient(app)
+
+
+@pytest.fixture(autouse=True)
+def ensure_db_env(seed_data):
+    os.environ["SALES_OUTREACH_DB"] = test_db_path
+    os.environ["SALESAI_DB_PATH"] = test_db_path
+    os.environ["SALESAI_CANDIDATES_DB"] = test_db_path
+    yield
 
 
 @pytest.fixture(scope="module")

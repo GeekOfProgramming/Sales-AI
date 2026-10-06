@@ -5,22 +5,29 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Do Not Contact (Suppression List)</h1>
-    <p class="page-subtitle">Authoritative suppression records enforced by Phase 9. Suppressed recipients can never be emailed.</p>
+    <h1 class="page-title">Do Not Contact (Suppression Registry)</h1>
+    <p class="page-subtitle">Authoritative suppression records enforced by Phase 9. Suppressed recipients and company domains can never be emailed.</p>
   </div>
 </div>
 
-<!-- Add Suppression Form -->
+<!-- Add Suppression Form (Explicit Scope: email vs domain) -->
 <div class="card">
   <div class="card-title">
     <span>Add Suppression Entry</span>
   </div>
-  <form method="POST" action="/sales/do-not-contact/add" class="form-inline">
+  <form method="POST" action="/sales/do-not-contact/add" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="width: 170px;">
+      <select name="scope" id="dnc_scope" class="form-control" onchange="updateDncPlaceholder()">
+        <option value="email">Email Scope</option>
+        <option value="domain">Domain Scope</option>
+      </select>
+    </div>
     <div style="flex: 2; min-width: 220px;">
-      <input type="text" name="email" class="form-control" placeholder="Email address or domain (e.g. user@domain.com or domain.com)" required>
+      <input type="text" name="target" id="dnc_target" class="form-control" placeholder="Target address (e.g. user@domain.com)" required>
     </div>
     <div style="flex: 1; min-width: 180px;">
-      <input type="text" name="company_domain" class="form-control" placeholder="Company Domain (optional)">
+      <input type="text" name="company_domain" class="form-control" placeholder="Associated Domain (optional)">
     </div>
     <div style="width: 180px;">
       <select name="reason" class="form-control">
@@ -63,7 +70,8 @@
           <td>{{ s.created_at[:19] }}</td>
           <td>
             <form method="POST" action="/sales/do-not-contact/remove" style="display:inline;">
-              <input type="hidden" name="email" value="{{ s.email }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="target" value="{{ s.email }}">
               <button type="submit" class="btn btn-secondary btn-sm" onclick="return confirm('Remove suppression for {{ s.email }}?');">Remove</button>
             </form>
           </td>
@@ -74,8 +82,20 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <p class="empty-state-text">No suppression entries currently active.</p>
+    <p class="empty-state-text">No entities currently suppressed.</p>
   </div>
   {% endif %}
 </div>
+
+<script>
+function updateDncPlaceholder() {
+  const scope = document.getElementById('dnc_scope').value;
+  const target = document.getElementById('dnc_target');
+  if (scope === 'domain') {
+    target.placeholder = 'Company domain (e.g. acme.com)';
+  } else {
+    target.placeholder = 'Target address (e.g. user@domain.com)';
+  }
+}
+</script>
 {% endblock %}

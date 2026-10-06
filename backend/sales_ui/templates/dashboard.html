@@ -74,6 +74,7 @@
     <span class="badge badge-info">Zero Autonomous Sends</span>
   </div>
   <form method="POST" action="/sales/discoveries/run" class="form-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="flex: 1; min-width: 200px;">
       <input type="text" name="query" class="form-control" placeholder="Search keywords (e.g. BIM, MEP, Architecture)" value="BIM">
     </div>

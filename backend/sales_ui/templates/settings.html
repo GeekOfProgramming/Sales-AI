@@ -51,7 +51,7 @@
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
     <div><strong>LLM Model:</strong> <code>{{ llm_model or 'qwen2.5:1.5b' }}</code></div>
     <div><strong>Ollama Engine Connectivity:</strong> <span class="badge {% if ollama_reachable %}badge-success{% else %}badge-warning{% endif %}">{{ 'Reachable' if ollama_reachable else 'Offline / Fallback' }}</span></div>
-    <div><strong>Vector Database (ChromaDB):</strong> <span class="badge badge-success">Local / Operational</span></div>
+    <div><strong>Vector Database (ChromaDB):</strong> <span class="badge {% if chroma_operational %}badge-success{% else %}badge-warning{% endif %}">{{ 'Operational' if chroma_operational else 'Unavailable' }}</span></div>
     <div><strong>UI Rendering Invariant:</strong> <code>Zero LLM Calls for Console Pages</code></div>
   </div>
 </div>

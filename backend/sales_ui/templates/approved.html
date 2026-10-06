@@ -50,12 +50,13 @@
           <td>
             <div style="display: flex; gap: 0.35rem;">
               <form method="POST" action="/sales/drafts/{{ d.draft_id }}/dry-run" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="revision" value="{{ d.revision }}">
                 <input type="hidden" name="reviewer" value="local_operator">
                 <button type="submit" class="btn btn-secondary btn-sm">Dry Run</button>
               </form>
               {% if not d.is_suppressed and email_send_enabled %}
-              <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'') }}', '{{ d.company_name|replace('\'', '\\\'') }}')">
+              <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ d.company_name|replace('\'', '\\\'') }}', '{{ d.sender_name|replace('\'', '\\\'') or 'pyBIM Team' }}', '{{ d.sender_email or 'sales@pybim.it' }}', '{{ d.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
                 Send...
               </button>
               {% else %}

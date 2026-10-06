@@ -81,6 +81,7 @@
         <!-- Approve Button: Never sends directly (P10_5-REG-001) -->
         {% if d.can_approve %}
         <form method="POST" action="/sales/drafts/{{ d.draft_id }}/approve" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="revision" value="{{ d.revision }}">
           <input type="hidden" name="reviewer" value="local_operator">
           <button type="submit" class="btn btn-success btn-sm">✅ Approve Draft</button>
@@ -95,6 +96,7 @@
         <!-- Reject Button -->
         {% if d.can_reject %}
         <form method="POST" action="/sales/drafts/{{ d.draft_id }}/reject" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="revision" value="{{ d.revision }}">
           <input type="hidden" name="reviewer" value="local_operator">
           <button type="submit" class="btn btn-danger btn-sm">❌ Reject</button>
@@ -103,6 +105,7 @@
 
         <!-- Dry Run Validation (P10_5-REG-005: 0 network calls) -->
         <form method="POST" action="/sales/drafts/{{ d.draft_id }}/dry-run" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="revision" value="{{ d.revision }}">
           <input type="hidden" name="reviewer" value="local_operator">
           <button type="submit" class="btn btn-secondary btn-sm">🧪 Dry Run</button>
@@ -110,7 +113,7 @@
 
         <!-- Explicit Send Button (P10_5-REG-004, P10_5-REG-006, P10_5-REG-009) -->
         {% if d.can_send and not d.is_suppressed and email_send_enabled %}
-        <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'') }}', '{{ d.company_name|replace('\'', '\\\'') }}')">
+        <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ d.company_name|replace('\'', '\\\'') }}', '{{ d.sender_name|replace('\'', '\\\'') or 'pyBIM Team' }}', '{{ d.sender_email or 'sales@pybim.it' }}', '{{ d.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
           📤 Send Real Email...
         </button>
         {% elif d.is_suppressed %}
@@ -125,6 +128,7 @@
 
         <!-- Do Not Contact Button -->
         <form method="POST" action="/sales/drafts/{{ d.draft_id }}/suppress" style="display:inline; margin-left:auto;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="email" value="{{ d.recipient_email }}">
           <input type="hidden" name="company_domain" value="{{ d.company_domain or '' }}">
           <input type="hidden" name="reason" value="manual">

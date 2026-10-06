@@ -224,6 +224,8 @@ class CandidateCompany(BaseModel):
             data["company_name"] = data.pop("name")
         if "canonical_domain" in data and "company_domain" not in data:
             data["company_domain"] = data.pop("canonical_domain")
+        if "domain" in data and "company_domain" not in data:
+            data["company_domain"] = data.pop("domain")
         if "status" in data and "discovery_status" not in data:
             data["discovery_status"] = data.pop("status")
         if "discovery_sources" in data and "source_refs" not in data:

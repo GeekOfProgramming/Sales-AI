@@ -16,26 +16,27 @@ class SuppressionStore:
     def __init__(self, review_store: Optional[ReviewStore] = None):
         self.store = review_store or ReviewStore()
 
-    def is_suppressed(self, email: str, company_domain: Optional[str] = None) -> bool:
-        if not email:
+    def is_suppressed(self, email: Optional[str] = None, company_domain: Optional[str] = None) -> bool:
+        if not email and not company_domain:
             return False
-        clean_email = email.strip().lower()
+        clean_email = email.strip().lower() if email else None
         clean_domain = company_domain.strip().lower() if company_domain else None
 
         with self.store._get_connection() as conn:
             # 1. Exact email match
-            row = conn.execute(
-                "SELECT 1 FROM suppression_list WHERE email = ? LIMIT 1",
-                (clean_email,),
-            ).fetchone()
-            if row:
-                return True
+            if clean_email:
+                row = conn.execute(
+                    "SELECT 1 FROM suppression_list WHERE email = ? LIMIT 1",
+                    (clean_email,),
+                ).fetchone()
+                if row:
+                    return True
 
             # 2. Optional company domain suppression
             if clean_domain:
                 row_domain = conn.execute(
-                    "SELECT 1 FROM suppression_list WHERE company_domain = ? LIMIT 1",
-                    (clean_domain,),
+                    "SELECT 1 FROM suppression_list WHERE company_domain = ? OR email = ? LIMIT 1",
+                    (clean_domain, clean_domain),
                 ).fetchone()
                 if row_domain:
                     return True
@@ -99,12 +100,12 @@ class SuppressionStore:
             )
         return entry
 
-    def remove_suppression(self, email: str) -> bool:
-        clean_email = email.strip().lower()
+    def remove_suppression(self, target: str) -> bool:
+        clean_target = target.strip().lower()
         with self.store._lock, self.store._get_connection() as conn:
             cursor = conn.execute(
-                "DELETE FROM suppression_list WHERE email = ?",
-                (clean_email,),
+                "DELETE FROM suppression_list WHERE email = ? OR company_domain = ? OR suppression_id = ?",
+                (clean_target, clean_target, clean_target),
             )
             return cursor.rowcount > 0
 

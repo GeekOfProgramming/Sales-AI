@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Sources | SalesAI Console{% endblock %}
+{% block title %}Sources & Historical Ingestion | SalesAI Console{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Discovery Sources & Provenance</h1>
-    <p class="page-subtitle">Configure discovery engines, monitor crawler health, and import manual seeds.</p>
+    <p class="page-subtitle">Configured data streams, scrapers, and historical spreadsheet ingestion with provenance tracking.</p>
   </div>
 </div>
 
-<!-- Manual Seed Input Form -->
+<!-- Manual Candidate Seed Input -->
 <div class="card">
   <div class="card-title">
     <span>Manual Candidate Seed Input</span>
@@ -19,7 +19,8 @@
   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
     Manually entered companies enter the normal Phase 10 research, deduplication, and qualification pipeline. They are never automatically qualified or contacted.
   </p>
-  <form method="POST" action="/sales/sources/manual-seed" class="form-inline">
+  <form method="POST" action="/sales/sources/manual-seed" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="flex: 1; min-width: 180px;">
       <input type="text" name="company_name" class="form-control" placeholder="Company Name (e.g. Acme BIM Studio)" required>
     </div>
@@ -36,25 +37,54 @@
   </form>
 </div>
 
-<!-- Historical Spreadsheet Import -->
+<!-- Historical Spreadsheet Import (Preview -> Confirm Workflow) -->
 <div class="card">
   <div class="card-title">
     <span>Import Historical Spreadsheet</span>
-    <span class="badge badge-muted">CSV / XLSX</span>
+    <span class="badge badge-muted">Preview → Confirm Workflow</span>
   </div>
   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-    Import historical outreach, company lists, or past contacts with root restriction, deduplication, and safety guards.
+    Import historical outreach, company lists, or past contacts with root restriction, deduplication, and safety guards. Preview parsing results before executing authoritative writes.
   </p>
-  <form method="POST" action="/sales/sources/import-history" class="form-inline">
+  <form method="POST" action="/sales/sources/import-history/preview" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="flex: 2; min-width: 280px;">
-      <input type="text" name="file_path" class="form-control" placeholder="Relative file path (e.g. data/historical_leads.csv)" required>
+      <input type="text" name="file_path" class="form-control" placeholder="Allowed repository file path (e.g. data/historical_leads.csv)" required>
     </div>
     <div style="flex: 1; min-width: 140px;">
       <input type="text" name="sheet_name" class="form-control" placeholder="Sheet Name (for XLSX)">
     </div>
-    <button type="submit" class="btn btn-secondary">Import File</button>
+    <button type="submit" class="btn btn-secondary">1. Preview Import</button>
   </form>
 </div>
+
+<!-- Preview Confirmation Card (If Preview Staged) -->
+{% if preview %}
+<div class="card" style="border: 1px solid var(--border-focus); background: var(--bg-surface);">
+  <div class="card-title">
+    <span>Stage 2: Confirm Historical Import</span>
+    <span class="badge badge-warning">Awaiting Execution</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; font-size: 0.875rem; margin-bottom: 1rem;">
+    <div><strong>File Path:</strong> <code>{{ preview.file_path }}</code></div>
+    <div><strong>Content Hash:</strong> <code>{{ preview.file_hash[:16] }}...</code></div>
+    <div><strong>Rows Detected:</strong> <strong>{{ preview.rows_detected }}</strong></div>
+    <div><strong>Companies Detected:</strong> <strong>{{ preview.companies_detected }}</strong></div>
+    <div><strong>Contacts Detected:</strong> <strong>{{ preview.contacts_detected }}</strong></div>
+    <div><strong>Historical Outreach:</strong> <strong>{{ preview.historical_outreach_events }}</strong></div>
+    <div><strong>DNC Records:</strong> <strong>{{ preview.dnc_count }}</strong></div>
+    <div><strong>Active Convs:</strong> <strong>{{ preview.active_conversations }}</strong></div>
+  </div>
+  <form method="POST" action="/sales/sources/import-history/confirm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="file_path" value="{{ preview.file_path }}">
+    <input type="hidden" name="file_hash" value="{{ preview.file_hash }}">
+    <input type="hidden" name="preview_token" value="{{ preview.preview_token }}">
+    <input type="hidden" name="sheet_name" value="{{ preview.sheet_name or '' }}">
+    <button type="submit" class="btn btn-success">✅ Confirm & Execute Authoritative Import</button>
+  </form>
+</div>
+{% endif %}
 
 <!-- Source Registry Table -->
 <div class="card">
@@ -87,7 +117,11 @@
           <td>{{ s.countries|join(', ') if s.countries else 'Global' }}</td>
           <td>
             {% if s.requires_api_key %}
-              <span class="badge badge-info">Configured</span>
+              {% if s.is_configured %}
+                <span class="badge badge-info">Configured</span>
+              {% else %}
+                <span class="badge badge-warning">Not configured</span>
+              {% endif %}
             {% else %}
               <span class="badge badge-muted">Public / Open</span>
             {% endif %}
@@ -101,6 +135,7 @@
           <td>{{ s.last_success_at[:19] if s.last_success_at else 'Never' }}</td>
           <td>
             <form method="POST" action="/sales/discoveries/run" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="sources" value="{{ s.id }}">
               <button type="submit" class="btn btn-secondary btn-sm">Run Now</button>
             </form>
