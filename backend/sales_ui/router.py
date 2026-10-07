@@ -64,6 +64,15 @@ from sales_engine.outreach.outreach_orchestrator import OutreachOrchestrator
 from sales_engine.outreach.schemas import SenderProfile, GenerateDraftsRequest
 from sales_engine.candidates.models import QualificationOutcome, DiscoveryStatus
 
+# Phase 11 Inbox and Reply Intelligence
+from sales_engine.inbox.store import InboxStore
+from sales_engine.inbox.sync import InboxSyncManager
+from sales_engine.inbox.reply_sender import ReplySendOrchestrator
+from sales_engine.inbox.classifier import ReplyClassifier
+from sales_engine.inbox.suggestion import ReplySuggestionEngine
+from sales_engine.inbox.providers.mock import MockMailboxProvider
+from sales_engine.inbox.models import ConversationEvent
+
 router = APIRouter(prefix="/sales", tags=["Sales-Console"])
 
 templates_dir = Path(__file__).parent / "templates"
@@ -96,6 +105,26 @@ def get_console_services():
     dash_svc = DashboardService(candidate_store=cand_store, review_store=rev_store)
     timeline_svc = TimelineService(candidate_store=cand_store, review_store=rev_store)
     
+    # Phase 11 Inbox and Reply Services
+    inbox_store = InboxStore(db_path=cand_store.db_path)
+    inbox_provider = MockMailboxProvider()
+    inbox_classifier = ReplyClassifier()
+    inbox_suggestion_engine = ReplySuggestionEngine()
+    inbox_sync_mgr = InboxSyncManager(
+        inbox_store=inbox_store,
+        provider=inbox_provider,
+        candidate_store=cand_store,
+        review_store=rev_store,
+        suppression_store=suppression_svc,
+        classifier=inbox_classifier,
+        suggestion_engine=inbox_suggestion_engine,
+    )
+    inbox_reply_sender = ReplySendOrchestrator(
+        inbox_store=inbox_store,
+        suppression_store=suppression_svc,
+        provider=inbox_provider,
+    )
+
     return {
         "cand_store": cand_store,
         "registry": registry,
@@ -108,6 +137,12 @@ def get_console_services():
         "audit_svc": audit_svc,
         "dash_svc": dash_svc,
         "timeline_svc": timeline_svc,
+        "inbox_store": inbox_store,
+        "inbox_provider": inbox_provider,
+        "inbox_classifier": inbox_classifier,
+        "inbox_suggestion_engine": inbox_suggestion_engine,
+        "inbox_sync_mgr": inbox_sync_mgr,
+        "inbox_reply_sender": inbox_reply_sender,
     }
 
 
@@ -1691,17 +1726,65 @@ async def remove_suppression_action(
 
 
 # ---------------------------------------------------------------------------
-# 11. REPLIES & CONVERSATION (PHASE 10.5 PLACEHOLDER / HISTORICAL)
+# 11. REPLIES & CONVERSATION (PHASE 11 INBOX & REPLY INTELLIGENCE)
 # ---------------------------------------------------------------------------
 @router.get("/replies", response_class=HTMLResponse)
-async def replies_view(request: Request):
+async def replies_view(
+    request: Request,
+    category: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status"),
+):
     svcs = get_console_services()
     store = svcs["cand_store"]
+    inbox_store: InboxStore = svcs["inbox_store"]
+    provider = svcs["inbox_provider"]
 
-    responses = []
-    positive_count = 0
+    conn_info = provider.get_connection_status()
+    sync_state = inbox_store.get_sync_state(provider.provider_name)
+
+    # 1. Active Phase 11 conversations
+    raw_convs = inbox_store.list_conversations(category=category, status=status_filter)
+    conversations = []
+    waiting_count = 0
     meetings_count = 0
 
+    for c in raw_convs:
+        comp_name = None
+        if c.company_id:
+            cand = store.get_candidate(c.company_id)
+            comp_name = cand.company_name if cand else c.company_id
+
+        # Resolve respondent name/email
+        msgs = inbox_store.list_inbound_messages(c.conversation_id)
+        latest_msg = msgs[-1] if msgs else None
+        resp_email = latest_msg.from_email if latest_msg else "Unknown"
+        resp_name = latest_msg.from_name if latest_msg else None
+
+        is_colleague = bool(
+            c.actual_respondent_contact_id and c.primary_contact_id
+            and c.actual_respondent_contact_id != c.primary_contact_id
+        )
+
+        if c.status in ("waiting_on_us", "needs_review"):
+            waiting_count += 1
+        if c.meeting_status != "none":
+            meetings_count += 1
+
+        conversations.append({
+            "conversation_id": c.conversation_id,
+            "company_name": comp_name,
+            "respondent_name": resp_name,
+            "respondent_email": resp_email,
+            "is_colleague": is_colleague,
+            "reply_category": c.reply_category,
+            "status": c.status,
+            "meeting_status": c.meeting_status,
+            "last_message_at": c.last_message_at,
+        })
+
+    # 2. Historical responses (Phase 10.5 compatibility)
+    responses = []
+    positive_count = 0
     try:
         with store._get_connection() as conn:
             rows = conn.execute("""
@@ -1717,12 +1800,12 @@ async def replies_view(request: Request):
                 stat = r["reply_status"] or ""
                 if "positive" in stat.lower() or "interested" in stat.lower():
                     positive_count += 1
-                if r["meeting_status"]:
-                    meetings_count += 1
 
                 responses.append({
                     "company_name": r["company_name"] or r["candidate_id"],
-                    "recipient_email": r["recipient_email"],
+                    "recipient_email": r["recipient_email"] or r["contact_email"],
+                    "respondent_name": r["respondent_name"] or r["contact_name"],
+                    "respondent_role": r["respondent_role"],
                     "reply_status": stat,
                     "reply_at": r["reply_at"] or "N/A",
                     "meeting_status": r["meeting_status"] or "No meeting",
@@ -1731,17 +1814,324 @@ async def replies_view(request: Request):
     except Exception:
         pass
 
-    return render_console_template(
+    csrf_token = get_or_create_csrf_token(request)
+
+    response = render_console_template(
         request=request,
         name="replies.html",
         context={
             "request": request,
             "active_tab": "replies",
+            "conn_info": conn_info,
+            "sync_state": sync_state,
+            "conversations": conversations,
             "responses": responses,
             "positive_count": positive_count,
             "meetings_count": meetings_count,
+            "waiting_count": waiting_count,
+            "email_send_enabled": is_email_send_enabled(),
+            "csrf_token": csrf_token,
+        },
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
+    return response
+
+
+@router.post("/inbox/sync")
+async def manual_inbox_sync_action(
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    sync_mgr: InboxSyncManager = svcs["inbox_sync_mgr"]
+    summary = sync_mgr.sync()
+    msg = f"Inbox+sync+completed.+Fetched+{summary.messages_fetched}+messages,+{summary.new_replies}+new+replies."
+    return RedirectResponse(f"/sales/replies?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/replies/{conversation_id}", response_class=HTMLResponse)
+async def conversation_detail_view(request: Request, conversation_id: str):
+    svcs = get_console_services()
+    store = svcs["cand_store"]
+    inbox_store: InboxStore = svcs["inbox_store"]
+    rev_store = svcs["rev_store"]
+
+    conv = inbox_store.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    company = store.get_candidate(conv.company_id) if conv.company_id else None
+    messages = inbox_store.list_inbound_messages(conversation_id)
+    events = inbox_store.list_events(conversation_id)
+    suggestion = inbox_store.get_latest_suggestion_for_conversation(conversation_id)
+    proposal = inbox_store.get_meeting_proposal(conversation_id)
+
+    # Resolve linked outbound draft
+    outbound_draft = None
+    if messages and messages[0].linked_outbound_draft_id:
+        outbound_draft = rev_store.get_draft(
+            messages[0].linked_outbound_draft_id,
+            messages[0].linked_outbound_revision or 1,
+        )
+
+    # Provenance details
+    latest_msg = messages[-1] if messages else None
+    actual_email = latest_msg.from_email if latest_msg else "Unknown"
+    actual_name = latest_msg.from_name if latest_msg else None
+    orig_email = outbound_draft.recipient_email if outbound_draft else None
+
+    is_diff = bool(orig_email and actual_email and orig_email.lower() != actual_email.lower())
+
+    csrf_token = get_or_create_csrf_token(request)
+    trusted_senders = get_trusted_senders()
+    trusted_sender_email = trusted_senders[0] if trusted_senders else "outreach@pybim.it"
+
+    response = render_console_template(
+        request=request,
+        name="reply_detail.html",
+        context={
+            "request": request,
+            "active_tab": "replies",
+            "conversation": conv,
+            "company": company,
+            "messages": messages,
+            "events": events,
+            "suggestion": suggestion,
+            "proposal": proposal,
+            "outbound_draft": outbound_draft,
+            "actual_respondent_email": actual_email,
+            "actual_respondent_name": actual_name,
+            "original_recipient_email": orig_email,
+            "is_different_respondent": is_diff,
+            "trusted_sender_email": trusted_sender_email,
+            "csrf_token": csrf_token,
             "email_send_enabled": is_email_send_enabled(),
         },
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
+    return response
+
+
+@router.post("/replies/{conversation_id}/classify")
+async def manual_reclassify_action(
+    conversation_id: str,
+    category: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    inbox_store: InboxStore = svcs["inbox_store"]
+    supp_store: SuppressionStore = svcs["suppression_svc"]
+
+    conv = inbox_store.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    old_cat = conv.reply_category
+    clean_cat = category.strip().lower()
+    conv.reply_category = clean_cat  # type: ignore
+
+    if clean_cat == "unsubscribe":
+        conv.status = "do_not_contact"
+        conv.active_conversation = False
+        msgs = inbox_store.list_inbound_messages(conversation_id)
+        if msgs and msgs[0].from_email:
+            supp_store.add_suppression(msgs[0].from_email, reason="opt_out", source="manual_reclassify")
+    elif clean_cat == "bounce":
+        conv.status = "bounce"
+        conv.active_conversation = False
+
+    inbox_store.save_conversation(conv)
+    inbox_store.add_event(
+        ConversationEvent(
+            conversation_id=conversation_id,
+            event_type="manual_reclassification",
+            actor="operator",
+            details={"old_category": old_cat, "new_category": clean_cat},
+        )
+    )
+    return RedirectResponse(f"/sales/replies/{conversation_id}?message=Category+updated+to+{clean_cat}.", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/replies/{conversation_id}/suggest-reply")
+async def generate_suggestion_action(
+    conversation_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    inbox_store: InboxStore = svcs["inbox_store"]
+    cand_store = svcs["cand_store"]
+    rev_store = svcs["rev_store"]
+    engine: ReplySuggestionEngine = svcs["inbox_suggestion_engine"]
+
+    conv = inbox_store.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    msgs = inbox_store.list_inbound_messages(conversation_id)
+    if not msgs:
+        return RedirectResponse(f"/sales/replies/{conversation_id}?error=No+messages+to+reply+to.", status_code=status.HTTP_303_SEE_OTHER)
+
+    latest_msg = msgs[-1]
+    outbound_subj = None
+    outbound_body = None
+    if latest_msg.linked_outbound_draft_id:
+        draft = rev_store.get_draft(
+            latest_msg.linked_outbound_draft_id,
+            latest_msg.linked_outbound_revision or 1,
+        )
+        if draft:
+            outbound_subj = draft.subject
+            outbound_body = draft.body
+
+    comp_name = None
+    if conv.company_id:
+        cand = cand_store.get_candidate(conv.company_id)
+        comp_name = cand.company_name if cand else None
+
+    sug = engine.generate_suggestion(
+        conversation=conv,
+        inbound_message=latest_msg,
+        outbound_subject=outbound_subj,
+        outbound_body=outbound_body,
+        company_name=comp_name,
+        contact_name=latest_msg.from_name,
+    )
+    if sug:
+        inbox_store.save_suggestion(sug)
+        return RedirectResponse(f"/sales/replies/{conversation_id}?message=Suggested+reply+generated.", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(f"/sales/replies/{conversation_id}?error=Cannot+generate+suggestion+for+suppressed+or+automated+messages.", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/reply-suggestions/{suggestion_id}/edit")
+async def edit_suggestion_action(
+    suggestion_id: str,
+    subject: str = Form(...),
+    body: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    inbox_store: InboxStore = svcs["inbox_store"]
+
+    sug = inbox_store.get_suggestion(suggestion_id)
+    if not sug:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    if sug.status == "sent":
+        return RedirectResponse(f"/sales/replies/{sug.conversation_id}?error=Sent+suggestions+are+immutable.", status_code=status.HTTP_303_SEE_OTHER)
+
+    sug.subject = subject.strip()
+    sug.body = body.strip()
+    sug.status = "pending_review"
+    inbox_store.save_suggestion(sug)
+
+    inbox_store.add_event(
+        ConversationEvent(
+            conversation_id=sug.conversation_id,
+            event_type="suggestion_edited",
+            actor="operator",
+            details={"suggestion_id": suggestion_id},
+        )
+    )
+    return RedirectResponse(f"/sales/replies/{sug.conversation_id}?message=Suggested+reply+saved.", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/reply-suggestions/{suggestion_id}/approve")
+async def approve_suggestion_action(
+    suggestion_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    inbox_store: InboxStore = svcs["inbox_store"]
+
+    sug = inbox_store.get_suggestion(suggestion_id)
+    if not sug:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    if sug.status == "sent":
+        return RedirectResponse(f"/sales/replies/{sug.conversation_id}?error=Sent+suggestions+are+immutable.", status_code=status.HTTP_303_SEE_OTHER)
+
+    sug.status = "approved"
+    sug.approved_by = "operator"
+    inbox_store.save_suggestion(sug)
+
+    inbox_store.add_event(
+        ConversationEvent(
+            conversation_id=sug.conversation_id,
+            event_type="suggestion_approved",
+            actor="operator",
+            details={"suggestion_id": suggestion_id},
+        )
+    )
+    return RedirectResponse(f"/sales/replies/{sug.conversation_id}?message=Reply+approved.+Ready+for+explicit+send.", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/reply-suggestions/{suggestion_id}/reject")
+async def reject_suggestion_action(
+    suggestion_id: str,
+    reason: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    inbox_store: InboxStore = svcs["inbox_store"]
+
+    sug = inbox_store.get_suggestion(suggestion_id)
+    if not sug:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    sug.status = "rejected"
+    sug.rejection_reason = reason
+    inbox_store.save_suggestion(sug)
+
+    inbox_store.add_event(
+        ConversationEvent(
+            conversation_id=sug.conversation_id,
+            event_type="suggestion_rejected",
+            actor="operator",
+            details={"suggestion_id": suggestion_id, "reason": reason},
+        )
+    )
+    return RedirectResponse(f"/sales/replies/{sug.conversation_id}?message=Reply+rejected.", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/reply-suggestions/{suggestion_id}/send")
+async def send_reply_action(
+    suggestion_id: str,
+    sender_email: str = Form(...),
+    confirm: bool = Form(False),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    inbox_store: InboxStore = svcs["inbox_store"]
+    reply_sender: ReplySendOrchestrator = svcs["inbox_reply_sender"]
+
+    sug = inbox_store.get_suggestion(suggestion_id)
+    if not sug:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+
+    if not confirm:
+        return RedirectResponse(
+            f"/sales/replies/{sug.conversation_id}?error=Operator+confirmation+is+mandatory+before+sending.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    res = reply_sender.send_reply(
+        conversation_id=sug.conversation_id,
+        suggestion_id=suggestion_id,
+        sender_email=sender_email,
+        operator_confirmed=confirm,
+        actor="operator",
+    )
+
+    if not res.success:
+        err_msg = res.error_message or res.error_type or "Failed to send reply"
+        return RedirectResponse(
+            f"/sales/replies/{sug.conversation_id}?error={err_msg.replace(' ', '+')}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    return RedirectResponse(
+        f"/sales/replies/{sug.conversation_id}?message=Reply+delivered+successfully.",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 

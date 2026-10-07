@@ -111,7 +111,9 @@ if sales_static_path.exists():
     app.mount("/static/sales", StaticFiles(directory=str(sales_static_path)), name="sales_static")
 
 from backend.sales_ui.router import router as sales_ui_router
+from backend.sales_inbox_api import router as sales_inbox_api_router
 app.include_router(sales_ui_router)
+app.include_router(sales_inbox_api_router)
 
 
 @app.get("/", tags=["UI"])

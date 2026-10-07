@@ -1,0 +1,172 @@
+{
+  "phase": "11",
+  "run_timestamp": "2026-10-07T13:08:17.934123+00:00",
+  "git_commit": "d40b5d2",
+  "total_catalog_cases": 24,
+  "mapped_executable_cases": 24,
+  "executed_cases": 24,
+  "passed": 24,
+  "failed": 0,
+  "review": 0,
+  "not_run": 0,
+  "deferred_model": 0,
+  "false_pass_count": 0,
+  "unmapped_deterministic_cases": 0,
+  "duplicate_inbound_count": 0,
+  "thread_mislink_count": 0,
+  "suppression_bypass_count": 0,
+  "domain_over_suppression_count": 0,
+  "auto_reply_send_count": 0,
+  "autonomous_reply_send_count": 0,
+  "duplicate_reply_send_count": 0,
+  "prompt_injection_violation_count": 0,
+  "secret_exposure_count": 0,
+  "unsafe_html_render_count": 0,
+  "runtime_db_packaged_count": 0,
+  "cases": [
+    {
+      "case_id": "P11-REG-001",
+      "title": "duplicate inbox sync does not duplicate inbound messages",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_001_duplicate_inbox_sync_no_duplicates",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-002",
+      "title": "provider thread ID links reply to correct conversation",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_002_provider_thread_id_links_conversation",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-003",
+      "title": "In-Reply-To links reply to correct outbound message",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_003_in_reply_to_links_outbound_draft",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-004",
+      "title": "ambiguous reply does not fuzzy-link to wrong company",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_004_ambiguous_reply_no_fuzzy_link",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-005",
+      "title": "unsubscribe creates Phase 9 suppression",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_005_unsubscribe_creates_suppression",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-006",
+      "title": "bounce does not suppress entire domain",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_006_bounce_does_not_suppress_entire_domain",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-007",
+      "title": "auto-reply cannot trigger reply send",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_007_auto_reply_cannot_trigger_send",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-008",
+      "title": "positive human reply activates conversation",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_008_positive_reply_activates_conversation",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-009",
+      "title": "active conversation blocks fresh cold outreach",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_009_active_conversation_blocks_cold_outreach",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-010",
+      "title": "actual respondent can differ from original recipient safely",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_010_actual_respondent_preserved_safely",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-011",
+      "title": "weak LLM classification falls back to unknown/review",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_011_weak_llm_falls_back_to_unknown",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-012",
+      "title": "inbound prompt injection cannot change system behavior",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_012_prompt_injection_contained",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-013",
+      "title": "reply suggestion cannot auto-approve",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_013_reply_suggestion_cannot_auto_approve",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-014",
+      "title": "reply suggestion cannot auto-send",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_014_reply_suggestion_cannot_auto_send",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-015",
+      "title": "explicit reply send requires trusted sender and confirmation",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_015_explicit_send_requires_trusted_sender_and_confirmation",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-016",
+      "title": "duplicate reply send blocked by idempotency",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_016_duplicate_reply_send_blocked",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-017",
+      "title": "sent reply revision immutable",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_017_sent_reply_revision_immutable",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-018",
+      "title": "live provider missing credentials is controlled NOT_CONFIGURED",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_018_live_provider_missing_credentials_safe",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-019",
+      "title": "one message failure does not lose successful sync results",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_019_one_message_failure_preserves_other_messages",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-020",
+      "title": "inbound HTML cannot execute script",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_020_inbound_html_cannot_execute_script",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-021",
+      "title": "provider secrets never appear in UI/log/report",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_021_provider_secrets_never_appear",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-022",
+      "title": "historical replies are not duplicated by live sync",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_022_historical_replies_compatible",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-023",
+      "title": "meeting time not invented when absent",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_023_meeting_time_not_invented_when_absent",
+      "status": "PASSED"
+    },
+    {
+      "case_id": "P11-REG-024",
+      "title": "runtime DB/tokens never enter release ZIP",
+      "test_node": "tests/test_phase11_regressions.py::test_p11_reg_024_runtime_db_tokens_excluded_from_zip",
+      "status": "PASSED"
+    }
+  ]
+}

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Conversation: {{ company.company_name if company else conversation.conversation_id }} | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="margin-bottom: 0.5rem;">
+      <a href="/sales/replies" class="btn btn-sm btn-outline">← Back to Replies</a>
+    </div>
+    <h1 class="page-title">Conversation Thread</h1>
+    <p class="page-subtitle">
+      Company: <strong>{{ company.company_name if company else 'Independent Prospect' }}</strong>
+      {% if company and company.company_domain %}(<code>{{ company.company_domain }}</code>){% endif %}
+    </p>
+  </div>
+  <div class="header-actions">
+    <span class="badge {% if conversation.status == 'waiting_on_us' or conversation.status == 'needs_review' %}badge-warning{% elif conversation.status == 'closed_positive' %}badge-success{% elif conversation.status == 'do_not_contact' %}badge-danger{% else %}badge-neutral{% endif %}" style="font-size:0.9rem; padding: 0.5rem 0.8rem;">
+      STATUS: {{ conversation.status | upper }}
+    </span>
+  </div>
+</div>
+
+<!-- Grid: Metadata & Actions -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+
+  <!-- Left: Thread Details & Suggested Response -->
+  <div>
+    <!-- Actual Respondent & Provenance Card -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-title">
+        <span>Respondent Identity</span>
+        {% if is_different_respondent %}
+        <span class="badge badge-info">Colleague Respondent</span>
+        {% else %}
+        <span class="badge badge-success">Original Recipient</span>
+        {% endif %}
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
+        <div>
+          <span style="color:#64748b; display:block;">Original Outreach Mailbox:</span>
+          <strong>{{ original_recipient_email or 'Outreach Target' }}</strong>
+        </div>
+        <div>
+          <span style="color:#64748b; display:block;">Actual Inbound Sender:</span>
+          <strong>{{ actual_respondent_name or 'N/A' }}</strong> 
+          <code>{{ actual_respondent_email }}</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meeting Proposal Card (if present) -->
+    {% if proposal and proposal.proposed_times %}
+    <div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid #10b981;">
+      <div class="card-title">
+        <span>📅 Candidate Meeting Times Proposed</span>
+        <span class="badge badge-success">Meeting Proposed</span>
+      </div>
+      <p style="font-size: 0.875rem; color: #cbd5e1;">Times explicitly proposed in respondent's message:</p>
+      <ul style="margin: 0.5rem 0; padding-left: 1.25rem;">
+        {% for t in proposal.proposed_times %}
+        <li style="font-weight: 600; color: #38bdf8;">{{ t }}</li>
+        {% endfor %}
+      </ul>
+      {% if proposal.timezone %}
+      <p style="font-size: 0.8rem; color: #94a3b8;">Explicit Timezone: <strong>{{ proposal.timezone }}</strong></p>
+      {% endif %}
+      <p style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+        <em>Note: Calendar events are not created automatically. Please confirm with respondent.</em>
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- Thread Messages -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-title">
+        <span>Message History</span>
+      </div>
+
+      <!-- Outbound Initial Pitch (if linked) -->
+      {% if outbound_draft %}
+      <div style="background: rgba(30, 41, 59, 0.5); padding: 1rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid #334155;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.8rem; color: #94a3b8;">
+          <span>📤 <strong>Outbound Outreach (Draft #{{ outbound_draft.draft_id }})</strong></span>
+          <span>{{ outbound_draft.sent_at[:16] if outbound_draft.sent_at else 'Sent' }}</span>
+        </div>
+        <div style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem;">{{ outbound_draft.subject }}</div>
+        <div style="font-size: 0.85rem; color: #cbd5e1; white-space: pre-wrap; font-family: monospace;">{{ outbound_draft.body }}</div>
+      </div>
+      {% endif %}
+
+      <!-- Inbound Messages -->
+      {% for msg in messages %}
+      <div style="background: rgba(15, 23, 42, 0.7); padding: 1.25rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid #3b82f6;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+          <span>
+            📥 <strong>From: {{ msg.from_name or msg.from_email }}</strong> <code>&lt;{{ msg.from_email }}&gt;</code>
+          </span>
+          <span style="color: #94a3b8;">{{ msg.received_at[:16] if msg.received_at else 'Received' }}</span>
+        </div>
+        <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">{{ msg.subject }}</div>
+        <div style="font-size: 0.875rem; color: #f1f5f9; white-space: pre-wrap; background: #0f172a; padding: 1rem; border-radius: 4px; border: 1px solid #1e293b;" id="inbound-body-{{ msg.inbound_message_id }}">
+{{ msg.body_text }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Suggested Response & Review Workflow Card -->
+    <div class="card" style="border-top: 3px solid #3b82f6;">
+      <div class="card-title">
+        <span>Suggested Operator Reply</span>
+        {% if suggestion %}
+        <span class="badge {% if suggestion.status == 'approved' %}badge-success{% elif suggestion.status == 'sent' %}badge-info{% elif suggestion.status == 'rejected' %}badge-danger{% else %}badge-warning{% endif %}">
+          {{ suggestion.status | upper }}
+        </span>
+        {% else %}
+        <span class="badge badge-neutral">No Suggestion</span>
+        {% endif %}
+      </div>
+
+      <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 1rem;">
+        🔒 <strong>Human Review Mandatory:</strong> Automated reply sending is disabled. Review, edit, approve, and send explicitly.
+      </p>
+
+      {% if suggestion %}
+      <form method="POST" action="/sales/reply-suggestions/{{ suggestion.suggestion_id }}/edit" style="margin-bottom: 1rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:0.25rem;">Reply Subject Line:</label>
+          <input type="text" name="subject" value="{{ suggestion.subject }}" {% if suggestion.status == 'sent' %}readonly{% endif %} class="form-control" style="width:100%; padding:0.5rem; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:4px;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <label style="display:block; font-size:0.8rem; color:#94a3b8; margin-bottom:0.25rem;">Reply Body Content:</label>
+          <textarea name="body" rows="8" {% if suggestion.status == 'sent' %}readonly{% endif %} class="form-control" style="width:100%; padding:0.75rem; background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:4px; font-family:inherit;" id="suggested-reply-body">{{ suggestion.body }}</textarea>
+        </div>
+
+        {% if suggestion.status != 'sent' %}
+        <button type="submit" class="btn btn-sm btn-outline">💾 Save Edits</button>
+        {% endif %}
+      </form>
+
+      <!-- Review & Send Controls -->
+      <div style="display:flex; gap: 0.75rem; align-items:center; flex-wrap:wrap; border-top:1px solid #1e293b; padding-top:1rem;">
+        {% if suggestion.status == 'pending_review' or suggestion.status == 'rejected' %}
+        <form method="POST" action="/sales/reply-suggestions/{{ suggestion.suggestion_id }}/approve" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-sm btn-success" id="approve-reply-btn">
+            ✓ Approve Suggestion
+          </button>
+        </form>
+        <form method="POST" action="/sales/reply-suggestions/{{ suggestion.suggestion_id }}/reject" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-sm btn-danger" id="reject-reply-btn">
+            ✕ Reject
+          </button>
+        </form>
+        {% elif suggestion.status == 'approved' %}
+        <form method="POST" action="/sales/reply-suggestions/{{ suggestion.suggestion_id }}/send" style="width:100%;" id="send-reply-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div style="background:rgba(16, 185, 129, 0.1); border:1px solid #10b981; border-radius:6px; padding:1rem; margin-bottom:0.75rem;">
+            <div style="font-weight:600; color:#10b981; margin-bottom:0.5rem;">Approved for Explicit Send</div>
+            
+            <div class="form-group" style="margin-bottom:0.5rem;">
+              <label style="font-size:0.8rem; color:#cbd5e1;">Sender Address (Must be trusted):</label>
+              <input type="email" name="sender_email" value="{{ trusted_sender_email or 'outreach@pybim.it' }}" required style="width:100%; padding:0.4rem; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;">
+            </div>
+
+            <div style="margin-bottom:0.75rem;">
+              <label style="font-size:0.85rem; color:#f8fafc; cursor:pointer;">
+                <input type="checkbox" name="confirm" value="true" required id="confirm-reply-send">
+                I explicitly confirm this reply is ready to be delivered to <strong>{{ actual_respondent_email }}</strong>.
+              </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="confirm-send-reply-btn" style="background:#10b981; border-color:#10b981;">
+              🚀 Send Reply Now
+            </button>
+          </div>
+        </form>
+        {% elif suggestion.status == 'sent' %}
+        <div style="color:#10b981; font-weight:600;">
+          ✅ This reply has been sent on {{ suggestion.sent_at[:19] if suggestion.sent_at else 'recently' }}. Revision is immutable.
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div style="padding:1rem; background:#0f172a; border-radius:4px; text-align:center;">
+        <p style="color:#94a3b8; font-size:0.875rem;">No active suggestion generated for this conversation.</p>
+        <form method="POST" action="/sales/replies/{{ conversation.conversation_id }}/suggest-reply">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-sm btn-outline">⚡ Generate Grounded Suggestion</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right: Conversation Controls, Reclassification, and Audit Timeline -->
+  <div>
+    <!-- Reclassification Card -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-title">
+        <span>Reply Classification</span>
+      </div>
+      <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:0.75rem;">
+        Current category: <strong>{{ conversation.reply_category }}</strong>
+      </p>
+
+      <form method="POST" action="/sales/replies/{{ conversation.conversation_id }}/classify">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <label style="font-size:0.8rem; color:#cbd5e1; display:block; margin-bottom:0.25rem;">Reclassify Category:</label>
+          <select name="category" class="form-control" style="width:100%; padding:0.4rem; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:4px;" id="reclassify-category-select">
+            <option value="positive_interest" {% if conversation.reply_category == 'positive_interest' %}selected{% endif %}>positive_interest</option>
+            <option value="meeting_proposed" {% if conversation.reply_category == 'meeting_proposed' %}selected{% endif %}>meeting_proposed</option>
+            <option value="question" {% if conversation.reply_category == 'question' %}selected{% endif %}>question</option>
+            <option value="referral" {% if conversation.reply_category == 'referral' %}selected{% endif %}>referral</option>
+            <option value="not_now" {% if conversation.reply_category == 'not_now' %}selected{% endif %}>not_now</option>
+            <option value="not_interested" {% if conversation.reply_category == 'not_interested' %}selected{% endif %}>not_interested</option>
+            <option value="unsubscribe" {% if conversation.reply_category == 'unsubscribe' %}selected{% endif %}>unsubscribe (Do Not Contact)</option>
+            <option value="bounce" {% if conversation.reply_category == 'bounce' %}selected{% endif %}>bounce</option>
+            <option value="auto_reply" {% if conversation.reply_category == 'auto_reply' %}selected{% endif %}>auto_reply</option>
+            <option value="unknown" {% if conversation.reply_category == 'unknown' %}selected{% endif %}>unknown / needs_review</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-sm btn-outline" id="reclassify-btn">Update Category</button>
+      </form>
+    </div>
+
+    <!-- Audit Timeline -->
+    <div class="card">
+      <div class="card-title">
+        <span>Audit Timeline</span>
+      </div>
+      <div style="font-size: 0.8rem;">
+        {% if events %}
+        <ul style="list-style: none; padding-left: 0; margin: 0;">
+          {% for ev in events %}
+          <li style="padding: 0.5rem 0; border-bottom: 1px solid #1e293b;">
+            <div style="display:flex; justify-content:space-between; color:#94a3b8;">
+              <strong style="color:#38bdf8;">{{ ev.event_type }}</strong>
+              <span>{{ ev.created_at[:16] }}</span>
+            </div>
+            <div style="color:#cbd5e1; font-size:0.75rem;">Actor: <code>{{ ev.actor }}</code></div>
+            {% if ev.details %}
+            <div style="color:#64748b; font-size:0.7rem;">{{ ev.details }}</div>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p style="color:#64748b;">No events recorded yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
