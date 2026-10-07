@@ -72,11 +72,19 @@ def ensure_db_env(adv_data):
     os.environ["SALES_OUTREACH_DB"] = test_db_path
     os.environ["SALESAI_DB_PATH"] = test_db_path
     os.environ["SALESAI_CANDIDATES_DB"] = test_db_path
+    os.environ["SMTP_FROM_EMAIL"] = "trusted_sender@pybim-studio.com"
+    os.environ["SMTP_FROM_NAME"] = "pyBIM Team"
     yield
 
 
 @pytest.fixture(scope="module")
 def adv_data():
+    os.environ["SALES_OUTREACH_DB"] = test_db_path
+    os.environ["SALESAI_DB_PATH"] = test_db_path
+    os.environ["SALESAI_CANDIDATES_DB"] = test_db_path
+    os.environ["EMAIL_SEND_ENABLED"] = "false"
+    os.environ["SMTP_FROM_EMAIL"] = "trusted_sender@pybim-studio.com"
+    os.environ["SMTP_FROM_NAME"] = "pyBIM Team"
     cand_store = CandidateStore(db_path=test_db_path)
     rev_store = ReviewStore(db_path=test_db_path)
     supp_store = SuppressionStore(rev_store)

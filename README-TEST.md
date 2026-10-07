@@ -1,9 +1,9 @@
 # SalesAI QA / Acceptance Test Report
 
 ## Run Information
-- **Date:** 2026-10-06
-- **Time:** 11:01:00 UTC
-- **Git Commit:** `1786acf`
+- **Date:** 2026-10-07
+- **Time:** 14:15:00 UTC
+- **Git Commit:** `e291b65`
 - **Python Version:** `3.14.7`
 - **SALES_LLM_MODEL:** `qwen2.5:1.5b (default)`
 - **Ollama Version:** `Not detected / unreachable`
@@ -14,11 +14,11 @@
 - **Live Tests Executed:** Yes
 
 ## Summary
-- **Total Cases:** 774
-- **Passed:** 755
+- **Total Cases:** 828
+- **Passed:** 806
 - **Failed:** 0
 - **Review Required:** 4
-- **Deferred (Model Limitation):** 10
+- **Deferred (Model Limitation):** 13
 - **Skipped / Not Run:** 5
 - **Source Changed:** 0
 
@@ -35,6 +35,7 @@
 | Phase 9 | 185 | 184 | 0 | 0 | 0 | 1 |
 | Phase 10 | 245 | 245 | 0 | 0 | 0 | 0 |
 | Phase 10.5 | 71 | 68 | 0 | 0 | 3 | 0 |
+| Phase 11 | 54 | 51 | 0 | 0 | 3 | 0 |
 
 
 ## Phase 7 Reconciliation & Case Count Model
@@ -280,6 +281,100 @@ Phase 10.5 implements the browser-based local Sales Console UI, human review and
   - `autonomous_reengagement_count = 0`
   - `ui_llm_render_call_count = 0`
   - `runtime_db_packaged_count = 0`
+
+## Phase 11 Case Count & Architecture Model (Inbox / Reply Intelligence & Conversation Workflow Golden QA)
+Phase 11 implements the multi-provider mailbox abstraction, idempotent inbox synchronization, deterministic thread linking, response classification, grounded reply suggestions, human review and approval workflows, explicit send confirmations, and robust inbound safety boundaries:
+- **Total Golden Cases in Catalog (`tests/golden/phase11_inbox.json` & `tests/reports/phase11_latest.json`):** 54 cases
+  - **Passed (Deterministic):** 51 test cases covering all critical safety gates, thread priority, sync idempotency, security boundaries, state transitions, suggestions, and provider boundaries:
+    - **Critical Safety Gates (`P11-GOLD-001` .. `012`):** 12/12 PASS
+      - `P11-GOLD-001`: Zero autonomous reply send (replies never send on arrival)
+      - `P11-GOLD-002`: Reply suggestions always start in `pending_review` status
+      - `P11-GOLD-003`: Human operator approval mandatory before send
+      - `P11-GOLD-004`: Explicit send confirmation required (approval alone makes zero provider calls)
+      - `P11-GOLD-005`: `EMAIL_SEND_ENABLED=false` strictly blocks live send
+      - `P11-GOLD-006`: Trusted sender validation enforced (rejects untrusted sender addresses)
+      - `P11-GOLD-007`: Phase 9 suppression authoritative (suppressed recipient strictly blocked)
+      - `P11-GOLD-008`: Duplicate reply send blocked by send_key idempotency
+      - `P11-GOLD-009`: Sent reply suggestions and revisions are immutable and terminal
+      - `P11-GOLD-010`: Auto-reply classification cannot trigger reply generation or send
+      - `P11-GOLD-011`: Bounce classification cannot trigger reply generation or send
+      - `P11-GOLD-012`: Unsubscribe classification triggers Phase 9 suppression and blocks send
+    - **Threading Priority & Linkage (`P11-THREAD-001` .. `006`):** 6/6 PASS
+      - `P11-THREAD-001`: Provider thread ID links reply to conversation
+      - `P11-THREAD-002`: In-Reply-To header links reply to outbound draft
+      - `P11-THREAD-003`: References header links reply to thread
+      - `P11-THREAD-004`: Exact recipient + subject alignment links when headers missing
+      - `P11-THREAD-005`: Exact known contact email links to candidate company
+      - `P11-THREAD-006`: Ambiguous messages remain unlinked (no fuzzy company-name linking)
+    - **Inbox Sync & Idempotency (`P11-SYNC-001` .. `005`):** 5/5 PASS
+      - `P11-SYNC-001`: Repeated inbox sync is idempotent (no duplicate inbound messages or timeline events)
+      - `P11-SYNC-002`: Cursor persistence across sync cycles
+      - `P11-SYNC-003`: Safety limits enforced (MAX_MESSAGES_PER_SYNC, SYNC_LOOKBACK_DAYS)
+      - `P11-SYNC-004`: Partial sync failure isolation (bad message does not discard valid messages)
+      - `P11-SYNC-005`: Historical Phase 10 responses preserved without duplicate creation
+    - **Deterministic Classification (`P11-CLASS-001` .. `007`):** 7/7 PASS
+      - `P11-CLASS-001`: Deterministic unsubscribe detection
+      - `P11-CLASS-002`: Deterministic bounce detection
+      - `P11-CLASS-003`: Deterministic auto-reply / out-of-office detection
+      - `P11-CLASS-004`: Positive interest classification
+      - `P11-CLASS-005`: Meeting proposed classification and explicit time extraction
+      - `P11-CLASS-006`: Referral and question classification
+      - `P11-CLASS-007`: Ambiguous / uncertain LLM output falls back to `unknown` + `needs_review`
+    - **Inbound Safety & Security (`P11-SEC-001` .. `005`):** 5/5 PASS
+      - `P11-SEC-001`: Inbound prompt injection contained and quarantined
+      - `P11-SEC-002`: Unsafe HTML / scripts / javascript: URLs sanitized
+      - `P11-SEC-003`: Provider secrets never exposed in UI, logs, or reports
+      - `P11-SEC-004`: Provider errors sanitized before presentation
+      - `P11-SEC-005`: Release packaging denylist excludes runtime databases and tokens
+    - **Conversation & Relationship State (`P11-STATE-001` .. `005`):** 5/5 PASS
+      - `P11-STATE-001`: Positive human reply sets `active_conversation=true`
+      - `P11-STATE-002`: Active conversation blocks cold outreach (`cold_outreach_allowed=false`)
+      - `P11-STATE-003`: Unsubscribe suppresses company and marks do_not_contact
+      - `P11-STATE-004`: Bounce marks mailbox invalid without domain-wide suppression
+      - `P11-STATE-005`: Colleague / alternate respondent preserved under strong identity
+    - **Suggested Reply Grounding & Workflow (`P11-SUG-001` .. `004`):** 4/4 PASS
+      - `P11-SUG-001`: Grounded reply suggestion with zero invented pricing/commitments
+      - `P11-SUG-002`: Operator edit creates audited revision preserving linkages
+      - `P11-SUG-003`: Approval makes zero provider calls
+      - `P11-SUG-004`: Manual reclassification supported with audit logging
+    - **Provider Boundaries & Health (`P11-PROV-001` .. `003`):** 3/3 PASS
+      - `P11-PROV-001`: MockMailboxProvider deterministic execution
+      - `P11-PROV-002`: Unconfigured Gmail and Graph report controlled NOT_CONFIGURED
+      - `P11-PROV-003`: Live providers report truthful connection status (no fake Connected)
+    - **Console UI & REST APIs (`P11-UI-001` .. `004`):** 4/4 PASS
+      - `P11-UI-001`: Replies queue list view renders with connection info and filters
+      - `P11-UI-002`: Conversation detail renders thread, suggestion, and review controls
+      - `P11-UI-003`: Zero auto-reply toggle in console UI
+      - `P11-UI-004`: All 10 Phase 11 REST API endpoints conform to specification
+  - **Weak-LLM Deferred Quality (`P11-SEM-001` .. `003`):** 3 cases marked `DEFERRED_MODEL` under `qwen2.5:1.5b` policy:
+    - `P11-SEM-001`: Complex semantic nuance and pragmatic intent fallback
+    - `P11-SEM-002`: Multilingual reply phrasing fallback
+    - `P11-SEM-003`: Multi-intent routing to operator review
+- **Critical Safety Results:** 12/12 PASS (100%)
+- **Deterministic Pass Rate:** 100.0% (51 / 51 deterministic cases pass)
+- **Mandatory Regression Invariants (`P11-REG-001` .. `024`):** 24/24 PASS (100%)
+- **API & UI Integration Tests:** 9/9 PASS (100%)
+- **Full Repository Suite:** 741 passed, 8 skipped, 0 failed
+- **QA Integrity Counters:**
+  - `false_pass_count = 0`
+  - `unmapped_deterministic_cases = 0`
+- **Audit & Safety Counters:**
+  - `duplicate_inbound_count = 0`
+  - `thread_mislink_count = 0`
+  - `suppression_bypass_count = 0`
+  - `domain_over_suppression_count = 0`
+  - `auto_reply_send_count = 0`
+  - `autonomous_reply_send_count = 0`
+  - `duplicate_reply_send_count = 0`
+  - `prompt_injection_violation_count = 0`
+  - `secret_exposure_count = 0`
+  - `unsafe_html_render_count = 0`
+  - `runtime_db_packaged_count = 0`
+- **Live Provider Statuses:**
+  - `MockMailboxProvider`: ACTIVE / PASS
+  - `GmailMailboxProvider`: NOT_CONFIGURED / NOT_RUN
+  - `GraphMailboxProvider`: NOT_CONFIGURED / NOT_RUN
+  - `ImapMailboxProvider`: NOT_CONFIGURED / NOT_RUN
 
 ## Failures
 _No failures detected._
