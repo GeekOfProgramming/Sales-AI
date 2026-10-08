@@ -10,6 +10,19 @@ from sales_engine.discovery_v2.bridges import (
     Phase9AuthorityBridge,
     Phase10ConsoleBridge,
 )
+from sales_engine.discovery_v2.scope import (
+    DiscoveryScope,
+    DiscoveryRun,
+    DiscoveryScopeStore,
+    DiscoveryRunner,
+    run_discovery,
+    DiscoveryMode,
+    SUPPORTED_MARKETS,
+    SUPPORTED_RELATIONSHIP_TYPES,
+    SUPPORTED_OPPORTUNITY_TYPES,
+    SUPPORTED_COMPANY_TIERS,
+    SUPPORTED_BIM_MATURITY,
+)
 
 __all__ = [
     "SourceRegistry",
@@ -23,4 +36,15 @@ __all__ = [
     "Phase8GroundingBridge",
     "Phase9AuthorityBridge",
     "Phase10ConsoleBridge",
+    "DiscoveryScope",
+    "DiscoveryRun",
+    "DiscoveryScopeStore",
+    "DiscoveryRunner",
+    "run_discovery",
+    "DiscoveryMode",
+    "SUPPORTED_MARKETS",
+    "SUPPORTED_RELATIONSHIP_TYPES",
+    "SUPPORTED_OPPORTUNITY_TYPES",
+    "SUPPORTED_COMPANY_TIERS",
+    "SUPPORTED_BIM_MATURITY",
 ]

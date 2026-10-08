@@ -247,6 +247,10 @@ class CandidateCompany(BaseModel):
         super().__init__(**data)
 
     @property
+    def id(self) -> str:
+        return self.candidate_id
+
+    @property
     def company_id(self) -> str:
         return self.candidate_id
 

@@ -1249,7 +1249,27 @@ def get_discovery_services():
     return _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
 
 
+class DiscoveryScopeApiRequest(_PydanticBaseModel):
+    scope_name: str
+    discovery_modes: Optional[List[str]] = None
+    markets: Optional[List[str]] = None
+    source_ids: Optional[List[str]] = None
+    relationship_types: Optional[List[str]] = None
+    opportunity_types: Optional[List[str]] = None
+    company_tiers: Optional[List[str]] = None
+    bim_maturity: Optional[List[str]] = None
+    max_results: int = 50
+    company_name_keywords: Optional[List[str]] = None
+    required_signals: Optional[List[str]] = None
+    excluded_keywords: Optional[List[str]] = None
+    languages: Optional[List[str]] = None
+    notes: Optional[str] = ""
+    enabled: bool = True
+    scope_id: Optional[str] = None
+
+
 class DiscoveryRunApiRequest(_PydanticBaseModel):
+    scope_id: Optional[str] = None
     sources: Optional[List[str]] = None
     query: str = "BIM"
     discovery_mode: str = "company_first"
@@ -1277,10 +1297,71 @@ class SourceImportApiRequest(_PydanticBaseModel):
     model_config = {"extra": "allow"}
 
 
+@app.get("/api/sales/discovery/scopes", tags=["Phase10-Discovery"])
+def list_discovery_scopes_endpoint(enabled_only: bool = False):
+    """List stored discovery search scopes."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+    store, _, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    scopes = scope_store.list_scopes(enabled_only=enabled_only)
+    return {"total": len(scopes), "scopes": [s.to_dict() for s in scopes]}
+
+
+@app.post("/api/sales/discovery/scopes", tags=["Phase10-Discovery"])
+def save_discovery_scope_endpoint(req: DiscoveryScopeApiRequest):
+    """Create or update a discovery search scope."""
+    from sales_engine.discovery_v2.scope import DiscoveryScope, DiscoveryScopeStore
+    store, _, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    scope = DiscoveryScope(
+        scope_name=req.scope_name,
+        discovery_modes=req.discovery_modes or ["company_first"],
+        markets=req.markets or ["Italy"],
+        source_ids=req.source_ids or [],
+        relationship_types=req.relationship_types or ["service_buyer"],
+        opportunity_types=req.opportunity_types or ["direct_bim_delivery"],
+        company_tiers=req.company_tiers or ["tier1", "tier2", "tier3"],
+        bim_maturity=req.bim_maturity or ["high", "medium", "low"],
+        max_results=req.max_results,
+        company_name_keywords=req.company_name_keywords or [],
+        required_signals=req.required_signals or [],
+        excluded_keywords=req.excluded_keywords or [],
+        languages=req.languages or [],
+        notes=req.notes or "",
+        enabled=req.enabled,
+        scope_id=req.scope_id or "",
+    )
+    saved = scope_store.save_scope(scope)
+    return saved.to_dict()
+
+
+@app.get("/api/sales/discovery/scopes/{scope_id}", tags=["Phase10-Discovery"])
+def get_discovery_scope_endpoint(scope_id: str):
+    """Get a discovery search scope by ID."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+    store, _, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    scope = scope_store.get_scope(scope_id)
+    if not scope:
+        raise HTTPException(status_code=404, detail=f"Discovery scope {scope_id} not found")
+    return scope.to_dict()
+
+
 @app.post("/api/sales/discovery/run", tags=["Phase10-Discovery"])
 def trigger_discovery_run_endpoint(req: DiscoveryRunApiRequest):
-    """Trigger a multi-source discovery run with strict zero-send invariant."""
+    """Trigger a discovery run with strict zero-send invariant. Supports scope_id execution."""
     store, registry, _, engine = get_discovery_services()
+    if req.scope_id:
+        from sales_engine.discovery_v2.scope import DiscoveryScopeStore, DiscoveryRunner
+        scope_store = DiscoveryScopeStore(db_path=store.db_path)
+        runner = DiscoveryRunner(
+            scope_store=scope_store,
+            candidate_store=store,
+            source_registry=registry,
+            engine=engine,
+        )
+        run_rec = runner.run(req.scope_id)
+        return run_rec.to_dict()
     sources_to_run = req.sources or [s.id for s in registry.list_sources(enabled_only=True)]
     run_rec = engine.run_multi_source_discovery(
         sources=sources_to_run,
