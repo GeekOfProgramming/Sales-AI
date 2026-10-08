@@ -29,7 +29,7 @@
   <!-- Main 12-Section Navigation Bar -->
   <nav class="nav-bar">
     <a href="/sales/dashboard" class="nav-link {% if active_tab == 'dashboard' %}active{% endif %}">Dashboard</a>
-    <a href="/sales/discoveries" class="nav-link {% if active_tab == 'discoveries' %}active{% endif %}">Discoveries</a>
+    <a href="/sales/discovery" class="nav-link {% if active_tab in ('discoveries', 'discovery') %}active{% endif %}">Discovery</a>
     <a href="/sales/sources" class="nav-link {% if active_tab == 'sources' %}active{% endif %}">Sources</a>
     <a href="/sales/candidates" class="nav-link {% if active_tab == 'candidates' %}active{% endif %}">Candidates</a>
     <a href="/sales/leads" class="nav-link {% if active_tab == 'leads' %}active{% endif %}">Qualified Leads</a>

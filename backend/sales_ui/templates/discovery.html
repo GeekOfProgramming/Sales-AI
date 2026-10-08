@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+
+{% block title %}Discovery Control &amp; Search Profiles | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Discovery Executions &amp; Search Profiles</h1>
+    <p class="page-subtitle">Configure search profiles, preview deterministic execution plans, and trigger discovery runs safely.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="#create-profile-section" class="btn btn-primary" onclick="document.getElementById('create-profile-section').scrollIntoView({behavior: 'smooth'});">+ Create Search Profile</a>
+    <a href="/sales/sources" class="btn btn-secondary">Manage Sources</a>
+  </div>
+</div>
+
+<!-- Quick Stat Badges -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Saved Profiles</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ profiles|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Active Profiles</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #10b981;">{{ profiles|selectattr('enabled')|list|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Recent Runs</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #3b82f6;">{{ recent_runs|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Registered Sources</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ sources|length }}</div>
+  </div>
+</div>
+
+<!-- Execution Plan Preview (If triggered) -->
+{% if preview_plan %}
+<div class="card" id="preview-plan-card" style="margin-bottom: 2rem; border-left: 4px solid #3b82f6;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Execution Plan Preview: <strong>{{ preview_plan.scope_name }}</strong></span>
+    <span class="badge badge-info">Zero Network Calls &bull; Zero DB Mutations</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
+    <div><strong>Target Markets:</strong> {{ preview_plan.markets|join(', ') or 'All' }}</div>
+    <div><strong>Modes:</strong> {{ preview_plan.discovery_modes|join(', ') }}</div>
+    <div><strong>Executable Sources:</strong> <span style="color: #10b981; font-weight: 700;">{{ preview_plan.executable_count }}</span></div>
+    <div><strong>Skipped Sources:</strong> <span style="color: #ef4444; font-weight: 700;">{{ preview_plan.skipped_count }}</span></div>
+    <div><strong>Effective Total Budget:</strong> {{ preview_plan.effective_total_budget }} candidates</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+    <!-- Executable Sources -->
+    <div>
+      <h4 style="margin-bottom: 0.5rem; color: #10b981;">Executable Sources ({{ preview_plan.executable_sources|length }})</h4>
+      {% if preview_plan.executable_sources %}
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Priority</th>
+            <th>Max Budget</th>
+            <th>Credential</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in preview_plan.executable_sources %}
+          <tr>
+            <td><strong>{{ s.name }}</strong> (<code>{{ s.source_id }}</code>)</td>
+            <td>P{{ s.priority }}</td>
+            <td>{{ s.effective_budget }}</td>
+            <td><span class="badge badge-success">{{ s.credential_status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: var(--text-secondary); font-size: 0.85rem;">No executable sources found for this scope.</p>
+      {% endif %}
+    </div>
+
+    <!-- Skipped Sources -->
+    <div>
+      <h4 style="margin-bottom: 0.5rem; color: #ef4444;">Skipped Sources ({{ preview_plan.skipped_sources|length }})</h4>
+      {% if preview_plan.skipped_sources %}
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in preview_plan.skipped_sources %}
+          <tr>
+            <td><strong>{{ s.name }}</strong></td>
+            <td><span class="badge badge-danger">{{ s.status }}</span></td>
+            <td style="color: var(--text-secondary);">{{ s.reason }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: var(--text-secondary); font-size: 0.85rem;">All requested sources are executable.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="margin-top: 1.5rem; display: flex; gap: 1rem; align-items: center;">
+    {% if preview_plan.enabled %}
+    <form method="POST" action="/sales/discovery/profiles/{{ preview_plan.scope_id }}/run" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Start Discovery</button>
+    </form>
+    {% else %}
+    <span class="badge badge-warning" style="padding: 0.5rem 1rem;">Profile is Disabled - Execution Blocked</span>
+    {% endif %}
+    <a href="/sales/discovery" class="btn btn-secondary">Close Preview</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Search Profiles Table -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Search Profiles ({{ profiles|length }})</span>
+    <span style="font-size: 0.85rem; color: var(--text-secondary);">Authoritative DiscoveryScope Model</span>
+  </div>
+  {% if profiles %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Profile Name</th>
+          <th>Status</th>
+          <th>Discovery Modes</th>
+          <th>Markets</th>
+          <th>Sources</th>
+          <th>Max Results</th>
+          <th>Last Run</th>
+          <th style="min-width: 280px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in profiles %}
+        <tr>
+          <td>
+            <a href="/sales/discovery/profiles/{{ p.scope_id }}" style="font-weight: 600; text-decoration: none;">
+              {{ p.scope_name }}
+            </a>
+            <div style="font-size: 0.75rem; color: var(--text-secondary);">ID: <code>{{ p.scope_id }}</code></div>
+          </td>
+          <td>
+            {% if p.enabled %}
+            <span class="badge badge-success">Active</span>
+            {% else %}
+            <span class="badge badge-warning">Disabled</span>
+            {% endif %}
+          </td>
+          <td>
+            {% for m in p.discovery_modes %}
+            <span class="badge badge-info" style="margin-right: 2px;">{{ m }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            {% for mkt in p.markets %}
+            <span class="badge badge-secondary" style="margin-right: 2px;">{{ mkt }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            <strong>{{ p.source_count }}</strong>
+            <span style="color: var(--text-secondary); font-size: 0.8rem;">configured</span>
+          </td>
+          <td>{{ p.max_results }}</td>
+          <td>
+            {% if p.last_run_time %}
+            <div>{{ p.last_run_time[:19] }}</div>
+            <span class="badge {% if p.last_run_status == 'completed' %}badge-success{% else %}badge-warning{% endif %}" style="font-size: 0.75rem;">
+              {{ p.last_run_status }} ({{ p.last_results_count }} found)
+            </span>
+            {% else %}
+            <span style="color: var(--text-secondary); font-size: 0.8rem;">Never run</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+              <!-- Preview Plan -->
+              <a href="/sales/discovery?preview_scope_id={{ p.scope_id }}#preview-plan-card" class="btn btn-sm btn-secondary">Preview</a>
+
+              <!-- Run Discovery -->
+              {% if p.enabled %}
+              <form method="POST" action="/sales/discovery/profiles/{{ p.scope_id }}/run" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-sm btn-primary">Start</button>
+              </form>
+              {% else %}
+              <button class="btn btn-sm btn-secondary" disabled title="Profile is disabled">Start</button>
+              {% endif %}
+
+              <!-- Edit Profile -->
+              <a href="/sales/discovery/profiles/{{ p.scope_id }}" class="btn btn-sm btn-secondary">Edit</a>
+
+              <!-- Duplicate Profile -->
+              <form method="POST" action="/sales/discovery/profiles/{{ p.scope_id }}/duplicate" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-sm btn-secondary" title="Duplicate Profile">Copy</button>
+              </form>
+
+              <!-- Toggle Enable / Disable -->
+              <form method="POST" action="/sales/discovery/profiles/{{ p.scope_id }}/toggle" style="margin: 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if p.enabled %}
+                <button type="submit" class="btn btn-sm btn-warning" title="Disable Profile">Disable</button>
+                {% else %}
+                <button type="submit" class="btn btn-sm btn-success" title="Enable Profile">Enable</button>
+                {% endif %}
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding: 2rem; text-align: center;">
+    <p class="empty-state-text">No Search Profiles configured yet. Create one below to start discovering companies.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Create Profile Section -->
+<div class="card" id="create-profile-section" style="margin-bottom: 2rem;">
+  <div class="card-title">
+    <span>Create New Search Profile</span>
+  </div>
+  <form method="POST" action="/sales/discovery/profiles/create">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <!-- Basic Info -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+      <div class="form-group">
+        <label class="form-label">Profile Name <span style="color: #ef4444;">*</span></label>
+        <input type="text" name="scope_name" class="form-control" placeholder="e.g. Italy BIM Contractors" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Results Budget</label>
+        <input type="number" name="max_results" class="form-control" value="50" min="1" max="1000" required>
+      </div>
+      <div class="form-group" style="display: flex; align-items: flex-end;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding-bottom: 0.5rem;">
+          <input type="checkbox" name="enabled" value="true" checked>
+          <span>Enabled</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Discovery Modes & Markets -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.25rem;">
+      <!-- Modes -->
+      <div>
+        <label class="form-label">Discovery Modes <span style="color: #ef4444;">*</span></label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+          {% for mode in supported_modes %}
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">
+            <input type="checkbox" name="discovery_modes" value="{{ mode }}" {% if mode == 'company_first' %}checked{% endif %}>
+            <span>{{ mode }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Markets -->
+      <div>
+        <label class="form-label">Target Markets <span style="color: #ef4444;">*</span></label>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; max-height: 140px; overflow-y: auto;">
+          {% for mkt in supported_markets %}
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="markets" value="{{ mkt }}" {% if mkt in ('Italy', 'Germany') %}checked{% endif %}>
+            <span>{{ mkt }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Authoritative Sources Selection -->
+    <div style="margin-bottom: 1.25rem;">
+      <label class="form-label">Discovery Sources (from Step 2 Registry)</label>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; max-height: 220px; overflow-y: auto;">
+        {% for s in sources %}
+        <label style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; padding: 0.35rem; border: 1px solid var(--border-color); border-radius: 4px;">
+          <input type="checkbox" name="source_ids" value="{{ s.id }}" {% if s.enabled %}checked{% endif %}>
+          <div>
+            <div><strong>{{ s.name }}</strong> (<code>{{ s.id }}</code>)</div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">
+              <span class="badge {% if s.enabled %}badge-success{% else %}badge-warning{% endif %}" style="font-size: 0.7rem;">{{ 'Enabled' if s.enabled else 'Disabled' }}</span>
+              <span class="badge badge-secondary" style="font-size: 0.7rem;">{{ s.type }}</span>
+              <span class="badge {% if s.adapter_status == 'AVAILABLE' %}badge-info{% else %}badge-danger{% endif %}" style="font-size: 0.7rem;">{{ s.adapter_status }}</span>
+              <span class="badge badge-secondary" style="font-size: 0.7rem;">Cred: {{ s.credential_status }}</span>
+            </div>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Advanced Qualification Taxonomies -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+      <!-- Relationship Types -->
+      <div>
+        <label class="form-label">Relationship Types</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px; max-height: 110px; overflow-y: auto;">
+          {% for rt in supported_relationship_types %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="relationship_types" value="{{ rt }}" {% if rt in ('service_buyer', 'technology_partner') %}checked{% endif %}>
+            <span>{{ rt }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Opportunity Types -->
+      <div>
+        <label class="form-label">Opportunity Types</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px; max-height: 110px; overflow-y: auto;">
+          {% for ot in supported_opportunity_types %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="opportunity_types" value="{{ ot }}" {% if ot in ('direct_bim_delivery', 'mep_delivery', 'automation') %}checked{% endif %}>
+            <span>{{ ot }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Company Tiers -->
+      <div>
+        <label class="form-label">Target Tiers</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px;">
+          {% for tier in supported_company_tiers %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="company_tiers" value="{{ tier }}" checked>
+            <span>{{ tier }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- BIM Maturity -->
+      <div>
+        <label class="form-label">BIM Maturity</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px;">
+          {% for bm in supported_bim_maturity %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="bim_maturity" value="{{ bm }}" checked>
+            <span>{{ bm }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyword Filters -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+      <div class="form-group">
+        <label class="form-label">Keywords (comma-separated)</label>
+        <input type="text" name="company_name_keywords" class="form-control" placeholder="e.g. BIM, Architecture, Revit, Engineering">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Required Signals (comma-separated)</label>
+        <input type="text" name="required_signals" class="form-control" placeholder="e.g. revit_api, bim_manager, open_jobs">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Excluded Keywords (comma-separated)</label>
+        <input type="text" name="excluded_keywords" class="form-control" placeholder="e.g. recruiter, staffing, portal, university">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Languages (comma-separated)</label>
+        <input type="text" name="languages" class="form-control" placeholder="e.g. it, en, de">
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="form-group" style="margin-bottom: 1.25rem;">
+      <label class="form-label">Operator Notes</label>
+      <textarea name="notes" class="form-control" rows="2" placeholder="Optional notes for this search profile..."></textarea>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save Search Profile</button>
+  </form>
+</div>
+
+<!-- Recent Discovery Runs -->
+<div class="card">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Recent Discovery Runs ({{ recent_runs|length }})</span>
+    <span style="font-size: 0.85rem; color: var(--text-secondary);">Audit Log &bull; Immutable Execution History</span>
+  </div>
+  {% if recent_runs %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Profile</th>
+          <th>Started</th>
+          <th>Status</th>
+          <th>Markets</th>
+          <th>Sources Executed</th>
+          <th>Results</th>
+          <th>Created</th>
+          <th>Updated</th>
+          <th>Errors</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent_runs %}
+        <tr>
+          <td>
+            <a href="/sales/discovery/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a>
+          </td>
+          <td>
+            <strong>{{ r.scope_name or r.scope_id or 'Ad-hoc' }}</strong>
+          </td>
+          <td>{{ r.started_at[:19] }}</td>
+          <td>
+            <span class="badge {% if r.status == 'completed' %}badge-success{% elif r.status == 'running' %}badge-info{% else %}badge-warning{% endif %}">
+              {{ r.status }}
+            </span>
+          </td>
+          <td>
+            {% for m in r.markets %}
+            <span class="badge badge-secondary" style="margin-right: 2px;">{{ m }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            {% for s in r.sources_executed %}
+            <span class="badge badge-info" style="margin-right: 2px;">{{ s }}</span>
+            {% else %}
+            <span style="color: var(--text-secondary); font-size: 0.8rem;">None</span>
+            {% endfor %}
+          </td>
+          <td><strong>{{ r.results_found }}</strong></td>
+          <td><span style="color: #10b981; font-weight: 600;">+{{ r.companies_created }}</span></td>
+          <td>{{ r.companies_updated }}</td>
+          <td>
+            {% if r.errors %}
+            <span class="badge badge-danger">{{ r.errors|length }} error(s)</span>
+            {% else %}
+            <span class="badge badge-secondary">0</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/sales/discovery/runs/{{ r.run_id }}" class="btn btn-sm btn-secondary">Details</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding: 2rem; text-align: center;">
+    <p class="empty-state-text">No discovery runs executed yet. Run a Search Profile above to start discovery.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

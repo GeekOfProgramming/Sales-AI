@@ -678,3 +678,7 @@ class SourceRegistry:
         if format.lower() == "yaml":
             return yaml.safe_dump({"sources": export_list}, sort_keys=False, default_flow_style=False)
         return json.dumps({"sources": export_list}, indent=2)
+
+    # Alias for developer ergonomics
+    save_source = register_source
+

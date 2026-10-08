@@ -1268,6 +1268,24 @@ class DiscoveryScopeApiRequest(_PydanticBaseModel):
     scope_id: Optional[str] = None
 
 
+class DiscoveryScopeApiUpdateRequest(_PydanticBaseModel):
+    scope_name: Optional[str] = None
+    discovery_modes: Optional[List[str]] = None
+    markets: Optional[List[str]] = None
+    source_ids: Optional[List[str]] = None
+    relationship_types: Optional[List[str]] = None
+    opportunity_types: Optional[List[str]] = None
+    company_tiers: Optional[List[str]] = None
+    bim_maturity: Optional[List[str]] = None
+    max_results: Optional[int] = None
+    company_name_keywords: Optional[List[str]] = None
+    required_signals: Optional[List[str]] = None
+    excluded_keywords: Optional[List[str]] = None
+    languages: Optional[List[str]] = None
+    notes: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
 class DiscoveryRunApiRequest(_PydanticBaseModel):
     scope_id: Optional[str] = None
     sources: Optional[List[str]] = None
@@ -1310,9 +1328,14 @@ def list_discovery_scopes_endpoint(enabled_only: bool = False):
 @app.post("/api/sales/discovery/scopes", tags=["Phase10-Discovery"])
 def save_discovery_scope_endpoint(req: DiscoveryScopeApiRequest):
     """Create or update a discovery search scope."""
-    from sales_engine.discovery_v2.scope import DiscoveryScope, DiscoveryScopeStore
-    store, _, _, _ = get_discovery_services()
+    from sales_engine.discovery_v2.scope import DiscoveryScope, DiscoveryScopeStore, validate_scope_payload
+    store, registry, _, _ = get_discovery_services()
     scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    payload = req.model_dump()
+    errors = validate_scope_payload(payload, registry=registry)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+
     scope = DiscoveryScope(
         scope_name=req.scope_name,
         discovery_modes=req.discovery_modes or ["company_first"],
@@ -1347,6 +1370,77 @@ def get_discovery_scope_endpoint(scope_id: str):
     return scope.to_dict()
 
 
+@app.post("/api/sales/discovery/scopes/{scope_id}/update", tags=["Phase10-Discovery"])
+def update_discovery_scope_endpoint(scope_id: str, req: DiscoveryScopeApiUpdateRequest):
+    """Update an existing discovery search scope preserving identity."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore, validate_scope_payload
+    store, registry, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    existing = scope_store.get_scope(scope_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Discovery scope {scope_id} not found")
+    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    merged = existing.to_dict()
+    merged.update(updates)
+    errors = validate_scope_payload(merged, registry=registry)
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    updated = scope_store.update_scope(scope_id, updates)
+    return updated.to_dict()
+
+
+@app.post("/api/sales/discovery/scopes/{scope_id}/duplicate", tags=["Phase10-Discovery"])
+def duplicate_discovery_scope_endpoint(scope_id: str):
+    """Duplicate an existing search profile with a new ID."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+    store, _, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    try:
+        cloned = scope_store.duplicate_scope(scope_id)
+        return cloned.to_dict()
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Discovery scope {scope_id} not found")
+
+
+@app.post("/api/sales/discovery/scopes/{scope_id}/enable", tags=["Phase10-Discovery"])
+def enable_discovery_scope_endpoint(scope_id: str):
+    """Enable a search profile."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+    store, _, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    try:
+        updated = scope_store.enable_scope(scope_id)
+        return updated.to_dict()
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Discovery scope {scope_id} not found")
+
+
+@app.post("/api/sales/discovery/scopes/{scope_id}/disable", tags=["Phase10-Discovery"])
+def disable_discovery_scope_endpoint(scope_id: str):
+    """Disable a search profile."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+    store, _, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    try:
+        updated = scope_store.disable_scope(scope_id)
+        return updated.to_dict()
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Discovery scope {scope_id} not found")
+
+
+@app.post("/api/sales/discovery/scopes/{scope_id}/preview", tags=["Phase10-Discovery"])
+def preview_discovery_scope_endpoint(scope_id: str):
+    """Preview the execution plan for a scope without performing any external calls."""
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore, preview_discovery_plan
+    store, registry, _, _ = get_discovery_services()
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    scope = scope_store.get_scope(scope_id)
+    if not scope:
+        raise HTTPException(status_code=404, detail=f"Discovery scope {scope_id} not found")
+    plan = preview_discovery_plan(scope, registry=registry)
+    return plan
+
+
 @app.post("/api/sales/discovery/run", tags=["Phase10-Discovery"])
 def trigger_discovery_run_endpoint(req: DiscoveryRunApiRequest):
     """Trigger a discovery run with strict zero-send invariant. Supports scope_id execution."""
@@ -1375,8 +1469,14 @@ def trigger_discovery_run_endpoint(req: DiscoveryRunApiRequest):
 def list_discovery_runs_endpoint(limit: int = 50):
     """List recent discovery run executions."""
     store, _, _, _ = get_discovery_services()
-    runs = store.list_discovery_runs(limit=limit)
-    return {"total": len(runs), "runs": runs}
+    from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+    scope_store = DiscoveryScopeStore(db_path=store.db_path)
+    scope_runs = [r.to_dict() for r in scope_store.list_runs(limit=limit)]
+    candidate_runs = store.list_discovery_runs(limit=limit)
+    seen_ids = {sr["run_id"] for sr in scope_runs}
+    all_runs = scope_runs + [r for r in candidate_runs if r.get("run_id") not in seen_ids]
+    all_runs.sort(key=lambda x: str(x.get("started_at") or ""), reverse=True)
+    return {"total": len(all_runs[:limit]), "runs": all_runs[:limit]}
 
 
 @app.get("/api/sales/discovery/runs/{run_id}", tags=["Phase10-Discovery"])
@@ -1385,6 +1485,11 @@ def get_discovery_run_endpoint(run_id: str):
     store, _, _, _ = get_discovery_services()
     run = store.get_discovery_run(run_id)
     if not run:
+        from sales_engine.discovery_v2.scope import DiscoveryScopeStore
+        scope_store = DiscoveryScopeStore(db_path=store.db_path)
+        scope_run = scope_store.get_run(run_id)
+        if scope_run:
+            return scope_run.to_dict()
         raise HTTPException(status_code=404, detail=f"Discovery run {run_id} not found")
     return run
 

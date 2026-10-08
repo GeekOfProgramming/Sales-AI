@@ -35,6 +35,8 @@ from backend.sales_ui.view_models import (
     SourceItemView,
     DiscoveryRunItemView,
     HistoricalImportPreviewResult,
+    SearchProfileItemView,
+    DiscoveryControlRunView,
 )
 from backend.sales_ui.dashboard_service import DashboardService
 from backend.sales_ui.timeline_service import TimelineService
@@ -46,6 +48,20 @@ from sales_engine.candidates.classifier import CompanyClassifier
 from sales_engine.discovery_v2.source_registry import SourceRegistry
 from sales_engine.discovery_v2.discovery_engine import DiscoveryEngineV2
 from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge, Phase10ConsoleBridge
+from sales_engine.discovery_v2.scope import (
+    DiscoveryScope,
+    DiscoveryRun,
+    DiscoveryScopeStore,
+    DiscoveryRunner,
+    preview_discovery_plan,
+    validate_scope_payload,
+    DiscoveryMode,
+    SUPPORTED_MARKETS,
+    SUPPORTED_RELATIONSHIP_TYPES,
+    SUPPORTED_OPPORTUNITY_TYPES,
+    SUPPORTED_COMPANY_TIERS,
+    SUPPORTED_BIM_MATURITY,
+)
 from sales_engine.historical.importer import HistoricalImporter
 
 from sales_engine.sending import (
@@ -140,11 +156,21 @@ def get_console_services():
     analytics_recommender = RecommendationEngine(analytics_store=analytics_store, metrics_calculator=analytics_metrics)
     analytics_evaluator = ModelEvaluator(analytics_store=analytics_store)
 
+    scope_store = DiscoveryScopeStore(db_path=cand_store.db_path)
+    discovery_runner = DiscoveryRunner(
+        scope_store=scope_store,
+        candidate_store=cand_store,
+        source_registry=registry,
+        engine=engine,
+    )
+
     return {
         "cand_store": cand_store,
         "registry": registry,
         "classifier": classifier,
         "engine": engine,
+        "scope_store": scope_store,
+        "discovery_runner": discovery_runner,
         "rev_store": rev_store,
         "approval_svc": approval_svc,
         "suppression_svc": suppression_svc,
@@ -403,40 +429,117 @@ async def dashboard_view(request: Request):
 
 
 # ---------------------------------------------------------------------------
-# 2. DISCOVERIES
+# 2. DISCOVERY CONTROL & SEARCH PROFILES (Production Readiness Step 3)
 # ---------------------------------------------------------------------------
+@router.get("/discovery", response_class=HTMLResponse)
 @router.get("/discoveries", response_class=HTMLResponse)
-async def discoveries_view(request: Request, message: Optional[str] = None, error: Optional[str] = None):
+async def discovery_view(
+    request: Request,
+    preview_scope_id: Optional[str] = None,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
     svcs = get_console_services()
-    cand_store = svcs.get("cand_store")
-    raw_runs = cand_store.list_discovery_runs(limit=30) if cand_store and hasattr(cand_store, "list_discovery_runs") else []
-    runs = []
-    for r in raw_runs:
-        runs.append(
-            DiscoveryRunItemView(
-                run_id=r.get("run_id", "run_unknown"),
-                mode=r.get("discovery_mode", "standard"),
-                source_name=r.get("source_id") or "multi-source",
-                started_at=r.get("started_at", "N/A"),
-                completed_at=r.get("completed_at"),
-                status=r.get("status", "completed"),
-                observations_found=r.get("observations_found", 0),
-                new_candidates=r.get("new_candidates", 0),
-                known_candidates=r.get("known_candidates", 0),
-                watchlist_candidates=r.get("watchlist_candidates", 0),
-                qualified_candidates=r.get("qualified_candidates", 0),
-                rejected_candidates=r.get("rejected_candidates", 0),
-                errors=r.get("errors", []),
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    registry: SourceRegistry = svcs["registry"]
+
+    # 1. Saved Search Profiles
+    scopes = scope_store.list_scopes()
+    profiles: List[SearchProfileItemView] = []
+    for sc in scopes:
+        last_runs = scope_store.list_runs(scope_id=sc.scope_id, limit=1)
+        lr = last_runs[0] if last_runs else None
+        profiles.append(
+            SearchProfileItemView(
+                scope_id=sc.scope_id,
+                scope_name=sc.scope_name,
+                enabled=sc.enabled,
+                discovery_modes=sc.discovery_modes,
+                markets=sc.markets,
+                source_ids=sc.source_ids,
+                source_count=len(sc.source_ids),
+                max_results=sc.max_results,
+                relationship_types=sc.relationship_types,
+                opportunity_types=sc.opportunity_types,
+                company_tiers=sc.company_tiers,
+                bim_maturity=sc.bim_maturity,
+                company_name_keywords=sc.company_name_keywords,
+                required_signals=sc.required_signals,
+                excluded_keywords=sc.excluded_keywords,
+                languages=sc.languages,
+                notes=sc.notes,
+                created_at=sc.created_at,
+                updated_at=sc.updated_at,
+                last_run_time=lr.started_at if lr else None,
+                last_run_status=lr.status if lr else None,
+                last_results_count=lr.results_found if lr else None,
+                last_run_id=lr.run_id if lr else None,
             )
         )
 
+    # 2. Recent Discovery Runs
+    raw_runs = scope_store.list_runs(limit=30)
+    recent_runs: List[DiscoveryControlRunView] = []
+    for r in raw_runs:
+        recent_runs.append(
+            DiscoveryControlRunView(
+                run_id=r.run_id,
+                scope_id=r.scope_id,
+                scope_name=r.scope_name,
+                started_at=r.started_at,
+                finished_at=r.finished_at,
+                status=r.status,
+                markets=r.markets,
+                discovery_modes=r.discovery_modes,
+                sources_requested=r.sources_requested,
+                sources_executed=r.sources_executed,
+                skipped_sources=r.skipped_sources,
+                results_found=r.results_found,
+                companies_created=r.companies_created,
+                companies_updated=r.companies_updated,
+                errors=r.errors,
+            )
+        )
+
+    # 3. Authoritative sources from Step 2 SourceRegistry
+    sources_raw = registry.list_sources()
+    sources_list = []
+    for s in sources_raw:
+        sources_list.append({
+            "id": s.id,
+            "name": s.name,
+            "type": s.type,
+            "enabled": s.enabled,
+            "adapter_status": getattr(s, "adapter_status", "AVAILABLE"),
+            "credential_status": s.get_credential_status(),
+            "max_results_per_run": getattr(s, "max_results_per_run", 50),
+            "countries": getattr(s, "countries", []) or getattr(s, "supported_markets", []),
+            "modes": getattr(s, "supported_discovery_modes", ["company_first"]),
+        })
+
+    # 4. Deterministic Preview Plan (Zero external calls, zero DB writes)
+    preview_plan = None
+    if preview_scope_id:
+        target_scope = scope_store.get_scope(preview_scope_id)
+        if target_scope:
+            preview_plan = preview_discovery_plan(target_scope, registry=registry)
+
     return render_console_template(
         request=request,
-        name="discoveries.html",
+        name="discovery.html",
         context={
             "request": request,
-            "active_tab": "discoveries",
-            "runs": runs,
+            "active_tab": "discovery",
+            "profiles": profiles,
+            "recent_runs": recent_runs,
+            "sources": sources_list,
+            "supported_modes": [m.value for m in DiscoveryMode],
+            "supported_markets": SUPPORTED_MARKETS,
+            "supported_relationship_types": SUPPORTED_RELATIONSHIP_TYPES,
+            "supported_opportunity_types": SUPPORTED_OPPORTUNITY_TYPES,
+            "supported_company_tiers": SUPPORTED_COMPANY_TIERS,
+            "supported_bim_maturity": SUPPORTED_BIM_MATURITY,
+            "preview_plan": preview_plan,
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
@@ -444,14 +547,395 @@ async def discoveries_view(request: Request, message: Optional[str] = None, erro
     )
 
 
+@router.get("/discovery/profiles/create")
+@router.get("/discovery/profiles/{scope_id}/update")
+@router.get("/discovery/profiles/{scope_id}/duplicate")
+@router.get("/discovery/profiles/{scope_id}/toggle")
+@router.get("/discovery/profiles/{scope_id}/run")
+async def reject_mutating_get():
+    raise HTTPException(status_code=405, detail="Method Not Allowed. Mutations must use POST.")
+
+
+@router.get("/discovery/profiles/{scope_id}", response_class=HTMLResponse)
+async def discovery_profile_view(
+    scope_id: str,
+    request: Request,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    registry: SourceRegistry = svcs["registry"]
+
+    profile = scope_store.get_scope(scope_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"Search Profile '{scope_id}' not found")
+
+    preview_plan = preview_discovery_plan(profile, registry=registry)
+    raw_runs = scope_store.list_runs(scope_id=scope_id, limit=20)
+    profile_runs = [
+        DiscoveryControlRunView(
+            run_id=r.run_id,
+            scope_id=r.scope_id,
+            scope_name=r.scope_name,
+            started_at=r.started_at,
+            finished_at=r.finished_at,
+            status=r.status,
+            markets=r.markets,
+            discovery_modes=r.discovery_modes,
+            sources_requested=r.sources_requested,
+            sources_executed=r.sources_executed,
+            skipped_sources=r.skipped_sources,
+            results_found=r.results_found,
+            companies_created=r.companies_created,
+            companies_updated=r.companies_updated,
+            errors=r.errors,
+        )
+        for r in raw_runs
+    ]
+
+    sources_raw = registry.list_sources()
+    sources_list = [
+        {
+            "id": s.id,
+            "name": s.name,
+            "type": s.type,
+            "enabled": s.enabled,
+            "adapter_status": getattr(s, "adapter_status", "AVAILABLE"),
+            "credential_status": s.get_credential_status(),
+            "max_results_per_run": getattr(s, "max_results_per_run", 50),
+            "countries": getattr(s, "countries", []) or getattr(s, "supported_markets", []),
+            "modes": getattr(s, "supported_discovery_modes", ["company_first"]),
+        }
+        for s in sources_raw
+    ]
+
+    return render_console_template(
+        request=request,
+        name="discovery_profile.html",
+        context={
+            "request": request,
+            "active_tab": "discovery",
+            "profile": profile,
+            "preview_plan": preview_plan,
+            "profile_runs": profile_runs,
+            "sources": sources_list,
+            "supported_modes": [m.value for m in DiscoveryMode],
+            "supported_markets": SUPPORTED_MARKETS,
+            "supported_relationship_types": SUPPORTED_RELATIONSHIP_TYPES,
+            "supported_opportunity_types": SUPPORTED_OPPORTUNITY_TYPES,
+            "supported_company_tiers": SUPPORTED_COMPANY_TIERS,
+            "supported_bim_maturity": SUPPORTED_BIM_MATURITY,
+            "email_send_enabled": is_email_send_enabled(),
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.get("/discovery/runs/{run_id}", response_class=HTMLResponse)
+async def discovery_run_detail_view(
+    run_id: str,
+    request: Request,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    cand_store = svcs["cand_store"]
+
+    run = scope_store.get_run(run_id)
+    if not run:
+        cand_run = cand_store.get_discovery_run(run_id) if hasattr(cand_store, "get_discovery_run") else None
+        if not cand_run:
+            raise HTTPException(status_code=404, detail=f"Discovery Run '{run_id}' not found")
+        run = DiscoveryRun(
+            run_id=cand_run.get("run_id", run_id),
+            scope_id=cand_run.get("source_id"),
+            scope_name=cand_run.get("source_id"),
+            started_at=cand_run.get("started_at", "N/A"),
+            finished_at=cand_run.get("completed_at"),
+            status=cand_run.get("status", "completed"),
+            markets=[],
+            discovery_modes=[cand_run.get("discovery_mode", "company_first")],
+            sources_requested=[cand_run.get("source_id", "multi-source")],
+            sources_executed=[cand_run.get("source_id", "multi-source")],
+            skipped_sources=[],
+            results_found=cand_run.get("observations_found", 0),
+            companies_created=cand_run.get("new_candidates", 0),
+            companies_updated=cand_run.get("known_candidates", 0),
+            errors=cand_run.get("errors", []),
+        )
+
+    return render_console_template(
+        request=request,
+        name="discovery_run_detail.html",
+        context={
+            "request": request,
+            "active_tab": "discovery",
+            "run": run,
+            "email_send_enabled": is_email_send_enabled(),
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.post("/discovery/profiles/create")
+async def create_discovery_profile_action(
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    registry: SourceRegistry = svcs["registry"]
+
+    form = await request.form()
+    scope_name = str(form.get("scope_name") or "").strip()
+    discovery_modes = form.getlist("discovery_modes")
+    markets = form.getlist("markets")
+    source_ids = form.getlist("source_ids")
+    relationship_types = form.getlist("relationship_types")
+    opportunity_types = form.getlist("opportunity_types")
+    company_tiers = form.getlist("company_tiers")
+    bim_maturity = form.getlist("bim_maturity")
+    max_results_val = form.get("max_results")
+    enabled = form.get("enabled") in ("true", "1", "on", True)
+
+    def _split_csv(val: Optional[Any]) -> List[str]:
+        if not val:
+            return []
+        return [item.strip() for item in str(val).split(",") if item.strip()]
+
+    company_name_keywords = _split_csv(form.get("company_name_keywords"))
+    required_signals = _split_csv(form.get("required_signals"))
+    excluded_keywords = _split_csv(form.get("excluded_keywords"))
+    languages = _split_csv(form.get("languages"))
+    notes = str(form.get("notes") or "").strip()
+
+    try:
+        max_results = int(max_results_val or 50)
+    except (ValueError, TypeError):
+        return RedirectResponse(
+            "/sales/discovery?error=Invalid+max_results+value",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    payload = {
+        "scope_name": scope_name,
+        "discovery_modes": discovery_modes,
+        "markets": markets,
+        "source_ids": source_ids,
+        "relationship_types": relationship_types,
+        "opportunity_types": opportunity_types,
+        "company_tiers": company_tiers,
+        "bim_maturity": bim_maturity,
+        "max_results": max_results,
+        "company_name_keywords": company_name_keywords,
+        "required_signals": required_signals,
+        "excluded_keywords": excluded_keywords,
+        "languages": languages,
+        "notes": notes,
+        "enabled": enabled,
+    }
+
+    errors = validate_scope_payload(payload, registry=registry)
+    if errors:
+        err_msg = "; ".join(errors)
+        return RedirectResponse(
+            f"/sales/discovery?error={err_msg}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    new_scope = DiscoveryScope(
+        scope_name=scope_name,
+        discovery_modes=discovery_modes,
+        markets=markets,
+        source_ids=source_ids,
+        relationship_types=relationship_types,
+        opportunity_types=opportunity_types,
+        company_tiers=company_tiers,
+        bim_maturity=bim_maturity,
+        max_results=max_results,
+        company_name_keywords=company_name_keywords,
+        required_signals=required_signals,
+        excluded_keywords=excluded_keywords,
+        languages=languages,
+        notes=notes,
+        enabled=enabled,
+    )
+    saved = scope_store.save_scope(new_scope)
+    msg = f"Search Profile '{saved.scope_name}' successfully created."
+    return RedirectResponse(f"/sales/discovery?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/discovery/profiles/{scope_id}/update")
+async def update_discovery_profile_action(
+    scope_id: str,
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    registry: SourceRegistry = svcs["registry"]
+
+    existing = scope_store.get_scope(scope_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Search Profile '{scope_id}' not found")
+
+    form = await request.form()
+    scope_name = str(form.get("scope_name") or "").strip()
+    discovery_modes = form.getlist("discovery_modes")
+    markets = form.getlist("markets")
+    source_ids = form.getlist("source_ids")
+    relationship_types = form.getlist("relationship_types")
+    opportunity_types = form.getlist("opportunity_types")
+    company_tiers = form.getlist("company_tiers")
+    bim_maturity = form.getlist("bim_maturity")
+    max_results_val = form.get("max_results")
+    enabled = form.get("enabled") in ("true", "1", "on", True)
+
+    def _split_csv(val: Optional[Any]) -> List[str]:
+        if not val:
+            return []
+        return [item.strip() for item in str(val).split(",") if item.strip()]
+
+    company_name_keywords = _split_csv(form.get("company_name_keywords"))
+    required_signals = _split_csv(form.get("required_signals"))
+    excluded_keywords = _split_csv(form.get("excluded_keywords"))
+    languages = _split_csv(form.get("languages"))
+    notes = str(form.get("notes") or "").strip()
+
+    try:
+        max_results = int(max_results_val or 50)
+    except (ValueError, TypeError):
+        return RedirectResponse(
+            f"/sales/discovery/profiles/{scope_id}?error=Invalid+max_results+value",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    updates = {
+        "scope_name": scope_name,
+        "discovery_modes": discovery_modes,
+        "markets": markets,
+        "source_ids": source_ids,
+        "relationship_types": relationship_types,
+        "opportunity_types": opportunity_types,
+        "company_tiers": company_tiers,
+        "bim_maturity": bim_maturity,
+        "max_results": max_results,
+        "company_name_keywords": company_name_keywords,
+        "required_signals": required_signals,
+        "excluded_keywords": excluded_keywords,
+        "languages": languages,
+        "notes": notes,
+        "enabled": enabled,
+    }
+
+    errors = validate_scope_payload(updates, registry=registry)
+    if errors:
+        err_msg = "; ".join(errors)
+        return RedirectResponse(
+            f"/sales/discovery/profiles/{scope_id}?error={err_msg}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    scope_store.update_scope(scope_id, updates)
+    return RedirectResponse(
+        f"/sales/discovery/profiles/{scope_id}?message=Search+Profile+updated+successfully",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/discovery/profiles/{scope_id}/duplicate")
+async def duplicate_discovery_profile_action(
+    scope_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    try:
+        cloned = scope_store.duplicate_scope(scope_id)
+        msg = f"Profile duplicated as '{cloned.scope_name}'."
+        return RedirectResponse(f"/sales/discovery?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Search Profile '{scope_id}' not found")
+
+
+@router.post("/discovery/profiles/{scope_id}/toggle")
+async def toggle_discovery_profile_action(
+    scope_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    existing = scope_store.get_scope(scope_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Search Profile '{scope_id}' not found")
+
+    new_state = not existing.enabled
+    if new_state:
+        scope_store.enable_scope(scope_id)
+        status_msg = f"Profile '{existing.scope_name}' enabled."
+    else:
+        scope_store.disable_scope(scope_id)
+        status_msg = f"Profile '{existing.scope_name}' disabled."
+
+    return RedirectResponse(f"/sales/discovery?message={status_msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/discovery/profiles/{scope_id}/run")
+async def run_discovery_profile_action(
+    scope_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    scope_store: DiscoveryScopeStore = svcs["scope_store"]
+    runner: DiscoveryRunner = svcs["discovery_runner"]
+
+    scope = scope_store.get_scope(scope_id)
+    if not scope:
+        raise HTTPException(status_code=404, detail=f"Search Profile '{scope_id}' not found")
+
+    if not scope.enabled:
+        return RedirectResponse(
+            f"/sales/discovery?error=Cannot+execute+disabled+profile+'{scope.scope_name}'",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    try:
+        run = runner.run(scope_id)
+        msg = f"Discovery run completed: {run.results_found} found, {run.companies_created} created, {run.companies_updated} updated."
+        return RedirectResponse(
+            f"/sales/discovery/runs/{run.run_id}?message={msg}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    except Exception as e:
+        return RedirectResponse(
+            f"/sales/discovery?error=Execution+failed:+{str(e)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+
+@router.post("/discovery/run")
 @router.post("/discoveries/run")
 async def trigger_discovery_run_action(
     query: str = Form("BIM"),
     discovery_mode: str = Form("company_first"),
     sources: Optional[str] = Form(None),
+    scope_id: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
+    if scope_id:
+        runner: DiscoveryRunner = svcs["discovery_runner"]
+        try:
+            run = runner.run(scope_id)
+            msg = f"Discovery run completed: {run.results_found} results found."
+            return RedirectResponse(f"/sales/discovery/runs/{run.run_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+        except Exception as e:
+            return RedirectResponse(f"/sales/discovery?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+
     source_list = [s.strip() for s in sources.split(",")] if sources else None
     try:
         run_rec = svcs["engine"].run_multi_source_discovery(
@@ -460,9 +944,9 @@ async def trigger_discovery_run_action(
             discovery_mode=discovery_mode,
         )
         msg = f"Discovery run completed: {run_rec.new_candidates} new candidates, {run_rec.observations_found} observations."
-        return RedirectResponse(f"/sales/discoveries?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(f"/sales/discovery?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
-        return RedirectResponse(f"/sales/discoveries?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(f"/sales/discovery?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------

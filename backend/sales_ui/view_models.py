@@ -301,3 +301,49 @@ class GenerateDraftUiRequest(BaseModel):
     contact_email: str
     reviewer: str = "local_operator"
 
+
+class SearchProfileItemView(BaseModel):
+    scope_id: str
+    scope_name: str
+    enabled: bool
+    discovery_modes: List[str] = Field(default_factory=list)
+    markets: List[str] = Field(default_factory=list)
+    source_ids: List[str] = Field(default_factory=list)
+    source_count: int = 0
+    max_results: int = 50
+    relationship_types: List[str] = Field(default_factory=list)
+    opportunity_types: List[str] = Field(default_factory=list)
+    company_tiers: List[str] = Field(default_factory=list)
+    bim_maturity: List[str] = Field(default_factory=list)
+    company_name_keywords: List[str] = Field(default_factory=list)
+    required_signals: List[str] = Field(default_factory=list)
+    excluded_keywords: List[str] = Field(default_factory=list)
+    languages: List[str] = Field(default_factory=list)
+    notes: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    last_run_time: Optional[str] = None
+    last_run_status: Optional[str] = None
+    last_results_count: Optional[int] = None
+    last_run_id: Optional[str] = None
+
+
+class DiscoveryControlRunView(BaseModel):
+    run_id: str
+    scope_id: Optional[str] = None
+    scope_name: Optional[str] = None
+    started_at: str
+    finished_at: Optional[str] = None
+    duration_str: Optional[str] = None
+    status: str
+    markets: List[str] = Field(default_factory=list)
+    discovery_modes: List[str] = Field(default_factory=list)
+    sources_requested: List[str] = Field(default_factory=list)
+    sources_executed: List[str] = Field(default_factory=list)
+    skipped_sources: List[Dict[str, Any]] = Field(default_factory=list)
+    results_found: int = 0
+    companies_created: int = 0
+    companies_updated: int = 0
+    errors: List[str] = Field(default_factory=list)
+
+

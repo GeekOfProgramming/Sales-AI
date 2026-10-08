@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Search Profile: {{ profile.scope_name }} | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <div style="margin-bottom: 0.5rem;">
+      <a href="/sales/discovery" class="btn btn-sm btn-secondary">&larr; Back to Discovery Control</a>
+    </div>
+    <h1 class="page-title">{{ profile.scope_name }}</h1>
+    <p class="page-subtitle">
+      ID: <code>{{ profile.scope_id }}</code> &bull;
+      Created: {{ profile.created_at[:19] }} &bull;
+      Updated: {{ profile.updated_at[:19] }} &bull;
+      {% if profile.enabled %}
+      <span class="badge badge-success">Active</span>
+      {% else %}
+      <span class="badge badge-warning">Disabled</span>
+      {% endif %}
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    {% if profile.enabled %}
+    <form method="POST" action="/sales/discovery/profiles/{{ profile.scope_id }}/run" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Start Discovery</button>
+    </form>
+    {% else %}
+    <button class="btn btn-secondary" disabled title="Profile is disabled">Start Discovery</button>
+    {% endif %}
+
+    <form method="POST" action="/sales/discovery/profiles/{{ profile.scope_id }}/duplicate" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-secondary">Duplicate</button>
+    </form>
+
+    <form method="POST" action="/sales/discovery/profiles/{{ profile.scope_id }}/toggle" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if profile.enabled %}
+      <button type="submit" class="btn btn-warning">Disable</button>
+      {% else %}
+      <button type="submit" class="btn btn-success">Enable</button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Plan Preview Card -->
+{% if preview_plan %}
+<div class="card" style="margin-bottom: 2rem; border-left: 4px solid #3b82f6;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Live Execution Plan Preview</span>
+    <span class="badge badge-info">Zero Network Calls &bull; Deterministic</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0;">
+    <div><strong>Configured Sources:</strong> {{ preview_plan.sources_requested|length }}</div>
+    <div><strong>Executable Sources:</strong> <span style="color: #10b981; font-weight: 700;">{{ preview_plan.executable_count }}</span></div>
+    <div><strong>Skipped Sources:</strong> <span style="color: #ef4444; font-weight: 700;">{{ preview_plan.skipped_count }}</span></div>
+    <div><strong>Effective Total Budget:</strong> {{ preview_plan.effective_total_budget }} candidates</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+    <!-- Executable -->
+    <div>
+      <h4 style="margin-bottom: 0.5rem; color: #10b981;">Executable Sources ({{ preview_plan.executable_sources|length }})</h4>
+      {% if preview_plan.executable_sources %}
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Priority</th>
+            <th>Effective Budget</th>
+            <th>Credential</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in preview_plan.executable_sources %}
+          <tr>
+            <td><strong>{{ s.name }}</strong> (<code>{{ s.source_id }}</code>)</td>
+            <td>P{{ s.priority }}</td>
+            <td>{{ s.effective_budget }}</td>
+            <td><span class="badge badge-success">{{ s.credential_status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: var(--text-secondary); font-size: 0.85rem;">No executable sources found.</p>
+      {% endif %}
+    </div>
+
+    <!-- Skipped -->
+    <div>
+      <h4 style="margin-bottom: 0.5rem; color: #ef4444;">Skipped Sources ({{ preview_plan.skipped_sources|length }})</h4>
+      {% if preview_plan.skipped_sources %}
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in preview_plan.skipped_sources %}
+          <tr>
+            <td><strong>{{ s.name }}</strong></td>
+            <td><span class="badge badge-danger">{{ s.status }}</span></td>
+            <td style="color: var(--text-secondary);">{{ s.reason }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: var(--text-secondary); font-size: 0.85rem;">No skipped sources.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Edit Profile Form -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-title">
+    <span>Edit Profile Configuration</span>
+  </div>
+  <form method="POST" action="/sales/discovery/profiles/{{ profile.scope_id }}/update">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <!-- Basic Info -->
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+      <div class="form-group">
+        <label class="form-label">Profile Name <span style="color: #ef4444;">*</span></label>
+        <input type="text" name="scope_name" class="form-control" value="{{ profile.scope_name }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Results Budget</label>
+        <input type="number" name="max_results" class="form-control" value="{{ profile.max_results }}" min="1" max="1000" required>
+      </div>
+      <div class="form-group" style="display: flex; align-items: flex-end;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding-bottom: 0.5rem;">
+          <input type="checkbox" name="enabled" value="true" {% if profile.enabled %}checked{% endif %}>
+          <span>Enabled</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Discovery Modes & Markets -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.25rem;">
+      <!-- Modes -->
+      <div>
+        <label class="form-label">Discovery Modes <span style="color: #ef4444;">*</span></label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+          {% for mode in supported_modes %}
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer;">
+            <input type="checkbox" name="discovery_modes" value="{{ mode }}" {% if mode in profile.discovery_modes %}checked{% endif %}>
+            <span>{{ mode }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Markets -->
+      <div>
+        <label class="form-label">Target Markets <span style="color: #ef4444;">*</span></label>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; max-height: 140px; overflow-y: auto;">
+          {% for mkt in supported_markets %}
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="markets" value="{{ mkt }}" {% if mkt in profile.markets %}checked{% endif %}>
+            <span>{{ mkt }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Authoritative Sources Selection -->
+    <div style="margin-bottom: 1.25rem;">
+      <label class="form-label">Discovery Sources (from Step 2 Registry)</label>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; max-height: 220px; overflow-y: auto;">
+        {% for s in sources %}
+        <label style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; padding: 0.35rem; border: 1px solid var(--border-color); border-radius: 4px;">
+          <input type="checkbox" name="source_ids" value="{{ s.id }}" {% if s.id in profile.source_ids %}checked{% endif %}>
+          <div>
+            <div><strong>{{ s.name }}</strong> (<code>{{ s.id }}</code>)</div>
+            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">
+              <span class="badge {% if s.enabled %}badge-success{% else %}badge-warning{% endif %}" style="font-size: 0.7rem;">{{ 'Enabled' if s.enabled else 'Disabled' }}</span>
+              <span class="badge badge-secondary" style="font-size: 0.7rem;">{{ s.type }}</span>
+              <span class="badge {% if s.adapter_status == 'AVAILABLE' %}badge-info{% else %}badge-danger{% endif %}" style="font-size: 0.7rem;">{{ s.adapter_status }}</span>
+              <span class="badge badge-secondary" style="font-size: 0.7rem;">Cred: {{ s.credential_status }}</span>
+            </div>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Advanced Qualification Taxonomies -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+      <div>
+        <label class="form-label">Relationship Types</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px; max-height: 110px; overflow-y: auto;">
+          {% for rt in supported_relationship_types %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="relationship_types" value="{{ rt }}" {% if rt in profile.relationship_types %}checked{% endif %}>
+            <span>{{ rt }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Opportunity Types</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px; max-height: 110px; overflow-y: auto;">
+          {% for ot in supported_opportunity_types %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="opportunity_types" value="{{ ot }}" {% if ot in profile.opportunity_types %}checked{% endif %}>
+            <span>{{ ot }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">Target Tiers</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px;">
+          {% for tier in supported_company_tiers %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="company_tiers" value="{{ tier }}" {% if tier in profile.company_tiers %}checked{% endif %}>
+            <span>{{ tier }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <label class="form-label">BIM Maturity</label>
+        <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px;">
+          {% for bm in supported_bim_maturity %}
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer;">
+            <input type="checkbox" name="bim_maturity" value="{{ bm }}" {% if bm in profile.bim_maturity %}checked{% endif %}>
+            <span>{{ bm }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyword Filters -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+      <div class="form-group">
+        <label class="form-label">Keywords</label>
+        <input type="text" name="company_name_keywords" class="form-control" value="{{ profile.company_name_keywords|join(', ') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Required Signals</label>
+        <input type="text" name="required_signals" class="form-control" value="{{ profile.required_signals|join(', ') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Excluded Keywords</label>
+        <input type="text" name="excluded_keywords" class="form-control" value="{{ profile.excluded_keywords|join(', ') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Languages</label>
+        <input type="text" name="languages" class="form-control" value="{{ profile.languages|join(', ') }}">
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="form-group" style="margin-bottom: 1.25rem;">
+      <label class="form-label">Operator Notes</label>
+      <textarea name="notes" class="form-control" rows="2">{{ profile.notes }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Update Profile</button>
+  </form>
+</div>
+
+<!-- Historical Runs for this Profile -->
+<div class="card">
+  <div class="card-title">
+    <span>Historical Runs for this Profile ({{ profile_runs|length }})</span>
+  </div>
+  {% if profile_runs %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Started</th>
+          <th>Status</th>
+          <th>Sources Executed</th>
+          <th>Results</th>
+          <th>Created</th>
+          <th>Updated</th>
+          <th>Errors</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in profile_runs %}
+        <tr>
+          <td><a href="/sales/discovery/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
+          <td>{{ r.started_at[:19] }}</td>
+          <td>
+            <span class="badge {% if r.status == 'completed' %}badge-success{% else %}badge-warning{% endif %}">
+              {{ r.status }}
+            </span>
+          </td>
+          <td>{{ r.sources_executed|join(', ') or 'None' }}</td>
+          <td><strong>{{ r.results_found }}</strong></td>
+          <td>+{{ r.companies_created }}</td>
+          <td>{{ r.companies_updated }}</td>
+          <td>
+            {% if r.errors %}
+            <span class="badge badge-danger">{{ r.errors|length }} error(s)</span>
+            {% else %}
+            <span class="badge badge-secondary">0</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="/sales/discovery/runs/{{ r.run_id }}" class="btn btn-sm btn-secondary">Details</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding: 1.5rem; text-align: center;">
+    <p class="empty-state-text">No discovery runs executed yet for this profile.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
