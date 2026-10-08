@@ -21,6 +21,8 @@ env/
 chroma_data/
 chroma_db/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # Environment Variables & Secrets

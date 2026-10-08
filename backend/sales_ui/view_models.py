@@ -184,6 +184,15 @@ class SourceItemView(BaseModel):
     requires_api_key: bool = False
     is_configured: bool = True
     config_error: bool = False
+    credential_status: str = "not_required"
+    credential_env_var: Optional[str] = None
+    adapter_id: Optional[str] = None
+    adapter_status: str = "AVAILABLE"
+    max_results_per_run: int = 50
+    description: str = ""
+    operator_instructions: str = ""
+    notes: str = ""
+    base_url: Optional[str] = None
     status: str = "operational"
     success_count: int = 0
     failure_count: int = 0

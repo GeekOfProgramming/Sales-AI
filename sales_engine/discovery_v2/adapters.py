@@ -134,16 +134,58 @@ def create_manual_seed_adapter(config: SourceConfig) -> Callable[[str], List[Dic
     return adapter
 
 
+KNOWN_ADAPTER_IDS = {
+    "brave_search",
+    "search_engine",
+    "generic_company_directory",
+    "generic_job_board",
+    "manual_seed",
+    "historical_import",
+    "ats",
+    "company_directory",
+    "business_directory",
+    "directory",
+    "registry",
+    "manual",
+}
+
+
 def get_default_adapter_for_source(config: SourceConfig) -> Optional[Callable[[str], List[Dict[str, Any]]]]:
     """
     Factory resolving the appropriate functional adapter for a source config.
+    Honors explicit adapter_id and marks unimplemented adapters as NOT_AVAILABLE.
     """
-    if config.type == "search_engine":
+    if getattr(config, "adapter_status", "AVAILABLE") == "NOT_AVAILABLE":
+        return None
+
+    # Check explicit adapter_id first
+    if config.adapter_id:
+        aid = config.adapter_id.lower().strip()
+        if aid == "brave_search" or aid == "search_engine":
+            return create_search_engine_adapter(config)
+        elif aid == "ats" or aid == "generic_job_board":
+            return create_ats_adapter(config)
+        elif aid in ("generic_company_directory", "company_directory", "business_directory", "directory", "registry"):
+            return create_directory_adapter(config)
+        elif aid in ("manual_seed", "historical_import", "manual"):
+            return create_manual_seed_adapter(config)
+        else:
+            config.adapter_status = "NOT_AVAILABLE"
+            return None
+
+    # Fallback to source type
+    stype = (config.type or "").lower().strip()
+    if stype == "search_engine":
         return create_search_engine_adapter(config)
-    elif config.type == "ats":
+    elif stype in ("ats", "job_board", "jobs"):
         return create_ats_adapter(config)
-    elif config.type in ("directory", "registry"):
+    elif stype in ("directory", "registry", "company_directory", "business_directory", "map_business", "professional_association", "tender_portal", "project_database"):
         return create_directory_adapter(config)
-    elif config.type in ("manual", "manual_seed", "historical_import"):
+    elif stype in ("manual", "manual_seed", "historical_import", "external_file"):
         return create_manual_seed_adapter(config)
+    elif stype in ("company_website", "company_site", "industry_news", "news", "social"):
+        # Built-in lightweight adapter returning empty until specialized crawler is bound
+        return create_directory_adapter(config)
+
+    config.adapter_status = "NOT_AVAILABLE"
     return None

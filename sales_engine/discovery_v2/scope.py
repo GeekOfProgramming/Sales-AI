@@ -460,22 +460,52 @@ class DiscoveryRunner:
 
         # Determine sources to execute:
         # Must be in scope.source_ids AND enabled in SourceRegistry
+        target_markets = {m.strip().lower() for m in scope.markets}
+        scope_modes_set = {str(m).strip().lower() for m in scope.discovery_modes}
+
         sources_to_run = []
         for src_id in scope.source_ids:
             cfg = self.registry.get_source(src_id)
             if not cfg:
-                # If unregistered source, skip with notice
+                # If unregistered source, skip with notice (PRD-SOURCE-014)
                 msg = f"Source '{src_id}' requested by scope is not registered in SourceRegistry"
                 logger.warning(msg)
                 run.errors.append(msg)
                 continue
             if not cfg.enabled:
-                logger.info(f"Source '{src_id}' is disabled in SourceRegistry; skipping execution")
+                msg = f"Source '{src_id}' is disabled in SourceRegistry; skipping execution"
+                logger.info(msg)
+                run.errors.append(msg)
                 continue
-            sources_to_run.append(src_id)
 
-        # Normalize markets (case-insensitive mapping to allowed country names/codes)
-        target_markets = {m.strip().lower() for m in scope.markets}
+            # Check adapter status (PRD-SOURCE-004)
+            if getattr(cfg, "adapter_status", "AVAILABLE") == "NOT_AVAILABLE":
+                msg = f"Source '{src_id}' adapter is NOT_AVAILABLE; skipping execution"
+                logger.warning(msg)
+                run.errors.append(msg)
+                continue
+
+            # Check supported markets compatibility (PRD-SOURCE-009)
+            source_markets = getattr(cfg, "countries", None) or getattr(cfg, "supported_markets", [])
+            if source_markets:
+                supp_set = {str(c).strip().lower() for c in source_markets}
+                if target_markets and not supp_set.intersection(target_markets):
+                    msg = f"Source '{src_id}' does not support requested markets {scope.markets}; skipping execution"
+                    logger.info(msg)
+                    run.errors.append(msg)
+                    continue
+
+            # Check supported discovery modes compatibility (PRD-SOURCE-010)
+            raw_modes = getattr(cfg, "discovery_mode", None) or getattr(cfg, "supported_discovery_modes", ["company_first"])
+            modes_list = raw_modes if isinstance(raw_modes, list) else [str(raw_modes)]
+            source_modes_set = {str(m).strip().lower() for m in modes_list}
+            if scope_modes_set and not source_modes_set.intersection(scope_modes_set):
+                msg = f"Source '{src_id}' does not support requested discovery modes {scope.discovery_modes}; skipping execution"
+                logger.info(msg)
+                run.errors.append(msg)
+                continue
+
+            sources_to_run.append(src_id)
 
         # Query to pass
         query = query_override or (" ".join(scope.company_name_keywords) if scope.company_name_keywords else "BIM")
@@ -507,8 +537,13 @@ class DiscoveryRunner:
                     run.errors.append(err_msg)
                     continue
 
+                # Enforce per-source max_results limit (PRD-SOURCE-008)
+                source_max = getattr(cfg, "max_results_per_run", 50) if cfg else 50
+                source_budget = min(source_max, max_allowed - collected_count)
+                source_collected = 0
+
                 for item in raw_items:
-                    if collected_count >= max_allowed:
+                    if collected_count >= max_allowed or source_collected >= source_budget:
                         break
 
                     c_name = item.get("company_name") or item.get("name")
@@ -568,6 +603,7 @@ class DiscoveryRunner:
                     )
 
                     collected_count += 1
+                    source_collected += 1
                     run.results_found += 1
 
                     if existing:

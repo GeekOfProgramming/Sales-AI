@@ -1,17 +1,341 @@
 {% extends "base.html" %}
 
-{% block title %}Sources & Historical Ingestion | SalesAI Console{% endblock %}
+{% block title %}Source Management | SalesAI Console{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
   <div>
-    <h1 class="page-title">Discovery Sources & Provenance</h1>
-    <p class="page-subtitle">Configured data streams, scrapers, and historical spreadsheet ingestion with provenance tracking.</p>
+    <h1 class="page-title">Discovery Sources &amp; Provenance</h1>
+    <p class="page-subtitle">Discovery Sources Management: Configure, test, monitor, and prioritize discovery sources, adapters, and search streams.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="#add-source-section" class="btn btn-primary" onclick="document.getElementById('add-source-section').scrollIntoView({behavior: 'smooth'});">+ Add Source</a>
   </div>
 </div>
 
+<!-- Quick Stat Badges -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Total Sources</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ sources|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Enabled</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #10b981;">{{ sources|selectattr('enabled')|list|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Disabled</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #f59e0b;">{{ sources|rejectattr('enabled')|list|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Adapters Available</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #3b82f6;">{{ sources|selectattr('adapter_status', 'equalto', 'AVAILABLE')|list|length }}</div>
+  </div>
+</div>
+
+<!-- Source Registry Table -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Registered Discovery Sources ({{ sources|length }})</span>
+    <span class="badge badge-info">Authoritative Registry</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Source / ID</th>
+          <th>Type</th>
+          <th>State</th>
+          <th>Priority</th>
+          <th>Max Results</th>
+          <th>Markets</th>
+          <th>Discovery Modes</th>
+          <th>Credentials</th>
+          <th>Adapter</th>
+          <th>Health</th>
+          <th>Runs / Errors</th>
+          <th style="min-width: 190px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sources %}
+        <tr id="source-row-{{ s.id }}">
+          <td>
+            <div style="font-weight: 600; color: var(--text-primary);">{{ s.name }}</div>
+            <div style="font-size: 0.75rem; font-family: monospace; color: var(--text-secondary);">{{ s.id }}</div>
+            {% if s.base_url %}
+            <div style="font-size: 0.7rem; color: var(--text-secondary); text-overflow: ellipsis; overflow: hidden; max-width: 180px; white-space: nowrap;">
+              🔗 {{ s.base_url }}
+            </div>
+            {% endif %}
+          </td>
+          <td><span class="badge badge-muted">{{ s.type }}</span></td>
+          <td>
+            {% if s.enabled %}
+              <span class="badge badge-success">Enabled</span>
+            {% else %}
+              <span class="badge badge-warning">Disabled</span>
+            {% endif %}
+          </td>
+          <td><strong>{{ s.priority }}</strong></td>
+          <td>{{ s.max_results_per_run }}</td>
+          <td>
+            {% if s.countries %}
+              <span style="font-size: 0.8rem;">{{ s.countries|join(', ') }}</span>
+            {% else %}
+              <span class="badge badge-muted">Global</span>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-size: 0.8rem;">{{ s.discovery_mode }}</span>
+          </td>
+          <td>
+            {% if s.requires_api_key %}
+              {% if s.credential_status == 'configured' %}
+                <span class="badge badge-success" title="Configured via {{ s.credential_env_var or 'ENV' }}">Configured</span>
+              {% elif s.credential_status == 'configuration_error' %}
+                <span class="badge badge-danger" title="No env var configured">Configuration error</span>
+              {% else %}
+                <span class="badge badge-warning" title="Missing {{ s.credential_env_var }}">Not configured</span>
+              {% endif %}
+              <div style="font-size: 0.7rem; font-family: monospace; color: var(--text-secondary);">
+                {{ s.credential_env_var or 'Missing VAR' }}
+              </div>
+            {% else %}
+              <span class="badge badge-muted">Not required</span>
+            {% endif %}
+
+          </td>
+          <td>
+            {% if s.adapter_status == 'AVAILABLE' %}
+              <span class="badge badge-success">AVAILABLE</span>
+            {% else %}
+              <span class="badge badge-danger">NOT_AVAILABLE</span>
+            {% endif %}
+            <div style="font-size: 0.7rem; font-family: monospace; color: var(--text-secondary);">
+              {{ s.adapter_id or 'none' }}
+            </div>
+          </td>
+          <td>
+            {% if s.status == 'healthy' or s.status == 'operational' %}
+              <span class="badge badge-success">{{ s.status }}</span>
+            {% elif s.status == 'failing' or s.status == 'unhealthy' %}
+              <span class="badge badge-danger">{{ s.status }}</span>
+            {% else %}
+              <span class="badge badge-warning">{{ s.status }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size: 0.8rem;">
+            <div><strong>{{ s.success_count }}</strong> succ / <strong>{{ s.failure_count }}</strong> fail</div>
+            {% if s.last_success_at %}
+              <div style="font-size: 0.7rem; color: var(--text-secondary);">Last ok: {{ s.last_success_at[:16] }}</div>
+            {% endif %}
+            {% if s.last_error %}
+              <div style="font-size: 0.7rem; color: #ef4444; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ s.last_error }}">
+                Err: {{ s.last_error }}
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              <!-- Toggle Enable / Disable -->
+              <form method="POST" action="/sales/sources/{{ s.id }}/toggle" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if s.enabled %}
+                  <button type="submit" class="btn btn-warning btn-sm" title="Disable this source">Disable</button>
+                {% else %}
+                  <button type="submit" class="btn btn-success btn-sm" title="Enable this source">Enable</button>
+                {% endif %}
+              </form>
+
+              <!-- Test Source -->
+              <form method="POST" action="/sales/sources/{{ s.id }}/test" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-secondary btn-sm" title="Safely test source connectivity">Test</button>
+              </form>
+
+              <!-- Quick Edit Toggle -->
+              <button type="button" class="btn btn-outline btn-sm" onclick="toggleEditRow('edit-row-{{ s.id }}')">Edit</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Inline Edit Form Row -->
+        <tr id="edit-row-{{ s.id }}" style="display: none; background: rgba(255,255,255,0.02);">
+          <td colspan="12" style="padding: 1.25rem;">
+            <form method="POST" action="/sales/sources/{{ s.id }}/update" style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem; color: var(--primary);">
+                Editing Configuration for Source: <code>{{ s.id }}</code>
+              </div>
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Source Name</label>
+                  <input type="text" name="name" class="form-control" value="{{ s.name }}" required>
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Priority (higher = prioritized)</label>
+                  <input type="number" name="priority" class="form-control" value="{{ s.priority }}" min="1" max="1000">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Max Results Per Run</label>
+                  <input type="number" name="max_results_per_run" class="form-control" value="{{ s.max_results_per_run }}" min="1" max="500">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Adapter ID</label>
+                  <input type="text" name="adapter_id" class="form-control" value="{{ s.adapter_id or '' }}">
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Supported Markets (comma-separated)</label>
+                  <input type="text" name="countries" class="form-control" value="{{ s.countries|join(', ') if s.countries else '' }}" placeholder="IT, DE, US, UAE">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Discovery Modes (comma-separated)</label>
+                  <input type="text" name="discovery_modes" class="form-control" value="{{ s.discovery_mode }}" placeholder="company_first, project_first">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Credential ENV Var Name (NO secrets)</label>
+                  <input type="text" name="credential_env_var" class="form-control" value="{{ s.credential_env_var or '' }}" placeholder="e.g. BRAVE_SEARCH_API_KEY">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Base URL (http/https)</label>
+                  <input type="url" name="base_url" class="form-control" value="{{ s.base_url or '' }}" placeholder="https://api.provider.com">
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Operator Instructions (Non-executable guidance)</label>
+                  <textarea name="operator_instructions" class="form-control" rows="2" placeholder="Search tips, query formats, rate-limit cautions...">{{ s.operator_instructions or '' }}</textarea>
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Notes</label>
+                  <textarea name="notes" class="form-control" rows="2" placeholder="Internal maintenance notes...">{{ s.notes or '' }}</textarea>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" name="requires_api_key" value="true" {% if s.requires_api_key %}checked{% endif %}>
+                  Requires API Key
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" name="enabled" value="true" {% if s.enabled %}checked{% endif %}>
+                  Source Enabled
+                </label>
+                <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditRow('edit-row-{{ s.id }}')">Cancel</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+                </div>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add New Source Card -->
+<div class="card" id="add-source-section" style="margin-bottom: 2rem;">
+  <div class="card-title">
+    <span>Add Discovery Source</span>
+    <span class="badge badge-info">Safe Config Only</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Register a new data stream or discovery source. Credentials must only be specified as environment variable names (never raw secrets). Safe protocols only (http/https). Instructions are stored strictly as text/guidance.
+  </p>
+  <form method="POST" action="/sales/sources/add" style="display: flex; flex-direction: column; gap: 1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Source ID *</label>
+        <input type="text" name="id" class="form-control" placeholder="e.g. germang_bim_portal" required pattern="^[a-zA-Z0-9_\-]+$">
+        <small style="color: var(--text-secondary); font-size: 0.7rem;">Unique identifier (alphanumeric, underscore, hyphen)</small>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Display Name *</label>
+        <input type="text" name="name" class="form-control" placeholder="e.g. German BIM Industry Portal" required>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Source Type *</label>
+        <select name="type" class="form-control" required>
+          {% for st in supported_source_types %}
+            <option value="{{ st }}">{{ st }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Adapter ID</label>
+        <input type="text" name="adapter_id" class="form-control" placeholder="e.g. generic_http, brave_search, manual">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Priority (1-1000)</label>
+        <input type="number" name="priority" class="form-control" value="100" min="1" max="1000">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Max Results Per Run</label>
+        <input type="number" name="max_results_per_run" class="form-control" value="50" min="1" max="500">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Supported Markets</label>
+        <input type="text" name="countries" class="form-control" placeholder="e.g. IT, DE, CH (blank for global)">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Discovery Modes</label>
+        <input type="text" name="discovery_modes" class="form-control" value="company_first, project_first" placeholder="company_first, project_first">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Base URL</label>
+        <input type="url" name="base_url" class="form-control" placeholder="https://api.source.com or directory URL">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Credential Environment Variable</label>
+        <input type="text" name="credential_env_var" class="form-control" placeholder="e.g. BRAVE_SEARCH_API_KEY (never enter secret keys!)">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Operator Instructions</label>
+        <textarea name="operator_instructions" class="form-control" rows="2" placeholder="Search keywords, filtering instructions, language guidelines..."></textarea>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Description & Notes</label>
+        <textarea name="description" class="form-control" rows="2" placeholder="Description of the source data, coverage, reliability..."></textarea>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 1.5rem; align-items: center;">
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="requires_api_key" value="true">
+        Requires API Key / Auth
+      </label>
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="enabled" value="true" checked>
+        Enabled immediately
+      </label>
+      <div style="margin-left: auto;">
+        <button type="submit" class="btn btn-primary">Create Source</button>
+      </div>
+    </div>
+  </form>
+</div>
+
 <!-- Manual Candidate Seed Input -->
-<div class="card">
+<div class="card" style="margin-bottom: 2rem;">
   <div class="card-title">
     <span>Manual Candidate Seed Input</span>
     <span class="badge badge-info">Standard Research Flow</span>
@@ -60,7 +384,7 @@
 
 <!-- Preview Confirmation Card (If Preview Staged) -->
 {% if preview %}
-<div class="card" style="border: 1px solid var(--border-focus); background: var(--bg-surface);">
+<div class="card" style="border: 1px solid var(--border-focus); background: var(--bg-surface); margin-top: 1.5rem;">
   <div class="card-title">
     <span>Stage 2: Confirm Historical Import</span>
     <span class="badge badge-warning">Awaiting Execution</span>
@@ -86,66 +410,16 @@
 </div>
 {% endif %}
 
-<!-- Source Registry Table -->
-<div class="card">
-  <div class="card-title">
-    <span>Registered Discovery Sources ({{ sources|length }})</span>
-  </div>
-  <div class="table-responsive">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Source Name</th>
-          <th>Type</th>
-          <th>Mode</th>
-          <th>Priority</th>
-          <th>Countries</th>
-          <th>Credential Status</th>
-          <th>Health Status</th>
-          <th>Success / Failure</th>
-          <th>Last Run</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for s in sources %}
-        <tr>
-          <td><strong>{{ s.name }}</strong></td>
-          <td><span class="badge badge-muted">{{ s.type }}</span></td>
-          <td>{{ s.discovery_mode }}</td>
-          <td>{{ s.priority }}</td>
-          <td>{{ s.countries|join(', ') if s.countries else 'Global' }}</td>
-          <td>
-            {% if s.requires_api_key %}
-              {% if s.config_error %}
-                <span class="badge badge-warning">Configuration error</span>
-              {% elif s.is_configured %}
-                <span class="badge badge-info">Configured</span>
-              {% else %}
-                <span class="badge badge-warning">Not configured</span>
-              {% endif %}
-            {% else %}
-              <span class="badge badge-muted">Public / Open</span>
-            {% endif %}
-          </td>
-          <td>
-            <span class="badge {% if s.status == 'operational' or s.status == 'healthy' %}badge-success{% else %}badge-warning{% endif %}">
-              {{ s.status }}
-            </span>
-          </td>
-          <td>{{ s.success_count }} / {{ s.failure_count }}</td>
-          <td>{{ s.last_success_at[:19] if s.last_success_at else 'Never' }}</td>
-          <td>
-            <form method="POST" action="/sales/discoveries/run" style="display:inline;">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <input type="hidden" name="sources" value="{{ s.id }}">
-              <button type="submit" class="btn btn-secondary btn-sm">Run Now</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+<script>
+function toggleEditRow(rowId) {
+  var row = document.getElementById(rowId);
+  if (row) {
+    if (row.style.display === 'none' || row.style.display === '') {
+      row.style.display = 'table-row';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+}
+</script>
 {% endblock %}

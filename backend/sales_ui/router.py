@@ -501,8 +501,17 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
                 priority=s.priority,
                 countries=s.countries,
                 requires_api_key=s.requires_api_key,
-                is_configured=is_conf,
-                config_error=config_error,
+                is_configured=s.get_credential_status() == "configured",
+                config_error=s.get_credential_status() == "configuration_error",
+                credential_status=s.get_credential_status(),
+                credential_env_var=s.credential_env_var,
+                adapter_id=s.adapter_id,
+                adapter_status=s.adapter_status,
+                max_results_per_run=s.max_results_per_run,
+                description=s.description,
+                operator_instructions=s.operator_instructions,
+                notes=s.notes,
+                base_url=s.base_url,
                 status=h.get("status", "operational"),
                 success_count=h.get("success_count", 0),
                 failure_count=h.get("failure_count", 0),
@@ -512,6 +521,7 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
             )
         )
 
+    from sales_engine.discovery_v2.source_registry import SUPPORTED_SOURCE_TYPES
     return render_console_template(
         request=request,
         name="sources.html",
@@ -519,11 +529,152 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
             "request": request,
             "active_tab": "sources",
             "sources": sources,
+            "supported_source_types": sorted(SUPPORTED_SOURCE_TYPES),
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
         },
     )
+
+
+@router.post("/sources/add")
+async def add_source_action(
+    request: Request,
+    id: str = Form(...),
+    name: str = Form(...),
+    type: str = Form(...),
+    description: str = Form(""),
+    priority: int = Form(100),
+    enabled: bool = Form(True),
+    discovery_modes: Optional[str] = Form("company_first"),
+    countries: Optional[str] = Form(""),
+    base_url: Optional[str] = Form(None),
+    requires_api_key: bool = Form(False),
+    credential_env_var: Optional[str] = Form(None),
+    max_results_per_run: int = Form(50),
+    adapter_id: Optional[str] = Form(None),
+    operator_instructions: str = Form(""),
+    notes: str = Form(""),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    registry = svcs["registry"]
+    countries_list = [c.strip() for c in countries.split(",") if c.strip()] if countries else []
+    modes_list = [m.strip() for m in discovery_modes.split(",") if m.strip()] if discovery_modes else ["company_first"]
+    try:
+        sc = registry.register_source({
+            "id": id.strip(),
+            "name": name.strip(),
+            "type": type.strip(),
+            "description": description.strip(),
+            "priority": priority,
+            "enabled": enabled,
+            "discovery_mode": modes_list,
+            "countries": countries_list,
+            "base_url": base_url.strip() if base_url else None,
+            "requires_api_key": requires_api_key,
+            "credential_env_var": credential_env_var.strip() if credential_env_var else None,
+            "max_results_per_run": max_results_per_run,
+            "adapter_id": adapter_id.strip() if adapter_id else None,
+            "operator_instructions": operator_instructions.strip(),
+            "notes": notes.strip(),
+        })
+        msg = f"Source '{sc.name}' successfully added."
+        return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+    except Exception as e:
+        err = f"Failed to add source: {e}"
+        return RedirectResponse(f"/sales/sources?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/sources/{source_id}/toggle")
+async def toggle_source_action(
+    source_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    registry = svcs["registry"]
+    sc = registry.get_source(source_id)
+    if not sc:
+        return RedirectResponse(f"/sales/sources?error=Source '{source_id}' not found", status_code=status.HTTP_303_SEE_OTHER)
+    if sc.enabled:
+        registry.disable_source(source_id)
+        msg = f"Source '{sc.name}' disabled."
+    else:
+        registry.enable_source(source_id)
+        msg = f"Source '{sc.name}' enabled."
+    return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/sources/{source_id}/test")
+async def test_source_action(
+    source_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    registry = svcs["registry"]
+    res = registry.test_source(source_id)
+    if res.get("status") in ("AVAILABLE", "available"):
+        msg = f"Source '{source_id}' test PASSED: {res.get('message', 'Available')}"
+        return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+    else:
+        err = f"Source '{source_id}' test {res.get('status')}: {res.get('error') or res.get('message')}"
+        return RedirectResponse(f"/sales/sources?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/sources/{source_id}/update")
+async def update_source_action(
+    source_id: str,
+    name: Optional[str] = Form(None),
+    priority: Optional[int] = Form(None),
+    enabled: Optional[bool] = Form(None),
+    discovery_modes: Optional[str] = Form(None),
+    countries: Optional[str] = Form(None),
+    base_url: Optional[str] = Form(None),
+    requires_api_key: Optional[bool] = Form(None),
+    credential_env_var: Optional[str] = Form(None),
+    max_results_per_run: Optional[int] = Form(None),
+    adapter_id: Optional[str] = Form(None),
+    operator_instructions: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    registry = svcs["registry"]
+    updates: Dict[str, Any] = {}
+    if name is not None:
+        updates["name"] = name.strip()
+    if priority is not None:
+        updates["priority"] = priority
+    if enabled is not None:
+        updates["enabled"] = enabled
+    if discovery_modes is not None:
+        updates["discovery_mode"] = [m.strip() for m in discovery_modes.split(",") if m.strip()]
+    if countries is not None:
+        updates["countries"] = [c.strip() for c in countries.split(",") if c.strip()]
+    if base_url is not None:
+        updates["base_url"] = base_url.strip() if base_url else None
+    if requires_api_key is not None:
+        updates["requires_api_key"] = requires_api_key
+    if credential_env_var is not None:
+        updates["credential_env_var"] = credential_env_var.strip() if credential_env_var else None
+    if max_results_per_run is not None:
+        updates["max_results_per_run"] = max_results_per_run
+    if adapter_id is not None:
+        updates["adapter_id"] = adapter_id.strip() if adapter_id else None
+    if operator_instructions is not None:
+        updates["operator_instructions"] = operator_instructions.strip()
+    if notes is not None:
+        updates["notes"] = notes.strip()
+
+    try:
+        updated = registry.update_source(source_id, updates)
+        if not updated:
+            return RedirectResponse(f"/sales/sources?error=Source '{source_id}' not found", status_code=status.HTTP_303_SEE_OTHER)
+        msg = f"Source '{updated.name}' updated successfully."
+        return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+    except Exception as e:
+        return RedirectResponse(f"/sales/sources?error=Failed to update source: {e}", status_code=status.HTTP_303_SEE_OTHER)
+
 
 
 @router.post("/sources/manual-seed")

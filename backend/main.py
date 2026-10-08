@@ -1477,25 +1477,120 @@ def list_watchlist_endpoint():
 
 @app.get("/api/sales/sources", tags=["Phase10-Discovery"])
 def list_sources_endpoint(enabled_only: bool = False):
-    """List all registered discovery sources with real-time health metrics."""
+    """List all registered discovery sources with real-time health metrics and credential status."""
     _, registry, _, _ = get_discovery_services()
     sources = registry.list_sources(enabled_only=enabled_only)
     health = registry.get_health_summary()
     res = []
     for s in sources:
         h = health.get(s.id, health.get(s.name, {}))
-        res.append({
-            "id": s.id,
-            "name": s.name,
-            "type": s.type,
-            "enabled": s.enabled,
-            "discovery_mode": s.discovery_mode,
-            "priority": s.priority,
-            "countries": s.countries,
-            "requires_api_key": s.requires_api_key,
-            "health": h,
-        })
+        d = s.to_dict()
+        d["health"] = h
+        res.append(d)
     return {"total": len(res), "sources": res}
+
+
+@app.get("/api/sales/sources/export", tags=["Phase10-Discovery"])
+def export_sources_endpoint(format: str = "json"):
+    """Export discovery source configurations with zero secrets."""
+    from fastapi.responses import Response
+    _, registry, _, _ = get_discovery_services()
+    exported_str = registry.export_sources(format=format)
+    media_type = "application/x-yaml" if format.lower() == "yaml" else "application/json"
+    return Response(content=exported_str, media_type=media_type)
+
+
+@app.get("/api/sales/sources/{source_id}", tags=["Phase10-Discovery"])
+def get_source_endpoint(source_id: str):
+    """Get single source configuration and health."""
+    _, registry, _, _ = get_discovery_services()
+    s = registry.get_source(source_id)
+    if not s:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+    health = registry.get_health_summary().get(s.id, {})
+    d = s.to_dict()
+    d["health"] = health
+    return d
+
+
+@app.post("/api/sales/sources", tags=["Phase10-Discovery"])
+async def create_source_endpoint(request: Request):
+    """Create a new discovery source with taxonomy and URL validation."""
+    _, registry, _, _ = get_discovery_services()
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    payload_str = json.dumps(payload)
+    forbidden_tokens = ["sk-", "Bearer ", "password", "api_secret", "client_secret"]
+    for tok in forbidden_tokens:
+        if tok in payload_str:
+            raise HTTPException(status_code=400, detail=f"Source configuration payload must not contain secrets or credentials: '{tok}'")
+
+    try:
+        sc = registry.register_source(payload)
+        return sc.to_dict()
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@app.post("/api/sales/sources/{source_id}/update", tags=["Phase10-Discovery"])
+async def update_source_endpoint(source_id: str, request: Request):
+    """Update an existing discovery source."""
+    _, registry, _, _ = get_discovery_services()
+    if not registry.get_source(source_id):
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    payload_str = json.dumps(payload)
+    forbidden_tokens = ["sk-", "Bearer ", "password", "api_secret", "client_secret"]
+    for tok in forbidden_tokens:
+        if tok in payload_str:
+            raise HTTPException(status_code=400, detail=f"Source configuration payload must not contain secrets or credentials: '{tok}'")
+
+    try:
+        sc = registry.update_source(source_id, payload)
+        return sc.to_dict()
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@app.post("/api/sales/sources/{source_id}/enable", tags=["Phase10-Discovery"])
+def enable_source_endpoint(source_id: str):
+    """Enable a discovery source."""
+    _, registry, _, _ = get_discovery_services()
+    try:
+        sc = registry.enable_source(source_id)
+        return {"status": "enabled", "source_id": source_id, "source": sc.to_dict()}
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+
+
+@app.post("/api/sales/sources/{source_id}/disable", tags=["Phase10-Discovery"])
+def disable_source_endpoint(source_id: str):
+    """Disable a discovery source."""
+    _, registry, _, _ = get_discovery_services()
+    try:
+        sc = registry.disable_source(source_id)
+        return {"status": "disabled", "source_id": source_id, "source": sc.to_dict()}
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+
+
+@app.post("/api/sales/sources/{source_id}/test", tags=["Phase10-Discovery"])
+def test_source_endpoint(source_id: str):
+    """Safely test connection and availability of a discovery source."""
+    _, registry, _, _ = get_discovery_services()
+    res = registry.test_source(source_id)
+    if res.get("status") == "NOT_AVAILABLE" and "not found" in res.get("error", "").lower():
+        raise HTTPException(status_code=404, detail=res.get("error"))
+    return res
 
 
 @app.post("/api/sales/sources/import", tags=["Phase10-Discovery"])
