@@ -70,8 +70,17 @@ from sales_engine.inbox.sync import InboxSyncManager
 from sales_engine.inbox.reply_sender import ReplySendOrchestrator
 from sales_engine.inbox.classifier import ReplyClassifier
 from sales_engine.inbox.suggestion import ReplySuggestionEngine
-from sales_engine.inbox.providers.mock import MockMailboxProvider
 from sales_engine.inbox.models import ConversationEvent
+from sales_engine.inbox.providers.mock import MockMailboxProvider
+
+# Phase 12 Analytics and Learning Loop
+from sales_engine.analytics import (
+    AnalyticsStore,
+    AnalyticsProjector,
+    AnalyticsMetricsCalculator,
+    RecommendationEngine,
+    ModelEvaluator,
+)
 
 router = APIRouter(prefix="/sales", tags=["Sales-Console"])
 
@@ -125,6 +134,12 @@ def get_console_services():
         provider=inbox_provider,
     )
 
+    analytics_store = AnalyticsStore(db_path=cand_store.db_path)
+    analytics_projector = AnalyticsProjector(analytics_store=analytics_store, db_path=cand_store.db_path)
+    analytics_metrics = AnalyticsMetricsCalculator(analytics_store=analytics_store)
+    analytics_recommender = RecommendationEngine(analytics_store=analytics_store, metrics_calculator=analytics_metrics)
+    analytics_evaluator = ModelEvaluator(analytics_store=analytics_store)
+
     return {
         "cand_store": cand_store,
         "registry": registry,
@@ -143,6 +158,11 @@ def get_console_services():
         "inbox_suggestion_engine": inbox_suggestion_engine,
         "inbox_sync_mgr": inbox_sync_mgr,
         "inbox_reply_sender": inbox_reply_sender,
+        "analytics_store": analytics_store,
+        "analytics_projector": analytics_projector,
+        "analytics_metrics": analytics_metrics,
+        "analytics_recommender": analytics_recommender,
+        "analytics_evaluator": analytics_evaluator,
     }
 
 
@@ -2249,3 +2269,93 @@ async def global_search_view(request: Request, q: Optional[str] = Query(None)):
             "email_send_enabled": is_email_send_enabled(),
         },
     )
+
+
+# =========================================================================
+# Phase 12 Analytics & Learning Loop Console
+# =========================================================================
+@router.get("/analytics", response_class=HTMLResponse)
+def get_sales_analytics_view(
+    request: Request,
+    tab: str = Query("overview"),
+    window: str = Query("all"),
+):
+    """
+    Operator Console Analytics View.
+    Strictly uses 0 LLM calls.
+    """
+    svcs = get_console_services()
+    store = svcs["analytics_store"]
+    metrics_calc = svcs["analytics_metrics"]
+    recommender = svcs["analytics_recommender"]
+    evaluator = svcs["analytics_evaluator"]
+
+    # Trigger idempotent projection if events count is 0
+    if store.count_events() == 0:
+        svcs["analytics_projector"].run_projection()
+
+    # Seed baseline evaluation if empty
+    if not store.list_evaluation_runs():
+        evaluator.seed_weak_model_baseline()
+
+    funnel = metrics_calc.get_funnel_summary(window=window)
+    diagnostics = store.get_diagnostics()
+    sources = metrics_calc.get_source_metrics(window=window)
+    markets = metrics_calc.get_market_metrics(window=window)
+    contacts = metrics_calc.get_contact_metrics(window=window)
+    messages = metrics_calc.get_message_metrics(window=window)
+    replies = metrics_calc.get_reply_categories_metrics(window=window)
+    relationships = metrics_calc.get_relationship_type_metrics(window=window)
+    model_runs = store.list_evaluation_runs()
+    recommendations = store.list_recommendations()
+    if not recommendations:
+        recommendations = recommender.generate_recommendations()
+
+    return render_console_template(
+        request=request,
+        name="analytics.html",
+        context={
+            "request": request,
+            "active_tab": "analytics",
+            "active_section": tab,
+            "window": window,
+            "funnel": funnel,
+            "diagnostics": diagnostics,
+            "sources": sources,
+            "markets": markets,
+            "contacts": contacts,
+            "messages": messages,
+            "replies": replies,
+            "relationships": relationships,
+            "model_runs": model_runs,
+            "recommendations": recommendations,
+            "email_send_enabled": is_email_send_enabled(),
+        },
+    )
+
+
+@router.post("/analytics/recommendations/{recommendation_id}/accept")
+async def console_accept_recommendation(
+    request: Request,
+    recommendation_id: str,
+    _=Depends(validate_csrf),
+):
+    """
+    Accepts recommendation via operator console form.
+    CRITICAL: Only records the human decision; zero automatic production mutations.
+    """
+    svcs = get_console_services()
+    svcs["analytics_recommender"].accept_recommendation(recommendation_id, reviewed_by="operator")
+    return RedirectResponse(url="/sales/analytics?tab=recommendations", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/analytics/recommendations/{recommendation_id}/reject")
+async def console_reject_recommendation(
+    request: Request,
+    recommendation_id: str,
+    _=Depends(validate_csrf),
+):
+    """Rejects recommendation via operator console form."""
+    svcs = get_console_services()
+    svcs["analytics_recommender"].reject_recommendation(recommendation_id, reviewed_by="operator")
+    return RedirectResponse(url="/sales/analytics?tab=recommendations", status_code=status.HTTP_303_SEE_OTHER)
