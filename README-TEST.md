@@ -36,6 +36,7 @@
 | Phase 10 | 245 | 245 | 0 | 0 | 0 | 0 |
 | Phase 10.5 | 71 | 68 | 0 | 0 | 3 | 0 |
 | Phase 11 | 54 | 51 | 0 | 0 | 3 | 0 |
+| Phase 12 | 54 | 51 | 0 | 0 | 3 | 0 |
 
 
 ## Phase 7 Reconciliation & Case Count Model
@@ -375,6 +376,96 @@ Phase 11 implements the multi-provider mailbox abstraction, idempotent inbox syn
   - `GmailMailboxProvider`: NOT_CONFIGURED / NOT_RUN
   - `GraphMailboxProvider`: NOT_CONFIGURED / NOT_RUN
   - `ImapMailboxProvider`: NOT_CONFIGURED / NOT_RUN
+
+## Phase 12 Case Count & Architecture Model (Analytics & Learning Loop Golden QA)
+Phase 12 implements decoupled analytics projections, deterministic funnel calculation, multi-dimensional slicing (sources, markets, roles, messages, replies, opportunities), statistical small-sample safety gates, offline model evaluation benchmarks, and human-in-the-loop recommendation loops:
+- **Total Golden Cases in Catalog (`tests/golden/phase12_analytics.json` & `tests/reports/phase12_latest.json`):** 54 cases
+  - **Passed (Deterministic):** 51 test cases covering all critical safety gates, counting foundations, small sample guardrails, taxonomy separation, multi-dimensional slices, model evaluation, and human decision workflows:
+    - **Critical Safety Gates (`P12-GOLD-001` .. `012`):** 12/12 PASS
+      - `P12-GOLD-001`: Analytics never alters Phase 5 scoring data or configurations
+      - `P12-GOLD-002`: Analytics never mutates Phase 9 suppression state
+      - `P12-GOLD-003`: Analytics never mutates discovery source configurations, priorities, or limits
+      - `P12-GOLD-004`: Analytics never mutates hourly or daily send limits
+      - `P12-GOLD-005`: Recommendation acceptance records operator decision/audit only, zero operational mutation
+      - `P12-GOLD-006`: Offline model evaluation performs exactly zero live email/mailbox sends
+      - `P12-GOLD-007`: Normal analytics UI rendering executes exactly zero LLM calls
+      - `P12-GOLD-008`: Analytics GET endpoints are strictly read-only and non-mutating
+      - `P12-GOLD-009`: Operational stores (Phase 9–11) remain authoritative source of truth
+      - `P12-GOLD-010`: Projection rebuild is read-only for operational stores
+      - `P12-GOLD-011`: Zero autonomous outreach optimization (no automatic dispatch or prompt deployment)
+      - `P12-GOLD-012`: Release packaging denylist excludes runtime databases and secrets
+    - **Projection & Counting Foundations (`P12-COUNT-001` .. `006`):** 6/6 PASS
+      - `P12-COUNT-001`: Projection idempotency verified under repeated execution (0 duplicate events)
+      - `P12-COUNT-002`: Incremental projection maps newly added operational records accurately
+      - `P12-COUNT-003`: Canonical funnel preserves ordered stages without inferred steps
+      - `P12-COUNT-004`: All conversion rates expose numerator, denominator, rate, and sample_size
+      - `P12-COUNT-005`: Human reply rates strictly exclude auto-replies and bounces
+      - `P12-COUNT-006`: Provenance distinguishes live system telemetry from historical imports
+    - **Small Sample Guardrails (`P12-SAFE-001` .. `004`):** 4/4 PASS
+      - `P12-SAFE-001`: Comparison guard blocks ranking claims when sample size < 10
+      - `P12-SAFE-002`: Recommendation guard blocks performance claims when sample size < 20
+      - `P12-SAFE-003`: Historical N=2 positive outcomes remain qualitative only
+      - `P12-SAFE-004`: Slices below threshold return explicit `insufficient_sample` flag
+    - **Taxonomy & Separation (`P12-SEPR-001` .. `003`):** 3/3 PASS
+      - `P12-SEPR-001`: Service buyer and partner categories remain distinct
+      - `P12-SEPR-002`: Opportunity taxonomy keeps BIM, automation, and partner types distinct
+      - `P12-SEPR-003`: Partner meetings are never counted as direct BIM sales conversions
+    - **Multi-Dimensional Slices (`P12-SLICE-001` .. `005`):** 5/5 PASS
+      - `P12-SLICE-001`: Source analytics aggregates observations, sends, and replies safely
+      - `P12-SLICE-002`: Market slices compute metrics without automatic prioritization
+      - `P12-SLICE-003`: Contact role analytics evaluates business roles without sensitive inference
+      - `P12-SLICE-004`: Message analytics aggregates length and tone without tracking pixels
+      - `P12-SLICE-005`: Reply intent breakdown slices positive, question, referral, and objection
+    - **Time Windows & Diagnostics (`P12-TIME-001` .. `003`):** 3/3 PASS
+      - `P12-TIME-001`: Standard time windows (7d, 30d, 90d, all) filter events deterministically
+      - `P12-TIME-002`: Custom date boundaries filter inclusive telemetry accurately
+      - `P12-TIME-003`: Missing dimension values render as unknown/null without silent imputation
+    - **Model Evaluation Framework (`P12-EVAL-001` .. `006`):** 6/6 PASS
+      - `P12-EVAL-001`: Registry persists model name, version, quantization, and hardware label
+      - `P12-EVAL-002`: Offline evaluation evaluates 6 core tasks independently
+      - `P12-EVAL-003`: Offline model run performs 0 sends and alters 0 approvals
+      - `P12-EVAL-004`: Fixture versioning (`phase12-v1`) enables consistent baseline comparisons
+      - `P12-EVAL-005`: Unmeasured benchmark counters (speed, VRAM, RAM) remain strictly null
+      - `P12-EVAL-006`: Weak model baseline preserves realistic outcome distribution
+    - **Human Feedback & Learning Loop (`P12-HUMAN-001` .. `004`):** 4/4 PASS
+      - `P12-HUMAN-001`: Human edit distance derives explicit none/minor/major/rewrite labels
+      - `P12-HUMAN-002`: Draft acceptance and rejection rates include audited sample sizes
+      - `P12-HUMAN-003`: Recommendation engine requires computed metric evidence
+      - `P12-HUMAN-004`: Recommendation acceptance updates audit metadata only
+    - **API & UI Surface Verification (`P12-UIAPI-001` .. `005`):** 5/5 PASS
+      - `P12-UIAPI-001`: All 10 Analytics REST endpoints return valid 200 schemas
+      - `P12-UIAPI-002`: Analytics GET endpoints strictly reject state mutations
+      - `P12-UIAPI-003`: Console Analytics UI renders all 10 required sections
+      - `P12-UIAPI-004`: Normal UI rendering generates exactly zero LLM invocations
+      - `P12-UIAPI-005`: UI renders Insufficient Sample badges for low-volume slices
+    - **Diagnostics, Export & Reliability (`P12-EXPORT-001` .. `003`):** 3/3 PASS
+      - `P12-EXPORT-001`: Export service produces sanitized CSV and JSON with zero secret leakage
+      - `P12-EXPORT-002`: Data quality diagnostics expose factual counts of missing/unknown attributes
+      - `P12-EXPORT-003`: Analytics store schema reinitialization is safe and idempotent
+  - **Weak-Model Deferred Quality (`P12-SEM-001` .. `003`):** 3 cases marked `DEFERRED_MODEL` under `qwen2.5:1.5b` policy:
+    - `P12-SEM-001`: Complex semantic nuance and pragmatic intent fallback
+    - `P12-SEM-002`: High-complexity outbound email tone adaptation
+    - `P12-SEM-003`: Multi-turn conversational nuance deferred to 14B/32B benchmarks
+- **Critical Safety Results:** 12/12 PASS (100%)
+- **Deterministic Pass Rate:** 100.0% (51 / 51 deterministic cases pass)
+- **Mandatory Regression Invariants (`P12-REG-001` .. `020`):** 21/21 PASS (100%)
+- **Full Repository Suite:** 816 passed, 8 skipped, 0 failed
+- **QA Integrity Counters:**
+  - `false_pass_count = 0`
+  - `unmapped_deterministic_cases = 0`
+- **Audit & Safety Counters:**
+  - `duplicate_analytics_event_count = 0`
+  - `double_count_violation_count = 0`
+  - `denominator_violation_count = 0`
+  - `small_sample_claim_violation_count = 0`
+  - `phase5_mutation_count = 0`
+  - `suppression_mutation_count = 0`
+  - `source_config_mutation_count = 0`
+  - `send_limit_mutation_count = 0`
+  - `analytics_llm_render_call_count = 0`
+  - `model_evaluation_send_count = 0`
+  - `secret_exposure_count = 0`
+  - `runtime_db_packaged_count = 0`
 
 ## Failures
 _No failures detected._

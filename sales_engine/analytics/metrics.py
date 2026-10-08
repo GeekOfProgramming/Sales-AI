@@ -69,9 +69,11 @@ class AnalyticsMetricsCalculator:
             since_dt = now - timedelta(days=30)
         elif window == "90d":
             since_dt = now - timedelta(days=90)
-        elif window == "custom" and start_date:
+        if window == "custom" and start_date:
             try:
                 since_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+                if since_dt.tzinfo is None:
+                    since_dt = since_dt.replace(tzinfo=timezone.utc)
             except Exception:
                 since_dt = None
 
@@ -79,6 +81,8 @@ class AnalyticsMetricsCalculator:
         if window == "custom" and end_date:
             try:
                 until_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=timezone.utc)
             except Exception:
                 until_dt = None
 

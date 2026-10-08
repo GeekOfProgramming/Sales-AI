@@ -1,0 +1,434 @@
+[
+  {
+    "case_id": "P12-GOLD-001",
+    "phase": "Phase 12",
+    "title": "Analytics Never Changes Phase 5 Score",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-002",
+    "phase": "Phase 12",
+    "title": "Analytics Never Changes Suppression",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-003",
+    "phase": "Phase 12",
+    "title": "Analytics Never Changes Source Configuration",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-004",
+    "phase": "Phase 12",
+    "title": "Analytics Never Changes Send Limits",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-005",
+    "phase": "Phase 12",
+    "title": "Recommendation Acceptance Records Decision Only",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-006",
+    "phase": "Phase 12",
+    "title": "Model Evaluation Sends Zero Emails",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-007",
+    "phase": "Phase 12",
+    "title": "Normal Analytics UI Uses Zero LLM Calls",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-008",
+    "phase": "Phase 12",
+    "title": "No Mutating GET",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-009",
+    "phase": "Phase 12",
+    "title": "Operational Stores Remain Source of Truth",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-010",
+    "phase": "Phase 12",
+    "title": "Rebuild Is Read-Only",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-011",
+    "phase": "Phase 12",
+    "title": "No Autonomous Outreach Optimization",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-GOLD-012",
+    "phase": "Phase 12",
+    "title": "Release Contains No Runtime DB / Secrets",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P12-COUNT-001",
+    "phase": "Phase 12",
+    "title": "Projection Idempotency Under Repeated Execution",
+    "section": "Projection & Counting",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-COUNT-002",
+    "phase": "Phase 12",
+    "title": "Incremental Projection On New Operational State",
+    "section": "Projection & Counting",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-COUNT-003",
+    "phase": "Phase 12",
+    "title": "Canonical Funnel Preserves Ordered Stages Without Inference",
+    "section": "Projection & Counting",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-COUNT-004",
+    "phase": "Phase 12",
+    "title": "Rates Expose Exact Numerator, Denominator and Sample Size",
+    "section": "Projection & Counting",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-COUNT-005",
+    "phase": "Phase 12",
+    "title": "Human Reply Rates Strictly Exclude Auto-Replies and Bounces",
+    "section": "Projection & Counting",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-COUNT-006",
+    "phase": "Phase 12",
+    "title": "Provenance Preserves Live vs Historical Import Without Inferred Telemetry",
+    "section": "Projection & Counting",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SAFE-001",
+    "phase": "Phase 12",
+    "title": "Comparison Guard Blocks Claims When N < 10",
+    "section": "Small Sample Safety",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SAFE-002",
+    "phase": "Phase 12",
+    "title": "Recommendation Guard Blocks Claims When N < 20",
+    "section": "Small Sample Safety",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SAFE-003",
+    "phase": "Phase 12",
+    "title": "Historical N=2 Outcomes Remain Strictly Qualitative",
+    "section": "Small Sample Safety",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SAFE-004",
+    "phase": "Phase 12",
+    "title": "Sub-threshold Metrics Return Explicit Insufficient Sample Flag",
+    "section": "Small Sample Safety",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SEPR-001",
+    "phase": "Phase 12",
+    "title": "Relationship Taxonomy Separates Buyer vs Partner Categories",
+    "section": "Taxonomy & Separation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SEPR-002",
+    "phase": "Phase 12",
+    "title": "Opportunity Taxonomy Keeps BIM, Automation, and Partner Types Distinct",
+    "section": "Taxonomy & Separation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SEPR-003",
+    "phase": "Phase 12",
+    "title": "Partner Meetings Are Never Counted As Direct BIM Sales Conversions",
+    "section": "Taxonomy & Separation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SLICE-001",
+    "phase": "Phase 12",
+    "title": "Source Analytics Aggregates Observations, Sends, and Conversions Without Priority Mutation",
+    "section": "Multi-Dimensional Slices",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SLICE-002",
+    "phase": "Phase 12",
+    "title": "Market Slices Compute Discovered, Qualified, and Rates Without Auto-Prioritization",
+    "section": "Multi-Dimensional Slices",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SLICE-003",
+    "phase": "Phase 12",
+    "title": "Contact Role Analytics Evaluates Technical vs Business Mailboxes Without Protected Demographics",
+    "section": "Multi-Dimensional Slices",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SLICE-004",
+    "phase": "Phase 12",
+    "title": "Message Analytics Aggregates Word Count, Tone, Service Without Tracking Pixels",
+    "section": "Multi-Dimensional Slices",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SLICE-005",
+    "phase": "Phase 12",
+    "title": "Reply Intent Breakdown Accurately Slices Positive, Question, Referral, and Objection",
+    "section": "Multi-Dimensional Slices",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-TIME-001",
+    "phase": "Phase 12",
+    "title": "Standard Time Windows (7d, 30d, 90d, All-Time) Filter Events Deterministically",
+    "section": "Time Windows & Diagnostics",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-TIME-002",
+    "phase": "Phase 12",
+    "title": "Custom Date Boundaries Bound Inclusive Telemetry Accurately",
+    "section": "Time Windows & Diagnostics",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-TIME-003",
+    "phase": "Phase 12",
+    "title": "Missing Metadata Renders As Unknown/Null Without Silent Imputation",
+    "section": "Time Windows & Diagnostics",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EVAL-001",
+    "phase": "Phase 12",
+    "title": "Model Evaluation Registry Persists Version, Quantization, and Hardware Label",
+    "section": "Model Evaluation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EVAL-002",
+    "phase": "Phase 12",
+    "title": "Task Breakdown Evaluates 6 Core Offline Tasks Independently",
+    "section": "Model Evaluation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EVAL-003",
+    "phase": "Phase 12",
+    "title": "Offline Model Run Never Sends Mail or Alters Production Approvals",
+    "section": "Model Evaluation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EVAL-004",
+    "phase": "Phase 12",
+    "title": "Fixture Versioning (v1.0) Enables Consistent Baseline Across Model Sizes",
+    "section": "Model Evaluation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EVAL-005",
+    "phase": "Phase 12",
+    "title": "Unmeasured Benchmark Counters (Speed, VRAM) Remain Strictly Null",
+    "section": "Model Evaluation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EVAL-006",
+    "phase": "Phase 12",
+    "title": "Weak Model Baseline Preserves Realistic Outcome Distribution",
+    "section": "Model Evaluation",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-HUMAN-001",
+    "phase": "Phase 12",
+    "title": "Human Edit Distance Derives Explicit None/Minor/Major/Rewrite Labels",
+    "section": "Human Learning Loop",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-HUMAN-002",
+    "phase": "Phase 12",
+    "title": "Draft Acceptance and Rejection Rates Include Audited Sample Sizes",
+    "section": "Human Learning Loop",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-HUMAN-003",
+    "phase": "Phase 12",
+    "title": "Recommendation Engine Requires Computed Metric Evidence Before Proposing Changes",
+    "section": "Human Learning Loop",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-HUMAN-004",
+    "phase": "Phase 12",
+    "title": "Recommendation Acceptance Updates Status/Audit Metadata Only Without Live Mutation",
+    "section": "Human Learning Loop",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-UIAPI-001",
+    "phase": "Phase 12",
+    "title": "Analytics API Endpoints Return Valid Schemas Across All Slices",
+    "section": "API & UI Surface",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-UIAPI-002",
+    "phase": "Phase 12",
+    "title": "Analytics GET Endpoints Strictly Reject State Mutations",
+    "section": "API & UI Surface",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-UIAPI-003",
+    "phase": "Phase 12",
+    "title": "Console Analytics UI Renders All 10 Required Sections Accurately",
+    "section": "API & UI Surface",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-UIAPI-004",
+    "phase": "Phase 12",
+    "title": "Normal Analytics UI Rendering Generates Exactly Zero LLM Invocations",
+    "section": "API & UI Surface",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-UIAPI-005",
+    "phase": "Phase 12",
+    "title": "UI Accurately Renders Insufficient Sample Badges For Low-Volume Slices",
+    "section": "API & UI Surface",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EXPORT-001",
+    "phase": "Phase 12",
+    "title": "Export Service Outputs Sanitized CSV and JSON With Zero Secret Leakage",
+    "section": "Export & Reliability",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EXPORT-002",
+    "phase": "Phase 12",
+    "title": "Data Quality Diagnostics Expose Factual Unknown Counts",
+    "section": "Export & Reliability",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-EXPORT-003",
+    "phase": "Phase 12",
+    "title": "Analytics Store Reinitialization And Event Insertion Are Idempotent",
+    "section": "Export & Reliability",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SEM-001",
+    "phase": "Phase 12",
+    "title": "Semantic Intent Nuance Deferred For 1.5B (qwen2.5:1.5b)",
+    "section": "Weak-Model Deferred",
+    "mode": "deferred_model",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SEM-002",
+    "phase": "Phase 12",
+    "title": "High-Complexity Outbound Email Tone Adaptation Deferred",
+    "section": "Weak-Model Deferred",
+    "mode": "deferred_model",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P12-SEM-003",
+    "phase": "Phase 12",
+    "title": "Multi-Turn Conversational Nuance Deferred To Future 14B/32B Models",
+    "section": "Weak-Model Deferred",
+    "mode": "deferred_model",
+    "critical_safety": false
+  }
+]

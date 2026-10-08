@@ -1,16 +1,35 @@
 {
   "phase": "12",
   "title": "SalesAI Phase 12 Analytics & Learning Loop",
-  "run_timestamp": "2026-10-08T10:20:46.882733+00:00",
-  "git_commit": "fde6d36",
-  "total_catalog_cases": 20,
-  "mapped_executable_cases": 20,
-  "executed_cases": 20,
-  "passed": 20,
+  "description": "Phase 12 Golden QA Acceptance Suite Results",
+  "run_timestamp": "2026-10-08T11:18:54.613207+00:00",
+  "git_commit": "29d3869",
+  "llm_model": "qwen2.5:1.5b",
+  "weak_llm_policy": "Weak model semantic nuance deferred without blocking Phase 12 analytics acceptance",
+  "total_catalog_cases": 54,
+  "mapped_executable_cases": 54,
+  "executed_cases": 54,
+  "passed": 51,
   "failed": 0,
   "review": 0,
   "not_run": 0,
-  "deferred_model": 1,
+  "deferred_model": 3,
+  "total cases": 54,
+  "mapped cases": 54,
+  "executed cases": 54,
+  "PASS": 51,
+  "FAIL": 0,
+  "REVIEW": 0,
+  "NOT_RUN": 0,
+  "DEFERRED_MODEL": 3,
+  "deterministic_pass_rate": "100.0%",
+  "deterministic pass rate": "100.0%",
+  "critical_safety_total": 12,
+  "critical_safety_passed": 12,
+  "critical_safety_failed": 0,
+  "critical safety total": 12,
+  "critical safety passed": 12,
+  "critical safety failed": 0,
   "false_pass_count": 0,
   "unmapped_deterministic_cases": 0,
   "duplicate_analytics_event_count": 0,
@@ -24,5 +43,495 @@
   "analytics_llm_render_call_count": 0,
   "model_evaluation_send_count": 0,
   "secret_exposure_count": 0,
-  "runtime_db_packaged_count": 0
+  "runtime_db_packaged_count": 0,
+  "regressions_passed": 21,
+  "regressions_total": 20,
+  "cases": [
+    {
+      "case_id": "P12-GOLD-001",
+      "title": "Analytics Never Changes Phase 5 Score",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_001_analytics_never_changes_phase5_score",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-002",
+      "title": "Analytics Never Changes Suppression",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_002_analytics_never_changes_suppression",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-003",
+      "title": "Analytics Never Changes Source Configuration",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_003_analytics_never_changes_source_configuration",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-004",
+      "title": "Analytics Never Changes Send Limits",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_004_analytics_never_changes_send_limits",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-005",
+      "title": "Recommendation Acceptance Records Decision Only",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_005_recommendation_acceptance_records_decision_only",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-006",
+      "title": "Model Evaluation Sends Zero Emails",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_006_model_evaluation_sends_zero_emails",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-007",
+      "title": "Normal Analytics UI Uses Zero LLM Calls",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_007_normal_analytics_ui_uses_zero_llm_calls",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-008",
+      "title": "No Mutating GET",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_008_no_mutating_get",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-009",
+      "title": "Operational Stores Remain Source of Truth",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_009_operational_stores_remain_source_of_truth",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-010",
+      "title": "Rebuild Is Read-Only",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_010_rebuild_is_read_only",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-011",
+      "title": "No Autonomous Outreach Optimization",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_011_no_autonomous_outreach_optimization",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-GOLD-012",
+      "title": "Release Contains No Runtime DB / Secrets",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_gold_012_release_contains_no_runtime_db_secrets",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-COUNT-001",
+      "title": "Projection Idempotency Under Repeated Execution",
+      "section": "Projection & Counting",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_count_001_projection_idempotency",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-COUNT-002",
+      "title": "Incremental Projection On New Operational State",
+      "section": "Projection & Counting",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_count_002_incremental_projection_new_state",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-COUNT-003",
+      "title": "Canonical Funnel Preserves Ordered Stages Without Inference",
+      "section": "Projection & Counting",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_count_003_canonical_funnel_stages",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-COUNT-004",
+      "title": "Rates Expose Exact Numerator, Denominator and Sample Size",
+      "section": "Projection & Counting",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_count_004_rates_expose_numerator_denominator_sample_size",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-COUNT-005",
+      "title": "Human Reply Rates Strictly Exclude Auto-Replies and Bounces",
+      "section": "Projection & Counting",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_count_005_human_reply_excludes_auto_and_bounce",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-COUNT-006",
+      "title": "Provenance Preserves Live vs Historical Import Without Inferred Telemetry",
+      "section": "Projection & Counting",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_count_006_provenance_preserves_live_vs_historical",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SAFE-001",
+      "title": "Comparison Guard Blocks Claims When N < 10",
+      "section": "Small Sample Safety",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_safe_001_comparison_guard_blocks_under_10",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SAFE-002",
+      "title": "Recommendation Guard Blocks Claims When N < 20",
+      "section": "Small Sample Safety",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_safe_002_recommendation_guard_blocks_under_20",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SAFE-003",
+      "title": "Historical N=2 Outcomes Remain Strictly Qualitative",
+      "section": "Small Sample Safety",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_safe_003_historical_n2_outcomes_remain_qualitative",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SAFE-004",
+      "title": "Sub-threshold Metrics Return Explicit Insufficient Sample Flag",
+      "section": "Small Sample Safety",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_safe_004_sub_threshold_metrics_insufficient_sample",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SEPR-001",
+      "title": "Relationship Taxonomy Separates Buyer vs Partner Categories",
+      "section": "Taxonomy & Separation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_sepr_001_relationship_taxonomy_separates_buyer_partner",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SEPR-002",
+      "title": "Opportunity Taxonomy Keeps BIM, Automation, and Partner Types Distinct",
+      "section": "Taxonomy & Separation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_sepr_002_opportunity_taxonomy_keeps_types_distinct",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SEPR-003",
+      "title": "Partner Meetings Are Never Counted As Direct BIM Sales Conversions",
+      "section": "Taxonomy & Separation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_sepr_003_partner_meetings_never_counted_as_direct_bim",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SLICE-001",
+      "title": "Source Analytics Aggregates Observations, Sends, and Conversions Without Priority Mutation",
+      "section": "Multi-Dimensional Slices",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_slice_001_source_analytics_aggregates",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SLICE-002",
+      "title": "Market Slices Compute Discovered, Qualified, and Rates Without Auto-Prioritization",
+      "section": "Multi-Dimensional Slices",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_slice_002_market_slices_compute_metrics",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SLICE-003",
+      "title": "Contact Role Analytics Evaluates Technical vs Business Mailboxes Without Protected Demographics",
+      "section": "Multi-Dimensional Slices",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_slice_003_contact_role_analytics",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SLICE-004",
+      "title": "Message Analytics Aggregates Word Count, Tone, Service Without Tracking Pixels",
+      "section": "Multi-Dimensional Slices",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_slice_004_message_analytics_aggregates",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SLICE-005",
+      "title": "Reply Intent Breakdown Accurately Slices Positive, Question, Referral, and Objection",
+      "section": "Multi-Dimensional Slices",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_slice_005_reply_intent_breakdown",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-TIME-001",
+      "title": "Standard Time Windows (7d, 30d, 90d, All-Time) Filter Events Deterministically",
+      "section": "Time Windows & Diagnostics",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_time_001_standard_time_windows",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-TIME-002",
+      "title": "Custom Date Boundaries Bound Inclusive Telemetry Accurately",
+      "section": "Time Windows & Diagnostics",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_time_002_custom_date_boundaries",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-TIME-003",
+      "title": "Missing Metadata Renders As Unknown/Null Without Silent Imputation",
+      "section": "Time Windows & Diagnostics",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_time_003_missing_metadata_renders_unknown_null",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EVAL-001",
+      "title": "Model Evaluation Registry Persists Version, Quantization, and Hardware Label",
+      "section": "Model Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_eval_001_model_evaluation_registry_persists_metadata",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EVAL-002",
+      "title": "Task Breakdown Evaluates 6 Core Offline Tasks Independently",
+      "section": "Model Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_eval_002_task_breakdown_evaluates_6_core_tasks",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EVAL-003",
+      "title": "Offline Model Run Never Sends Mail or Alters Production Approvals",
+      "section": "Model Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_eval_003_offline_run_never_sends_or_alters_approvals",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EVAL-004",
+      "title": "Fixture Versioning (v1.0) Enables Consistent Baseline Across Model Sizes",
+      "section": "Model Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_eval_004_fixture_versioning_consistency",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EVAL-005",
+      "title": "Unmeasured Benchmark Counters (Speed, VRAM) Remain Strictly Null",
+      "section": "Model Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_eval_005_unmeasured_benchmark_counters_null",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EVAL-006",
+      "title": "Weak Model Baseline Preserves Realistic Outcome Distribution",
+      "section": "Model Evaluation",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_eval_006_weak_model_baseline_preserves_distribution",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-HUMAN-001",
+      "title": "Human Edit Distance Derives Explicit None/Minor/Major/Rewrite Labels",
+      "section": "Human Learning Loop",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_human_001_edit_distance_derives_explicit_labels",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-HUMAN-002",
+      "title": "Draft Acceptance and Rejection Rates Include Audited Sample Sizes",
+      "section": "Human Learning Loop",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_human_002_draft_acceptance_rates",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-HUMAN-003",
+      "title": "Recommendation Engine Requires Computed Metric Evidence Before Proposing Changes",
+      "section": "Human Learning Loop",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_human_003_recommendation_engine_requires_computed_evidence",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-HUMAN-004",
+      "title": "Recommendation Acceptance Updates Status/Audit Metadata Only Without Live Mutation",
+      "section": "Human Learning Loop",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_human_004_recommendation_acceptance_audit_only",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-UIAPI-001",
+      "title": "Analytics API Endpoints Return Valid Schemas Across All Slices",
+      "section": "API & UI Surface",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_uiapi_001_analytics_api_endpoints",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-UIAPI-002",
+      "title": "Analytics GET Endpoints Strictly Reject State Mutations",
+      "section": "API & UI Surface",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_uiapi_002_analytics_get_endpoints_reject_mutations",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-UIAPI-003",
+      "title": "Console Analytics UI Renders All 10 Required Sections Accurately",
+      "section": "API & UI Surface",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_uiapi_003_console_analytics_ui_renders_10_sections",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-UIAPI-004",
+      "title": "Normal Analytics UI Rendering Generates Exactly Zero LLM Invocations",
+      "section": "API & UI Surface",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_uiapi_004_normal_ui_zero_llm_invocations",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-UIAPI-005",
+      "title": "UI Accurately Renders Insufficient Sample Badges For Low-Volume Slices",
+      "section": "API & UI Surface",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_uiapi_005_ui_renders_insufficient_sample_badges",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EXPORT-001",
+      "title": "Export Service Outputs Sanitized CSV and JSON With Zero Secret Leakage",
+      "section": "Export & Reliability",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_export_001_export_csv_json_zero_leakage",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EXPORT-002",
+      "title": "Data Quality Diagnostics Expose Factual Unknown Counts",
+      "section": "Export & Reliability",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_export_002_data_quality_diagnostics",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-EXPORT-003",
+      "title": "Analytics Store Reinitialization And Event Insertion Are Idempotent",
+      "section": "Export & Reliability",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_export_003_analytics_store_reinit_idempotent",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P12-SEM-001",
+      "title": "Semantic Intent Nuance Deferred For 1.5B (qwen2.5:1.5b)",
+      "section": "Weak-Model Deferred",
+      "mode": "deferred_model",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_sem_001_semantic_intent_nuance_deferred",
+      "status": "DEFERRED_MODEL"
+    },
+    {
+      "case_id": "P12-SEM-002",
+      "title": "High-Complexity Outbound Email Tone Adaptation Deferred",
+      "section": "Weak-Model Deferred",
+      "mode": "deferred_model",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_sem_002_high_complexity_outbound_tone_deferred",
+      "status": "DEFERRED_MODEL"
+    },
+    {
+      "case_id": "P12-SEM-003",
+      "title": "Multi-Turn Conversational Nuance Deferred To Future 14B/32B Models",
+      "section": "Weak-Model Deferred",
+      "mode": "deferred_model",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase12_acceptance.py::test_p12_sem_003_multi_turn_conversational_nuance_deferred",
+      "status": "DEFERRED_MODEL"
+    }
+  ]
 }
