@@ -1,0 +1,108 @@
+{
+  "manifest_version": "1.0.0",
+  "project_name": "SalesAI",
+  "description": "Authoritative release packaging manifest for SalesAI with explicit allowlist roots and defense-in-depth denylist.",
+  "profiles": {
+    "developer_source": {
+      "description": "Full clean source distribution including automated test suites, documentation, and tooling.",
+      "include_roots": [
+        "sales_engine",
+        "backend",
+        "ai_engine",
+        "config",
+        "data/rules",
+        "static",
+        "docs",
+        "scripts",
+        "setup",
+        "tests",
+        "exports/sample_export",
+        "requirements.txt",
+        "pytest.ini",
+        "pyrightconfig.json",
+        "pyrefly.toml",
+        ".gitignore",
+        "README.md",
+        "README-TEST.md",
+        "start_server.py",
+        "run_sales_ai.bat",
+        "run_pybim.bat",
+        "stop_pybim.bat",
+        "release_manifest.json",
+        "repo_manifest.json"
+      ]
+    },
+    "production_runtime": {
+      "description": "Minimal production runtime distribution containing only executable code and configurations.",
+      "include_roots": [
+        "sales_engine",
+        "backend",
+        "ai_engine",
+        "config",
+        "data/rules",
+        "static",
+        "docs/REPOSITORY-STRUCTURE.md",
+        "docs/LEGACY-COMPONENTS.md",
+        "docs/RELEASE-CONTENTS.md",
+        "setup",
+        "requirements.txt",
+        "README.md",
+        "start_server.py",
+        "run_sales_ai.bat"
+      ]
+    }
+  },
+  "default_profile": "developer_source",
+  "security_denylist": {
+    "excluded_dir_names": [
+      ".git",
+      ".venv",
+      "venv",
+      "env",
+      "ENV",
+      "__pycache__",
+      ".pytest_cache",
+      ".ruff_cache",
+      ".mypy_cache",
+      "chroma_db",
+      "chroma_data",
+      "runtime",
+      "logs"
+    ],
+    "excluded_extensions": [
+      ".pyc",
+      ".pyo",
+      ".pyd",
+      ".db",
+      ".db-wal",
+      ".db-shm",
+      ".sqlite",
+      ".sqlite3",
+      ".sqlite-wal",
+      ".sqlite-shm",
+      ".wal",
+      ".shm",
+      ".pem",
+      ".key",
+      ".p12",
+      ".pfx",
+      ".pkcs12",
+      ".crt",
+      ".cer",
+      ".log",
+      ".zip",
+      ".exe"
+    ],
+    "sensitive_filename_substrings": [
+      "sales_outreach.db",
+      "chroma.sqlite3",
+      "candidates.db",
+      "client_secret",
+      "credentials",
+      "oauth",
+      "token.json",
+      "smtp_pass",
+      ".env"
+    ]
+  }
+}

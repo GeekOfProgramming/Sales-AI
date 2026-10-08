@@ -59,9 +59,10 @@ def main():
     print(f"  • Web UI Studio:               http://{primary_ip}:8000/ui")
     print(f"  • Swagger API Docs:            http://{primary_ip}:8000/docs")
 
+    enable_tunnel = os.environ.get("ENABLE_PUBLIC_TUNNEL", "").lower() in ("1", "true", "yes") or "--tunnel" in sys.argv
     cloudflared_path = find_cloudflared()
     tunnel_proc = None
-    if cloudflared_path:
+    if cloudflared_path and enable_tunnel:
         print(f"\n🌐 Starting Cloudflare Quick Tunnel using: {cloudflared_path}", flush=True)
         try:
             tunnel_proc = subprocess.Popen(
