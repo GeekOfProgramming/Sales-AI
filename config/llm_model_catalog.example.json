@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "SalesAI 16-slot candidate model catalog and task routing policy. All tasks default to Tier 1 Budget. Disabled by default.",
+  "task_policies": {
+    "website_extraction": {
+      "starting_tier": "tier_1_budget",
+      "subtasks": ["pass_a", "pass_b"],
+      "evaluation_focus": "factual_extraction_grounding"
+    },
+    "job_analysis": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "hiring_signals_bim_skills"
+    },
+    "discovery_query_generation": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "query_quality_diversity"
+    },
+    "inbox_classification": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "intent_accuracy_suppression"
+    },
+    "reply_suggestion": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "grounded_facts_no_unauthorized_claims"
+    },
+    "outreach_draft": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "b2b_tone_evidence_attribution"
+    }
+  },
+  "candidate_slots": [
+    {
+      "candidate_id": "t1_c1_openai_mini",
+      "tier": "tier_1_budget",
+      "priority": 1,
+      "provider_id": "openai",
+      "exact_model_id": "gpt-4o-mini",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 128000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 0.15,
+        "output_per_1m": 0.60,
+        "effective_date": "2024-07-18",
+        "source_url": "https://openai.com/api/pricing/"
+      }
+    },
+    {
+      "candidate_id": "t1_c2_anthropic_haiku",
+      "tier": "tier_1_budget",
+      "priority": 2,
+      "provider_id": "anthropic",
+      "exact_model_id": "claude-3-5-haiku-20241022",
+      "enabled": false,
+      "provider_adapter_kind": "anthropic_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 200000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 0.80,
+        "output_per_1m": 4.00,
+        "effective_date": "2024-10-22",
+        "source_url": "https://www.anthropic.com/pricing"
+      }
+    },
+    {
+      "candidate_id": "t1_c3_google_flash",
+      "tier": "tier_1_budget",
+      "priority": 3,
+      "provider_id": "google",
+      "exact_model_id": "gemini-2.0-flash",
+      "enabled": false,
+      "provider_adapter_kind": "gemini_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 1048576
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 0.10,
+        "output_per_1m": 0.40,
+        "effective_date": "2024-12-11",
+        "source_url": "https://ai.google.dev/pricing"
+      }
+    },
+    {
+      "candidate_id": "t1_c4_mistral_small",
+      "tier": "tier_1_budget",
+      "priority": 4,
+      "provider_id": "mistral",
+      "exact_model_id": "mistral-small-latest",
+      "enabled": false,
+      "provider_adapter_kind": "mistral_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 32000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 0.20,
+        "output_per_1m": 0.60,
+        "effective_date": "2024-09-01",
+        "source_url": "https://mistral.ai/technology/#pricing"
+      }
+    },
+    {
+      "candidate_id": "t2_c1_openai_standard",
+      "tier": "tier_2_balanced",
+      "priority": 1,
+      "provider_id": "openai",
+      "exact_model_id": "gpt-4o",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 128000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 2.50,
+        "output_per_1m": 10.00,
+        "effective_date": "2024-08-06",
+        "source_url": "https://openai.com/api/pricing/"
+      }
+    },
+    {
+      "candidate_id": "t2_c2_anthropic_sonnet",
+      "tier": "tier_2_balanced",
+      "priority": 2,
+      "provider_id": "anthropic",
+      "exact_model_id": "claude-3-5-sonnet-20241022",
+      "enabled": false,
+      "provider_adapter_kind": "anthropic_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 200000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 3.00,
+        "output_per_1m": 15.00,
+        "effective_date": "2024-10-22",
+        "source_url": "https://www.anthropic.com/pricing"
+      }
+    },
+    {
+      "candidate_id": "t2_c3_google_pro",
+      "tier": "tier_2_balanced",
+      "priority": 3,
+      "provider_id": "google",
+      "exact_model_id": "gemini-1.5-pro",
+      "enabled": false,
+      "provider_adapter_kind": "gemini_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 2097152
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 1.25,
+        "output_per_1m": 5.00,
+        "effective_date": "2024-05-14",
+        "source_url": "https://ai.google.dev/pricing"
+      }
+    },
+    {
+      "candidate_id": "t2_c4_mistral_large",
+      "tier": "tier_2_balanced",
+      "priority": 4,
+      "provider_id": "mistral",
+      "exact_model_id": "mistral-large-latest",
+      "enabled": false,
+      "provider_adapter_kind": "mistral_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 128000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 2.00,
+        "output_per_1m": 6.00,
+        "effective_date": "2024-07-24",
+        "source_url": "https://mistral.ai/technology/#pricing"
+      }
+    },
+    {
+      "candidate_id": "t3_c1_anthropic_sonnet_hf",
+      "tier": "tier_3_high_fidelity",
+      "priority": 1,
+      "provider_id": "anthropic",
+      "exact_model_id": "claude-3-5-sonnet-20241022",
+      "enabled": false,
+      "provider_adapter_kind": "anthropic_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 200000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 3.00,
+        "output_per_1m": 15.00,
+        "effective_date": "2024-10-22",
+        "source_url": "https://www.anthropic.com/pricing"
+      }
+    },
+    {
+      "candidate_id": "t3_c2_openai_flagship_hf",
+      "tier": "tier_3_high_fidelity",
+      "priority": 2,
+      "provider_id": "openai",
+      "exact_model_id": "gpt-4o",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 128000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 2.50,
+        "output_per_1m": 10.00,
+        "effective_date": "2024-08-06",
+        "source_url": "https://openai.com/api/pricing/"
+      }
+    },
+    {
+      "candidate_id": "t3_c3_google_pro_hf",
+      "tier": "tier_3_high_fidelity",
+      "priority": 3,
+      "provider_id": "google",
+      "exact_model_id": "gemini-1.5-pro",
+      "enabled": false,
+      "provider_adapter_kind": "gemini_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 2097152
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 1.25,
+        "output_per_1m": 5.00,
+        "effective_date": "2024-05-14",
+        "source_url": "https://ai.google.dev/pricing"
+      }
+    },
+    {
+      "candidate_id": "t3_c4_mistral_large_hf",
+      "tier": "tier_3_high_fidelity",
+      "priority": 4,
+      "provider_id": "mistral",
+      "exact_model_id": "mistral-large-latest",
+      "enabled": false,
+      "provider_adapter_kind": "mistral_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 128000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 2.00,
+        "output_per_1m": 6.00,
+        "effective_date": "2024-07-24",
+        "source_url": "https://mistral.ai/technology/#pricing"
+      }
+    },
+    {
+      "candidate_id": "t4_c1_openai_o1",
+      "tier": "tier_4_flagship",
+      "priority": 1,
+      "provider_id": "openai",
+      "exact_model_id": "o1",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": false,
+        "context_window": 200000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 15.00,
+        "output_per_1m": 60.00,
+        "effective_date": "2024-12-05",
+        "source_url": "https://openai.com/api/pricing/"
+      }
+    },
+    {
+      "candidate_id": "t4_c2_anthropic_opus",
+      "tier": "tier_4_flagship",
+      "priority": 2,
+      "provider_id": "anthropic",
+      "exact_model_id": "claude-3-opus-20240229",
+      "enabled": false,
+      "provider_adapter_kind": "anthropic_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 200000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 15.00,
+        "output_per_1m": 75.00,
+        "effective_date": "2024-03-04",
+        "source_url": "https://www.anthropic.com/pricing"
+      }
+    },
+    {
+      "candidate_id": "t4_c3_openai_o3_mini",
+      "tier": "tier_4_flagship",
+      "priority": 3,
+      "provider_id": "openai",
+      "exact_model_id": "o3-mini",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": false,
+        "context_window": 200000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": 1.10,
+        "output_per_1m": 4.40,
+        "effective_date": "2025-01-31",
+        "source_url": "https://openai.com/api/pricing/"
+      }
+    },
+    {
+      "candidate_id": "t4_c4_google_ultra",
+      "tier": "tier_4_flagship",
+      "priority": 4,
+      "provider_id": "google",
+      "exact_model_id": "gemini-ultra",
+      "enabled": false,
+      "provider_adapter_kind": "gemini_native",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {
+        "supports_json_mode": true,
+        "supports_temperature": true,
+        "context_window": 128000
+      },
+      "pricing": {
+        "currency": "USD",
+        "input_per_1m": null,
+        "output_per_1m": null,
+        "effective_date": null,
+        "source_url": null
+      }
+    }
+  ]
+}
