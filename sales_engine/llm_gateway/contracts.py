@@ -140,6 +140,25 @@ class LLMRequest(BaseModel):
             f"timeout_seconds={self.timeout_seconds})"
         )
 
+    def __str__(self) -> str:
+        """Ensure str(request) scrubs raw prompt text identically to repr(request)."""
+        return self.__repr__()
+
+    def safe_log_dict(self) -> Dict[str, Any]:
+        """Return safe, non-sensitive dictionary suitable for application logging."""
+        return {
+            "request_id": self.request_id,
+            "task_id": self.task_id,
+            "provider": self.provider,
+            "model": self.model,
+            "tier": self.tier.value if self.tier else None,
+            "prompt_length": len(self.prompt),
+            "system_prompt_length": len(self.system_prompt) if self.system_prompt else 0,
+            "temperature": self.temperature,
+            "max_output_tokens": self.max_output_tokens,
+            "timeout_seconds": self.timeout_seconds,
+        }
+
 
 class LLMResponse(BaseModel):
     """
@@ -225,3 +244,33 @@ class LLMResponse(BaseModel):
         if v is not None and not math.isfinite(v):
             raise ValueError("Metric value must be a finite real number (not NaN or Inf)")
         return v
+
+    def __repr__(self) -> str:
+        """Safe representation scrubbing raw response text to prevent customer data leakage in logs."""
+        content_len = len(self.content)
+        return (
+            f"LLMResponse(request_id={self.request_id!r}, task_id={self.task_id!r}, "
+            f"provider={self.provider!r}, model={self.model!r}, content_length={content_len}, "
+            f"input_tokens={self.input_tokens}, output_tokens={self.output_tokens}, "
+            f"latency_ms={self.latency_ms}, finish_reason={self.finish_reason!r})"
+        )
+
+    def __str__(self) -> str:
+        """Ensure str(response) scrubs raw content text identically to repr(response)."""
+        return self.__repr__()
+
+    def safe_log_dict(self) -> Dict[str, Any]:
+        """Return safe, non-sensitive dictionary suitable for application logging."""
+        return {
+            "request_id": self.request_id,
+            "task_id": self.task_id,
+            "provider": self.provider,
+            "model": self.model,
+            "content_length": len(self.content),
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "latency_ms": self.latency_ms,
+            "cost_usd": self.cost_usd,
+            "finish_reason": self.finish_reason,
+            "provider_request_id": self.provider_request_id,
+        }

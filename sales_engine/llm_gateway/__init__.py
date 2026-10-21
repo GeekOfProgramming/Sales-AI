@@ -26,15 +26,17 @@ from sales_engine.llm_gateway.interface import (
 )
 from sales_engine.llm_gateway.registry import ProviderRegistry
 from sales_engine.llm_gateway.config import GatewayConfig
+from sales_engine.llm_gateway.providers.openai_provider import OpenAIProvider
 
 __all__ = [
     # Contracts
     "ModelTier",
     "LLMRequest",
     "LLMResponse",
-    # Interfaces
+    # Interfaces & Providers
     "BaseLLMProvider",
     "LLMProviderGateway",
+    "OpenAIProvider",
     # Registry & Config
     "ProviderRegistry",
     "GatewayConfig",
