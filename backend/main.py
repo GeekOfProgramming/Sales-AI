@@ -22,17 +22,14 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
 from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
 from sales_engine.web.website_fetcher import WebsiteFetcher
 from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
 from ai_engine.rag_retriever import BIMRAGRetriever
 from ai_engine.data_ingestor import BIMDataIngestor
-from ai_engine.crew_orchestrator import BIMCrewOrchestrator
 from ai_engine.ingest_queue import ingest_queue
-from ai_engine.acc_client import cloud_client
-from ai_engine.cloud_auditor import cloud_auditor
 from backend.auth import authenticate_admin, create_access_token, verify_admin_token
 from backend.schemas import (
     ScriptGenerationRequest,
@@ -45,14 +42,6 @@ from backend.schemas import (
     QueueItemResponse,
     ApprovalRequest,
     RejectionRequest,
-    ACCHubItem,
-    ACCProjectItem,
-    ACCModelItem,
-    CloudAuditRequest,
-    CloudAuditResponse,
-    CloudSyncApprovalRequest,
-    ACCConfigRequest,
-    ACCConfigStatusResponse,
     SalesLLMTestRequest,
     SalesLLMTestResponse,
     WebsiteAnalyzeRequest,
@@ -64,31 +53,24 @@ from backend.schemas import (
     BuildLeadsRequest,
     BuildLeadsResponse,
     EnrichLeadsRequest,
-    EnrichLeadsResponse
+    EnrichLeadsResponse,
 )
 from sales_engine.outreach.schemas import GenerateDraftsRequest
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager: initializes AI engine components and persistent ChromaDB on startup."""
-    print("🚀 Initializing pyBIM-LLM AI services...")
-    
-    # 1. Initialize LLM Client
+    """Lifecycle manager: initializes SalesAI AI services on startup."""
+    print("🚀 Initializing SalesAI services...")
     app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
-    
-    # 1. Initialize LLM Client
-    app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
-    
-    
-    print("🎉 pyBIM-LLM Gateway is ready to serve requests.")
+    print("🎉 SalesAI Gateway is ready to serve requests.")
     yield
-    print("🛑 Shutting down pyBIM-LLM Gateway.")
+    print("🛑 Shutting down SalesAI Gateway.")
 
 
 app = FastAPI(
     title="SalesAI Lead Intelligence API",
-    description="SalesAI Backend with Local Ollama Integration",
-    version="0.1.0",
+    description="SalesAI Backend with External & Local LLM Integration",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -120,17 +102,14 @@ app.include_router(sales_analytics_api_router)
 
 @app.get("/", tags=["UI"])
 def root_endpoint():
-    """Serve the Web UI Studio dashboard."""
-    index_file = static_path / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return {"service": "pyBIM-LLM Gateway", "status": "operational"}
+    """Serve the SalesAI Operator Console."""
+    return RedirectResponse(url="/sales", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 @app.get("/ui", tags=["UI"])
 def ui_endpoint():
-    """Dedicated endpoint for Web UI Studio."""
-    return FileResponse(static_path / "index.html")
+    """Dedicated endpoint redirecting to SalesAI Operator Console."""
+    return RedirectResponse(url="/sales", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
 def get_llm_client() -> BIMLLMClient:
@@ -188,237 +167,6 @@ def health_check():
         available_models=models,
         indexed_rules_count=rules_count,
         version="0.1.0",
-    )
-
-
-def _validate_code(code: str, language: str) -> Optional[str]:
-    """Perform preliminary syntax validation on the extracted code."""
-    if language.lower() in ("python", "py"):
-        try:
-            ast.parse(code)
-            return "Python syntax validation passed."
-        except SyntaxError as e:
-            return f"Python syntax warning on line {e.lineno}: {e.msg}"
-    elif language.lower() in ("csharp", "c#", "cs"):
-        if "IExternalCommand" in code or "Transaction" in code:
-            return "C# structural check passed (Revit API contracts present)."
-        return "C# structure notice: Standard Revit API contracts not explicitly detected."
-    return None
-
-
-def intent_router(prompt: str) -> str:
-    """Classify user prompt intent into 'text_generation' or 'code_generation'.
-
-    Analyzes keywords and regex patterns to differentiate conceptual/explanatory
-    inquiries from actionable script/code generation requests.
-    """
-    if not prompt or not prompt.strip():
-        return "code_generation"
-
-    clean = prompt.lower().strip()
-
-    # Patterns indicating explanatory, descriptive, or conceptual queries
-    text_patterns = [
-        r"\b(explain|what is|how does|why|describe|summarize|tell me about|guide|difference between|compare|overview|concept|pros and cons)\b",
-        r"(توضیح|چیست|چرا|چگونه|تفاوت|مقایسه|راهنما|خلاصه|مفهوم|مستندات|تعریف کن|به چه صورت|معرفی|منظور از)",
-    ]
-
-    # Patterns indicating code/script generation, modification, or automation
-    code_patterns = [
-        r"\b(write|generate|create|build|script|code|macro|plugin|addin|filter|collector|transaction|unwrapelement|parameter)\b",
-        r"\b(def\s+|class\s+|import\s+|clr\.addreference)\b",
-        r"(کد|اسکریپت|برنامه|پلاگین|ماکرو|المان|دیوار|تراکنش|پارامتر|تغییر بده|ایجاد کن|بساز|بنویس|فیلتر کن|حذف کن|محاسبه کن|اضافه کن|تنظیم کن)",
-    ]
-
-    is_text = any(re.search(pat, clean, re.IGNORECASE) for pat in text_patterns)
-    is_code = any(re.search(pat, clean, re.IGNORECASE) for pat in code_patterns)
-
-    # Pure text inquiry (unless user explicitly requests code writing)
-    if is_text and not (
-        "کد بنویس" in clean
-        or "اسکریپت بنویس" in clean
-        or "write code" in clean
-        or "write a script" in clean
-        or "generate script" in clean
-        or "generate code" in clean
-    ):
-        return "text_generation"
-
-    if is_code:
-        return "code_generation"
-
-    return "code_generation"
-
-
-@app.post("/generate-script", response_model=ScriptGenerationResponse, tags=["AI Inference"])
-async def generate_script(request: ScriptGenerationRequest):
-    """Receive a prompt and optional selected Revit elements, retrieve rules via RAG, and generate code."""
-    start_time = time.perf_counter()
-    llm_client: BIMLLMClient = get_llm_client()
-    rag_retriever: BIMRAGRetriever = get_rag_retriever()
-
-    if not request.user_prompt.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Prompt cannot be empty.",
-        )
-
-    # 1. Format User Prompt with Selected Elements Metadata
-    effective_prompt = request.user_prompt
-    if request.selected_elements and len(request.selected_elements) > 0:
-        elem_summaries = []
-        for elem in request.selected_elements:
-            elem_desc = f"ID: {elem.element_id} (Category: {elem.category}"
-            if elem.name:
-                elem_desc += f", Name: {elem.name}"
-            if elem.family_name:
-                elem_desc += f", Family: {elem.family_name}"
-            if elem.parameters:
-                elem_desc += f", Params: {elem.parameters}"
-            elem_desc += ")"
-            elem_summaries.append(elem_desc)
-
-        effective_prompt += (
-            f"\n\n[SELECTED REVIT ELEMENTS CONTEXT ({len(request.selected_elements)} elements)]:\n"
-            + "\n".join(elem_summaries)
-        )
-
-    # 2. Retrieve Relevant Knowledge Rules via RAG
-    retrieved_sources: List[str] = []
-    rag_context_parts: List[str] = []
-
-    if request.include_rag_rules:
-        try:
-            hits = rag_retriever.query(request.user_prompt, top_k=3)
-            for hit in hits:
-                src = hit["metadata"].get("source", "unknown")
-                if src not in retrieved_sources:
-                    retrieved_sources.append(src)
-                header = hit["metadata"].get("header", "")
-                rag_context_parts.append(f"[{src} - {header}]:\n{hit['content']}")
-        except Exception as e:
-            print(f"⚠️ RAG retrieval warning: {e}")
-
-    # Append any custom rules provided directly in the request
-    if request.custom_rules and request.custom_rules.strip():
-        rag_context_parts.append(f"[Custom Client Rules]:\n{request.custom_rules.strip()}")
-
-    combined_context = "\n\n".join(rag_context_parts) if rag_context_parts else None
-
-    # 3. Semantic Routing: Intent Classification and Dynamic Model Assignment
-    detected_intent = intent_router(request.user_prompt)
-
-    available_models = []
-    try:
-        available_models = llm_client.list_available_models()
-    except Exception:
-        pass
-
-    if request.model:
-        selected_model = request.model
-    elif detected_intent == "text_generation":
-        # Check for local NLP model (e.g., llama3)
-        llama_variant = next((m for m in available_models if "llama3" in m.lower()), None)
-        if llama_variant:
-            selected_model = llama_variant
-        elif "llama3" in available_models:
-            selected_model = "llama3"
-        else:
-            # Fallback to local coder model if llama3 is not yet pulled
-            selected_model = "qwen2.5-coder:1.5b"
-            print(f"ℹ️ Semantic Router: Intent is 'text_generation'. llama3 not installed locally; using {selected_model}")
-    else:
-        # Code generation default: qwen2.5-coder
-        coder_variant = next((m for m in available_models if "qwen2.5-coder" in m.lower()), None)
-        selected_model = coder_variant or "qwen2.5-coder:1.5b"
-
-    # 4. Multi-Agent Execution (Code) vs Linear Direct Execution (Text)
-    target_env = getattr(request, "environment", "pyrevit")
-    target_lang = getattr(request, "language", "python") or "python"
-
-    if detected_intent == "code_generation":
-        # Determine language & environment contracts
-        if target_env == "dynamo" or target_lang.lower() == "dynamo":
-            target_env = "dynamo"
-            target_lang = "python"
-        elif target_env == "csharp" or target_lang.lower() in ("csharp", "cs", "c#"):
-            target_env = "csharp"
-            target_lang = "csharp"
-        else:
-            target_env = "pyrevit"
-            target_lang = "python"
-
-        try:
-            orchestrator = BIMCrewOrchestrator(
-                llm_client=llm_client,
-                model_name=selected_model,
-                max_feedback_cycles=2,
-            )
-            crew_result = await orchestrator.run(
-                user_prompt=effective_prompt,
-                environment=target_env,
-                language=target_lang,
-                context_rules=combined_context,
-                temperature=request.temperature,
-            )
-            generated_code = crew_result.code
-            model_used = crew_result.model_used
-            qa_passed = crew_result.audit_passed
-            qa_cycles = crew_result.feedback_cycles
-            qa_checklist = crew_result.checklist
-            auto_remediated = crew_result.auto_remediated
-            validation_note = crew_result.audit_notes
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"CrewAI Multi-Agent orchestrator error: {str(e)}",
-            )
-
-    else:
-        # Linear Direct NLP execution for text inquiries
-        target_env = "text"
-        target_lang = "markdown"
-
-        llm_req = CodeGenerationRequest(
-            user_prompt=effective_prompt,
-            environment=target_env,
-            language=target_lang,
-            context_rules=combined_context,
-            model=selected_model,
-            temperature=request.temperature,
-        )
-
-        try:
-            llm_resp = await llm_client.generate_code_async(llm_req, model_name=selected_model)
-            generated_code = llm_resp.extracted_code
-            model_used = llm_resp.model
-            qa_passed = True
-            qa_cycles = 1
-            qa_checklist = None
-            auto_remediated = False
-            validation_note = "Direct NLP explanation generated without multi-agent overhead."
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Inference engine error: {str(e)}",
-            )
-
-    total_duration = round(time.perf_counter() - start_time, 3)
-
-    return ScriptGenerationResponse(
-        success=True,
-        code=generated_code,
-        language=f"{target_lang} ({target_env})",
-        model_used=model_used,
-        intent=detected_intent,
-        qa_audit_passed=qa_passed,
-        qa_feedback_cycles=qa_cycles,
-        qa_checklist=qa_checklist,
-        auto_remediated=auto_remediated,
-        retrieved_rules_count=len(rag_context_parts),
-        retrieved_sources=retrieved_sources,
-        execution_time_seconds=total_duration,
-        validation_notes=validation_note,
     )
 
 
@@ -617,215 +365,6 @@ async def get_submission_status(request_id: str):
             detail=f"Tracking ID '{request_id}' not found in knowledge queue.",
         )
     return QueueItemResponse(**item)
-
-
-# --- Autodesk Construction Cloud (ACC) Endpoints ---
-
-# @app.get(
-#     "/api/acc/hubs",
-#     response_model=List[ACCHubItem],
-#     summary="List accessible corporate Hubs in ACC / BIM 360",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def list_acc_hubs():
-#     """Retrieve list of accessible Autodesk Construction Cloud hubs."""
-#     try:
-#         hubs = await cloud_client.get_hubs()
-#         return [ACCHubItem(**h) for h in hubs]
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_502_BAD_GATEWAY,
-#             detail=f"Autodesk Platform Services error: {str(e)}",
-#         )
-# 
-# 
-# @app.get(
-#     "/api/acc/projects/{hub_id}",
-#     response_model=List[ACCProjectItem],
-#     summary="List active projects inside an ACC Hub",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def list_acc_projects(hub_id: str):
-#     """Retrieve list of active projects within a specified hub."""
-#     try:
-#         projects = await cloud_client.get_projects(hub_id=hub_id)
-#         return [ACCProjectItem(**p) for p in projects]
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_502_BAD_GATEWAY,
-#             detail=f"Failed to fetch projects for hub {hub_id}: {str(e)}",
-#         )
-# 
-# 
-# @app.get(
-#     "/api/acc/models/{project_id}",
-#     response_model=List[ACCModelItem],
-#     summary="List Revit models in an ACC Project",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def list_acc_models(project_id: str):
-#     """Retrieve Revit models (.rvt) available in the cloud project without downloading."""
-#     try:
-#         models = await cloud_client.get_models(project_id=project_id)
-#         return [ACCModelItem(**m) for m in models]
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_502_BAD_GATEWAY,
-#             detail=f"Failed to fetch models for project {project_id}: {str(e)}",
-#         )
-# 
-# 
-# @app.post(
-#     "/api/acc/audit",
-#     response_model=CloudAuditResponse,
-#     summary="Execute Read-Only local AI compliance audit on Cloud Model",
-#     description="Fetches element metadata via Model Derivative API and audits against ISO 19650 and BIM rules.",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def audit_cloud_model(req: CloudAuditRequest):
-#     """Read-only audit: extracts parameter trees from ACC and produces a compliance report without modifying the model."""
-#     try:
-#         # 1. Fetch metadata without opening Revit or downloading full RVT
-#         metadata = await cloud_client.get_model_metadata(req.urn)
-#         
-#         # 2. Local AI Audit against ISO 19650 rules
-#         report = cloud_auditor.audit_model_metadata(metadata)
-#         return CloudAuditResponse(**report)
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Cloud BIM audit failed: {str(e)}",
-#         )
-# 
-# 
-# @app.post(
-#     "/api/acc/apply-changes",
-#     summary="Human-in-the-Loop approval: commit reviewed parameter changes (Admin Only)",
-#     description="Authorizes controlled write-back of approved corrections. Requires human administrator confirmation.",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def apply_cloud_model_changes(
-#     req: CloudSyncApprovalRequest,
-#     admin_user: dict = Depends(verify_admin_token),
-# ):
-#     """Human-in-the-Loop gateway: ensures no AI modifications occur without explicit admin confirmation."""
-#     return {
-#         "status": "authorized",
-#         "urn": req.urn,
-#         "approved_elements_count": len(req.approved_elements),
-#         "approved_elements": req.approved_elements,
-#         "authorized_by": admin_user.get("sub", "admin"),
-#         "message": f"Human-in-the-loop approval recorded for {len(req.approved_elements)} element corrections. Ready for staged synchronization.",
-#     }
-# 
-# 
-# def update_env_credentials(client_id: Optional[str], client_secret: Optional[str], force_mock: bool = False):
-#     """Safely updates or removes APS credentials in .env file."""
-#     env_path = Path(__file__).resolve().parent.parent / ".env"
-#     lines = []
-#     if env_path.exists():
-#         try:
-#             lines = env_path.read_text(encoding="utf-8").splitlines()
-#         except Exception:
-#             lines = []
-# 
-#     new_lines = []
-#     seen_id = False
-#     seen_secret = False
-# 
-#     for line in lines:
-#         stripped = line.strip()
-#         if stripped.startswith("APS_CLIENT_ID="):
-#             if not force_mock and client_id is not None:
-#                 new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
-#             seen_id = True
-#         elif stripped.startswith("APS_CLIENT_SECRET="):
-#             if not force_mock and client_secret is not None:
-#                 new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
-#             seen_secret = True
-#         else:
-#             new_lines.append(line)
-# 
-#     if not force_mock and client_id is not None and not seen_id:
-#         new_lines.append(f"APS_CLIENT_ID={client_id.strip()}")
-#     if not force_mock and client_secret is not None and not seen_secret:
-#         new_lines.append(f"APS_CLIENT_SECRET={client_secret.strip()}")
-# 
-#     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-# 
-#     if force_mock:
-#         os.environ.pop("APS_CLIENT_ID", None)
-#         os.environ.pop("APS_CLIENT_SECRET", None)
-#     else:
-#         if client_id is not None:
-#             os.environ["APS_CLIENT_ID"] = client_id.strip()
-#         if client_secret is not None:
-#             os.environ["APS_CLIENT_SECRET"] = client_secret.strip()
-# 
-# 
-# @app.get(
-#     "/api/acc/config",
-#     response_model=ACCConfigStatusResponse,
-#     summary="Get Autodesk Construction Cloud configuration & connection status",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def get_acc_config():
-#     """Returns current operational status (Live vs Simulation) and masked client ID."""
-#     info = cloud_client.get_status_info()
-#     return ACCConfigStatusResponse(**info)
-# 
-# 
-# @app.post(
-#     "/api/acc/config/test",
-#     summary="Test Autodesk Platform Services credentials without saving (Admin Only)",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def test_acc_credentials(
-#     req: ACCConfigRequest,
-#     admin_user: dict = Depends(verify_admin_token),
-# ):
-#     """Verifies client ID and client secret against Autodesk's OAuth 2.0 au#     summary="Save Autodesk Platform Services cloud credentials (Admin Only)",
-#     description="Updates .env persistence and reconfigures active cloud client in memory without restart.",
-#     tags=["Cloud BIM (ACC)"],
-# )
-# async def configure_acc_credentials(
-#     req: ACCConfigRequest,
-#     admin_user: dict = Depends(verify_admin_token),
-# ):
-#     """Admin configuration: writes keys to .env and switches cloud_client dynamically between Live and Mock."""
-#     if req.force_mock or (not req.client_id and not req.client_secret):
-#         # Switch to Mock Mode
-#         cloud_client.set_credentials("", "", force_mock=True)
-#         update_env_credentials("", "", force_mock=True)
-#         info = cloud_client.get_status_info()
-#         info["message"] = "Switched to offline simulation / mock mode. Credentials cleared from active session."
-#         return ACCConfigStatusResponse(**info)
-# 
-#     cid = (req.client_id or "").strip()
-#     sec = (req.client_secret or "").strip()
-# 
-#     if not cid or not sec:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail="Both Client ID and Client Secret are required for live cloud connectivity.",
-#         )
-# 
-#     # Unless explicitly bypassed, test connection with Autodesk servers
-#     if not req.skip_verification:
-#         test_res = await cloud_client.test_connection(client_id=cid, client_secret=sec)
-#         if not test_res.get("success"):
-#             raise HTTPException(
-#                 status_code=status.HTTP_400_BAD_REQUEST,
-#                 detail=test_res.get("message", "Autodesk Platform Services credentials failed validation."),
-#             )
-# 
-#     # Credentials valid: configure in-memory client and persist to .env
-#     cloud_client.set_credentials(cid, sec, force_mock=False)
-#     update_env_credentials(cid, sec, force_mock=False)
-# 
-#     info = cloud_client.get_status_info()
-#     info["message"] = "Autodesk Platform Services credentials successfully saved and activated!"
-#     return ACCConfigStatusResponse(**info)
 
 
 @app.post("/api/sales/test-llm", tags=["SalesAI"])

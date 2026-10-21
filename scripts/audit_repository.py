@@ -26,8 +26,6 @@ ALLOWED_ROOT_FILES = {
     "README-TEST.md",
     "run_sales_ai.bat",
     "start_server.py",
-    "run_pybim.bat",
-    "stop_pybim.bat",
     "release_manifest.json",
     "repo_manifest.json",
 }

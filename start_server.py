@@ -46,18 +46,16 @@ def find_cloudflared():
 
 def main():
     print("=" * 70)
-    print("🚀 pyBIM-LLM Server - Multi-Laptop Workstation & AI Hub")
+    print("🚀 SalesAI Server - Local Lead Intelligence Gateway")
     print("=" * 70)
 
-    local_ips = get_local_ips()
-    primary_ip = local_ips[0] if local_ips else "10.120.24.34"
+    bind_host = os.getenv("SALESAI_HOST", "127.0.0.1")
+    bind_port = int(os.getenv("SALESAI_PORT", "8000"))
 
     print("\n📍 Connectivity Details:")
-    print(f"  • Laptop 1 (Localhost):        http://localhost:8000")
-    print(f"  • Laptop 2 & 3 (Wi-Fi / LAN):  http://{primary_ip}:8000")
-    print(f"  • Revit Plugin Endpoint:       http://{primary_ip}:8000/generate-script")
-    print(f"  • Web UI Studio:               http://{primary_ip}:8000/ui")
-    print(f"  • Swagger API Docs:            http://{primary_ip}:8000/docs")
+    print(f"  • Sales Operator Console:      http://{bind_host}:{bind_port}/sales")
+    print(f"  • Swagger API Documentation:   http://{bind_host}:{bind_port}/docs")
+    print(f"  • Health Check:                http://{bind_host}:{bind_port}/health")
 
     enable_tunnel = os.environ.get("ENABLE_PUBLIC_TUNNEL", "").lower() in ("1", "true", "yes") or "--tunnel" in sys.argv
     cloudflared_path = find_cloudflared()

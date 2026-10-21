@@ -26,8 +26,6 @@
         "README-TEST.md",
         "start_server.py",
         "run_sales_ai.bat",
-        "run_pybim.bat",
-        "stop_pybim.bat",
         "release_manifest.json",
         "repo_manifest.json"
       ]

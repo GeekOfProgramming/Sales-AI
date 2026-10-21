@@ -46,22 +46,6 @@
       "category": "frozen_legacy_required"
     },
     {
-      "pattern": "revit_plugin/**",
-      "category": "frozen_legacy_required"
-    },
-    {
-      "pattern": "run_pybim.bat",
-      "category": "frozen_legacy_required"
-    },
-    {
-      "pattern": "stop_pybim.bat",
-      "category": "frozen_legacy_required"
-    },
-    {
-      "pattern": "scripts/legacy_diagnostics/**",
-      "category": "frozen_legacy_required"
-    },
-    {
       "pattern": "tests/**",
       "category": "tests_and_qa"
     },
