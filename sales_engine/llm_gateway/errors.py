@@ -224,3 +224,72 @@ class LLMEvaluationIntegrityError(LLMError, ValueError):
             task_id=task_id,
         )
 
+
+class LLMPrivacyError(LLMError, ValueError):
+    """Base exception for all LLM Gateway privacy, redaction, and payload policy violations."""
+
+    def __init__(
+        self,
+        message: str = "Privacy or payload policy validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+        error_code: str = "PRIVACY_VIOLATION",
+    ):
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMUntrustedContentError(LLMPrivacyError):
+    """Raised when untrusted content contains fatal security violations (control chars, malformed envelope, severe injection)."""
+
+    def __init__(
+        self,
+        message: str = "Untrusted content security validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="UNTRUSTED_CONTENT_VIOLATION",
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMAllowlistViolationError(LLMPrivacyError):
+    """Raised when non-allowlisted, restricted, or forbidden fields are passed to the payload builder."""
+
+    def __init__(
+        self,
+        message: str = "Payload contains forbidden or non-allowlisted fields.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="ALLOWLIST_VIOLATION",
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMPrivacyRejectionError(LLMPrivacyError):
+    """Raised when payload fails privacy scrubbing or ambiguity requires conservative manual review."""
+
+    def __init__(
+        self,
+        message: str = "Payload rejected by privacy filter; manual review required.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="PRIVACY_REJECTION",
+            provider=provider,
+            task_id=task_id,
+        )

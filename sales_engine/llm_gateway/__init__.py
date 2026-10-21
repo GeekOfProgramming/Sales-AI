@@ -19,30 +19,31 @@ from sales_engine.llm_gateway.errors import (
     LLMBudgetExceededError,
     LLMInvalidSchemaError,
     LLMProviderUnavailableError,
+    LLMPrivacyError,
+    LLMUntrustedContentError,
+    LLMAllowlistViolationError,
+    LLMPrivacyRejectionError,
 )
-from sales_engine.llm_gateway.interface import (
-    BaseLLMProvider,
-    LLMProviderGateway,
+from sales_engine.llm_gateway.privacy_filter import (
+    PrivacyFilter,
+    RedactionResult,
+    is_luhn_valid,
 )
-from sales_engine.llm_gateway.registry import ProviderRegistry
-from sales_engine.llm_gateway.config import GatewayConfig
-from sales_engine.llm_gateway.providers.openai_provider import OpenAIProvider
-from sales_engine.llm_gateway.model_catalog import (
-    ModelCandidate,
-    ModelCatalog,
-    PricingMetadata,
-    CANONICAL_TASKS,
-    normalize_task_id,
+from sales_engine.llm_gateway.source_boundaries import (
+    InputTrustClass,
+    normalize_company_domain,
+    wrap_untrusted_source,
+    contains_prompt_injection,
 )
-from sales_engine.llm_gateway.router import (
-    TaskRouteDecision,
-    TaskRouter,
-)
-from sales_engine.llm_gateway.evaluation_policy import (
-    EvaluationDecision,
-    CandidateScorecard,
-    TaskEvaluationState,
-    EvaluationPlanner,
+from sales_engine.llm_gateway.payload_builder import (
+    PAYLOAD_POLICY_VERSION,
+    TASK_EXCERPT_LIMITS,
+    TASK_ALLOWLISTS,
+    FORBIDDEN_FIELDS,
+    PayloadBuildResult,
+    PayloadBuilder,
+    check_full_text_opt_out_signals,
+    preview_sanitized_payload,
 )
 
 __all__ = [
@@ -81,5 +82,24 @@ __all__ = [
     "LLMBudgetExceededError",
     "LLMInvalidSchemaError",
     "LLMProviderUnavailableError",
+    "LLMPrivacyError",
+    "LLMUntrustedContentError",
+    "LLMAllowlistViolationError",
+    "LLMPrivacyRejectionError",
+    # Privacy & Boundaries (S2.4)
+    "PrivacyFilter",
+    "RedactionResult",
+    "is_luhn_valid",
+    "InputTrustClass",
+    "normalize_company_domain",
+    "wrap_untrusted_source",
+    "contains_prompt_injection",
+    "PAYLOAD_POLICY_VERSION",
+    "TASK_EXCERPT_LIMITS",
+    "TASK_ALLOWLISTS",
+    "FORBIDDEN_FIELDS",
+    "PayloadBuildResult",
+    "PayloadBuilder",
+    "check_full_text_opt_out_signals",
+    "preview_sanitized_payload",
 ]
-
