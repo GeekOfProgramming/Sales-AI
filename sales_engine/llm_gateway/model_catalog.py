@@ -2,11 +2,13 @@
 sales_engine/llm_gateway/model_catalog.py
 Deterministic 16-slot candidate model catalog and canonical task taxonomy for SalesAI.
 Supports four tiers, four ordered candidates per tier, task-specific priorities, and zero HTTP calls.
+Implements S2.3.1 routing integrity hardening: immutable candidate models, neutral slot IDs,
+strict subtask validation, and fail-closed candidate verification guards.
 """
 
 from enum import Enum
 from typing import Dict, List, Optional, Any, Set
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from sales_engine.llm_gateway.contracts import ModelTier
 
@@ -64,13 +66,33 @@ def normalize_task_id(task_id: str) -> str:
     raise ValueError(f"Unknown task ID or alias: {task_id!r}. Must be one of {sorted(list(CANONICAL_TASKS))}")
 
 
+def validate_subtask_id(task_id: str, subtask_id: Optional[str]) -> Optional[str]:
+    """
+    Validate subtask identifier against canonical subtask taxonomy.
+    Fails closed on subtask mismatches or invalid assignments.
+    """
+    canonical = normalize_task_id(task_id)
+    if subtask_id is None:
+        return None
+    cleaned_subtask = subtask_id.strip().lower()
+    allowed = CANONICAL_SUBTASKS.get(canonical)
+    if not allowed:
+        raise ValueError(f"Task '{canonical}' does not define subtasks; received subtask '{subtask_id}'.")
+    if cleaned_subtask not in allowed:
+        raise ValueError(
+            f"Invalid subtask '{subtask_id}' for task '{canonical}'. Must be one of {sorted(list(allowed))}."
+        )
+    return cleaned_subtask
+
+
 class PricingMetadata(BaseModel):
     """
     Verified model pricing metadata.
     Unknown prices must remain None (never silently 0.0).
+    Frozen to enforce immutability.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     currency: str = Field(default="USD", max_length=8)
     input_per_1m: Optional[float] = Field(default=None, ge=0.0)
@@ -83,9 +105,10 @@ class ModelCandidate(BaseModel):
     """
     A specific model candidate slot within a tier.
     Zero fabricated model names, zero synthetic performance metrics.
+    Frozen to enforce immutability.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate_id: str = Field(..., min_length=1, max_length=64)
     tier: ModelTier
@@ -97,6 +120,7 @@ class ModelCandidate(BaseModel):
     provider_adapter_kind: str = Field(default="openai_compatible", max_length=64)
     allowed_tasks: List[str] = Field(default_factory=lambda: ["*"])
     pricing: Optional[PricingMetadata] = Field(default=None)
+    verification_notes: Optional[str] = Field(default=None, max_length=256)
 
     @field_validator("allowed_tasks")
     @classmethod
@@ -111,6 +135,30 @@ class ModelCandidate(BaseModel):
                 normalized.append(normalize_task_id(t))
         return normalized
 
+    @model_validator(mode="after")
+    def validate_candidate_integrity(self) -> "ModelCandidate":
+        """
+        Validate candidate integrity.
+        Disabled placeholders may contain unverified/placeholder fields.
+        Enabled candidates MUST possess real provider IDs, non-placeholder exact model IDs,
+        and verified capability evidence.
+        """
+        if self.enabled:
+            unverified_placeholders = {"unassigned", "placeholder", "unknown", "unverified", "unverified_slot"}
+            if not self.provider_id or self.provider_id.strip().lower() in unverified_placeholders:
+                raise ValueError(
+                    f"Cannot enable candidate '{self.candidate_id}' with unassigned/placeholder provider: '{self.provider_id}'."
+                )
+            if not self.exact_model_id or self.exact_model_id.strip().lower() in unverified_placeholders:
+                raise ValueError(
+                    f"Cannot enable candidate '{self.candidate_id}' with unverified/placeholder exact_model_id: '{self.exact_model_id}'."
+                )
+            if not self.verified_capabilities:
+                raise ValueError(
+                    f"Cannot enable candidate '{self.candidate_id}' without verified capabilities."
+                )
+        return self
+
     def is_task_allowed(self, task_id: str) -> bool:
         """Check if candidate is authorized for a specific canonical task."""
         canonical = normalize_task_id(task_id)
@@ -123,6 +171,7 @@ class ModelCatalog(BaseModel):
     """
     In-memory catalog of candidate model slots across four tiers.
     Enforces 16 distinct slots, deterministic ordering, and per-task priority overrides.
+    Maintains candidate immutability and alias mapping for legacy references.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -132,17 +181,129 @@ class ModelCatalog(BaseModel):
         default_factory=dict,
         description="Per-task candidate ordering: task_key -> tier_value -> list of candidate_ids",
     )
+    candidate_aliases: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Aliases mapping legacy / S2.3 identifiers to neutral slot IDs",
+    )
+
+    def _resolve_id(self, candidate_id: str) -> str:
+        """Resolve candidate ID through alias dictionary if present."""
+        if candidate_id in self.candidates:
+            return candidate_id
+        if candidate_id in self.candidate_aliases:
+            return self.candidate_aliases[candidate_id]
+        return candidate_id
 
     def register_candidate(self, candidate: ModelCandidate, allow_override: bool = False) -> None:
-        """Register a model candidate. Rejects duplicate candidate_ids by default."""
+        """
+        Register a model candidate.
+        Rejects duplicate candidate_ids or (tier, priority) slot collisions by default.
+        """
         cid = candidate.candidate_id
         if cid in self.candidates and not allow_override:
             raise ValueError(f"Candidate '{cid}' already exists in catalog. Override rejected.")
+
+        # Check for duplicate (tier, priority)
+        for existing_id, existing in self.candidates.items():
+            if (
+                existing_id != cid
+                and existing.tier == candidate.tier
+                and existing.priority == candidate.priority
+                and not allow_override
+            ):
+                raise ValueError(
+                    f"Candidate slot conflict: slot (tier={candidate.tier.value}, priority={candidate.priority}) "
+                    f"is already occupied by '{existing_id}'."
+                )
+
         self.candidates[cid] = candidate
 
     def get_candidate(self, candidate_id: str) -> Optional[ModelCandidate]:
-        """Lookup candidate by candidate_id."""
-        return self.candidates.get(candidate_id)
+        """Lookup candidate by candidate_id or alias."""
+        resolved = self._resolve_id(candidate_id)
+        return self.candidates.get(resolved)
+
+    def enable_candidate(
+        self,
+        candidate_id: str,
+        provider_id: str,
+        exact_model_id: str,
+        verified_capabilities: Dict[str, Any],
+        pricing: Optional[PricingMetadata] = None,
+        verification_notes: Optional[str] = None,
+        provider_adapter_kind: str = "openai_compatible",
+        allowed_tasks: Optional[List[str]] = None,
+    ) -> ModelCandidate:
+        """
+        Safely enable a candidate slot with validated provider metadata.
+        Returns the newly created immutable ModelCandidate.
+        """
+        resolved = self._resolve_id(candidate_id)
+        existing = self.candidates.get(resolved)
+        if not existing:
+            raise ValueError(f"Candidate '{candidate_id}' not found in catalog.")
+
+        updated = ModelCandidate(
+            candidate_id=existing.candidate_id,
+            tier=existing.tier,
+            priority=existing.priority,
+            provider_id=provider_id,
+            exact_model_id=exact_model_id,
+            enabled=True,
+            verified_capabilities=verified_capabilities,
+            provider_adapter_kind=provider_adapter_kind,
+            allowed_tasks=allowed_tasks or existing.allowed_tasks,
+            pricing=pricing,
+            verification_notes=verification_notes,
+        )
+        self.candidates[resolved] = updated
+        return updated
+
+    def disable_candidate(self, candidate_id: str) -> ModelCandidate:
+        """Disable a candidate slot, preventing its use in production routes."""
+        resolved = self._resolve_id(candidate_id)
+        existing = self.candidates.get(resolved)
+        if not existing:
+            raise ValueError(f"Candidate '{candidate_id}' not found in catalog.")
+        updated = existing.model_copy(update={"enabled": False})
+        self.candidates[resolved] = updated
+        return updated
+
+    def set_task_priority_override(
+        self,
+        task_id: str,
+        tier: ModelTier,
+        candidate_ids: List[str],
+    ) -> None:
+        """
+        Configure task-specific candidate ordering with strict validation.
+        Validates that every candidate exists, belongs to the specified tier,
+        and is authorized for the task.
+        """
+        canonical_task = normalize_task_id(task_id)
+        if not candidate_ids:
+            raise ValueError("candidate_ids list cannot be empty for priority override.")
+
+        seen = set()
+        for cid in candidate_ids:
+            resolved_cid = self._resolve_id(cid)
+            if resolved_cid in seen:
+                raise ValueError(f"Duplicate candidate_id '{cid}' in priority override list.")
+            seen.add(resolved_cid)
+
+            candidate = self.get_candidate(resolved_cid)
+            if not candidate:
+                raise ValueError(f"Candidate '{cid}' not found in catalog.")
+            if candidate.tier != tier:
+                raise ValueError(
+                    f"Candidate '{cid}' tier ({candidate.tier.value}) does not match override tier ({tier.value})."
+                )
+            if not candidate.is_task_allowed(canonical_task):
+                raise ValueError(f"Candidate '{cid}' is not authorized for task '{canonical_task}'.")
+
+        if canonical_task not in self.task_priority_overrides:
+            self.task_priority_overrides[canonical_task] = {}
+        self.task_priority_overrides[canonical_task][tier.value] = list(candidate_ids)
 
     def get_candidates_for_tier(
         self,
@@ -157,7 +318,6 @@ class ModelCatalog(BaseModel):
         canonical_task = normalize_task_id(task_id)
         tier_key = tier.value
 
-        # Collect candidates in this tier allowed for this task
         tier_candidates = [
             c
             for c in self.candidates.values()
@@ -166,74 +326,76 @@ class ModelCatalog(BaseModel):
         if only_enabled:
             tier_candidates = [c for c in tier_candidates if c.enabled]
 
-        # Check for task-specific ordering override
         task_overrides = self.task_priority_overrides.get(canonical_task, {}).get(tier_key)
         if task_overrides:
             candidate_map = {c.candidate_id: c for c in tier_candidates}
             ordered = []
             for cid in task_overrides:
-                if cid in candidate_map:
-                    ordered.append(candidate_map[cid])
-            # Append any candidates not explicitly listed in override
+                resolved_cid = self._resolve_id(cid)
+                if resolved_cid in candidate_map:
+                    ordered.append(candidate_map[resolved_cid])
             for c in sorted(tier_candidates, key=lambda x: x.priority):
                 if c not in ordered:
                     ordered.append(c)
-            return ordered
+            return list(ordered)
 
-        # Default ordering: by candidate priority (1..4), then candidate_id
         return sorted(tier_candidates, key=lambda c: (c.priority, c.candidate_id))
 
     @classmethod
     def create_default_16_slot_catalog(cls) -> "ModelCatalog":
         """
         Create standard 16-slot catalog (4 tiers x 4 candidate slots per tier).
+        Uses neutral slot IDs t1_c1..t4_c4.
         All slots are explicitly defined and DISABLED by default (fail-closed).
+        All pricing and capabilities are unknown (None/empty) until verified.
+        Maintains legacy alias mappings for backward compatibility.
         """
         catalog = cls()
 
-        # Slot definitions (Tier 1..4, Slots 1..4)
-        slots = [
-            # TIER 1 (Budget)
-            ("t1_c1_openai_mini", ModelTier.TIER_1_BUDGET, 1, "openai", "gpt-4o-mini", "openai_compatible"),
-            ("t1_c2_anthropic_haiku", ModelTier.TIER_1_BUDGET, 2, "anthropic", "claude-3-5-haiku-20241022", "anthropic_native"),
-            ("t1_c3_google_flash", ModelTier.TIER_1_BUDGET, 3, "google", "gemini-2.0-flash", "gemini_native"),
-            ("t1_c4_mistral_small", ModelTier.TIER_1_BUDGET, 4, "mistral", "mistral-small-latest", "mistral_native"),
+        # Aliases mapping legacy S2.3 identifiers to neutral slot IDs
+        catalog.candidate_aliases = {
+            "t1_c1_openai_mini": "t1_c1",
+            "t1_c2_anthropic_haiku": "t1_c2",
+            "t1_c3_google_flash": "t1_c3",
+            "t1_c4_mistral_small": "t1_c4",
+            "t2_c1_openai_standard": "t2_c1",
+            "t2_c2_anthropic_sonnet": "t2_c2",
+            "t2_c3_google_pro": "t2_c3",
+            "t2_c4_mistral_large": "t2_c4",
+            "t3_c1_anthropic_sonnet_hf": "t3_c1",
+            "t3_c2_openai_flagship_hf": "t3_c2",
+            "t3_c3_google_pro_hf": "t3_c3",
+            "t3_c4_mistral_large_hf": "t3_c4",
+            "t4_c1_openai_o1": "t4_c1",
+            "t4_c2_anthropic_opus": "t4_c2",
+            "t4_c3_openai_o3_mini": "t4_c3",
+            "t4_c4_google_ultra": "t4_c4",
+        }
 
-            # TIER 2 (Balanced)
-            ("t2_c1_openai_standard", ModelTier.TIER_2_BALANCED, 1, "openai", "gpt-4o", "openai_compatible"),
-            ("t2_c2_anthropic_sonnet", ModelTier.TIER_2_BALANCED, 2, "anthropic", "claude-3-5-sonnet-20241022", "anthropic_native"),
-            ("t2_c3_google_pro", ModelTier.TIER_2_BALANCED, 3, "google", "gemini-1.5-pro", "gemini_native"),
-            ("t2_c4_mistral_large", ModelTier.TIER_2_BALANCED, 4, "mistral", "mistral-large-latest", "mistral_native"),
-
-            # TIER 3 (High Fidelity)
-            ("t3_c1_anthropic_sonnet_hf", ModelTier.TIER_3_HIGH_FIDELITY, 1, "anthropic", "claude-3-5-sonnet-20241022", "anthropic_native"),
-            ("t3_c2_openai_flagship_hf", ModelTier.TIER_3_HIGH_FIDELITY, 2, "openai", "gpt-4o", "openai_compatible"),
-            ("t3_c3_google_pro_hf", ModelTier.TIER_3_HIGH_FIDELITY, 3, "google", "gemini-1.5-pro", "gemini_native"),
-            ("t3_c4_mistral_large_hf", ModelTier.TIER_3_HIGH_FIDELITY, 4, "mistral", "mistral-large-latest", "mistral_native"),
-
-            # TIER 4 (Flagship / Complex Arbitration)
-            ("t4_c1_openai_o1", ModelTier.TIER_4_FLAGSHIP, 1, "openai", "o1", "openai_compatible"),
-            ("t4_c2_anthropic_opus", ModelTier.TIER_4_FLAGSHIP, 2, "anthropic", "claude-3-opus-20240229", "anthropic_native"),
-            ("t4_c3_openai_o3_mini", ModelTier.TIER_4_FLAGSHIP, 3, "openai", "o3-mini", "openai_compatible"),
-            ("t4_c4_google_ultra", ModelTier.TIER_4_FLAGSHIP, 4, "google", "gemini-ultra", "gemini_native"),
+        tiers = [
+            (ModelTier.TIER_1_BUDGET, 1),
+            (ModelTier.TIER_2_BALANCED, 2),
+            (ModelTier.TIER_3_HIGH_FIDELITY, 3),
+            (ModelTier.TIER_4_FLAGSHIP, 4),
         ]
 
-        for cid, tier, prio, prov, exact_m, adapter in slots:
-            catalog.register_candidate(
-                ModelCandidate(
-                    candidate_id=cid,
-                    tier=tier,
-                    priority=prio,
-                    provider_id=prov,
-                    exact_model_id=exact_m,
-                    enabled=False,  # Strict fail-closed default
-                    provider_adapter_kind=adapter,
-                    allowed_tasks=["*"],
-                    verified_capabilities={
-                        "supports_json_mode": True,
-                        "supports_temperature": True if not exact_m.startswith("o1") else False,
-                    },
+        for tier, tier_num in tiers:
+            for slot_num in range(1, 5):
+                cid = f"t{tier_num}_c{slot_num}"
+                catalog.register_candidate(
+                    ModelCandidate(
+                        candidate_id=cid,
+                        tier=tier,
+                        priority=slot_num,
+                        provider_id="unassigned",
+                        exact_model_id="unverified_slot",
+                        enabled=False,  # Strict fail-closed default
+                        provider_adapter_kind="openai_compatible",
+                        allowed_tasks=["*"],
+                        verified_capabilities={},
+                        pricing=None,
+                        verification_notes=None,
+                    )
                 )
-            )
 
         return catalog

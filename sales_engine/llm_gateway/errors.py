@@ -187,3 +187,40 @@ class LLMProviderUnavailableError(LLMError):
             provider=provider,
             task_id=task_id,
         )
+
+
+class LLMRoutingIntegrityError(LLMError, ValueError):
+    """Raised when an approved route fails integrity validation or tampering is detected."""
+
+    def __init__(
+        self,
+        message: str = "Routing integrity validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="ROUTING_INTEGRITY_VIOLATION",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMEvaluationIntegrityError(LLMError, ValueError):
+    """Raised when an evaluation scorecard fails integrity verification (mismatch, replay, stale)."""
+
+    def __init__(
+        self,
+        message: str = "Evaluation scorecard integrity validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="EVALUATION_INTEGRITY_VIOLATION",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+

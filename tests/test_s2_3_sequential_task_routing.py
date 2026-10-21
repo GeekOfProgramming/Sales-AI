@@ -1,19 +1,27 @@
 """
 tests/test_s2_3_sequential_task_routing.py
 Comprehensive deterministic test suite for SalesAI S2.3 v2 Sequential Model Evaluation & Task Routing.
+Updated for S2.3.1 routing integrity hardening: neutral slot IDs (t1_c1..t4_c4), immutable models,
+strict candidate enablement validation, and simulated benchmark flags.
 Zero live API calls, zero local neural weights, zero local Ollama.
 """
 
 import pytest
 
 from sales_engine.llm_gateway.contracts import ModelTier, LLMRequest, LLMResponse
-from sales_engine.llm_gateway.errors import LLMNotConfiguredError, LLMInvalidSchemaError
+from sales_engine.llm_gateway.errors import (
+    LLMNotConfiguredError,
+    LLMInvalidSchemaError,
+    LLMRoutingIntegrityError,
+    LLMEvaluationIntegrityError,
+)
 from sales_engine.llm_gateway.model_catalog import (
     ModelCatalog,
     ModelCandidate,
     PricingMetadata,
     CANONICAL_TASKS,
     normalize_task_id,
+    validate_subtask_id,
 )
 from sales_engine.llm_gateway.router import (
     TaskRouteDecision,
@@ -92,39 +100,41 @@ def test_catalog_deterministic_priority_order():
     catalog = ModelCatalog.create_default_16_slot_catalog()
     t1_candidates = catalog.get_candidates_for_tier("website_extraction", ModelTier.TIER_1_BUDGET)
     assert len(t1_candidates) == 4
-    assert t1_candidates[0].candidate_id == "t1_c1_openai_mini"
-    assert t1_candidates[1].candidate_id == "t1_c2_anthropic_haiku"
-    assert t1_candidates[2].candidate_id == "t1_c3_google_flash"
-    assert t1_candidates[3].candidate_id == "t1_c4_mistral_small"
+    assert t1_candidates[0].candidate_id == "t1_c1"
+    assert t1_candidates[1].candidate_id == "t1_c2"
+    assert t1_candidates[2].candidate_id == "t1_c3"
+    assert t1_candidates[3].candidate_id == "t1_c4"
 
 
 def test_catalog_task_specific_priority_override():
     catalog = ModelCatalog.create_default_16_slot_catalog()
-    # Override priority for inbox_classification: test Google Flash first
-    catalog.task_priority_overrides["inbox_classification"] = {
-        "tier_1_budget": ["t1_c3_google_flash", "t1_c1_openai_mini"]
-    }
+    # Override priority for inbox_classification: test slot 3 first
+    catalog.set_task_priority_override(
+        "inbox_classification",
+        ModelTier.TIER_1_BUDGET,
+        ["t1_c3", "t1_c1"],
+    )
 
     inbox_t1 = catalog.get_candidates_for_tier("inbox_classification", ModelTier.TIER_1_BUDGET)
-    assert inbox_t1[0].candidate_id == "t1_c3_google_flash"
-    assert inbox_t1[1].candidate_id == "t1_c1_openai_mini"
+    assert inbox_t1[0].candidate_id == "t1_c3"
+    assert inbox_t1[1].candidate_id == "t1_c1"
 
     # Website extraction remains default
     web_t1 = catalog.get_candidates_for_tier("website_extraction", ModelTier.TIER_1_BUDGET)
-    assert web_t1[0].candidate_id == "t1_c1_openai_mini"
+    assert web_t1[0].candidate_id == "t1_c1"
 
 
 def test_catalog_duplicate_registration_rejected():
     catalog = ModelCatalog()
     cand1 = ModelCandidate(
-        candidate_id="dup_id",
+        candidate_id="cand_1",
         tier=ModelTier.TIER_1_BUDGET,
         priority=1,
         provider_id="openai",
         exact_model_id="gpt-4o-mini",
     )
     cand2 = ModelCandidate(
-        candidate_id="dup_id",
+        candidate_id="cand_1",
         tier=ModelTier.TIER_1_BUDGET,
         priority=2,
         provider_id="openai",
@@ -159,8 +169,13 @@ def test_router_dry_run_defaults_to_tier_1():
 
 def test_router_approved_resolution_success():
     catalog = ModelCatalog.create_default_16_slot_catalog()
-    # Enable the candidate
-    catalog.candidates["t1_c1_openai_mini"].enabled = True
+    # Enable the candidate with validated provider credentials
+    catalog.enable_candidate(
+        "t1_c1",
+        provider_id="openai",
+        exact_model_id="gpt-4o-mini",
+        verified_capabilities={"supports_json_mode": True},
+    )
 
     router = TaskRouter(catalog=catalog)
     decision = TaskRouteDecision(
@@ -168,30 +183,39 @@ def test_router_approved_resolution_success():
         tier=ModelTier.TIER_1_BUDGET,
         provider_id="openai",
         model="gpt-4o-mini",
-        candidate_id="t1_c1_openai_mini",
+        candidate_id="t1_c1",
         approved_by="operator_human",
     )
     router.set_approved_route(decision)
 
     resolved = router.resolve_approved("website_extraction")
-    assert resolved.candidate_id == "t1_c1_openai_mini"
+    assert resolved.candidate_id == "t1_c1"
     assert resolved.model == "gpt-4o-mini"
     assert resolved.tier == ModelTier.TIER_1_BUDGET
 
 
 def test_router_approved_candidate_disabled_fails_closed():
     catalog = ModelCatalog.create_default_16_slot_catalog()
-    # Candidate remains disabled (default)
+    # Enable candidate and approve route
+    catalog.enable_candidate(
+        "t1_c1",
+        provider_id="openai",
+        exact_model_id="gpt-4o-mini",
+        verified_capabilities={"supports_json_mode": True},
+    )
     router = TaskRouter(catalog=catalog)
     decision = TaskRouteDecision(
         task_id="website_extraction",
         tier=ModelTier.TIER_1_BUDGET,
         provider_id="openai",
         model="gpt-4o-mini",
-        candidate_id="t1_c1_openai_mini",
+        candidate_id="t1_c1",
         approved_by="operator_human",
     )
     router.set_approved_route(decision)
+
+    # Candidate disabled after approval (catalog drift / mutation)
+    catalog.disable_candidate("t1_c1")
 
     with pytest.raises(LLMNotConfiguredError, match="currently disabled in catalog"):
         router.resolve_approved("website_extraction")
@@ -200,14 +224,20 @@ def test_router_approved_candidate_disabled_fails_closed():
 def test_router_zero_automatic_tier_escalation():
     # Proves router has no logic that automatically switches tiers
     router = TaskRouter()
+    router.catalog.enable_candidate(
+        "t1_c1",
+        provider_id="openai",
+        exact_model_id="gpt-4o-mini",
+        verified_capabilities={"supports_json_mode": True},
+    )
     decision = TaskRouteDecision(
         task_id="job_analysis",
         tier=ModelTier.TIER_1_BUDGET,
         provider_id="openai",
         model="gpt-4o-mini",
-        candidate_id="t1_c1_openai_mini",
+        candidate_id="t1_c1",
+        approved_by="operator_human",
     )
-    router.catalog.candidates["t1_c1_openai_mini"].enabled = True
     router.set_approved_route(decision)
 
     assert router.get_active_tier_for_task("job_analysis") == ModelTier.TIER_1_BUDGET
@@ -236,7 +266,7 @@ def test_evaluation_planner_early_stops_on_pass():
     state = planner.get_or_create_state("website_extraction")
 
     cand1 = planner.get_current_candidate(state)
-    assert cand1.candidate_id == "t1_c1_openai_mini"
+    assert cand1.candidate_id == "t1_c1"
 
     # Scorecard: candidate passes!
     scorecard = CandidateScorecard(
@@ -247,12 +277,13 @@ def test_evaluation_planner_early_stops_on_pass():
         safety_critical_passed=True,
         score=0.92,
         reasoning_codes=["GROUNDING_VERIFIED", "SCHEMA_VALID"],
+        is_simulated=True,
     )
     decision = planner.process_scorecard(state, scorecard)
 
     assert decision == EvaluationDecision.ACCEPT_CANDIDATE
     assert state.status == "approved"
-    assert state.approved_candidate_id == "t1_c1_openai_mini"
+    assert state.approved_candidate_id == "t1_c1"
     # Further evaluation stops
     assert planner.get_current_candidate(state) is None
 
@@ -271,6 +302,7 @@ def test_evaluation_planner_advances_within_same_tier_on_fail():
         safety_critical_passed=True,
         score=0.45,
         reasoning_codes=["EXTRACTION_INCOMPLETE"],
+        is_simulated=True,
     )
     decision1 = planner.process_scorecard(state, scorecard1)
 
@@ -279,7 +311,7 @@ def test_evaluation_planner_advances_within_same_tier_on_fail():
     assert state.current_candidate_index == 1
 
     cand2 = planner.get_current_candidate(state)
-    assert cand2.candidate_id == "t1_c2_anthropic_haiku"
+    assert cand2.candidate_id == "t1_c2"
 
 
 def test_evaluation_planner_safety_failure_blocks_approval():
@@ -296,6 +328,7 @@ def test_evaluation_planner_safety_failure_blocks_approval():
         safety_critical_passed=False,
         score=0.85,
         reasoning_codes=["INVENTED_NUMERICAL_PROMISE"],
+        is_simulated=True,
     )
     decision = planner.process_scorecard(state, scorecard)
 
@@ -319,6 +352,7 @@ def test_evaluation_planner_exhausts_tier_after_4_failures():
             passed=False,
             score=0.30,
             reasoning_codes=["UNSUBSCRIBE_MISCLASSIFIED"],
+            is_simulated=True,
         )
         dec = planner.process_scorecard(state, scorecard)
         if i < 3:
@@ -343,6 +377,7 @@ def test_evaluation_planner_promotion_requires_operator_approval():
             tier=ModelTier.TIER_1_BUDGET,
             passed=False,
             score=0.2,
+            is_simulated=True,
         )
         planner.process_scorecard(state, scorecard)
 
@@ -358,7 +393,7 @@ def test_evaluation_planner_promotion_requires_operator_approval():
 
     next_cand = planner.get_current_candidate(state)
     assert next_cand.tier == ModelTier.TIER_2_BALANCED
-    assert next_cand.candidate_id == "t2_c1_openai_standard"
+    assert next_cand.candidate_id == "t2_c1"
 
 
 def test_evaluation_planner_all_tiers_exhausted_unresolved():
@@ -375,6 +410,7 @@ def test_evaluation_planner_all_tiers_exhausted_unresolved():
                 tier=tier,
                 passed=False,
                 score=0.1,
+                is_simulated=True,
             )
             planner.process_scorecard(state, scorecard)
 
@@ -388,7 +424,7 @@ def test_evaluation_planner_all_tiers_exhausted_unresolved():
 
 
 # ---------------------------------------------------------------------------
-# 5. Mandatory Dry-Run Examples (Section 7 Specification)
+# 5. Mandatory Dry-Run Examples
 # ---------------------------------------------------------------------------
 
 
@@ -411,6 +447,7 @@ def test_mandatory_example_a_website_extraction_candidate_rotation_and_early_sto
         passed=False,
         score=0.40,
         reasoning_codes=["GROUNDING_DEFECT"],
+        is_simulated=True,
     )
     dec1 = planner.process_scorecard(state_web, scorecard1)
     assert dec1 == EvaluationDecision.PROPOSE_NEXT_IN_SAME_TIER
@@ -425,6 +462,7 @@ def test_mandatory_example_a_website_extraction_candidate_rotation_and_early_sto
         safety_critical_passed=True,
         score=0.95,
         reasoning_codes=["GROUNDING_PASSED", "FACTS_ACCURATE"],
+        is_simulated=True,
     )
     dec2 = planner.process_scorecard(state_web, scorecard2)
     assert dec2 == EvaluationDecision.ACCEPT_CANDIDATE
@@ -458,6 +496,7 @@ def test_mandatory_example_b_inbox_classification_exhausts_tier1_then_approved_p
             passed=False,
             score=0.35,
             reasoning_codes=["UNSUBSCRIBE_CONFLATED_WITH_REFERRAL"],
+            is_simulated=True,
         )
         dec = planner.process_scorecard(state, scorecard)
 
@@ -473,7 +512,7 @@ def test_mandatory_example_b_inbox_classification_exhausts_tier1_then_approved_p
     assert state.current_tier == ModelTier.TIER_2_BALANCED
 
     tier2_cand1 = planner.get_current_candidate(state)
-    assert tier2_cand1.candidate_id == "t2_c1_openai_standard"
+    assert tier2_cand1.candidate_id == "t2_c1"
     assert tier2_cand1.tier == ModelTier.TIER_2_BALANCED
 
 
@@ -495,6 +534,7 @@ def test_mandatory_example_c_outreach_draft_safety_failure_forbids_pass():
         safety_critical_passed=False,  # But failed prohibited claim rule!
         score=0.88,
         reasoning_codes=["PROHIBITED_CLAIM_FABRICATED_TEAM_SIZE"],
+        is_simulated=True,
     )
     dec = planner.process_scorecard(state, scorecard)
 
@@ -502,7 +542,7 @@ def test_mandatory_example_c_outreach_draft_safety_failure_forbids_pass():
     assert dec == EvaluationDecision.PROPOSE_NEXT_IN_SAME_TIER
     assert state.approved_candidate_id is None
     next_cand = planner.get_current_candidate(state)
-    assert next_cand.candidate_id == "t1_c2_anthropic_haiku"
+    assert next_cand.candidate_id == "t1_c2"
 
 
 def test_mandatory_example_d_job_analysis_passes_slot_1_leaving_15_untested():
@@ -524,20 +564,23 @@ def test_mandatory_example_d_job_analysis_passes_slot_1_leaving_15_untested():
         safety_critical_passed=True,
         score=0.96,
         reasoning_codes=["BIM_SKILLS_CORRECTLY_PARSED"],
+        is_simulated=True,
     )
     dec_job = planner.process_scorecard(state_job, scorecard)
     assert dec_job == EvaluationDecision.ACCEPT_CANDIDATE
-    assert state_job.approved_candidate_id == "t1_c1_openai_mini"
+    assert state_job.approved_candidate_id == "t1_c1"
 
     # Only 1 candidate evaluated out of 16!
     assert len(state_job.history) == 1
 
-    # query generation independently evaluates candidate 2 (Anthropic)
-    planner.catalog.task_priority_overrides["discovery_query_generation"] = {
-        "tier_1_budget": ["t1_c2_anthropic_haiku"]
-    }
+    # query generation independently evaluates candidate 2
+    planner.catalog.set_task_priority_override(
+        "discovery_query_generation",
+        ModelTier.TIER_1_BUDGET,
+        ["t1_c2"],
+    )
     cand_query = planner.get_current_candidate(state_query)
-    assert cand_query.candidate_id == "t1_c2_anthropic_haiku"
+    assert cand_query.candidate_id == "t1_c2"
 
 
 def test_mandatory_example_e_unconfigured_model_fails_closed():
@@ -571,23 +614,25 @@ def test_website_extraction_subtasks_pass_a_and_pass_b_isolated():
     scorecard_a = CandidateScorecard(
         task_id="website_extraction",
         subtask_id="pass_a",
-        candidate_id="t1_c1_openai_mini",
+        candidate_id="t1_c1",
         tier=ModelTier.TIER_1_BUDGET,
         passed=True,
         score=0.94,
+        is_simulated=True,
     )
     planner.process_scorecard(state_pass_a, scorecard_a)
     assert state_pass_a.status == "approved"
-    assert state_pass_a.approved_candidate_id == "t1_c1_openai_mini"
+    assert state_pass_a.approved_candidate_id == "t1_c1"
 
     # Pass B candidate 1 fails
     scorecard_b = CandidateScorecard(
         task_id="website_extraction",
         subtask_id="pass_b",
-        candidate_id="t1_c1_openai_mini",
+        candidate_id="t1_c1",
         tier=ModelTier.TIER_1_BUDGET,
         passed=False,
         score=0.50,
+        is_simulated=True,
     )
     planner.process_scorecard(state_pass_b, scorecard_b)
     assert state_pass_b.status == "evaluating"
