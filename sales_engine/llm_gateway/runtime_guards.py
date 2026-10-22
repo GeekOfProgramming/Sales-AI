@@ -26,6 +26,8 @@ from sales_engine.llm_gateway.errors import (
     LLMError,
     LLMRateLimitError,
     LLMProviderUnavailableError,
+    LLMDuplicateRequestError,
+    LLMCandidateMismatchError,
 )
 from sales_engine.llm_gateway.model_catalog import ModelCandidate
 
@@ -38,6 +40,8 @@ class RuntimeGuard:
     2. Consecutive calls to the same provider respect a minimum cooldown interval.
     3. Errors during transport mark reservations as UNCERTAIN rather than $0.00.
     4. First upstream failure (429, 5xx, timeout) stops execution immediately without retries.
+    5. A1 Defense: Single request_id cannot trigger a second network dispatch (cached or fail closed).
+    6. A2 Defense: Request provider, model, tier, and task are strictly bound to authorized candidate.
     """
 
     def __init__(
@@ -56,6 +60,73 @@ class RuntimeGuard:
 
         # Cooldown tracking: provider_id -> monotonic timestamp of last completed call
         self._last_call_timestamps: Dict[str, float] = {}
+
+        # A1 Idempotency protections: in-memory cache and in-flight tracking
+        self._response_cache: Dict[str, LLMResponse] = {}
+        self._in_flight_request_ids: set[str] = set()
+
+    def _validate_candidate_binding(
+        self,
+        request: LLMRequest,
+        candidate: ModelCandidate,
+        subtask_id: Optional[str] = None,
+    ) -> None:
+        """
+        A2 Defense: Verify exact equality of request provider, model, tier, and task to candidate.
+        Fails closed with LLMCandidateMismatchError on any divergence before reservation or HTTP.
+        """
+        if not candidate.enabled:
+            raise LLMCandidateMismatchError(
+                message=f"Candidate '{candidate.candidate_id}' is disabled in catalog (fail-closed).",
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        if not candidate.is_task_allowed(request.task_id):
+            raise LLMCandidateMismatchError(
+                message=f"Candidate '{candidate.candidate_id}' is not authorized for task '{request.task_id}'.",
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        if request.provider is not None and request.provider != candidate.provider_id:
+            raise LLMCandidateMismatchError(
+                message=(
+                    f"Pricing/candidate identity mismatch: request.provider '{request.provider}' "
+                    f"does not match candidate provider_id '{candidate.provider_id}'."
+                ),
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        if request.model is not None and request.model != candidate.exact_model_id:
+            raise LLMCandidateMismatchError(
+                message=(
+                    f"Pricing/candidate identity mismatch: request.model '{request.model}' "
+                    f"does not match candidate exact_model_id '{candidate.exact_model_id}'."
+                ),
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        if request.tier is not None and request.tier != candidate.tier:
+            raise LLMCandidateMismatchError(
+                message=(
+                    f"Pricing/candidate identity mismatch: request.tier '{request.tier}' "
+                    f"does not match candidate tier '{candidate.tier}'."
+                ),
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        # Explicitly bind candidate identity to request to ensure perfect dispatch fidelity
+        if request.provider is None:
+            request.provider = candidate.provider_id
+        if request.model is None:
+            request.model = candidate.exact_model_id
+        if request.tier is None:
+            request.tier = candidate.tier
+
 
     def _get_async_semaphore(self) -> asyncio.Semaphore:
         if self._async_semaphore is None:
@@ -152,55 +223,88 @@ class RuntimeGuard:
         """
         Synchronously execute an LLM call under budget preflight, concurrency, and rate guards.
         """
-        provider_id = candidate.provider_id
+        # A1 Defense: Return cached prior response if already dispatched/reconciled in this runtime
+        with self._state_lock:
+            if request.request_id in self._response_cache:
+                return self._response_cache[request.request_id]
+            if request.request_id in self._in_flight_request_ids:
+                raise LLMDuplicateRequestError(
+                    message=f"Request ID '{request.request_id}' is currently in flight in another thread/coroutine.",
+                    provider=candidate.provider_id,
+                    task_id=request.task_id,
+                )
+            self._in_flight_request_ids.add(request.request_id)
 
-        # 1. Preflight budget reservation (fails closed if disabled or over budget)
-        reservation = self.ledger.reserve(
-            request=request,
-            candidate=candidate,
-            subtask_id=subtask_id,
-            declared_input_tokens=declared_input_tokens,
-        )
-
-        # 2. Acquire concurrency and cooldown
         try:
-            self._check_and_acquire_sync(provider_id)
-        except Exception as exc:
-            # Safe cancellation because no network dispatch occurred
-            self.ledger.cancel_reservation(
-                reservation.reservation_id,
-                reason_code=getattr(exc, "error_code", "CONCURRENCY_BLOCKED"),
-            )
-            raise
+            # A2 Defense: Preflight verification of candidate binding to request
+            self._validate_candidate_binding(request, candidate, subtask_id=subtask_id)
 
-        dispatched = False
-        try:
-            dispatched = True
-            response = call_fn(request)
-        except (LLMRateLimitError, LLMProviderUnavailableError) as err:
-            # Immediate fail-closed on first 429 or 5xx: zero auto-retry or tier escalation
-            error_code = getattr(err, "error_code", "PROVIDER_ERROR")
-            self.ledger.mark_reservation_failed(
-                reservation.reservation_id, error_code=error_code, dispatched=dispatched
+            provider_id = candidate.provider_id
+
+            # 1. Preflight budget reservation (fails closed if disabled, duplicate, or over budget)
+            reservation = self.ledger.reserve(
+                request=request,
+                candidate=candidate,
+                subtask_id=subtask_id,
+                declared_input_tokens=declared_input_tokens,
             )
-            raise
-        except Exception as err:
-            error_code = getattr(err, "error_code", type(err).__name__)
-            self.ledger.mark_reservation_failed(
-                reservation.reservation_id, error_code=error_code, dispatched=dispatched
+
+            # 2. Acquire concurrency and cooldown
+            try:
+                self._check_and_acquire_sync(provider_id)
+            except Exception as exc:
+                self.ledger.cancel_reservation(
+                    reservation.reservation_id,
+                    reason_code=getattr(exc, "error_code", "CONCURRENCY_BLOCKED"),
+                )
+                raise
+
+            # A2 Defense: Verify immediately before HTTP dispatch that request attributes match candidate
+            if request.provider != candidate.provider_id or request.model != candidate.exact_model_id:
+                self.ledger.cancel_reservation(reservation.reservation_id, reason_code="CANDIDATE_MISMATCH")
+                raise LLMCandidateMismatchError(
+                    message=(
+                        f"Pricing/candidate identity mismatch before HTTP dispatch: "
+                        f"request({request.provider}/{request.model}) != candidate({candidate.provider_id}/{candidate.exact_model_id})"
+                    ),
+                    provider=candidate.provider_id,
+                    task_id=request.task_id,
+                )
+
+            dispatched = False
+            try:
+                dispatched = True
+                response = call_fn(request)
+            except (LLMRateLimitError, LLMProviderUnavailableError) as err:
+                error_code = getattr(err, "error_code", "PROVIDER_ERROR")
+                self.ledger.mark_reservation_failed(
+                    reservation.reservation_id, error_code=error_code, dispatched=dispatched
+                )
+                raise
+            except Exception as err:
+                error_code = getattr(err, "error_code", type(err).__name__)
+                self.ledger.mark_reservation_failed(
+                    reservation.reservation_id, error_code=error_code, dispatched=dispatched
+                )
+                raise
+            finally:
+                self._release_sync(provider_id)
+
+            # 3. Post-response reconciliation against reported usage and verified pricing
+            self.ledger.reconcile_response(
+                reservation_id=reservation.reservation_id,
+                response=response,
+                candidate=candidate,
             )
-            raise
+
+            # A1 Defense: Cache response to guarantee subsequent duplicate calls never re-dispatch
+            with self._state_lock:
+                self._response_cache[request.request_id] = response
+
+            return response
         finally:
-            self._release_sync(provider_id)
-
-        # 3. Post-response reconciliation against reported usage and verified pricing
-        self.ledger.reconcile_response(
-            reservation_id=reservation.reservation_id,
-            response=response,
-            candidate=candidate,
-        )
-
-        return response
+            with self._state_lock:
+                self._in_flight_request_ids.discard(request.request_id)
 
     async def guarded_call_async(
         self,
@@ -213,50 +317,85 @@ class RuntimeGuard:
         """
         Asynchronously execute an LLM call under budget preflight, concurrency, and rate guards.
         """
-        provider_id = candidate.provider_id
+        # A1 Defense: Return cached prior response if already dispatched/reconciled in this runtime
+        with self._state_lock:
+            if request.request_id in self._response_cache:
+                return self._response_cache[request.request_id]
+            if request.request_id in self._in_flight_request_ids:
+                raise LLMDuplicateRequestError(
+                    message=f"Request ID '{request.request_id}' is currently in flight in another thread/coroutine.",
+                    provider=candidate.provider_id,
+                    task_id=request.task_id,
+                )
+            self._in_flight_request_ids.add(request.request_id)
 
-        # 1. Preflight budget reservation
-        reservation = self.ledger.reserve(
-            request=request,
-            candidate=candidate,
-            subtask_id=subtask_id,
-            declared_input_tokens=declared_input_tokens,
-        )
-
-        # 2. Acquire concurrency and cooldown
         try:
-            await self._check_and_acquire_async(provider_id)
-        except Exception as exc:
-            self.ledger.cancel_reservation(
-                reservation.reservation_id,
-                reason_code=getattr(exc, "error_code", "CONCURRENCY_BLOCKED"),
-            )
-            raise
+            # A2 Defense: Preflight verification of candidate binding to request
+            self._validate_candidate_binding(request, candidate, subtask_id=subtask_id)
 
-        dispatched = False
-        try:
-            dispatched = True
-            response = await call_async_fn(request)
-        except (LLMRateLimitError, LLMProviderUnavailableError) as err:
-            error_code = getattr(err, "error_code", "PROVIDER_ERROR")
-            self.ledger.mark_reservation_failed(
-                reservation.reservation_id, error_code=error_code, dispatched=dispatched
+            provider_id = candidate.provider_id
+
+            # 1. Preflight budget reservation
+            reservation = self.ledger.reserve(
+                request=request,
+                candidate=candidate,
+                subtask_id=subtask_id,
+                declared_input_tokens=declared_input_tokens,
             )
-            raise
-        except Exception as err:
-            error_code = getattr(err, "error_code", type(err).__name__)
-            self.ledger.mark_reservation_failed(
-                reservation.reservation_id, error_code=error_code, dispatched=dispatched
+
+            # 2. Acquire concurrency and cooldown
+            try:
+                await self._check_and_acquire_async(provider_id)
+            except Exception as exc:
+                self.ledger.cancel_reservation(
+                    reservation.reservation_id,
+                    reason_code=getattr(exc, "error_code", "CONCURRENCY_BLOCKED"),
+                )
+                raise
+
+            # A2 Defense: Verify immediately before HTTP dispatch that request attributes match candidate
+            if request.provider != candidate.provider_id or request.model != candidate.exact_model_id:
+                self.ledger.cancel_reservation(reservation.reservation_id, reason_code="CANDIDATE_MISMATCH")
+                raise LLMCandidateMismatchError(
+                    message=(
+                        f"Pricing/candidate identity mismatch before HTTP dispatch: "
+                        f"request({request.provider}/{request.model}) != candidate({candidate.provider_id}/{candidate.exact_model_id})"
+                    ),
+                    provider=candidate.provider_id,
+                    task_id=request.task_id,
+                )
+
+            dispatched = False
+            try:
+                dispatched = True
+                response = await call_async_fn(request)
+            except (LLMRateLimitError, LLMProviderUnavailableError) as err:
+                error_code = getattr(err, "error_code", "PROVIDER_ERROR")
+                self.ledger.mark_reservation_failed(
+                    reservation.reservation_id, error_code=error_code, dispatched=dispatched
+                )
+                raise
+            except Exception as err:
+                error_code = getattr(err, "error_code", type(err).__name__)
+                self.ledger.mark_reservation_failed(
+                    reservation.reservation_id, error_code=error_code, dispatched=dispatched
+                )
+                raise
+            finally:
+                self._release_async(provider_id)
+
+            # 3. Post-response reconciliation
+            self.ledger.reconcile_response(
+                reservation_id=reservation.reservation_id,
+                response=response,
+                candidate=candidate,
             )
-            raise
+
+            # A1 Defense: Cache response to guarantee subsequent duplicate calls never re-dispatch
+            with self._state_lock:
+                self._response_cache[request.request_id] = response
+
+            return response
         finally:
-            self._release_async(provider_id)
-
-        # 3. Post-response reconciliation
-        self.ledger.reconcile_response(
-            reservation_id=reservation.reservation_id,
-            response=response,
-            candidate=candidate,
-        )
-
-        return response
+            with self._state_lock:
+                self._in_flight_request_ids.discard(request.request_id)

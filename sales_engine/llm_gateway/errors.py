@@ -332,3 +332,39 @@ class LLMUncertainUsageError(LLMError):
             provider=provider,
             task_id=task_id,
         )
+
+
+class LLMDuplicateRequestError(LLMError):
+    """Raised when an identical request_id has already been processed or is currently in flight."""
+
+    def __init__(
+        self,
+        message: str = "Duplicate request_id cannot generate a second paid network dispatch.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="DUPLICATE_REQUEST_ID",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMCandidateMismatchError(LLMError, ValueError):
+    """Raised when request provider, model, tier, or task diverges from the authorized candidate."""
+
+    def __init__(
+        self,
+        message: str = "Request provider, model, tier, or task diverges from authorized candidate.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="CANDIDATE_MISMATCH",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )

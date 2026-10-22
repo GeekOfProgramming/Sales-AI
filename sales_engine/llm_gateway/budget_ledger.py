@@ -23,6 +23,8 @@ from sales_engine.llm_gateway.errors import (
     LLMBudgetExceededError,
     LLMNotConfiguredError,
     LLMUncertainUsageError,
+    LLMDuplicateRequestError,
+    LLMCandidateMismatchError,
 )
 from sales_engine.llm_gateway.model_catalog import ModelCandidate
 
@@ -312,6 +314,51 @@ class BudgetLedger:
                 task_id=request.task_id,
             )
 
+        # A2 Defense: Validate candidate eligibility for task
+        if not candidate.is_task_allowed(request.task_id):
+            raise LLMCandidateMismatchError(
+                message=f"Candidate '{candidate.candidate_id}' is not authorized for task '{request.task_id}'.",
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        # A2 Defense: Validate exact provider, model, tier equality if specified on request
+        if request.provider is not None and request.provider != candidate.provider_id:
+            raise LLMCandidateMismatchError(
+                message=(
+                    f"Pricing/candidate identity mismatch: request.provider '{request.provider}' "
+                    f"does not match candidate provider_id '{candidate.provider_id}'."
+                ),
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+        if request.model is not None and request.model != candidate.exact_model_id:
+            raise LLMCandidateMismatchError(
+                message=(
+                    f"Pricing/candidate identity mismatch: request.model '{request.model}' "
+                    f"does not match candidate exact_model_id '{candidate.exact_model_id}'."
+                ),
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+        if request.tier is not None and request.tier != candidate.tier:
+            raise LLMCandidateMismatchError(
+                message=(
+                    f"Pricing/candidate identity mismatch: request.tier '{request.tier}' "
+                    f"does not match candidate tier '{candidate.tier}'."
+                ),
+                provider=candidate.provider_id,
+                task_id=request.task_id,
+            )
+
+        # Bind candidate identity to request to eliminate dispatch divergence
+        if request.provider is None:
+            request.provider = candidate.provider_id
+        if request.model is None:
+            request.model = candidate.exact_model_id
+        if request.tier is None:
+            request.tier = candidate.tier
+
         # Verify candidate pricing metadata
         pricing = candidate.pricing
         if (
@@ -372,7 +419,7 @@ class BudgetLedger:
             conn = self._get_connection()
             try:
                 with conn:
-                    # Idempotency check: if request_id already has an active reservation, return it
+                    # A1 Defense: Idempotency check across all lifecycle statuses
                     cursor = conn.execute(
                         """
                         SELECT reservation_id, request_id, task_id, subtask_id, provider_id, model,
@@ -381,14 +428,26 @@ class BudgetLedger:
                                reported_output_tokens, final_cost_usd, status, failure_code,
                                pricing_version
                         FROM llm_reservations
-                        WHERE request_id = ? AND status IN ('RESERVED', 'RECONCILED')
+                        WHERE request_id = ?
                         LIMIT 1;
                         """,
                         (request.request_id,),
                     )
                     existing = cursor.fetchone()
                     if existing:
-                        return self._row_to_reservation(existing)
+                        existing_status = existing[16]
+                        if existing_status == ReservationStatus.RESERVED.value:
+                            return self._row_to_reservation(existing)
+                        else:
+                            raise LLMDuplicateRequestError(
+                                message=(
+                                    f"Duplicate request_id '{request.request_id}' has already been processed "
+                                    f"with status '{existing_status}'. A new request_id is required."
+                                ),
+                                provider=candidate.provider_id,
+                                task_id=request.task_id,
+                            )
+
 
                     # Calculate current daily spend (RESERVED, RECONCILED, UNCERTAIN)
                     cur_day = conn.execute(

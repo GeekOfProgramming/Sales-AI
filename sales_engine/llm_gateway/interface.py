@@ -8,7 +8,11 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
-from sales_engine.llm_gateway.errors import LLMNotConfiguredError
+from sales_engine.llm_gateway.errors import (
+    LLMNotConfiguredError,
+    LLMRoutingIntegrityError,
+    LLMCandidateMismatchError,
+)
 from sales_engine.llm_gateway.registry import ProviderRegistry
 from sales_engine.llm_gateway.config import GatewayConfig
 from sales_engine.llm_gateway.runtime_guards import RuntimeGuard
@@ -102,20 +106,30 @@ class LLMProviderGateway:
         self,
         request: LLMRequest,
         candidate: Optional[ModelCandidate] = None,
+        is_benchmark: bool = False,
     ) -> LLMResponse:
         """
         Synchronous gateway entrypoint.
         Routes to resolved provider; optionally wrapped by runtime_guard.
+        Enforces candidate identity and routing integrity before dispatch.
         """
         provider = self._resolve_provider(request)
         if self.runtime_guard:
+            subtask_id = request.metadata.get("subtask_id") if request.metadata else None
+            if candidate is not None and self.router and not is_benchmark:
+                approved = self.router.resolve_approved(request.task_id, subtask_id)
+                if candidate.candidate_id != approved.candidate_id:
+                    raise LLMRoutingIntegrityError(
+                        f"Pricing/candidate identity mismatch: caller candidate '{candidate.candidate_id}' "
+                        f"does not match approved route candidate '{approved.candidate_id}'.",
+                        task_id=request.task_id,
+                    )
             target_candidate = candidate or self._resolve_candidate(request)
             if not target_candidate:
                 raise LLMNotConfiguredError(
                     message=f"Cannot execute guarded call: no candidate resolved for task '{request.task_id}'.",
                     task_id=request.task_id,
                 )
-            subtask_id = request.metadata.get("subtask_id") if request.metadata else None
             return self.runtime_guard.guarded_call(
                 request=request,
                 candidate=target_candidate,
@@ -128,20 +142,30 @@ class LLMProviderGateway:
         self,
         request: LLMRequest,
         candidate: Optional[ModelCandidate] = None,
+        is_benchmark: bool = False,
     ) -> LLMResponse:
         """
         Asynchronous gateway entrypoint.
         Routes to resolved provider; optionally wrapped by runtime_guard.
+        Enforces candidate identity and routing integrity before dispatch.
         """
         provider = self._resolve_provider(request)
         if self.runtime_guard:
+            subtask_id = request.metadata.get("subtask_id") if request.metadata else None
+            if candidate is not None and self.router and not is_benchmark:
+                approved = self.router.resolve_approved(request.task_id, subtask_id)
+                if candidate.candidate_id != approved.candidate_id:
+                    raise LLMRoutingIntegrityError(
+                        f"Pricing/candidate identity mismatch: caller candidate '{candidate.candidate_id}' "
+                        f"does not match approved route candidate '{approved.candidate_id}'.",
+                        task_id=request.task_id,
+                    )
             target_candidate = candidate or self._resolve_candidate(request)
             if not target_candidate:
                 raise LLMNotConfiguredError(
                     message=f"Cannot execute guarded call: no candidate resolved for task '{request.task_id}'.",
                     task_id=request.task_id,
                 )
-            subtask_id = request.metadata.get("subtask_id") if request.metadata else None
             return await self.runtime_guard.guarded_call_async(
                 request=request,
                 candidate=target_candidate,

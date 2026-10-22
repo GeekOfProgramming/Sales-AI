@@ -79,6 +79,8 @@ from sales_engine.llm_gateway.runtime_guards import (
 from sales_engine.llm_gateway.errors import (
     LLMConcurrencyLimitError,
     LLMUncertainUsageError,
+    LLMDuplicateRequestError,
+    LLMCandidateMismatchError,
 )
 
 __all__ = [
@@ -123,6 +125,8 @@ __all__ = [
     "LLMPrivacyRejectionError",
     "LLMConcurrencyLimitError",
     "LLMUncertainUsageError",
+    "LLMDuplicateRequestError",
+    "LLMCandidateMismatchError",
     # Privacy & Boundaries (S2.4)
     "PrivacyFilter",
     "RedactionResult",
