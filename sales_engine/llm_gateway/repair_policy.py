@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
 
-REPAIR_POLICY_VERSION = "1.0.0"
+REPAIR_POLICY_VERSION = "1.0.1"
 
 # Failure codes that are purely formatting / syntax and potentially repairable
 FORMATTING_FAILURE_CODES: Set[str] = {
@@ -35,11 +35,18 @@ NON_REPAIRABLE_FAILURE_CODES: Set[str] = {
     "IDENTITY_MISMATCH_PROVIDER",
     "IDENTITY_MISMATCH_MODEL",
     "IDENTITY_MISMATCH_SUBTASK",
+    "MISSING_APPROVED_PROVIDER_IDENTITY",
+    "MISSING_APPROVED_MODEL_IDENTITY",
     "FINISH_REASON_LENGTH_TRUNCATED",
     "FINISH_REASON_REFUSAL",
     "EVIDENCE_UNKNOWN_REF",
     "EVIDENCE_FABRICATED_CITATION",
+    "EVIDENCE_APPROVED_SET_REQUIRED",
+    "EVIDENCE_MALFORMED_REF",
+    "EVIDENCE_DUPLICATE_REF",
     "OPT_OUT_OVERRIDE_PREVENTED",
+    "BOUNCE_OVERRIDE_PREVENTED",
+    "SUPPRESSION_OVERRIDE_PREVENTED",
     "SAFETY_PROMPT_INJECTION_DETECTED",
     "SAFETY_SECRET_LEAKAGE_DETECTED",
     "OUTPUT_SIZE_EXCEEDED",
@@ -155,9 +162,11 @@ class RepairPolicy:
 
         # Check if ANY non-repairable code is present
         has_non_repairable = any(
-            code in NON_REPAIRABLE_FAILURE_CODES or code.startswith("IDENTITY_MISMATCH_")
-            or code.startswith("EVIDENCE_") or code.startswith("SAFETY_")
-            or code.startswith("OPT_OUT_") or code.startswith("FINISH_REASON_")
+            code in NON_REPAIRABLE_FAILURE_CODES or code.startswith("IDENTITY_")
+            or code.startswith("MISSING_") or code.startswith("EVIDENCE_")
+            or code.startswith("SAFETY_") or code.startswith("OPT_OUT_")
+            or code.startswith("BOUNCE_") or code.startswith("SUPPRESSION_")
+            or code.startswith("FINISH_REASON_")
             for code in failure_reasons
         )
 

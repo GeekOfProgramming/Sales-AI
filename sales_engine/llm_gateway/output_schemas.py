@@ -35,12 +35,13 @@ SCHEMA_REGISTRY_VERSION = "1.0.0"
 
 
 class StrictOutputBaseModel(BaseModel):
-    """Base class for all S2.5 output schemas. Forbids extra fields and enforces clean types."""
+    """Base class for all S2.5 output schemas. Forbids extra fields and enforces strict types."""
 
     model_config = ConfigDict(
         extra="forbid",
         str_strip_whitespace=True,
         arbitrary_types_allowed=False,
+        strict=True,
     )
 
 

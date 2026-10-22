@@ -562,7 +562,8 @@ def test_extra_unregistered_fields_rejected_by_forbid_policy():
     res = validator.validate(req, resp)
 
     assert res.is_valid is False
-    assert any("SCHEMA_EXTRA_FIELD_HALLUCINATED_EXTRA_FIELD" in r for r in res.failure_reasons)
+    # S2.5.1 B7: Extra fields emit sanitized generic SCHEMA_EXTRA_FIELD
+    assert "SCHEMA_EXTRA_FIELD" in res.failure_reasons
 
 
 def test_outreach_draft_subject_bounds_violation_rejected():
@@ -639,7 +640,8 @@ def test_approved_evidence_refs_pass_validation_with_review_flag():
         "evidence_refs": ["JOB-001"],
     }
     resp = _make_resp(json.dumps(data), req)
-    res = validator.validate(req, resp)
+    # S2.5.1 B2: approved_evidence_ids passed as authoritative argument
+    res = validator.validate(req, resp, approved_evidence_ids={"JOB-001", "SIG-002"})
 
     assert res.is_valid is True
     assert res.needs_business_review is True  # Factual support cannot be proven by schema alone
@@ -656,7 +658,8 @@ def test_unknown_evidence_ref_rejected():
         "evidence_refs": ["FABRICATED-REF-999"],  # Unknown ID
     }
     resp = _make_resp(json.dumps(data), req)
-    res = validator.validate(req, resp)
+    # S2.5.1 B2: approved_evidence_ids passed as authoritative argument
+    res = validator.validate(req, resp, approved_evidence_ids={"JOB-001"})
 
     assert res.is_valid is False
     assert "EVIDENCE_UNKNOWN_REF" in res.failure_reasons
@@ -673,7 +676,8 @@ def test_duplicate_evidence_refs_rejected():
         "evidence_refs": ["JOB-001", "JOB-001"],  # Duplicate
     }
     resp = _make_resp(json.dumps(data), req)
-    res = validator.validate(req, resp)
+    # S2.5.1 B2: approved_evidence_ids passed as authoritative argument
+    res = validator.validate(req, resp, approved_evidence_ids={"JOB-001"})
 
     assert res.is_valid is False
     assert "EVIDENCE_DUPLICATE_REF" in res.failure_reasons
@@ -788,7 +792,8 @@ def test_forbidden_operational_action_send_email_rejected():
     res = validator.validate(req, resp)
 
     assert res.is_valid is False
-    assert any("SAFETY_FORBIDDEN_OPERATIONAL_ACTION_SEND_EMAIL" in r or "SCHEMA_EXTRA_FIELD_SEND_EMAIL" in r for r in res.failure_reasons)
+    # S2.5.1 B7: Extra fields emit sanitized generic SCHEMA_EXTRA_FIELD
+    assert any("SAFETY_FORBIDDEN_OPERATIONAL_ACTION_SEND_EMAIL" in r or "SCHEMA_EXTRA_FIELD" in r for r in res.failure_reasons)
 
 
 # ===========================================================================

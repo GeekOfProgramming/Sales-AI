@@ -2,13 +2,14 @@
 sales_engine/llm_gateway/output_validation.py
 Strict, deterministic, provider-independent LLM output validation layer for SalesAI.
 Strictly offline, fail-closed, zero network/IO.
-Implements S2.5:
+Implements S2.5 & S2.5.1:
 - Typed OutputValidationResult and LLMOutputValidator
-- Request/response identity & provenance verification
+- Request/response identity & provenance verification (B5 & B6)
 - Strict syntax parsing (duplicate keys, single whole-response fence only, no eval/permissive regex)
-- Seven task/subtask schema validations using SchemaRegistry
-- Evidence reference verification against approved local evidence sets
-- Local opt-out / bounce precedence over conflicting model classifications
+- Seven task/subtask schema validations using SchemaRegistry (strict types, B8)
+- Authoritative evidence reference verification with single trusted provenance path (B1 & B2)
+- Local opt-out, bounce, and suppression precedence over every conflicting classification (B3 & B4)
+- Attacker-controlled schema extra key sanitization (zero PII/secrets in diagnostics, B7)
 - Prompt injection & secret reflection defenses
 - Bounded repair proposal evaluation (zero network dispatch)
 """
@@ -33,7 +34,7 @@ from sales_engine.llm_gateway.repair_policy import (
 )
 from sales_engine.llm_gateway.source_boundaries import contains_prompt_injection
 
-OUTPUT_VALIDATOR_VERSION = "1.0.0"
+OUTPUT_VALIDATOR_VERSION = "1.0.1"
 
 # Sensitive token / secret inspection patterns in output
 _OUTPUT_SECRET_PATTERNS = [
@@ -79,6 +80,12 @@ def _reject_constant(val: str) -> None:
     raise ValueError(f"ILLEGAL_CONSTANT:{val}")
 
 
+def _sanitize_reason_code(code: str) -> str:
+    """Ensure reason code contains only uppercase alphanumeric and underscores, max 64 chars."""
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", str(code).strip()).upper()
+    return cleaned[:64]
+
+
 class OutputValidationResult(BaseModel):
     """
     Typed, immutable result returned by LLMOutputValidator.
@@ -100,7 +107,19 @@ class OutputValidationResult(BaseModel):
     )
     is_opt_out_overridden: bool = Field(
         default=False,
-        description="True if local unsubscribe/bounce signal overrode conflicting model output",
+        description="True if local unsubscribe signal overrode conflicting model output",
+    )
+    is_bounce_overridden: bool = Field(
+        default=False,
+        description="True if local bounce signal overrode contradictory positive model output",
+    )
+    is_suppression_overridden: bool = Field(
+        default=False,
+        description="True if local suppression signal overrode contradictory positive model output",
+    )
+    effective_local_disposition: Optional[str] = Field(
+        default=None,
+        description="Authoritative local disposition (e.g. 'unsubscribe', 'bounce', 'do_not_contact')",
     )
     normalization_applied: bool = Field(
         default=False,
@@ -118,15 +137,19 @@ class OutputValidationResult(BaseModel):
     validator_version: str = Field(default=OUTPUT_VALIDATOR_VERSION)
 
     def safe_log_dict(self) -> Dict[str, Any]:
-        """Return non-sensitive dictionary suitable for application logging."""
+        """Return non-sensitive dictionary suitable for application logging (zero attacker input)."""
+        safe_reasons = [_sanitize_reason_code(r) for r in self.failure_reasons]
         return {
             "is_valid": self.is_valid,
             "task_id": self.task_id,
             "subtask_id": self.subtask_id,
             "schema_version": self.schema_version,
-            "failure_reasons": list(self.failure_reasons),
+            "failure_reasons": safe_reasons,
             "needs_business_review": self.needs_business_review,
             "is_opt_out_overridden": self.is_opt_out_overridden,
+            "is_bounce_overridden": self.is_bounce_overridden,
+            "is_suppression_overridden": self.is_suppression_overridden,
+            "effective_local_disposition": self.effective_local_disposition,
             "normalization_applied": self.normalization_applied,
             "has_repair_proposal": self.repair_proposal is not None,
             "raw_content_length": self.raw_content_length,
@@ -135,10 +158,12 @@ class OutputValidationResult(BaseModel):
         }
 
     def __repr__(self) -> str:
+        safe_reasons = [_sanitize_reason_code(r) for r in self.failure_reasons]
         return (
             f"OutputValidationResult(is_valid={self.is_valid}, task_id={self.task_id!r}, "
-            f"subtask_id={self.subtask_id!r}, reasons={self.failure_reasons!r}, "
+            f"subtask_id={self.subtask_id!r}, reasons={safe_reasons!r}, "
             f"needs_business_review={self.needs_business_review}, opt_out_overridden={self.is_opt_out_overridden}, "
+            f"bounce_overridden={self.is_bounce_overridden}, disposition={self.effective_local_disposition!r}, "
             f"raw_length={self.raw_content_length})"
         )
 
@@ -151,6 +176,7 @@ class LLMOutputValidator:
     Lightweight, deterministic, provider-independent output validation engine for SalesAI.
     Validates identity, strict JSON syntax, versioned task schemas, evidence references,
     and security boundaries. Zero external network IO, zero model calls.
+    Hardened under S2.5.1 against defects B1 through B8.
     """
 
     def __init__(
@@ -192,7 +218,7 @@ class LLMOutputValidator:
             for k, v in data.items():
                 k_lower = str(k).lower().strip()
                 if k_lower in _FORBIDDEN_OPERATIONAL_ACTIONS:
-                    failure_reasons.append(f"SAFETY_FORBIDDEN_OPERATIONAL_ACTION_{k_lower.upper()}")
+                    failure_reasons.append(f"SAFETY_FORBIDDEN_OPERATIONAL_ACTION_{_sanitize_reason_code(k_lower)}")
                 self._check_safety_and_operational_protection(v, failure_reasons)
 
         elif isinstance(data, (list, tuple)):
@@ -220,19 +246,22 @@ class LLMOutputValidator:
         Synchronous validation of an LLMResponse against an LLMRequest.
         Executes strict multi-phase verification:
         1. Base metrics & finish reason
-        2. Request/response identity & provenance
+        2. Request/response identity & provenance (S2.5.1 B5 & B6)
         3. Raw size & control sequence bounds
         4. Local single-fence normalization
         5. Strict duplicate-key syntax parsing
-        6. Task-specific schema validation
-        7. Evidence references grounding check
-        8. Local opt-out / bounce precedence
+        6. Task-specific schema validation (S2.5.1 B7 & B8)
+        7. Evidence references grounding check (S2.5.1 B1 & B2)
+        8. Local opt-out / bounce precedence (S2.5.1 B3 & B4)
         9. Security & operational protection
         10. Bounded repair proposal evaluation
         """
         failure_reasons: List[str] = []
         needs_business_review = False
         is_opt_out_overridden = False
+        is_bounce_overridden = False
+        is_suppression_overridden = False
+        effective_local_disposition: Optional[str] = None
         normalization_applied = False
         validated_data: Optional[Dict[str, Any]] = None
 
@@ -259,7 +288,7 @@ class LLMOutputValidator:
                 failure_reasons.append("FINISH_REASON_REFUSAL")
 
         # -------------------------------------------------------------------
-        # 2. Identity & Provenance Verification (Section 2.1)
+        # 2. Identity & Provenance Verification (Section 2.1 / S2.5.1 B5 & B6)
         # -------------------------------------------------------------------
         if not response.request_id or response.request_id != request.request_id:
             failure_reasons.append("IDENTITY_MISMATCH_REQUEST_ID")
@@ -274,16 +303,34 @@ class LLMOutputValidator:
             failure_reasons.append("IDENTITY_MISMATCH_TASK_ID")
             canonical_task = "unknown"
 
-        if request.provider and response.provider != request.provider:
+        # S2.5.1 B5: Explicit pinned provider and model required on request
+        if not request.provider or not str(request.provider).strip():
+            failure_reasons.append("MISSING_APPROVED_PROVIDER_IDENTITY")
+        elif response.provider != request.provider:
             failure_reasons.append("IDENTITY_MISMATCH_PROVIDER")
 
-        if request.model and response.model != request.model:
+        if not request.model or not str(request.model).strip():
+            failure_reasons.append("MISSING_APPROVED_MODEL_IDENTITY")
+        elif response.model != request.model:
             failure_reasons.append("IDENTITY_MISMATCH_MODEL")
 
-        # Resolve subtask identifier
-        resolved_subtask = subtask_id
-        if resolved_subtask is None and request.metadata:
-            resolved_subtask = request.metadata.get("subtask_id")
+        # S2.5.1 B6: Subtask resolution and consistency
+        req_meta_subtask = None
+        if request.metadata and "subtask_id" in request.metadata:
+            raw_sub = request.metadata["subtask_id"]
+            if raw_sub is not None:
+                req_meta_subtask = str(raw_sub).strip().lower()
+
+        arg_subtask = None
+        if subtask_id is not None:
+            arg_subtask = str(subtask_id).strip().lower()
+
+        # Detect inconsistency if both are provided
+        if req_meta_subtask is not None and arg_subtask is not None and req_meta_subtask != arg_subtask:
+            failure_reasons.append("IDENTITY_MISMATCH_SUBTASK")
+            resolved_subtask = req_meta_subtask
+        else:
+            resolved_subtask = arg_subtask if arg_subtask is not None else req_meta_subtask
 
         if canonical_task == "website_extraction":
             try:
@@ -291,6 +338,10 @@ class LLMOutputValidator:
                 if not resolved_subtask:
                     failure_reasons.append("IDENTITY_MISMATCH_SUBTASK")
             except ValueError:
+                failure_reasons.append("IDENTITY_MISMATCH_SUBTASK")
+        else:
+            # Non-website tasks do not define subtasks; reject unexpected subtasks
+            if resolved_subtask is not None:
                 failure_reasons.append("IDENTITY_MISMATCH_SUBTASK")
 
         # -------------------------------------------------------------------
@@ -309,7 +360,6 @@ class LLMOutputValidator:
         cleaned_content = raw_content.strip()
 
         # Match single whole-response Markdown code fence:
-        # e.g., ^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$
         fence_match = re.match(r"^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$", cleaned_content, re.IGNORECASE)
         if fence_match:
             # Whole response was enclosed in code fence
@@ -368,83 +418,108 @@ class LLMOutputValidator:
                     failure_reasons.append(err_name)
 
         # -------------------------------------------------------------------
-        # 6. Task Schema Validation (Section 2.3)
+        # 6. Task Schema Validation (Section 2.3 / S2.5.1 B7 & B8)
         # -------------------------------------------------------------------
         if parsed_dict is not None and not any(r.startswith("SYNTAX_") for r in failure_reasons):
             try:
                 schema_cls = SchemaRegistry.get_schema(canonical_task, resolved_subtask)
             except ValueError:
-                failure_reasons.append(f"SCHEMA_UNREGISTERED_TASK_{canonical_task.upper()}")
+                failure_reasons.append(f"SCHEMA_UNREGISTERED_TASK_{_sanitize_reason_code(canonical_task)}")
                 schema_cls = None
 
             if schema_cls:
                 try:
-                    # Validate against strict authoritative schema
+                    # Validate against strict authoritative schema (strict=True enforces types, B8)
                     validated_instance = schema_cls.model_validate(parsed_dict)
                     validated_data = validated_instance.model_dump()
                 except ValidationError as ve:
                     for err in ve.errors():
-                        loc_parts = [str(p) for p in err.get("loc", [])]
-                        field_name = "_".join(loc_parts) if loc_parts else "ROOT"
                         err_type = err.get("type", "")
+                        loc_parts = [str(p) for p in err.get("loc", [])]
 
-                        if "missing" in err_type:
-                            failure_reasons.append(f"SCHEMA_MISSING_REQUIRED_FIELD_{field_name.upper()}")
-                        elif "extra_forbidden" in err_type:
-                            failure_reasons.append(f"SCHEMA_EXTRA_FIELD_{field_name.upper()}")
-                        elif "enum" in err_type or "literal_error" in err_type:
-                            failure_reasons.append(f"SCHEMA_INVALID_ENUM_{field_name.upper()}")
-                        elif any(b in err_type for b in ["greater_than", "less_than", "length", "too_short", "too_long", "too_many"]):
-                            failure_reasons.append(f"SCHEMA_BOUNDS_VIOLATION_{field_name.upper()}")
+                        if "extra_forbidden" in err_type:
+                            # S2.5.1 B7: NEVER echo attacker-controlled key names in failure reasons!
+                            failure_reasons.append("SCHEMA_EXTRA_FIELD")
                         else:
-                            failure_reasons.append(f"SCHEMA_TYPE_ERROR_{field_name.upper()}")
+                            # For other schema errors, verify field is in known schema fields
+                            raw_field = "_".join(loc_parts) if loc_parts else "ROOT"
+                            clean_field = re.sub(r"[^A-Za-z0-9_]", "", raw_field).upper()[:40]
+                            known_fields = set(f.upper() for f in schema_cls.model_fields.keys())
+                            if loc_parts and loc_parts[0].upper() in known_fields:
+                                safe_field_label = clean_field
+                            else:
+                                safe_field_label = "FIELD"
+
+                            if "missing" in err_type:
+                                failure_reasons.append(f"SCHEMA_MISSING_REQUIRED_FIELD_{safe_field_label}")
+                            elif "enum" in err_type or "literal_error" in err_type:
+                                failure_reasons.append(f"SCHEMA_INVALID_ENUM_{safe_field_label}")
+                            elif any(b in err_type for b in ["greater_than", "less_than", "length", "too_short", "too_long", "too_many"]):
+                                failure_reasons.append(f"SCHEMA_BOUNDS_VIOLATION_{safe_field_label}")
+                            else:
+                                failure_reasons.append(f"SCHEMA_TYPE_ERROR_{safe_field_label}")
 
         # -------------------------------------------------------------------
-        # 7. Evidence Grounding & Reference Integrity (Section 2.4)
+        # 7. Evidence Grounding & Reference Integrity (Section 2.4 / S2.5.1 B1 & B2)
         # -------------------------------------------------------------------
         if validated_data is not None:
             refs = validated_data.get("evidence_refs") or []
             if refs:
-                # Resolve approved evidence IDs
-                approved_ids = set(approved_evidence_ids or set())
-                if request.metadata and "approved_evidence_ids" in request.metadata:
-                    meta_ids = request.metadata["approved_evidence_ids"]
-                    if isinstance(meta_ids, (list, set, tuple)):
-                        approved_ids.update(str(i) for i in meta_ids)
+                # S2.5.1 B1: Any nonempty cited references MUST fail if no approved evidence set is supplied
+                if approved_evidence_ids is None or len(approved_evidence_ids) == 0:
+                    failure_reasons.append("EVIDENCE_APPROVED_SET_REQUIRED")
+                else:
+                    # S2.5.1 B2: approved_evidence_ids passed as argument is AUTHORITATIVE.
+                    # Request metadata MUST NOT broaden or override it!
+                    trusted_ids = set(approved_evidence_ids)
+                    seen_refs = set()
+                    for ref in refs:
+                        ref_str = str(ref).strip() if ref is not None else ""
+                        if not ref_str:
+                            failure_reasons.append("EVIDENCE_MALFORMED_REF")
+                            continue
+                        if ref_str in seen_refs:
+                            failure_reasons.append("EVIDENCE_DUPLICATE_REF")
+                        seen_refs.add(ref_str)
 
-                seen_refs = set()
-                for ref in refs:
-                    ref_str = str(ref).strip()
-                    if ref_str in seen_refs:
-                        failure_reasons.append("EVIDENCE_DUPLICATE_REF")
-                    seen_refs.add(ref_str)
-
-                    if approved_ids and ref_str not in approved_ids:
-                        failure_reasons.append("EVIDENCE_UNKNOWN_REF")
+                        if ref_str not in trusted_ids:
+                            failure_reasons.append("EVIDENCE_UNKNOWN_REF")
 
                 # Schema validation cannot establish factual claim truth on its own
                 needs_business_review = True
 
         # -------------------------------------------------------------------
-        # 8. Local Opt-Out / Bounce Precedence (Section 2.4)
+        # 8. Local Opt-Out, Bounce & Suppression Precedence (Section 2.4 / S2.5.1 B3 & B4)
         # -------------------------------------------------------------------
         if canonical_task == "inbox_classification" and validated_data is not None:
-            # Check local signals
-            opt_out_detected = False
-            if local_signals and local_signals.get("is_opt_out_detected"):
-                opt_out_detected = True
-            elif request.metadata and request.metadata.get("is_opt_out_detected"):
-                opt_out_detected = True
+            local_sigs = local_signals or {}
+            opt_out_detected = bool(local_sigs.get("is_opt_out_detected") or (request.metadata and request.metadata.get("is_opt_out_detected")))
+            bounce_detected = bool(local_sigs.get("is_bounce_detected") or (request.metadata and request.metadata.get("is_bounce_detected")))
+            suppressed = bool(local_sigs.get("is_suppressed") or (request.metadata and request.metadata.get("is_suppressed")))
 
+            model_cat = validated_data.get("category")
+
+            # Deterministic precedence: 1. Opt-out, 2. Bounce, 3. Suppression
             if opt_out_detected:
-                model_cat = validated_data.get("category")
-                if model_cat in ("positive_interest", "meeting_proposed", "referral", "question"):
-                    # Local opt-out signal strictly overrides conflicting positive model classification
+                # S2.5.1 B3: Opt-out overrides EVERY conflicting category (including not_now, not_interested, unknown, auto_reply, bounce)
+                if model_cat != "unsubscribe":
                     failure_reasons.append("OPT_OUT_OVERRIDE_PREVENTED")
-                    validated_data["category"] = "unsubscribe"
-                    validated_data["confidence"] = 1.0
-                    validated_data["reasoning"] = "Overridden by verified local opt-out / suppression signal."
                     is_opt_out_overridden = True
+                    effective_local_disposition = "unsubscribe"
+                    needs_business_review = True
+            elif bounce_detected:
+                # S2.5.1 B4: Bounce overrides conflicting positive, inquiry, or meeting categories
+                if model_cat != "bounce":
+                    failure_reasons.append("BOUNCE_OVERRIDE_PREVENTED")
+                    is_bounce_overridden = True
+                    effective_local_disposition = "bounce"
+                    needs_business_review = True
+            elif suppressed:
+                # S2.5.1 B4: Suppression blocks positive engagement, follow-up, or inquiry categories
+                if model_cat in ("positive_interest", "meeting_proposed", "referral", "question", "not_now"):
+                    failure_reasons.append("SUPPRESSION_OVERRIDE_PREVENTED")
+                    is_suppression_overridden = True
+                    effective_local_disposition = "do_not_contact"
                     needs_business_review = True
 
         # -------------------------------------------------------------------
@@ -459,15 +534,19 @@ class LLMOutputValidator:
         is_valid = len(failure_reasons) == 0
         repair_proposal = None
         if not is_valid:
+            # Sanitize reason codes before repair policy evaluation (S2.5.1 B7)
+            sanitized_failure_reasons = sorted(list(set(_sanitize_reason_code(r) for r in failure_reasons)))
             repair_proposal = self.repair_policy.evaluate_repair(
                 request=request,
                 response=response,
-                failure_reasons=failure_reasons,
+                failure_reasons=sanitized_failure_reasons,
                 prior_attempt_count=prior_attempt_count,
                 subtask_id=resolved_subtask,
             )
             # Fail closed: scrub validated data on failure
             validated_data = None
+        else:
+            sanitized_failure_reasons = []
 
         return OutputValidationResult(
             is_valid=is_valid,
@@ -475,9 +554,12 @@ class LLMOutputValidator:
             subtask_id=resolved_subtask,
             schema_version=SCHEMA_REGISTRY_VERSION,
             validated_data=validated_data,
-            failure_reasons=sorted(list(set(failure_reasons))),
+            failure_reasons=sanitized_failure_reasons,
             needs_business_review=needs_business_review,
             is_opt_out_overridden=is_opt_out_overridden,
+            is_bounce_overridden=is_bounce_overridden,
+            is_suppression_overridden=is_suppression_overridden,
+            effective_local_disposition=effective_local_disposition,
             normalization_applied=normalization_applied,
             repair_proposal=repair_proposal,
             raw_content_length=raw_len,
