@@ -8,7 +8,7 @@ JSON-escaped data values, preventing delimiter breakouts or system instruction s
 import json
 import re
 from enum import Enum
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, Set
 from urllib.parse import urlparse
 
 from sales_engine.llm_gateway.errors import LLMUntrustedContentError
@@ -24,6 +24,53 @@ class InputTrustClass(str, Enum):
     APPROVED_BUSINESS_FACTS = "approved_business_facts"
     UNTRUSTED_SOURCE = "untrusted_source"
     RESTRICTED_LOCAL_ONLY = "restricted_local_only"
+
+
+# Fixed local allowlist for source kinds
+VALID_SOURCE_KINDS: Set[str] = {
+    "website_evidence",
+    "website_excerpt_b",
+    "website",
+    "job_posting",
+    "inbound_email",
+    "recent_reply",
+    "discovery_context",
+    "outreach_context",
+}
+
+# Strict opaque local source_id pattern: 1-80 chars, alphanum start, safe chars only
+SOURCE_ID_REGEX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")
+
+
+def validate_source_id(source_id: str) -> str:
+    """
+    Validate that source_id is a non-empty, bounded, opaque local identifier.
+    Strictly permits only [A-Za-z0-9][A-Za-z0-9_.:-]{0,79}.
+    Rejects quotes, angle brackets, newlines, spaces, control chars, and oversized IDs.
+    """
+    if not isinstance(source_id, str):
+        raise LLMUntrustedContentError(f"source_id must be str, got {type(source_id).__name__}")
+    if not source_id or len(source_id) > 80:
+        raise LLMUntrustedContentError(
+            f"source_id must be between 1 and 80 characters, got {len(source_id) if source_id else 0}"
+        )
+    if not SOURCE_ID_REGEX.match(source_id):
+        raise LLMUntrustedContentError(
+            f"Invalid source_id: contains forbidden characters, spaces, quotes, or invalid pattern: {source_id[:30]!r}"
+        )
+    return source_id
+
+
+def validate_source_kind(source_kind: str) -> str:
+    """
+    Validate that source_kind is one of the fixed local allowlisted source kinds.
+    Prevents untrusted values from creating unauthorized attributes or roles.
+    """
+    if not isinstance(source_kind, str) or source_kind not in VALID_SOURCE_KINDS:
+        raise LLMUntrustedContentError(
+            f"Invalid or untrusted source_kind: {source_kind!r}. Allowed: {sorted(list(VALID_SOURCE_KINDS))}"
+        )
+    return source_kind
 
 
 # Common adversarial injection phrases to detect and log
@@ -42,14 +89,19 @@ _INJECTION_PHRASES = [
     "act as system",
     "</untrusted_content>",
     "<system>",
+    "</system>",
     "[inst]",
+    "[/inst]",
     "### system:",
+    "human:",
+    "assistant:",
+    "developer:",
 ]
 
 
 def contains_prompt_injection(text: str) -> bool:
     """Return True if text contains recognizable adversarial prompt injection phrases."""
-    if not text:
+    if not text or not isinstance(text, str):
         return False
     lower = text.lower()
     return any(p in lower for p in _INJECTION_PHRASES)
@@ -105,47 +157,46 @@ def wrap_untrusted_source(
     Wrap untrusted source text inside a JSON-escaped typed envelope.
     Returns (wrapped_envelope_str, injection_detected_bool).
 
-    Fails closed on forbidden control characters or malformed inputs.
+    Fails closed on forbidden control characters, data URLs, invalid source_id,
+    or unauthorized source_kind.
     """
     if not isinstance(content, str):
         raise LLMUntrustedContentError(f"Untrusted content must be str, got {type(content).__name__}")
 
-    if not source_id or not isinstance(source_id, str):
-        raise LLMUntrustedContentError("source_id must be a non-empty string.")
+    # 1. Strictly validate opaque local source_id and fixed source_kind
+    val_source_id = validate_source_id(source_id)
+    val_source_kind = validate_source_kind(source_kind)
 
-    if not source_kind or not isinstance(source_kind, str):
-        raise LLMUntrustedContentError("source_kind must be a non-empty string.")
-
-    # 1. Check for fatal control characters (null bytes or invalid ascii)
+    # 2. Check for fatal control characters (null bytes or invalid ascii)
     for c in content:
         code = ord(c)
         if code == 0 or (code < 32 and c not in ("\t", "\n", "\r")) or code == 127:
-            raise LLMUntrustedContentError(f"Untrusted source '{source_id}' contains forbidden control characters.")
+            raise LLMUntrustedContentError(f"Untrusted source '{val_source_id}' contains forbidden control characters.")
 
-    # 2. Check for data URLs
+    # 3. Check for data URLs
     if re.search(r"data:\s*text/html", content, re.IGNORECASE):
-        raise LLMUntrustedContentError(f"Untrusted source '{source_id}' contains forbidden data URL.")
+        raise LLMUntrustedContentError(f"Untrusted source '{val_source_id}' contains forbidden data URL.")
 
-    # 3. Detect injection attempts (for audit flagging)
+    # 4. Detect injection attempts (for audit and fail-closed suppression)
     injection_detected = contains_prompt_injection(content)
 
-    # 4. Truncate if max_chars is specified
+    # 5. Truncate if max_chars is specified
     text = content
     if max_chars is not None and len(text) > max_chars:
         text = text[:max_chars]
 
-    # 5. Serialize as JSON data value inside typed envelope
+    # 6. Serialize as JSON data value inside typed envelope
     # JSON encoding ensures all quotes, newlines, and potential delimiter tags are safely escaped
     envelope_payload = {
-        "source_id": source_id,
-        "source_kind": source_kind,
+        "source_id": val_source_id,
+        "source_kind": val_source_kind,
         "untrusted": True,
         "content": text,
     }
     json_str = json.dumps(envelope_payload, ensure_ascii=False)
 
     wrapped = (
-        f'<UNTRUSTED_CONTENT source_kind="{source_kind}" source_id="{source_id}" untrusted="true">\n'
+        f'<UNTRUSTED_CONTENT source_kind="{val_source_kind}" source_id="{val_source_id}" untrusted="true">\n'
         f"{json_str}\n"
         f"</UNTRUSTED_CONTENT>"
     )

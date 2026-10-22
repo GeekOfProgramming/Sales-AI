@@ -457,11 +457,9 @@ def test_fake_commands_cannot_control_model_routing_or_parameters():
     }
     result = builder.build_payload("job_analysis", input_data)
 
-    assert result.llm_request is not None
-    assert result.llm_request.provider is None  # Unset by untrusted text
-    assert result.llm_request.model is None     # Unset by untrusted text
-    assert result.llm_request.tier is None      # Not escalated to Tier 4
-    assert result.llm_request.max_output_tokens == 2048
+    assert result.manual_review_required is True
+    assert result.llm_request is None
+    assert "Prompt injection" in result.rejection_reason
 
 
 def test_reject_untrusted_source_with_null_bytes_or_control_chars():
@@ -637,8 +635,9 @@ def test_preview_sanitized_payload_shows_preview_without_raw_secrets():
     preview = preview_sanitized_payload(result)
 
     assert "mario.rossi@studioarch.it" not in str(preview)
-    assert "[PERSONAL_EMAIL_1]" in preview["sanitized_prompt_sample"]
+    assert preview["sanitized_prompt_sample"] is None
     assert preview["redaction_counts"]["emails"] == 1
+    assert preview["prompt_char_length"] > 0
 
 
 def test_idempotency_and_zero_mutation_of_input_data():

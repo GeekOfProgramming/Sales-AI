@@ -67,18 +67,18 @@ _BEARER_TOKEN_RE = re.compile(
     re.IGNORECASE,
 )
 _OPENAI_KEY_RE = re.compile(
-    r"\b(sk-(?:live|proj|test)?-[A-Za-z0-9_\-]{20,})\b"
+    r"\b(sk-[A-Za-z0-9_\-]{20,})\b"
 )
 _SECRET_ASSIGN_RE = re.compile(
     r"\b(api[-_]?key|client_secret|refresh_token|access_token|smtp_pass(?:word)?|"
-    r"password|passwd|pwd|private[-_]?key)\s*([:=])\s*['\"]?(?!\[[A-Z_]+_\d+\])([^\s,;&'\"]{4,})['\"]?",
+    r"password|passwd|pwd|private[-_]?key|auth_token)\s*([:=])\s*['\"]?(?!\[[A-Z_]+_\d+\])([^\s,;&'\"]{4,})['\"]?",
     re.IGNORECASE,
 )
 _ENV_SECRET_RE = re.compile(
     r"\b([A-Z0-9_]*(?:SECRET|TOKEN|API_KEY|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*)\s*=\s*['\"]?(?!\[[A-Z_]+_\d+\])([^\s'\"]{4,})['\"]?"
 )
 _COOKIE_RE = re.compile(
-    r"\b(sessionid|connect\.sid|phpsessid|csrf_token|xsrf_token|cookie)\s*([:=])\s*['\"]?(?!\[[A-Z_]+_\d+\])([^\s,;&'\"]{6,})['\"]?",
+    r"\b(sessionid|connect\.sid|phpsessid|csrf_token|xsrf_token|cookie)\s*([:=])\s*['\"]?(?!\[[A-Z_]+_\d+\])([^\s,;&'\"]{4,})['\"]?",
     re.IGNORECASE,
 )
 
@@ -147,6 +147,7 @@ class RedactionResult(BaseModel):
     rejection_reason: Optional[str] = Field(default=None)
     placeholder_map: Dict[str, str] = Field(
         default_factory=dict,
+        exclude=True,
         description="Local-only mapping from placeholder to original value. Never transmitted or logged.",
     )
 
@@ -206,6 +207,9 @@ class PrivacyFilter:
         key = original_val.strip()
         if key in self._val_to_placeholder:
             return self._val_to_placeholder[key]
+
+        if len(self._placeholder_map) >= 500:
+            raise LLMPrivacyRejectionError("Maximum unique sensitive placeholders exceeded per request (500).")
 
         self._counters[category] = self._counters.get(category, 0) + 1
         placeholder = f"[{category}_{self._counters[category]}]"
@@ -396,7 +400,7 @@ class PrivacyFilter:
             )
             if suspicious_residuals:
                 manual_review = True
-                rejection_reasons.append(f"Residual unredacted secret assignment detected: {suspicious_residuals.group(0)[:15]}...")
+                rejection_reasons.append("Residual unredacted secret assignment detected.")
 
         return RedactionResult(
             sanitized_text=sanitized,
