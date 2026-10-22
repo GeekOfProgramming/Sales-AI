@@ -70,10 +70,15 @@ class S3BenchmarkReportGenerator:
             "exact_model_id",
             "case_id",
             "group",
+            "schema_pass",
+            "ground_truth_pass",
+            "evidence_pass",
+            "safety_pass",
+            "overall_pass",
+            "needs_review",
             "syntactic_valid",
             "semantic_valid",
             "safety_valid",
-            "overall_pass",
             "latency_ms",
             "input_tokens",
             "output_tokens",
@@ -96,10 +101,15 @@ class S3BenchmarkReportGenerator:
                     "exact_model_id": case.exact_model_id,
                     "case_id": case.case_id,
                     "group": case.group,
+                    "schema_pass": case.schema_pass,
+                    "ground_truth_pass": case.ground_truth_pass,
+                    "evidence_pass": case.evidence_pass,
+                    "safety_pass": case.safety_pass,
+                    "overall_pass": case.overall_pass,
+                    "needs_review": case.needs_review,
                     "syntactic_valid": case.syntactic_valid,
                     "semantic_valid": case.semantic_valid,
                     "safety_valid": case.safety_valid,
-                    "overall_pass": case.overall_pass,
                     "latency_ms": case.latency_ms,
                     "input_tokens": case.input_tokens if case.input_tokens is not None else "",
                     "output_tokens": case.output_tokens if case.output_tokens is not None else "",
@@ -122,12 +132,20 @@ class S3BenchmarkReportGenerator:
         filename = f"BENCHMARK_REPORT_{report.run_id}.md"
         target_path = self.output_dir / filename
 
+        mode_str = "OFFLINE DRY-RUN (MOCKED)" if report.is_dry_run else "LIVE PILOT"
+        if report.is_smoke_only:
+            mode_str += " [SMOKE TEST ONLY]"
+
         lines = [
-            f"# SalesAI S3.0 — External LLM Benchmark Report",
+            f"# SalesAI S3.1 — External LLM Benchmark Report",
             f"",
             f"- **Run ID:** `{report.run_id}`",
             f"- **Timestamp:** `{report.timestamp}`",
-            f"- **Mode:** `{'OFFLINE DRY-RUN (MOCKED)' if report.is_dry_run else 'LIVE PILOT'}`",
+            f"- **Mode:** `{mode_str}`",
+            f"- **Scorer Version:** `{report.scorer_version}`",
+            f"- **Fixture Catalog Version:** `{report.fixture_catalog_version}`",
+            f"- **Pricing Source Mode:** `{report.pricing_source_mode}`",
+            f"- **Smoke Test Only:** `{report.is_smoke_only}`",
             f"- **Total Cases Evaluated:** `{report.total_cases_run}`",
             f"- **Total Measured / Calculated Cost:** `${report.total_cost_usd:.6f}`",
             f"",
@@ -141,18 +159,21 @@ class S3BenchmarkReportGenerator:
             f"",
             f"## 1. Candidate Comparison & Qualification Matrix",
             f"",
-            f"| Task / Subtask | Candidate | Provider | Model | Cases | Syntactic % | Semantic % | Safety % | Overall % | Qualified? | Status |",
-            f"| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |",
+            f"| Task / Subtask | Candidate | Provider | Model | Cases | Schema % | Ground Truth % | Evidence % | Safety % | Overall % | Qualified? | Status |",
+            f"| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |",
         ]
 
         for s in report.candidate_summaries:
             task_disp = f"{s.task_id}:{s.subtask_id}" if s.subtask_id else s.task_id
             qual_str = "✅ YES" if s.qualified else "❌ NO"
-            status_str = "PROPOSED" if s.qualified else "REJECTED"
+            if s.is_smoke_only:
+                status_str = "SMOKE_ONLY"
+            else:
+                status_str = "PROPOSED" if s.qualified else "REJECTED"
             lines.append(
                 f"| `{task_disp}` | `{s.candidate_id}` | `{s.provider_id}` | `{s.exact_model_id}` | "
-                f"{s.cases_evaluated} | {s.syntactic_pass_rate:.1%} | {s.semantic_pass_rate:.1%} | "
-                f"{s.safety_pass_rate:.1%} | {s.overall_pass_rate:.1%} | {qual_str} | **{status_str}** |"
+                f"{s.cases_evaluated} | {s.schema_pass_rate:.1%} | {s.ground_truth_pass_rate:.1%} | "
+                f"{s.evidence_pass_rate:.1%} | {s.safety_pass_rate:.1%} | {s.overall_pass_rate:.1%} | {qual_str} | **{status_str}** |"
             )
 
         lines.extend([

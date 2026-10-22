@@ -414,10 +414,10 @@ def test_sequential_tier1_evaluation_stops_on_first_qualifying():
     """Verify runner evaluates candidate #1 first, and stops when #1 qualifies."""
     runner = ExternalBenchmarkRunner(dry_run=True, stop_on_first_qualifying=True)
 
-    # Run on single task with 2 cases for fast deterministic check
+    # Run on single task with full 10 cases for qualification check
     report = runner.run_benchmark(
         task_filter="job_analysis",
-        max_cases_per_task=2,
+        max_cases_per_task=10,
     )
 
     # Candidate #1 (t1_c1) qualifies in mock runner -> runner stops!
@@ -561,4 +561,4 @@ def test_multi_format_report_generation():
         md_content = md_path.read_text(encoding="utf-8")
         assert "External LLM Benchmark Report" in md_content
         assert "constitute production route approvals" in md_content
-        assert "PROPOSED" in md_content
+        assert "PROPOSED" in md_content or "SMOKE_ONLY" in md_content

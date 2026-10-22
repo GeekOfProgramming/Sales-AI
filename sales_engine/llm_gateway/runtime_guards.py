@@ -10,7 +10,9 @@ Enforces:
 """
 
 import asyncio
+import hashlib
 import inspect
+import json
 import threading
 import time
 from typing import Callable, Optional, Dict, Any, Awaitable
@@ -63,7 +65,31 @@ class RuntimeGuard:
 
         # A1 Idempotency protections: in-memory cache and in-flight tracking
         self._response_cache: Dict[str, LLMResponse] = {}
+        self._request_fingerprints: Dict[str, str] = {}
         self._in_flight_request_ids: set[str] = set()
+
+    def _compute_request_fingerprint(
+        self,
+        request: LLMRequest,
+        candidate: Optional[ModelCandidate] = None,
+    ) -> str:
+        """
+        Compute deterministic SHA-256 fingerprint of request content and parameters.
+        Used to prevent cache reuse when the same request_id is reused with different payload/parameters.
+        Does not log or expose raw prompt text.
+        """
+        data = {
+            "task_id": request.task_id,
+            "model": request.model or (candidate.exact_model_id if candidate else None),
+            "provider": request.provider or (candidate.provider_id if candidate else None),
+            "tier": request.tier.value if request.tier else (candidate.tier.value if candidate else None),
+            "prompt": request.prompt,
+            "system_prompt": request.system_prompt or "",
+            "temperature": request.temperature,
+            "max_output_tokens": request.max_output_tokens,
+        }
+        encoded = json.dumps(data, sort_keys=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def _validate_candidate_binding(
         self,
@@ -223,9 +249,20 @@ class RuntimeGuard:
         """
         Synchronously execute an LLM call under budget preflight, concurrency, and rate guards.
         """
-        # A1 Defense: Return cached prior response if already dispatched/reconciled in this runtime
+        # A1 Defense & S3.1 Fingerprint Check:
+        fingerprint = self._compute_request_fingerprint(request, candidate)
         with self._state_lock:
             if request.request_id in self._response_cache:
+                cached_fp = self._request_fingerprints.get(request.request_id)
+                if cached_fp and cached_fp != fingerprint:
+                    raise LLMDuplicateRequestError(
+                        message=(
+                            f"Request ID '{request.request_id}' reused with mismatched payload, "
+                            f"task, model, or parameters."
+                        ),
+                        provider=candidate.provider_id,
+                        task_id=request.task_id,
+                    )
                 return self._response_cache[request.request_id]
             if request.request_id in self._in_flight_request_ids:
                 raise LLMDuplicateRequestError(
@@ -300,6 +337,7 @@ class RuntimeGuard:
             # A1 Defense: Cache response to guarantee subsequent duplicate calls never re-dispatch
             with self._state_lock:
                 self._response_cache[request.request_id] = response
+                self._request_fingerprints[request.request_id] = fingerprint
 
             return response
         finally:
@@ -317,9 +355,20 @@ class RuntimeGuard:
         """
         Asynchronously execute an LLM call under budget preflight, concurrency, and rate guards.
         """
-        # A1 Defense: Return cached prior response if already dispatched/reconciled in this runtime
+        # A1 Defense & S3.1 Fingerprint Check:
+        fingerprint = self._compute_request_fingerprint(request, candidate)
         with self._state_lock:
             if request.request_id in self._response_cache:
+                cached_fp = self._request_fingerprints.get(request.request_id)
+                if cached_fp and cached_fp != fingerprint:
+                    raise LLMDuplicateRequestError(
+                        message=(
+                            f"Request ID '{request.request_id}' reused with mismatched payload, "
+                            f"task, model, or parameters."
+                        ),
+                        provider=candidate.provider_id,
+                        task_id=request.task_id,
+                    )
                 return self._response_cache[request.request_id]
             if request.request_id in self._in_flight_request_ids:
                 raise LLMDuplicateRequestError(
@@ -394,6 +443,7 @@ class RuntimeGuard:
             # A1 Defense: Cache response to guarantee subsequent duplicate calls never re-dispatch
             with self._state_lock:
                 self._response_cache[request.request_id] = response
+                self._request_fingerprints[request.request_id] = fingerprint
 
             return response
         finally:

@@ -36,7 +36,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from sales_engine.benchmark.external_runner import ExternalBenchmarkRunner
 from sales_engine.benchmark.report_s3 import S3BenchmarkReportGenerator
-from sales_engine.llm_gateway.errors import LLMNotConfiguredError
+from sales_engine.llm_gateway.errors import LLMNotConfiguredError, LLMBudgetExceededError
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,7 +55,26 @@ def parse_args() -> argparse.Namespace:
         "--live",
         dest="dry_run",
         action="store_false",
-        help="Attempt live commercial execution (fails closed in S3.0).",
+        help="Attempt live commercial execution (requires --confirm-paid).",
+    )
+    parser.add_argument(
+        "--confirm-paid",
+        dest="confirm_paid",
+        action="store_true",
+        default=False,
+        help="Second required authorization key for live execution confirming paid commercial calls.",
+    )
+    parser.add_argument(
+        "--max-requests",
+        type=int,
+        default=1,
+        help="Maximum requests permitted in live mode (safety ceiling: 20, default: 1).",
+    )
+    parser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=0.10,
+        help="Maximum spend in USD permitted in live mode (safety ceiling: $1.00, default: 0.10).",
     )
     parser.add_argument(
         "--task",
@@ -95,9 +114,13 @@ def main() -> int:
     args = parse_args()
 
     print("=" * 72)
-    print("SalesAI S3.0 - External LLM Benchmark Runner")
+    print("SalesAI S3.1 - External LLM Benchmark Runner")
     print("=" * 72)
     print(f"Mode: {'OFFLINE DRY-RUN (Deterministic Mock)' if args.dry_run else 'LIVE DISPATCH'}")
+    if not args.dry_run:
+        print(f"  Confirm Paid Key: {args.confirm_paid}")
+        print(f"  Max Requests Cap: {args.max_requests}")
+        print(f"  Max Spend Cap: ${args.max_cost_usd:.2f}")
     print(f"Task Filter: {args.task}")
     print(f"Candidate Filter: {args.candidate or 'Sequential Tier 1 (#1..#4)'}")
     print(f"Max Cases per Task: {args.max_cases or 'All available fixtures'}")
@@ -105,8 +128,13 @@ def main() -> int:
     print("-" * 72)
 
     try:
-        runner = ExternalBenchmarkRunner(dry_run=args.dry_run)
-    except LLMNotConfiguredError as e:
+        runner = ExternalBenchmarkRunner(
+            dry_run=args.dry_run,
+            confirm_paid=args.confirm_paid,
+            max_requests=args.max_requests,
+            max_cost_usd=args.max_cost_usd,
+        )
+    except (LLMNotConfiguredError, LLMBudgetExceededError) as e:
         print(f"\n[SAFETY GATE TRIPPED] Execution Refused:\n  {e}", file=sys.stderr)
         return 1
     except Exception as e:

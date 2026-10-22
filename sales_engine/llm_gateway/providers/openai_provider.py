@@ -153,12 +153,36 @@ class OpenAIProvider(BaseLLMProvider):
 
         cap = self.model_capabilities.get(model, {})
 
-        # Temperature (omit if model capability explicitly forbids it)
-        if cap.get("supports_temperature", True):
+        is_reasoning = (
+            cap.get("is_reasoning_model", False)
+            or cap.get("use_max_completion_tokens", False)
+            or "o1" in model.lower()
+            or "o3" in model.lower()
+            or "luna" in model.lower()
+        )
+
+        reasoning_effort = (request.metadata or {}).get("reasoning_effort") or cap.get("reasoning_effort")
+
+        # Temperature: reasoning models with reasoning effort other than 'none' do not support temperature
+        supports_temp = cap.get("supports_temperature", True)
+        omit_temperature = (
+            not supports_temp
+            or (is_reasoning and reasoning_effort != "none")
+            or (reasoning_effort is not None and reasoning_effort != "none")
+        )
+
+        if not omit_temperature:
             payload["temperature"] = request.temperature
 
-        # Token ceiling
-        payload["max_tokens"] = request.max_output_tokens
+        # Token ceiling: reasoning models use max_completion_tokens, standard models use max_tokens
+        use_max_completion_tokens = cap.get("use_max_completion_tokens", False) or is_reasoning
+        if use_max_completion_tokens:
+            payload["max_completion_tokens"] = request.max_output_tokens
+        else:
+            payload["max_tokens"] = request.max_output_tokens
+
+        if reasoning_effort and reasoning_effort != "none":
+            payload["reasoning_effort"] = reasoning_effort
 
         # JSON Mode / Structured Output
         if request.response_schema is not None or cap.get("force_json_mode", False):
