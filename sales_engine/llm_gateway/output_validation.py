@@ -1,0 +1,509 @@
+"""
+sales_engine/llm_gateway/output_validation.py
+Strict, deterministic, provider-independent LLM output validation layer for SalesAI.
+Strictly offline, fail-closed, zero network/IO.
+Implements S2.5:
+- Typed OutputValidationResult and LLMOutputValidator
+- Request/response identity & provenance verification
+- Strict syntax parsing (duplicate keys, single whole-response fence only, no eval/permissive regex)
+- Seven task/subtask schema validations using SchemaRegistry
+- Evidence reference verification against approved local evidence sets
+- Local opt-out / bounce precedence over conflicting model classifications
+- Prompt injection & secret reflection defenses
+- Bounded repair proposal evaluation (zero network dispatch)
+"""
+
+import json
+import math
+import re
+from typing import Dict, Any, Optional, List, Set, Tuple, Type
+from pydantic import BaseModel, Field, ConfigDict, ValidationError
+
+from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
+from sales_engine.llm_gateway.model_catalog import normalize_task_id, validate_subtask_id
+from sales_engine.llm_gateway.output_schemas import (
+    SchemaRegistry,
+    StrictOutputBaseModel,
+    SCHEMA_REGISTRY_VERSION,
+)
+from sales_engine.llm_gateway.repair_policy import (
+    RepairPolicy,
+    RepairProposal,
+    REPAIR_POLICY_VERSION,
+)
+from sales_engine.llm_gateway.source_boundaries import contains_prompt_injection
+
+OUTPUT_VALIDATOR_VERSION = "1.0.0"
+
+# Sensitive token / secret inspection patterns in output
+_OUTPUT_SECRET_PATTERNS = [
+    r"bearer\s+[A-Za-z0-9_\-\.]{15,}",
+    r"sk-[A-Za-z0-9_\-]{15,}",
+    r"(?:api[_\s-]?key|secret[_\s-]?key|access[_\s-]?token|private[_\s-]?key)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{12,}",
+    r"password\s*[:=]\s*['\"][^'\"]{6,}['\"]",
+]
+_SECRET_RE = re.compile("|".join(_OUTPUT_SECRET_PATTERNS), re.IGNORECASE)
+
+# Forbidden operational action keys/values that LLM output must not attempt to authorize
+_FORBIDDEN_OPERATIONAL_ACTIONS: Set[str] = {
+    "send_email",
+    "send_now",
+    "send_status",
+    "authorized",
+    "approved_by",
+    "promote_tier",
+    "change_budget",
+    "budget_override",
+    "confirm_meeting",
+    "meeting_confirmed",
+    "alter_routing",
+}
+
+
+def _detect_duplicate_keys(pairs: List[Tuple[Any, Any]]) -> Dict[str, Any]:
+    """
+    JSON object pairs hook that detects duplicate dictionary keys at ANY depth.
+    Standard json.loads silently overwrites duplicates; SalesAI strictly rejects them.
+    """
+    d: Dict[str, Any] = {}
+    for k, v in pairs:
+        k_str = str(k)
+        if k_str in d:
+            raise ValueError(f"DUPLICATE_KEY:{k_str}")
+        d[k_str] = v
+    return d
+
+
+def _reject_constant(val: str) -> None:
+    """Reject NaN, Infinity, -Infinity in JSON numbers."""
+    raise ValueError(f"ILLEGAL_CONSTANT:{val}")
+
+
+class OutputValidationResult(BaseModel):
+    """
+    Typed, immutable result returned by LLMOutputValidator.
+    Contains validated data/model on success, or safe failure reason codes on rejection.
+    Guarantees zero leakage of customer data, prompts, or secrets in repr/str.
+    """
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=False)
+
+    is_valid: bool = Field(..., description="Whether output passed all syntax, schema, and safety checks")
+    task_id: str = Field(..., description="Canonical task identifier")
+    subtask_id: Optional[str] = Field(default=None, description="Canonical subtask identifier if applicable")
+    schema_version: str = Field(default=SCHEMA_REGISTRY_VERSION)
+    validated_data: Optional[Dict[str, Any]] = Field(default=None, description="Validated JSON dictionary on success")
+    failure_reasons: List[str] = Field(default_factory=list, description="Safe diagnostic reason codes")
+    needs_business_review: bool = Field(
+        default=False,
+        description="True if business claim grounding or human verification is needed",
+    )
+    is_opt_out_overridden: bool = Field(
+        default=False,
+        description="True if local unsubscribe/bounce signal overrode conflicting model output",
+    )
+    normalization_applied: bool = Field(
+        default=False,
+        description="True if leading/trailing whitespace or whole-response fence was stripped",
+    )
+    repair_proposal: Optional[RepairProposal] = Field(
+        default=None,
+        description="Disabled single-attempt repair plan on formatting failure",
+    )
+    raw_content_length: int = Field(default=0, ge=0, description="Length in characters of raw provider output")
+    metrics: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Safe measured metrics (tokens, latency, uninvented cost)",
+    )
+    validator_version: str = Field(default=OUTPUT_VALIDATOR_VERSION)
+
+    def safe_log_dict(self) -> Dict[str, Any]:
+        """Return non-sensitive dictionary suitable for application logging."""
+        return {
+            "is_valid": self.is_valid,
+            "task_id": self.task_id,
+            "subtask_id": self.subtask_id,
+            "schema_version": self.schema_version,
+            "failure_reasons": list(self.failure_reasons),
+            "needs_business_review": self.needs_business_review,
+            "is_opt_out_overridden": self.is_opt_out_overridden,
+            "normalization_applied": self.normalization_applied,
+            "has_repair_proposal": self.repair_proposal is not None,
+            "raw_content_length": self.raw_content_length,
+            "metrics": dict(self.metrics),
+            "validator_version": self.validator_version,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"OutputValidationResult(is_valid={self.is_valid}, task_id={self.task_id!r}, "
+            f"subtask_id={self.subtask_id!r}, reasons={self.failure_reasons!r}, "
+            f"needs_business_review={self.needs_business_review}, opt_out_overridden={self.is_opt_out_overridden}, "
+            f"raw_length={self.raw_content_length})"
+        )
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+class LLMOutputValidator:
+    """
+    Lightweight, deterministic, provider-independent output validation engine for SalesAI.
+    Validates identity, strict JSON syntax, versioned task schemas, evidence references,
+    and security boundaries. Zero external network IO, zero model calls.
+    """
+
+    def __init__(
+        self,
+        max_content_bytes: int = 500_000,
+        max_nesting_depth: int = 8,
+        max_collection_items: int = 200,
+        max_dict_keys: int = 100,
+        repair_policy: Optional[RepairPolicy] = None,
+    ):
+        self.max_content_bytes = max_content_bytes
+        self.max_nesting_depth = max_nesting_depth
+        self.max_collection_items = max_collection_items
+        self.max_dict_keys = max_dict_keys
+        self.repair_policy = repair_policy or RepairPolicy(max_attempts=1)
+
+    def _check_nesting_and_size(self, data: Any, current_depth: int = 0) -> None:
+        """Recursively enforce nesting depth and collection size limits."""
+        if current_depth > self.max_nesting_depth:
+            raise ValueError("EXCESSIVE_NESTING_DEPTH")
+
+        if isinstance(data, dict):
+            if len(data) > self.max_dict_keys:
+                raise ValueError("EXCESSIVE_COLLECTION_SIZE")
+            for k, v in data.items():
+                if len(str(k)) > 250:
+                    raise ValueError("EXCESSIVE_KEY_LENGTH")
+                self._check_nesting_and_size(v, current_depth + 1)
+
+        elif isinstance(data, (list, tuple)):
+            if len(data) > self.max_collection_items:
+                raise ValueError("EXCESSIVE_COLLECTION_SIZE")
+            for item in data:
+                self._check_nesting_and_size(item, current_depth + 1)
+
+    def _check_safety_and_operational_protection(self, data: Any, failure_reasons: List[str]) -> None:
+        """Scan validated output for injected instructions, leaked secrets, or forbidden operational controls."""
+        if isinstance(data, dict):
+            for k, v in data.items():
+                k_lower = str(k).lower().strip()
+                if k_lower in _FORBIDDEN_OPERATIONAL_ACTIONS:
+                    failure_reasons.append(f"SAFETY_FORBIDDEN_OPERATIONAL_ACTION_{k_lower.upper()}")
+                self._check_safety_and_operational_protection(v, failure_reasons)
+
+        elif isinstance(data, (list, tuple)):
+            for item in data:
+                self._check_safety_and_operational_protection(item, failure_reasons)
+
+        elif isinstance(data, str):
+            if contains_prompt_injection(data):
+                if "SAFETY_PROMPT_INJECTION_DETECTED" not in failure_reasons:
+                    failure_reasons.append("SAFETY_PROMPT_INJECTION_DETECTED")
+            if _SECRET_RE.search(data):
+                if "SAFETY_SECRET_LEAKAGE_DETECTED" not in failure_reasons:
+                    failure_reasons.append("SAFETY_SECRET_LEAKAGE_DETECTED")
+
+    def validate(
+        self,
+        request: LLMRequest,
+        response: LLMResponse,
+        approved_evidence_ids: Optional[Set[str]] = None,
+        local_signals: Optional[Dict[str, Any]] = None,
+        prior_attempt_count: int = 0,
+        subtask_id: Optional[str] = None,
+    ) -> OutputValidationResult:
+        """
+        Synchronous validation of an LLMResponse against an LLMRequest.
+        Executes strict multi-phase verification:
+        1. Base metrics & finish reason
+        2. Request/response identity & provenance
+        3. Raw size & control sequence bounds
+        4. Local single-fence normalization
+        5. Strict duplicate-key syntax parsing
+        6. Task-specific schema validation
+        7. Evidence references grounding check
+        8. Local opt-out / bounce precedence
+        9. Security & operational protection
+        10. Bounded repair proposal evaluation
+        """
+        failure_reasons: List[str] = []
+        needs_business_review = False
+        is_opt_out_overridden = False
+        normalization_applied = False
+        validated_data: Optional[Dict[str, Any]] = None
+
+        raw_content = response.content or ""
+        raw_len = len(raw_content)
+
+        # Collect safe metrics
+        metrics = {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "latency_ms": response.latency_ms,
+            "cost_usd": response.cost_usd,  # Stays None if unmeasured, never 0.0
+            "provider_request_id": response.provider_request_id,
+        }
+
+        # -------------------------------------------------------------------
+        # 1. Finish Reason Checks
+        # -------------------------------------------------------------------
+        if response.finish_reason:
+            fr = response.finish_reason.lower().strip()
+            if fr in ("length", "max_tokens"):
+                failure_reasons.append("FINISH_REASON_LENGTH_TRUNCATED")
+            elif fr in ("content_filter", "refusal"):
+                failure_reasons.append("FINISH_REASON_REFUSAL")
+
+        # -------------------------------------------------------------------
+        # 2. Identity & Provenance Verification (Section 2.1)
+        # -------------------------------------------------------------------
+        if not response.request_id or response.request_id != request.request_id:
+            failure_reasons.append("IDENTITY_MISMATCH_REQUEST_ID")
+
+        try:
+            req_canonical_task = normalize_task_id(request.task_id)
+            resp_canonical_task = normalize_task_id(response.task_id)
+            if req_canonical_task != resp_canonical_task:
+                failure_reasons.append("IDENTITY_MISMATCH_TASK_ID")
+            canonical_task = req_canonical_task
+        except ValueError:
+            failure_reasons.append("IDENTITY_MISMATCH_TASK_ID")
+            canonical_task = "unknown"
+
+        if request.provider and response.provider != request.provider:
+            failure_reasons.append("IDENTITY_MISMATCH_PROVIDER")
+
+        if request.model and response.model != request.model:
+            failure_reasons.append("IDENTITY_MISMATCH_MODEL")
+
+        # Resolve subtask identifier
+        resolved_subtask = subtask_id
+        if resolved_subtask is None and request.metadata:
+            resolved_subtask = request.metadata.get("subtask_id")
+
+        if canonical_task == "website_extraction":
+            try:
+                resolved_subtask = validate_subtask_id(canonical_task, resolved_subtask)
+                if not resolved_subtask:
+                    failure_reasons.append("IDENTITY_MISMATCH_SUBTASK")
+            except ValueError:
+                failure_reasons.append("IDENTITY_MISMATCH_SUBTASK")
+
+        # -------------------------------------------------------------------
+        # 3. Raw Size & Control Sequence Bounds (Section 2.2)
+        # -------------------------------------------------------------------
+        raw_bytes = raw_content.encode("utf-8")
+        if len(raw_bytes) > self.max_content_bytes:
+            failure_reasons.append("OUTPUT_SIZE_EXCEEDED")
+
+        if "\x00" in raw_content:
+            failure_reasons.append("SYNTAX_INVALID_CONTROL_CHARS")
+
+        # -------------------------------------------------------------------
+        # 4. Local Single-Fence Normalization (Section 3)
+        # -------------------------------------------------------------------
+        cleaned_content = raw_content.strip()
+
+        # Match single whole-response Markdown code fence:
+        # e.g., ^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$
+        fence_match = re.match(r"^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$", cleaned_content, re.IGNORECASE)
+        if fence_match:
+            # Whole response was enclosed in code fence
+            cleaned_content = fence_match.group(1).strip()
+            normalization_applied = True
+        elif "```" in raw_content:
+            # Code fence exists but is surrounded by commentary or multiple fences
+            # Do NOT strip; leave as-is so strict single JSON decoder detects commentary
+            pass
+
+        # -------------------------------------------------------------------
+        # 5. Strict Syntax Parsing & Duplicate Key Rejection (Section 2.2)
+        # -------------------------------------------------------------------
+        parsed_dict: Optional[Dict[str, Any]] = None
+        if not cleaned_content:
+            failure_reasons.append("SYNTAX_INVALID_JSON")
+        else:
+            try:
+                decoder = json.JSONDecoder(
+                    object_pairs_hook=_detect_duplicate_keys,
+                    parse_constant=_reject_constant,
+                )
+                obj, end_idx = decoder.raw_decode(cleaned_content)
+
+                # Check if there is trailing content after the first object
+                remaining = cleaned_content[end_idx:].strip()
+                if remaining:
+                    if remaining.startswith("{"):
+                        failure_reasons.append("SYNTAX_MULTIPLE_OBJECTS")
+                    else:
+                        failure_reasons.append("SYNTAX_COMMENTARY_OUTSIDE_JSON")
+
+                if not isinstance(obj, dict):
+                    failure_reasons.append("SYNTAX_NON_OBJECT_ROOT")
+                else:
+                    parsed_dict = obj
+
+            except json.JSONDecodeError:
+                failure_reasons.append("SYNTAX_INVALID_JSON")
+            except ValueError as e:
+                err_str = str(e)
+                if "DUPLICATE_KEY" in err_str:
+                    failure_reasons.append("SYNTAX_DUPLICATE_KEY")
+                elif "ILLEGAL_CONSTANT" in err_str:
+                    failure_reasons.append("SYNTAX_INVALID_CONSTANT_NAN")
+                else:
+                    failure_reasons.append("SYNTAX_INVALID_JSON")
+
+        # Check nesting depth and collection bounds on parsed object
+        if parsed_dict is not None:
+            try:
+                self._check_nesting_and_size(parsed_dict)
+            except ValueError as e:
+                err_name = str(e)
+                if err_name not in failure_reasons:
+                    failure_reasons.append(err_name)
+
+        # -------------------------------------------------------------------
+        # 6. Task Schema Validation (Section 2.3)
+        # -------------------------------------------------------------------
+        if parsed_dict is not None and not any(r.startswith("SYNTAX_") for r in failure_reasons):
+            try:
+                schema_cls = SchemaRegistry.get_schema(canonical_task, resolved_subtask)
+            except ValueError:
+                failure_reasons.append(f"SCHEMA_UNREGISTERED_TASK_{canonical_task.upper()}")
+                schema_cls = None
+
+            if schema_cls:
+                try:
+                    # Validate against strict authoritative schema
+                    validated_instance = schema_cls.model_validate(parsed_dict)
+                    validated_data = validated_instance.model_dump()
+                except ValidationError as ve:
+                    for err in ve.errors():
+                        loc_parts = [str(p) for p in err.get("loc", [])]
+                        field_name = "_".join(loc_parts) if loc_parts else "ROOT"
+                        err_type = err.get("type", "")
+
+                        if "missing" in err_type:
+                            failure_reasons.append(f"SCHEMA_MISSING_REQUIRED_FIELD_{field_name.upper()}")
+                        elif "extra_forbidden" in err_type:
+                            failure_reasons.append(f"SCHEMA_EXTRA_FIELD_{field_name.upper()}")
+                        elif "enum" in err_type or "literal_error" in err_type:
+                            failure_reasons.append(f"SCHEMA_INVALID_ENUM_{field_name.upper()}")
+                        elif any(b in err_type for b in ["greater_than", "less_than", "length", "too_short", "too_long", "too_many"]):
+                            failure_reasons.append(f"SCHEMA_BOUNDS_VIOLATION_{field_name.upper()}")
+                        else:
+                            failure_reasons.append(f"SCHEMA_TYPE_ERROR_{field_name.upper()}")
+
+        # -------------------------------------------------------------------
+        # 7. Evidence Grounding & Reference Integrity (Section 2.4)
+        # -------------------------------------------------------------------
+        if validated_data is not None:
+            refs = validated_data.get("evidence_refs") or []
+            if refs:
+                # Resolve approved evidence IDs
+                approved_ids = set(approved_evidence_ids or set())
+                if request.metadata and "approved_evidence_ids" in request.metadata:
+                    meta_ids = request.metadata["approved_evidence_ids"]
+                    if isinstance(meta_ids, (list, set, tuple)):
+                        approved_ids.update(str(i) for i in meta_ids)
+
+                seen_refs = set()
+                for ref in refs:
+                    ref_str = str(ref).strip()
+                    if ref_str in seen_refs:
+                        failure_reasons.append("EVIDENCE_DUPLICATE_REF")
+                    seen_refs.add(ref_str)
+
+                    if approved_ids and ref_str not in approved_ids:
+                        failure_reasons.append("EVIDENCE_UNKNOWN_REF")
+
+                # Schema validation cannot establish factual claim truth on its own
+                needs_business_review = True
+
+        # -------------------------------------------------------------------
+        # 8. Local Opt-Out / Bounce Precedence (Section 2.4)
+        # -------------------------------------------------------------------
+        if canonical_task == "inbox_classification" and validated_data is not None:
+            # Check local signals
+            opt_out_detected = False
+            if local_signals and local_signals.get("is_opt_out_detected"):
+                opt_out_detected = True
+            elif request.metadata and request.metadata.get("is_opt_out_detected"):
+                opt_out_detected = True
+
+            if opt_out_detected:
+                model_cat = validated_data.get("category")
+                if model_cat in ("positive_interest", "meeting_proposed", "referral", "question"):
+                    # Local opt-out signal strictly overrides conflicting positive model classification
+                    failure_reasons.append("OPT_OUT_OVERRIDE_PREVENTED")
+                    validated_data["category"] = "unsubscribe"
+                    validated_data["confidence"] = 1.0
+                    validated_data["reasoning"] = "Overridden by verified local opt-out / suppression signal."
+                    is_opt_out_overridden = True
+                    needs_business_review = True
+
+        # -------------------------------------------------------------------
+        # 9. Security & Operational Protection (Section 2.4 & 4)
+        # -------------------------------------------------------------------
+        if validated_data is not None:
+            self._check_safety_and_operational_protection(validated_data, failure_reasons)
+
+        # -------------------------------------------------------------------
+        # 10. Bounded Repair Proposal Evaluation (Section 3)
+        # -------------------------------------------------------------------
+        is_valid = len(failure_reasons) == 0
+        repair_proposal = None
+        if not is_valid:
+            repair_proposal = self.repair_policy.evaluate_repair(
+                request=request,
+                response=response,
+                failure_reasons=failure_reasons,
+                prior_attempt_count=prior_attempt_count,
+                subtask_id=resolved_subtask,
+            )
+            # Fail closed: scrub validated data on failure
+            validated_data = None
+
+        return OutputValidationResult(
+            is_valid=is_valid,
+            task_id=canonical_task,
+            subtask_id=resolved_subtask,
+            schema_version=SCHEMA_REGISTRY_VERSION,
+            validated_data=validated_data,
+            failure_reasons=sorted(list(set(failure_reasons))),
+            needs_business_review=needs_business_review,
+            is_opt_out_overridden=is_opt_out_overridden,
+            normalization_applied=normalization_applied,
+            repair_proposal=repair_proposal,
+            raw_content_length=raw_len,
+            metrics=metrics,
+            validator_version=OUTPUT_VALIDATOR_VERSION,
+        )
+
+    async def validate_async(
+        self,
+        request: LLMRequest,
+        response: LLMResponse,
+        approved_evidence_ids: Optional[Set[str]] = None,
+        local_signals: Optional[Dict[str, Any]] = None,
+        prior_attempt_count: int = 0,
+        subtask_id: Optional[str] = None,
+    ) -> OutputValidationResult:
+        """
+        Asynchronous validation entrypoint ensuring strict sync/async validation parity.
+        Because validation is purely in-memory computation, delegating synchronously
+        guarantees deterministic, identical results.
+        """
+        return self.validate(
+            request=request,
+            response=response,
+            approved_evidence_ids=approved_evidence_ids,
+            local_signals=local_signals,
+            prior_attempt_count=prior_attempt_count,
+            subtask_id=subtask_id,
+        )

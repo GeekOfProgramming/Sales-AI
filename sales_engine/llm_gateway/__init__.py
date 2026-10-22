@@ -45,6 +45,27 @@ from sales_engine.llm_gateway.payload_builder import (
     check_full_text_opt_out_signals,
     preview_sanitized_payload,
 )
+from sales_engine.llm_gateway.output_schemas import (
+    SCHEMA_REGISTRY_VERSION,
+    SchemaRegistry,
+    WebsitePassAOutput,
+    WebsitePassBOutput,
+    JobAnalysisOutput,
+    DiscoveryQueryGenerationOutput,
+    InboxClassificationOutput,
+    ReplySuggestionOutput,
+    OutreachDraftOutput,
+)
+from sales_engine.llm_gateway.repair_policy import (
+    REPAIR_POLICY_VERSION,
+    RepairPolicy,
+    RepairProposal,
+)
+from sales_engine.llm_gateway.output_validation import (
+    OUTPUT_VALIDATOR_VERSION,
+    OutputValidationResult,
+    LLMOutputValidator,
+)
 
 __all__ = [
     # Contracts
@@ -102,4 +123,20 @@ __all__ = [
     "PayloadBuilder",
     "check_full_text_opt_out_signals",
     "preview_sanitized_payload",
+    # Output Validation & Repair (S2.5)
+    "OutputValidationResult",
+    "LLMOutputValidator",
+    "OUTPUT_VALIDATOR_VERSION",
+    "SchemaRegistry",
+    "SCHEMA_REGISTRY_VERSION",
+    "WebsitePassAOutput",
+    "WebsitePassBOutput",
+    "JobAnalysisOutput",
+    "DiscoveryQueryGenerationOutput",
+    "InboxClassificationOutput",
+    "ReplySuggestionOutput",
+    "OutreachDraftOutput",
+    "RepairPolicy",
+    "RepairProposal",
+    "REPAIR_POLICY_VERSION",
 ]
