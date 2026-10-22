@@ -20,7 +20,7 @@ import re
 from typing import Dict, Any, Optional, List, Set, Tuple, Type
 from pydantic import BaseModel, Field, ConfigDict, ValidationError
 
-from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
+from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse, sanitize_log_str
 from sales_engine.llm_gateway.model_catalog import normalize_task_id, validate_subtask_id
 from sales_engine.llm_gateway.output_schemas import (
     SchemaRegistry,
@@ -34,7 +34,7 @@ from sales_engine.llm_gateway.repair_policy import (
 )
 from sales_engine.llm_gateway.source_boundaries import contains_prompt_injection
 
-OUTPUT_VALIDATOR_VERSION = "1.0.1"
+OUTPUT_VALIDATOR_VERSION = "1.0.2"
 
 # Sensitive token / secret inspection patterns in output
 _OUTPUT_SECRET_PATTERNS = [
@@ -139,31 +139,43 @@ class OutputValidationResult(BaseModel):
     def safe_log_dict(self) -> Dict[str, Any]:
         """Return non-sensitive dictionary suitable for application logging (zero attacker input)."""
         safe_reasons = [_sanitize_reason_code(r) for r in self.failure_reasons]
+        # S2.5.2 B2: Closed allowlist of known scalar measured fields (never copy arbitrary keys)
+        safe_metrics: Dict[str, Any] = {
+            "input_tokens": self.metrics.get("input_tokens") if isinstance(self.metrics.get("input_tokens"), int) else None,
+            "output_tokens": self.metrics.get("output_tokens") if isinstance(self.metrics.get("output_tokens"), int) else None,
+            "latency_ms": self.metrics.get("latency_ms") if isinstance(self.metrics.get("latency_ms"), (int, float)) else None,
+            "cost_usd": self.metrics.get("cost_usd") if isinstance(self.metrics.get("cost_usd"), (int, float)) else None,
+            "has_provider_request_id": bool(self.metrics.get("has_provider_request_id")),
+            "provider_request_id": None,
+        }
         return {
             "is_valid": self.is_valid,
-            "task_id": self.task_id,
-            "subtask_id": self.subtask_id,
-            "schema_version": self.schema_version,
+            "task_id": sanitize_log_str(self.task_id),
+            "subtask_id": sanitize_log_str(self.subtask_id) if self.subtask_id else None,
+            "schema_version": sanitize_log_str(self.schema_version),
             "failure_reasons": safe_reasons,
             "needs_business_review": self.needs_business_review,
             "is_opt_out_overridden": self.is_opt_out_overridden,
             "is_bounce_overridden": self.is_bounce_overridden,
             "is_suppression_overridden": self.is_suppression_overridden,
-            "effective_local_disposition": self.effective_local_disposition,
+            "effective_local_disposition": sanitize_log_str(self.effective_local_disposition) if self.effective_local_disposition else None,
             "normalization_applied": self.normalization_applied,
             "has_repair_proposal": self.repair_proposal is not None,
             "raw_content_length": self.raw_content_length,
-            "metrics": dict(self.metrics),
-            "validator_version": self.validator_version,
+            "metrics": safe_metrics,
+            "validator_version": sanitize_log_str(self.validator_version),
         }
 
     def __repr__(self) -> str:
         safe_reasons = [_sanitize_reason_code(r) for r in self.failure_reasons]
+        safe_task = sanitize_log_str(self.task_id)
+        safe_subtask = sanitize_log_str(self.subtask_id) if self.subtask_id else None
+        safe_disp = sanitize_log_str(self.effective_local_disposition) if self.effective_local_disposition else None
         return (
-            f"OutputValidationResult(is_valid={self.is_valid}, task_id={self.task_id!r}, "
-            f"subtask_id={self.subtask_id!r}, reasons={safe_reasons!r}, "
+            f"OutputValidationResult(is_valid={self.is_valid}, task_id={safe_task!r}, "
+            f"subtask_id={safe_subtask!r}, reasons={safe_reasons!r}, "
             f"needs_business_review={self.needs_business_review}, opt_out_overridden={self.is_opt_out_overridden}, "
-            f"bounce_overridden={self.is_bounce_overridden}, disposition={self.effective_local_disposition!r}, "
+            f"bounce_overridden={self.is_bounce_overridden}, disposition={safe_disp!r}, "
             f"raw_length={self.raw_content_length})"
         )
 
@@ -268,13 +280,15 @@ class LLMOutputValidator:
         raw_content = response.content or ""
         raw_len = len(raw_content)
 
-        # Collect safe metrics
+        # Collect safe metrics (S2.5.2 B1 & B2: never put untrusted provider_request_id in metrics)
+        has_prov_id = bool(response.provider_request_id and str(response.provider_request_id).strip())
         metrics = {
             "input_tokens": response.input_tokens,
             "output_tokens": response.output_tokens,
             "latency_ms": response.latency_ms,
             "cost_usd": response.cost_usd,  # Stays None if unmeasured, never 0.0
-            "provider_request_id": response.provider_request_id,
+            "has_provider_request_id": has_prov_id,
+            "provider_request_id": None,
         }
 
         # -------------------------------------------------------------------

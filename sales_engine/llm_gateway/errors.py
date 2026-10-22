@@ -6,6 +6,8 @@ Ensures zero leakage of sensitive data, prompts, or credentials in strings/repr.
 
 from typing import Optional
 
+from sales_engine.llm_gateway.contracts import sanitize_log_str
+
 
 class LLMError(Exception):
     """
@@ -31,17 +33,18 @@ class LLMError(Exception):
     def __str__(self) -> str:
         ctx = []
         if self.provider:
-            ctx.append(f"provider={self.provider}")
+            ctx.append(f"provider={sanitize_log_str(self.provider)}")
         if self.task_id:
-            ctx.append(f"task={self.task_id}")
+            ctx.append(f"task={sanitize_log_str(self.task_id)}")
         ctx_str = f" [{', '.join(ctx)}]" if ctx else ""
-        return f"[{self.error_code}] {self.message}{ctx_str}"
+        safe_msg = sanitize_log_str(self.message, max_len=256)
+        return f"[{self.error_code}] {safe_msg}{ctx_str}"
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(error_code={self.error_code!r}, "
-            f"message={self.message!r}, retryable={self.retryable}, "
-            f"provider={self.provider!r}, task_id={self.task_id!r})"
+            f"message={sanitize_log_str(self.message, max_len=256)!r}, retryable={self.retryable}, "
+            f"provider={sanitize_log_str(self.provider)!r}, task_id={sanitize_log_str(self.task_id)!r})"
         )
 
 

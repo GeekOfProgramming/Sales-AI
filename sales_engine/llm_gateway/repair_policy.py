@@ -9,9 +9,9 @@ auto-escalating tiers, or mutating production records.
 from typing import Optional, List, Dict, Any, Set
 from pydantic import BaseModel, Field, ConfigDict
 
-from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
+from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse, sanitize_log_str
 
-REPAIR_POLICY_VERSION = "1.0.1"
+REPAIR_POLICY_VERSION = "1.0.2"
 
 # Failure codes that are purely formatting / syntax and potentially repairable
 FORMATTING_FAILURE_CODES: Set[str] = {
@@ -90,23 +90,25 @@ class RepairProposal(BaseModel):
     def safe_log_dict(self) -> Dict[str, Any]:
         """Return safe, non-sensitive dictionary suitable for application logging."""
         return {
-            "request_id": self.request_id,
-            "task_id": self.task_id,
-            "subtask_id": self.subtask_id,
-            "provider": self.provider,
-            "model": self.model,
+            "request_id": sanitize_log_str(self.request_id),
+            "task_id": sanitize_log_str(self.task_id),
+            "subtask_id": sanitize_log_str(self.subtask_id) if self.subtask_id else None,
+            "provider": sanitize_log_str(self.provider) if self.provider else None,
+            "model": sanitize_log_str(self.model) if self.model else None,
             "attempt_count": self.attempt_count,
             "repairable": self.repairable,
             "reason_codes": list(self.reason_codes),
             "dispatch_allowed": self.dispatch_allowed,
             "requires_authorization": self.requires_authorization,
-            "policy_version": self.policy_version,
+            "policy_version": sanitize_log_str(self.policy_version),
         }
 
     def __repr__(self) -> str:
         return (
-            f"RepairProposal(request_id={self.request_id!r}, task_id={self.task_id!r}, "
-            f"provider={self.provider!r}, model={self.model!r}, attempt_count={self.attempt_count}, "
+            f"RepairProposal(request_id={sanitize_log_str(self.request_id)!r}, "
+            f"task_id={sanitize_log_str(self.task_id)!r}, "
+            f"provider={sanitize_log_str(self.provider)!r}, "
+            f"model={sanitize_log_str(self.model)!r}, attempt_count={self.attempt_count}, "
             f"repairable={self.repairable}, dispatch_allowed={self.dispatch_allowed})"
         )
 

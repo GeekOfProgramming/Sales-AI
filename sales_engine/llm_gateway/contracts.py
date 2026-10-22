@@ -5,10 +5,46 @@ Uses Pydantic v2 with strict validation and safe PII-scrubbed representations.
 """
 
 import math
+import re
 import uuid
 from enum import Enum
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+
+# Sensitive patterns for safe logging redaction (S2.5.2)
+_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+_SECRET_PATTERN = re.compile(
+    r"(?:sk-[a-zA-Z0-9_-]{8,}|bearer\s+[a-zA-Z0-9_.-]{10,}|ghp_[a-zA-Z0-9]{10,}|(?:token|secret|password|api[_-]?key)[=:\s]+[a-zA-Z0-9_-]{8,})",
+    re.IGNORECASE,
+)
+_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:\\[^\s\n\r\t]+|/(?:etc|usr|home|var|tmp|Users|AppData)/[^\s\n\r\t]+)")
+_CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def sanitize_log_str(val: Optional[Any], max_len: int = 128) -> Optional[str]:
+    """
+    Sanitize strings destined for safe logging, __str__, or __repr__.
+    Redacts email addresses, API tokens/secrets, filesystem paths, and control characters.
+    Preserves normal valid identifiers (alphanumeric, dashes, dots, underscores, colons).
+    """
+    if val is None:
+        return None
+    s = str(val)
+    if not s:
+        return ""
+
+    # Replace control characters with a space
+    s = _CONTROL_CHAR_PATTERN.sub(" ", s).strip()
+
+    # Redact sensitive data patterns
+    s = _EMAIL_PATTERN.sub("[REDACTED_EMAIL]", s)
+    s = _SECRET_PATTERN.sub("[REDACTED_SECRET]", s)
+    s = _PATH_PATTERN.sub("[REDACTED_PATH]", s)
+
+    if len(s) > max_len:
+        s = s[:max_len]
+    return s
 
 
 class ModelTier(str, Enum):
@@ -133,8 +169,10 @@ class LLMRequest(BaseModel):
         prompt_len = len(self.prompt)
         sys_len = len(self.system_prompt) if self.system_prompt else 0
         return (
-            f"LLMRequest(request_id={self.request_id!r}, task_id={self.task_id!r}, "
-            f"provider={self.provider!r}, model={self.model!r}, tier={self.tier!r}, "
+            f"LLMRequest(request_id={sanitize_log_str(self.request_id)!r}, "
+            f"task_id={sanitize_log_str(self.task_id)!r}, "
+            f"provider={sanitize_log_str(self.provider)!r}, "
+            f"model={sanitize_log_str(self.model)!r}, tier={self.tier!r}, "
             f"prompt_length={prompt_len}, system_prompt_length={sys_len}, "
             f"temperature={self.temperature}, max_output_tokens={self.max_output_tokens}, "
             f"timeout_seconds={self.timeout_seconds})"
@@ -147,10 +185,10 @@ class LLMRequest(BaseModel):
     def safe_log_dict(self) -> Dict[str, Any]:
         """Return safe, non-sensitive dictionary suitable for application logging."""
         return {
-            "request_id": self.request_id,
-            "task_id": self.task_id,
-            "provider": self.provider,
-            "model": self.model,
+            "request_id": sanitize_log_str(self.request_id),
+            "task_id": sanitize_log_str(self.task_id),
+            "provider": sanitize_log_str(self.provider),
+            "model": sanitize_log_str(self.model),
             "tier": self.tier.value if self.tier else None,
             "prompt_length": len(self.prompt),
             "system_prompt_length": len(self.system_prompt) if self.system_prompt else 0,
@@ -249,10 +287,12 @@ class LLMResponse(BaseModel):
         """Safe representation scrubbing raw response text to prevent customer data leakage in logs."""
         content_len = len(self.content)
         return (
-            f"LLMResponse(request_id={self.request_id!r}, task_id={self.task_id!r}, "
-            f"provider={self.provider!r}, model={self.model!r}, content_length={content_len}, "
+            f"LLMResponse(request_id={sanitize_log_str(self.request_id)!r}, "
+            f"task_id={sanitize_log_str(self.task_id)!r}, "
+            f"provider={sanitize_log_str(self.provider)!r}, "
+            f"model={sanitize_log_str(self.model)!r}, content_length={content_len}, "
             f"input_tokens={self.input_tokens}, output_tokens={self.output_tokens}, "
-            f"latency_ms={self.latency_ms}, finish_reason={self.finish_reason!r})"
+            f"latency_ms={self.latency_ms}, finish_reason={sanitize_log_str(self.finish_reason)!r})"
         )
 
     def __str__(self) -> str:
@@ -261,16 +301,18 @@ class LLMResponse(BaseModel):
 
     def safe_log_dict(self) -> Dict[str, Any]:
         """Return safe, non-sensitive dictionary suitable for application logging."""
+        has_prov_id = bool(self.provider_request_id and str(self.provider_request_id).strip())
         return {
-            "request_id": self.request_id,
-            "task_id": self.task_id,
-            "provider": self.provider,
-            "model": self.model,
+            "request_id": sanitize_log_str(self.request_id),
+            "task_id": sanitize_log_str(self.task_id),
+            "provider": sanitize_log_str(self.provider),
+            "model": sanitize_log_str(self.model),
             "content_length": len(self.content),
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "latency_ms": self.latency_ms,
             "cost_usd": self.cost_usd,
-            "finish_reason": self.finish_reason,
-            "provider_request_id": self.provider_request_id,
+            "finish_reason": sanitize_log_str(self.finish_reason),
+            "has_provider_request_id": has_prov_id,
+            "provider_request_id": None,
         }

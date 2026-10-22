@@ -250,9 +250,9 @@ class OpenAIProvider(BaseLLMProvider):
 
         try:
             data = resp.json()
-        except Exception as e:
+        except Exception:
             raise LLMInvalidSchemaError(
-                message=f"Provider response is not valid JSON: {e}",
+                message="Provider response is not valid JSON.",
                 provider=self._provider_id,
                 task_id=request.task_id,
             )
