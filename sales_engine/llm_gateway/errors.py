@@ -296,3 +296,39 @@ class LLMPrivacyRejectionError(LLMPrivacyError):
             provider=provider,
             task_id=task_id,
         )
+
+
+class LLMConcurrencyLimitError(LLMError):
+    """Raised when local concurrency cap or cooldown rate limit is exceeded."""
+
+    def __init__(
+        self,
+        message: str = "Local LLM concurrency limit or cooldown active.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="CONCURRENCY_LIMIT",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMUncertainUsageError(LLMError):
+    """Raised when provider returns unmeasured or ambiguous token usage, requiring manual review."""
+
+    def __init__(
+        self,
+        message: str = "LLM response contains missing or ambiguous token usage; flagged for operator review.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="UNCERTAIN_USAGE",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )

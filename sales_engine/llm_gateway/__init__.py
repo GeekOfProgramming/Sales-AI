@@ -66,6 +66,20 @@ from sales_engine.llm_gateway.output_validation import (
     OutputValidationResult,
     LLMOutputValidator,
 )
+from sales_engine.llm_gateway.budget_ledger import (
+    BudgetPolicyConfig,
+    ReservationStatus,
+    BudgetReservation,
+    BudgetSummary,
+    BudgetLedger,
+)
+from sales_engine.llm_gateway.runtime_guards import (
+    RuntimeGuard,
+)
+from sales_engine.llm_gateway.errors import (
+    LLMConcurrencyLimitError,
+    LLMUncertainUsageError,
+)
 
 __all__ = [
     # Contracts
@@ -107,6 +121,8 @@ __all__ = [
     "LLMUntrustedContentError",
     "LLMAllowlistViolationError",
     "LLMPrivacyRejectionError",
+    "LLMConcurrencyLimitError",
+    "LLMUncertainUsageError",
     # Privacy & Boundaries (S2.4)
     "PrivacyFilter",
     "RedactionResult",
@@ -139,4 +155,11 @@ __all__ = [
     "RepairPolicy",
     "RepairProposal",
     "REPAIR_POLICY_VERSION",
+    # Budget Ledger & Runtime Guards (S2.6)
+    "BudgetPolicyConfig",
+    "ReservationStatus",
+    "BudgetReservation",
+    "BudgetSummary",
+    "BudgetLedger",
+    "RuntimeGuard",
 ]
