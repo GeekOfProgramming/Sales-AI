@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import re
 import time
@@ -28,6 +29,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+import httpx
 
 from sales_engine.llm_gateway.contracts import (
     LLMRequest,
@@ -44,6 +47,7 @@ from sales_engine.llm_gateway.errors import (
     LLMRoutingIntegrityError,
 )
 from sales_engine.llm_gateway.interface import BaseLLMProvider, LLMProviderGateway
+from sales_engine.llm_gateway.providers.openai_provider import OpenAIProvider
 from sales_engine.llm_gateway.model_catalog import (
     ModelCandidate,
     ModelCatalog,
@@ -71,6 +75,15 @@ from sales_engine.benchmark.ground_truth_evaluator import (
     GroundTruthEvaluator,
     GroundTruthEvaluationResult,
     SCORER_VERSION,
+)
+
+# S3.2 Verified Live Model Pricing for standard short-context gpt-6-luna (verified 2026-10-22)
+TIER1_LIVE_LUNA_PRICING = PricingMetadata(
+    currency="USD",
+    input_per_1m=0.10,
+    output_per_1m=0.50,
+    effective_date="2026-10-22",
+    source_url="https://developers.openai.com/api/docs/pricing",
 )
 
 
@@ -374,7 +387,7 @@ class MockBenchmarkProvider(BaseLLMProvider):
 
 class ExternalBenchmarkRunner:
     """
-    Main benchmark execution runner for external LLM evaluation in SalesAI S3.0.
+    Main benchmark execution runner for external LLM evaluation in SalesAI S3.0 / S3.2.
     Executes deterministic benchmark runs, records structured scorecards, and computes
     candidate recommendation proposals.
     """
@@ -390,15 +403,45 @@ class ExternalBenchmarkRunner:
         db_path: Optional[str] = None,
         qualification_threshold: float = 0.8,
         stop_on_first_qualifying: bool = True,
+        api_key: Optional[str] = None,
+        real_provider_transport: Optional[httpx.BaseTransport] = None,
     ):
         self.dry_run = dry_run
         self.confirm_paid = confirm_paid
-        self.max_requests = max_requests
-        self.max_cost_usd = max_cost_usd
         self.qualification_threshold = qualification_threshold
         self.stop_on_first_qualifying = stop_on_first_qualifying
+        self._api_key = api_key
+        self._real_provider_transport = real_provider_transport
+        self._attempted_requests_count = 0
 
-        # S3.1 Two-Key Gate: Live commercial execution requires explicit --confirm-paid
+        # LIVE-02: Strict validation of numeric caps across all modes
+        if not isinstance(max_requests, int) or isinstance(max_requests, bool) or max_requests <= 0:
+            raise LLMBudgetExceededError(
+                f"Live benchmark request cap must be a positive integer >= 1 (got {max_requests!r})."
+            )
+        if max_requests > 20:
+            raise LLMBudgetExceededError(
+                f"Live benchmark request cap {max_requests} exceeds safety ceiling (max 20 requests per run)."
+            )
+        self.max_requests = max_requests
+
+        if (
+            not isinstance(max_cost_usd, (int, float))
+            or isinstance(max_cost_usd, bool)
+            or math.isnan(max_cost_usd)
+            or math.isinf(max_cost_usd)
+            or max_cost_usd <= 0.0
+        ):
+            raise LLMBudgetExceededError(
+                f"Live benchmark cost ceiling must be a positive finite number > 0 (got {max_cost_usd!r})."
+            )
+        if max_cost_usd > 1.00:
+            raise LLMBudgetExceededError(
+                f"Live benchmark cost ceiling ${max_cost_usd:.2f} exceeds safety ceiling (max $1.00 per run)."
+            )
+        self.max_cost_usd = float(max_cost_usd)
+
+        # S3.1 & S3.2 Two-Key Gate: Live commercial execution requires explicit --confirm-paid
         if not dry_run:
             if not confirm_paid:
                 raise LLMNotConfiguredError(
@@ -406,28 +449,29 @@ class ExternalBenchmarkRunner:
                     "Two-key execution gate: --live mode requires explicit --confirm-paid confirmation. "
                     "Commercial API calls refused."
                 )
-            if max_requests > 20:
-                raise LLMBudgetExceededError(
-                    f"Live benchmark request cap {max_requests} exceeds safety ceiling (max 20 requests per run)."
+            # LIVE-03 & Requirement 7: Prohibit in-memory SQLite in live mode
+            if db_path is not None and str(db_path) == ":memory:":
+                raise LLMNotConfiguredError(
+                    "Live benchmark requires a persistent local SQLite ledger. ':memory:' is prohibited in live mode."
                 )
-            if max_cost_usd > 1.00:
-                raise LLMBudgetExceededError(
-                    f"Live benchmark cost ceiling ${max_cost_usd:.2f} exceeds safety ceiling (max $1.00 per run)."
-                )
+            self.db_path = str(db_path) if db_path else "data/benchmark_budget.db"
+            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        else:
+            self.db_path = str(db_path) if db_path else ":memory:"
 
         # 1. Model Catalog setup
         self.catalog = catalog or ModelCatalog.create_default_16_slot_catalog()
-        self._initialize_tier_1_candidates()
 
-        # 2. Budget Ledger & Runtime Guards
+        # 2. Budget Ledger & Runtime Guards (per-request ceiling bound by max_cost_usd)
+        eff_max_request = min(self.max_cost_usd, 0.05 if dry_run else self.max_cost_usd)
         self.budget_policy = budget_policy or BudgetPolicyConfig(
             enabled=True,
-            max_request_spend_usd=0.05,
+            max_request_spend_usd=eff_max_request,
             daily_limit_usd=1.00,
             monthly_limit_usd=15.00,
+            max_concurrent_requests=1,
             cooldown_seconds=0.0,
         )
-        self.db_path = db_path or ":memory:"
         self.ledger = BudgetLedger(db_path=self.db_path, config=self.budget_policy)
         self.runtime_guard = RuntimeGuard(
             ledger=self.ledger,
@@ -436,26 +480,33 @@ class ExternalBenchmarkRunner:
 
         # 3. Provider & Gateway setup
         self.registry = ProviderRegistry()
-        self.mock_provider = MockBenchmarkProvider(provider_id_val="openai_compatible_mock")
-        self.registry.register(self.mock_provider)
+        if self.dry_run:
+            self._initialize_mock_tier_1_candidates()
+            self.mock_provider = MockBenchmarkProvider(provider_id_val="openai_compatible_mock")
+            self.registry.register(self.mock_provider)
+            self.gateway_config = GatewayConfig(
+                enabled=True,
+                default_provider="openai_compatible_mock",
+            )
+        else:
+            # LIVE-01: In live mode, candidate slots remain disabled until explicitly selected
+            # Do NOT register mock provider or mock candidates
+            self.gateway_config = GatewayConfig(
+                enabled=True,
+                default_provider="openai",
+            )
 
-        self.gateway_config = GatewayConfig(
-            enabled=True,
-            default_provider="openai_compatible_mock",
-        )
         self.gateway = LLMProviderGateway(
             registry=self.registry,
             config=self.gateway_config,
             runtime_guard=self.runtime_guard,
         )
-
-        # 4. Output Validator
         self.validator = LLMOutputValidator()
 
-    def _initialize_tier_1_candidates(self) -> None:
+    def _initialize_mock_tier_1_candidates(self) -> None:
         """
-        Configure neutral Tier 1 candidate slots with verified mock pricing
-        suitable for offline benchmark evaluation.
+        Configure neutral Tier 1 candidate slots with mock pricing
+        suitable for offline dry-run benchmark evaluation ONLY.
         """
         tier_1_specs = [
             ("t1_c1", "openai_compatible_mock", "tier1-economy-mini", 0.15, 0.60),
@@ -481,6 +532,138 @@ class ExternalBenchmarkRunner:
                 allowed_tasks=["*"],
             )
 
+    def _configure_live_candidate(self, candidate_id: str = "t1_c1") -> None:
+        """
+        Configure one explicitly selected verified Tier 1 candidate for live smoke execution.
+        Targeting OpenAIProvider and official model ID gpt-6-luna.
+        All other slots remain disabled.
+        """
+        if candidate_id != "t1_c1":
+            raise LLMNotConfiguredError(
+                f"Candidate '{candidate_id}' is not verified for live benchmarking in S3.2. "
+                "Only 't1_c1' (gpt-6-luna) is verified."
+            )
+
+        api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
+        if not api_key and not self._real_provider_transport:
+            raise LLMNotConfiguredError(
+                "Missing OPENAI_API_KEY in environment for live benchmark execution."
+            )
+
+        # Register real OpenAIProvider with verified capabilities
+        self.real_provider = OpenAIProvider(
+            provider_id="openai",
+            base_url="https://api.openai.com/v1",
+            api_key=api_key or "sk-live-smoke-test-key",
+            transport=self._real_provider_transport,
+            model_capabilities={
+                "gpt-6-luna": {
+                    "is_reasoning_model": True,
+                    "supports_json_schema": True,
+                    "supports_system_prompt": True,
+                    "max_tokens_key": "max_completion_tokens",
+                }
+            },
+        )
+        self.registry.register(self.real_provider)
+
+        # Disable all 16 slots first
+        for c in list(self.catalog.candidates.values()):
+            self.catalog.disable_candidate(c.candidate_id)
+
+        # Enable strictly t1_c1 with verified rates
+        self.catalog.enable_candidate(
+            candidate_id="t1_c1",
+            provider_id="openai",
+            exact_model_id="gpt-6-luna",
+            verified_capabilities={
+                "json_mode": True,
+                "strict_schema": True,
+                "reasoning_model": True,
+            },
+            pricing=TIER1_LIVE_LUNA_PRICING,
+            verification_notes="S3.2 verified Tier 1 candidate (gpt-6-luna) for live smoke benchmarking",
+            allowed_tasks=["*"],
+        )
+
+    def _get_current_run_spend(self, run_id: str) -> float:
+        """Calculate cumulative spend for the current run from SQLite ledger (reconciled + reserved + uncertain)."""
+        with self.ledger._lock:
+            conn = self.ledger._get_connection()
+            try:
+                with conn:
+                    cursor = conn.execute(
+                        """
+                        SELECT COALESCE(SUM(COALESCE(final_cost_usd, reserved_usd)), 0.0)
+                        FROM llm_reservations
+                        WHERE request_id LIKE ?
+                          AND status IN ('RESERVED', 'RECONCILED', 'UNCERTAIN');
+                        """,
+                        (f"bench_{run_id}_%",),
+                    )
+                    row = cursor.fetchone()
+                    return float(row[0]) if row and row[0] is not None else 0.0
+            finally:
+                if not self.ledger._is_memory:
+                    conn.close()
+
+    def get_run_ledger_summary(self, run_id: str) -> Dict[str, Any]:
+        """Expose a precise read-only summary from the SQLite ledger for this run."""
+        with self.ledger._lock:
+            conn = self.ledger._get_connection()
+            try:
+                with conn:
+                    cursor = conn.execute(
+                        """
+                        SELECT reservation_id, request_id, model, status, final_cost_usd, reserved_usd, failure_code
+                        FROM llm_reservations
+                        WHERE request_id LIKE ?
+                        ORDER BY created_at ASC;
+                        """,
+                        (f"bench_{run_id}_%",),
+                    )
+                    rows = cursor.fetchall()
+                    records = []
+                    status_counts: Dict[str, int] = {}
+                    total_cost = 0.0
+                    reconciled_cost = 0.0
+                    uncertain_cost = 0.0
+                    for r in rows:
+                        status = r[3]
+                        f_cost = r[4]
+                        r_cost = r[5]
+                        effective_cost = f_cost if f_cost is not None else r_cost
+                        status_counts[status] = status_counts.get(status, 0) + 1
+                        if status in ("RECONCILED", "UNCERTAIN"):
+                            total_cost += effective_cost
+                        if status == "RECONCILED" and f_cost is not None:
+                            reconciled_cost += f_cost
+                        elif status == "UNCERTAIN":
+                            uncertain_cost += r_cost
+                        records.append({
+                            "reservation_id": r[0],
+                            "request_id": r[1],
+                            "model": r[2],
+                            "status": status,
+                            "final_cost_usd": f_cost,
+                            "reserved_usd": r_cost,
+                            "effective_cost_usd": effective_cost,
+                            "failure_code": r[6],
+                        })
+                    return {
+                        "db_path": str(self.db_path),
+                        "run_id": run_id,
+                        "reservations_count": len(records),
+                        "status_counts": status_counts,
+                        "total_cost_usd": round(total_cost, 6),
+                        "reconciled_cost_usd": round(reconciled_cost, 6),
+                        "uncertain_cost_usd": round(uncertain_cost, 6),
+                        "records": records,
+                    }
+            finally:
+                if not self.ledger._is_memory:
+                    conn.close()
+
     def run_benchmark(
         self,
         task_filter: Optional[str] = None,
@@ -493,6 +676,7 @@ class ExternalBenchmarkRunner:
         """
         run_id = f"s3_bench_{uuid.uuid4().hex[:10]}"
         timestamp = datetime.now(timezone.utc).isoformat()
+        self._attempted_requests_count = 0
 
         # Canonical 7 paths
         all_task_paths = [
@@ -504,6 +688,20 @@ class ExternalBenchmarkRunner:
             ("reply_suggestion", None),
             ("outreach_draft", None),
         ]
+
+        if not self.dry_run:
+            if not task_filter or task_filter == "all":
+                raise LLMNotConfiguredError(
+                    "Live smoke execution requires an explicit single task (e.g. --task website_extraction:pass_a). "
+                    "Multiple tasks or 'all' not permitted in live smoke pilot."
+                )
+            if candidate_filter == "t1_c1":
+                self._configure_live_candidate("t1_c1")
+            else:
+                raise LLMNotConfiguredError(
+                    "Real benchmarking requires verified live provider configuration with non-mock pricing. "
+                    "Explicitly configure verified candidate --candidate t1_c1. Fails closed."
+                )
 
         if task_filter and task_filter != "all":
             filtered_paths = []
@@ -588,7 +786,7 @@ class ExternalBenchmarkRunner:
                             "is_production_approved": False,
                             "provenance_note": (
                                 "Evaluated under short smoke test mode (<10 cases). "
-                                "Smoke tests cannot qualify or approve a model as a production winner."
+                                "Smoke tests cannot qualify or approve a model as a production winner (SMOKE_ONLY / NOT MODEL-QUALIFIED)."
                             ),
                         }
                     else:
@@ -602,7 +800,7 @@ class ExternalBenchmarkRunner:
                             "status": "PROPOSED_RECOMMENDATION",
                             "is_production_approved": False,
                             "provenance_note": (
-                                "Recommended by S3.1 benchmark evaluator. "
+                                "Recommended by S3.1/S3.2 benchmark evaluator. "
                                 "Requires authenticated operator approval before production route activation."
                             ),
                         }
@@ -611,7 +809,7 @@ class ExternalBenchmarkRunner:
                         break
 
         tasks_evaluated = [f"{t}:{s}" if s else t for t, s in target_paths]
-        is_smoke_run = any(s.is_smoke_only for s in summaries)
+        is_smoke_run = any(s.is_smoke_only for s in summaries) or total_cases_run < 10
         return BenchmarkRunReport(
             run_id=run_id,
             timestamp=timestamp,
@@ -623,7 +821,7 @@ class ExternalBenchmarkRunner:
             total_cost_usd=round(total_cost, 6),
             scorer_version=SCORER_VERSION,
             fixture_catalog_version="s3.0-catalog-v1",
-            pricing_source_mode="offline_mock" if self.dry_run else "provider_measured",
+            pricing_source_mode="offline_mock" if self.dry_run else "provider_direct_verified",
             is_smoke_only=is_smoke_run,
         )
 
@@ -668,6 +866,9 @@ class ExternalBenchmarkRunner:
 
             if case_res.overall_pass:
                 cases_passed += 1
+
+            if not self.dry_run and "RUN_REQUEST_CAP_REACHED" in case_res.failure_categories:
+                break
 
         total = len(fixtures)
         is_smoke = total < 10
@@ -764,8 +965,57 @@ class ExternalBenchmarkRunner:
             metadata=meta,
         )
 
+        # Check request and cost ceilings before dispatch (enforced for live runs)
+        if not self.dry_run:
+            if self._attempted_requests_count >= self.max_requests:
+                return BenchmarkCaseExecutionResult(
+                    case_id=fixture.case_id,
+                    task_id=fixture.task_id,
+                    subtask_id=fixture.subtask_id,
+                    group=fixture.group,
+                    candidate_id=candidate.candidate_id,
+                    provider_id=candidate.provider_id,
+                    exact_model_id=candidate.exact_model_id,
+                    latency_ms=0,
+                    syntactic_valid=False,
+                    semantic_valid=False,
+                    safety_valid=False,
+                    overall_pass=False,
+                    failure_categories=["RUN_REQUEST_CAP_REACHED"],
+                    failure_reasons=[
+                        f"Per-run request ceiling of {self.max_requests} reached. Case not dispatched."
+                    ],
+                )
+
+            # Estimate conservative spend for preflight ceiling check
+            prompt_chars = len(fixture.prompt) + (len(fixture.system_prompt) if fixture.system_prompt else 0)
+            est_input_tokens = max(1, math.ceil(prompt_chars / self.budget_policy.chars_per_token_estimate))
+            est_output_tokens = request.max_output_tokens
+            pricing = candidate.pricing
+            if pricing and pricing.input_per_1m is not None and pricing.output_per_1m is not None:
+                est_spend = (
+                    est_input_tokens * pricing.input_per_1m
+                    + est_output_tokens * pricing.output_per_1m
+                ) / 1_000_000.0
+                est_spend = round(est_spend, 6)
+            else:
+                est_spend = self.max_cost_usd + 1.0
+
+            if est_spend > self.max_cost_usd:
+                raise LLMBudgetExceededError(
+                    f"Projected request spend ${est_spend:.6f} exceeds per-run cost ceiling of ${self.max_cost_usd:.6f}."
+                )
+
+            cur_run_spend = self._get_current_run_spend(run_id)
+            if cur_run_spend + est_spend > self.max_cost_usd:
+                raise LLMBudgetExceededError(
+                    f"Projected cumulative run spend (${cur_run_spend:.6f} + ${est_spend:.6f} = "
+                    f"${cur_run_spend + est_spend:.6f}) exceeds per-run cost ceiling of ${self.max_cost_usd:.6f}."
+                )
+
         start_time = time.perf_counter()
         try:
+            self._attempted_requests_count += 1
             # Dispatch through LLMProviderGateway with candidate binding
             response = self.gateway.generate(
                 request=request,
@@ -773,6 +1023,8 @@ class ExternalBenchmarkRunner:
                 is_benchmark=True,
             )
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+        except (LLMBudgetExceededError, LLMNotConfiguredError, LLMCandidateMismatchError):
+            raise
         except Exception as e:
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             return BenchmarkCaseExecutionResult(

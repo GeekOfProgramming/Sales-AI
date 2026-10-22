@@ -137,7 +137,7 @@ class S3BenchmarkReportGenerator:
             mode_str += " [SMOKE TEST ONLY]"
 
         lines = [
-            f"# SalesAI S3.1 — External LLM Benchmark Report",
+            f"# SalesAI S3.2 — External LLM Benchmark Report",
             f"",
             f"- **Run ID:** `{report.run_id}`",
             f"- **Timestamp:** `{report.timestamp}`",
@@ -225,6 +225,13 @@ class S3BenchmarkReportGenerator:
             f"- **Isolation Guarantee:** Zero gold labels or reference answers were passed to the tested model.",
             f"- **Preflight Accounting:** All executions verified budget availability and bound candidate pricing prior to dispatch.",
             f"- **Audit Status:** Offline benchmark executed without commercial network calls.",
+            f"",
+            f"---",
+            f"",
+            f"## 5. Known Benchmark Limitations",
+            f"",
+            f"- **QUALITY-01 (Golden Coverage):** Synthetic fixture catalog has incomplete `expected_output` references for `discovery_query_generation`, `reply_suggestion`, and `outreach_draft`. Full semantic evaluation requires full task quality validation prior to production qualification.",
+            f"- **Smoke Test Non-Qualification:** Any smoke-test results (`SMOKE_ONLY / NOT MODEL-QUALIFIED`) strictly cannot qualify a model as production-suitable or authorize production routing updates.",
         ])
 
         target_path.write_text("\n".join(lines), encoding="utf-8")

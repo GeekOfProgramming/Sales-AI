@@ -95,6 +95,12 @@ def parse_args() -> argparse.Namespace:
         help="Maximum fixture cases to evaluate per task (useful for quick smoke tests).",
     )
     parser.add_argument(
+        "--db-path",
+        type=str,
+        default=None,
+        help="Path to persistent SQLite database for live ledger (default: data/benchmark_budget.db in live mode, :memory: in dry-run).",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default="runtime/benchmarks",
@@ -114,13 +120,14 @@ def main() -> int:
     args = parse_args()
 
     print("=" * 72)
-    print("SalesAI S3.1 - External LLM Benchmark Runner")
+    print("SalesAI S3.2 - External LLM Benchmark Runner")
     print("=" * 72)
     print(f"Mode: {'OFFLINE DRY-RUN (Deterministic Mock)' if args.dry_run else 'LIVE DISPATCH'}")
     if not args.dry_run:
         print(f"  Confirm Paid Key: {args.confirm_paid}")
         print(f"  Max Requests Cap: {args.max_requests}")
         print(f"  Max Spend Cap: ${args.max_cost_usd:.2f}")
+        print(f"  Ledger DB: {args.db_path or 'data/benchmark_budget.db'}")
     print(f"Task Filter: {args.task}")
     print(f"Candidate Filter: {args.candidate or 'Sequential Tier 1 (#1..#4)'}")
     print(f"Max Cases per Task: {args.max_cases or 'All available fixtures'}")
@@ -133,6 +140,7 @@ def main() -> int:
             confirm_paid=args.confirm_paid,
             max_requests=args.max_requests,
             max_cost_usd=args.max_cost_usd,
+            db_path=args.db_path,
         )
     except (LLMNotConfiguredError, LLMBudgetExceededError) as e:
         print(f"\n[SAFETY GATE TRIPPED] Execution Refused:\n  {e}", file=sys.stderr)
@@ -153,6 +161,15 @@ def main() -> int:
     print(f"  Total Cases Executed: {report.total_cases_run}")
     print(f"  Total Cost: ${report.total_cost_usd:.6f}")
     print(f"  Tasks Evaluated: {len(report.tasks_evaluated)}")
+
+    if not args.dry_run:
+        summary = runner.get_run_ledger_summary(report.run_id)
+        print("\nSQLite Ledger Audit Summary:")
+        print(f"  Database Path: {summary['db_path']}")
+        print(f"  Total Reservations: {summary['reservations_count']}")
+        print(f"  Status Counts: {summary['status_counts']}")
+        print(f"  Total Reconciled Spend: ${summary['reconciled_cost_usd']:.6f}")
+        print(f"  Total Uncertain Spend: ${summary['uncertain_cost_usd']:.6f}")
 
     output_dir = Path(args.output_dir)
     report_gen = S3BenchmarkReportGenerator(output_dir=output_dir)
