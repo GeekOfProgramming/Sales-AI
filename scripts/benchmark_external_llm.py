@@ -101,6 +101,41 @@ def parse_args() -> argparse.Namespace:
         help="Path to persistent SQLite database for live ledger (default: data/benchmark_budget.db in live mode, :memory: in dry-run).",
     )
     parser.add_argument(
+        "--provider",
+        type=str,
+        default=None,
+        choices=["openai", "gemini", "groq", "xai"],
+        help="Target provider for live smoke benchmark (openai, gemini, groq, xai).",
+    )
+    parser.add_argument(
+        "--free-only",
+        dest="free_only",
+        action="store_true",
+        default=False,
+        help="Fail-closed restriction: refuse execution if provider is not verified free tier (FREE_ELIGIBILITY_UNCONFIRMED).",
+    )
+    parser.add_argument(
+        "--connectivity-smoke",
+        dest="connectivity_smoke",
+        action="store_true",
+        default=False,
+        help="Execute single-case connectivity smoke (SMOKE_ONLY). Capped at 1 case and 1 request.",
+    )
+    parser.add_argument(
+        "--allow-xai-paid",
+        dest="allow_xai_paid",
+        action="store_true",
+        default=False,
+        help="Explicit operator authorization allowing chargeable generation on xAI Grok.",
+    )
+    parser.add_argument(
+        "--probe-models",
+        dest="probe_models",
+        action="store_true",
+        default=False,
+        help="Run read-only GET /models metadata probe for the selected provider without generating text.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default="runtime/benchmarks",
@@ -119,28 +154,60 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
+    # Fast path: Read-only metadata probe (zero generation)
+    if args.probe_models:
+        from scripts.probe_llm_providers import probe_single_provider, print_probe_result
+        from sales_engine.benchmark.provider_catalog import PROVIDER_SPECS_BY_ID, get_provider_spec
+        print("=" * 72)
+        print("SalesAI S3.3 - Provider Metadata & Authentication Probe (--probe-models)")
+        print("=" * 72)
+        prov_key = args.provider or "openai"
+        spec = get_provider_spec(prov_key)
+        if not spec:
+            print(f"Error: Unknown provider '{prov_key}'.", file=sys.stderr)
+            return 2
+        res = probe_single_provider(spec)
+        print_probe_result(res)
+        return 0 if res["status"] in ("AUTHENTICATED", "NOT_CONFIGURED") else 1
+
+    # Connectivity smoke overrides: cap at exactly 1 case and 1 request
+    eff_max_cases = 1 if args.connectivity_smoke else args.max_cases
+    eff_max_requests = 1 if args.connectivity_smoke else args.max_requests
+    eff_output_dir = (
+        f"{args.output_dir}/{args.provider}"
+        if args.provider and args.output_dir == "runtime/benchmarks"
+        else args.output_dir
+    )
+
     print("=" * 72)
-    print("SalesAI S3.2 - External LLM Benchmark Runner")
+    print("SalesAI S3.3 - Four-Provider External Benchmark & Connectivity Smoke")
     print("=" * 72)
     print(f"Mode: {'OFFLINE DRY-RUN (Deterministic Mock)' if args.dry_run else 'LIVE DISPATCH'}")
     if not args.dry_run:
+        print(f"  Target Provider: {args.provider or 'openai (default)'}")
         print(f"  Confirm Paid Key: {args.confirm_paid}")
-        print(f"  Max Requests Cap: {args.max_requests}")
+        print(f"  Free-Only Gate: {args.free_only}")
+        print(f"  Connectivity Smoke: {args.connectivity_smoke}")
+        print(f"  Max Requests Cap: {eff_max_requests}")
         print(f"  Max Spend Cap: ${args.max_cost_usd:.2f}")
         print(f"  Ledger DB: {args.db_path or 'data/benchmark_budget.db'}")
     print(f"Task Filter: {args.task}")
-    print(f"Candidate Filter: {args.candidate or 'Sequential Tier 1 (#1..#4)'}")
-    print(f"Max Cases per Task: {args.max_cases or 'All available fixtures'}")
-    print(f"Output Directory: {args.output_dir}")
+    print(f"Candidate Filter: {args.candidate or 'Selected Provider Tier 1 Candidate'}")
+    print(f"Max Cases per Task: {eff_max_cases or 'All available fixtures'}")
+    print(f"Output Directory: {eff_output_dir}")
     print("-" * 72)
 
     try:
         runner = ExternalBenchmarkRunner(
             dry_run=args.dry_run,
             confirm_paid=args.confirm_paid,
-            max_requests=args.max_requests,
+            max_requests=eff_max_requests,
             max_cost_usd=args.max_cost_usd,
             db_path=args.db_path,
+            provider_filter=args.provider,
+            free_only=args.free_only,
+            allow_xai_generation=args.allow_xai_paid,
+            is_connectivity_smoke=args.connectivity_smoke,
         )
     except (LLMNotConfiguredError, LLMBudgetExceededError) as e:
         print(f"\n[SAFETY GATE TRIPPED] Execution Refused:\n  {e}", file=sys.stderr)
@@ -149,12 +216,16 @@ def main() -> int:
         print(f"\n[INITIALIZATION ERROR] Failed to initialize runner:\n  {e}", file=sys.stderr)
         return 2
 
-    print("Running deterministic benchmark evaluation...")
-    report = runner.run_benchmark(
-        task_filter=args.task,
-        candidate_filter=args.candidate,
-        max_cases_per_task=args.max_cases,
-    )
+    print("Running benchmark evaluation...")
+    try:
+        report = runner.run_benchmark(
+            task_filter=args.task,
+            candidate_filter=args.candidate,
+            max_cases_per_task=eff_max_cases,
+        )
+    except (LLMNotConfiguredError, LLMBudgetExceededError) as e:
+        print(f"\n[SAFETY GATE TRIPPED] Execution Refused:\n  {e}", file=sys.stderr)
+        return 1
 
     print("\nBenchmark Execution Completed:")
     print(f"  Run ID: {report.run_id}")
@@ -171,7 +242,7 @@ def main() -> int:
         print(f"  Total Reconciled Spend: ${summary['reconciled_cost_usd']:.6f}")
         print(f"  Total Uncertain Spend: ${summary['uncertain_cost_usd']:.6f}")
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(eff_output_dir)
     report_gen = S3BenchmarkReportGenerator(output_dir=output_dir)
 
     print("\nGenerating Benchmark Reports...")

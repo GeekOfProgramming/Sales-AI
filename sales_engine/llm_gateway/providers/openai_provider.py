@@ -29,6 +29,9 @@ from sales_engine.llm_gateway.interface import BaseLLMProvider
 
 DEFAULT_ALLOWED_HOSTS: Set[str] = {
     "api.openai.com",
+    "generativelanguage.googleapis.com",
+    "api.groq.com",
+    "api.x.ai",
 }
 
 
@@ -84,7 +87,15 @@ class OpenAIProvider(BaseLLMProvider):
     """
     OpenAI-compatible Chat Completions HTTPS REST adapter.
     Implements BaseLLMProvider with fail-closed configuration and strict boundary guards.
+    Supports OpenAI, Google Gemini (OpenAI compat), GroqCloud, and xAI Grok.
     """
+
+    PROVIDER_ENV_VARS: Dict[str, str] = {
+        "openai": "OPENAI_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "xai": "XAI_API_KEY",
+    }
 
     def __init__(
         self,
@@ -92,6 +103,7 @@ class OpenAIProvider(BaseLLMProvider):
         api_key: Optional[str] = None,
         base_url: str = "https://api.openai.com/v1",
         allowed_hosts: Optional[Set[str]] = None,
+        env_var: Optional[str] = None,
         client: Optional[httpx.Client] = None,
         async_client: Optional[httpx.AsyncClient] = None,
         transport: Optional[httpx.BaseTransport] = None,
@@ -102,6 +114,7 @@ class OpenAIProvider(BaseLLMProvider):
     ):
         self._provider_id = provider_id
         self._api_key = api_key
+        self.env_var = env_var or self.PROVIDER_ENV_VARS.get(provider_id.lower(), "OPENAI_API_KEY")
         self.allowed_hosts = allowed_hosts or DEFAULT_ALLOWED_HOSTS
         self.base_url = validate_endpoint_url(base_url, self.allowed_hosts)
         self.default_model = default_model
@@ -119,11 +132,12 @@ class OpenAIProvider(BaseLLMProvider):
         return self._provider_id
 
     def _get_api_key(self) -> str:
-        """Retrieve API key from constructor or environment. Raises if missing."""
-        key = self._api_key or os.environ.get("OPENAI_API_KEY")
+        """Retrieve API key from constructor or specific provider environment variable. Raises if missing."""
+        target_env = self.env_var or self.PROVIDER_ENV_VARS.get(self._provider_id.lower(), "OPENAI_API_KEY")
+        key = self._api_key or os.environ.get(target_env)
         if not key or not key.strip():
             raise LLMNotConfiguredError(
-                message=f"Missing API key for provider '{self._provider_id}'. Set OPENAI_API_KEY.",
+                message=f"Missing API key for provider '{self._provider_id}'. Set {target_env}.",
                 provider=self._provider_id,
             )
         return key.strip()
@@ -174,12 +188,16 @@ class OpenAIProvider(BaseLLMProvider):
         if not omit_temperature:
             payload["temperature"] = request.temperature
 
-        # Token ceiling: reasoning models use max_completion_tokens, standard models use max_tokens
-        use_max_completion_tokens = cap.get("use_max_completion_tokens", False) or is_reasoning
-        if use_max_completion_tokens:
-            payload["max_completion_tokens"] = request.max_output_tokens
+        # Token ceiling: respect explicit max_tokens_key, or default based on reasoning capabilities
+        explicit_token_key = cap.get("max_tokens_key")
+        if explicit_token_key:
+            payload[explicit_token_key] = request.max_output_tokens
         else:
-            payload["max_tokens"] = request.max_output_tokens
+            use_max_completion_tokens = cap.get("use_max_completion_tokens", False) or is_reasoning
+            if use_max_completion_tokens:
+                payload["max_completion_tokens"] = request.max_output_tokens
+            else:
+                payload["max_tokens"] = request.max_output_tokens
 
         if reasoning_effort and reasoning_effort != "none":
             payload["reasoning_effort"] = reasoning_effort
@@ -494,3 +512,152 @@ class OpenAIProvider(BaseLLMProvider):
             raise self._parse_http_error(resp, request.task_id)
 
         return self._parse_response_body(resp, request, model, latency_ms)
+
+    def probe_models(self, timeout_seconds: float = 15.0) -> Dict[str, Any]:
+        """
+        Perform a read-only metadata probe (GET /models) to verify authentication and endpoint connectivity.
+        Does NOT initiate any text generation or token consumption.
+        Returns safe summary dictionary with model IDs and status.
+        Raises LLMAuthenticationError, LLMProviderUnavailableError, LLMTimeoutError, etc. on failure.
+        Never exposes API keys or sensitive error bodies.
+        """
+        api_key = self._get_api_key()
+        endpoint = f"{self.base_url}/models"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "SalesAI-Gateway/2.2",
+        }
+        timeout = httpx.Timeout(
+            timeout=timeout_seconds,
+            connect=10.0,
+            read=timeout_seconds,
+            write=10.0,
+        )
+        client_kwargs = {
+            "timeout": timeout,
+            "follow_redirects": False,
+        }
+        if self._transport:
+            client_kwargs["transport"] = self._transport
+
+        t0 = time.perf_counter()
+        try:
+            if self._injected_client:
+                resp = self._injected_client.get(endpoint, headers=headers)
+            else:
+                with httpx.Client(**client_kwargs) as client:
+                    resp = client.get(endpoint, headers=headers)
+            t1 = time.perf_counter()
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError(
+                message=f"Model probe timed out after {timeout_seconds}s.",
+                provider=self._provider_id,
+                task_id="probe_models",
+            ) from e
+        except httpx.NetworkError as e:
+            raise LLMProviderUnavailableError(
+                message=f"Network error connecting to {self._provider_id} API at {self.base_url}.",
+                provider=self._provider_id,
+                task_id="probe_models",
+            ) from e
+
+        if resp.status_code != 200:
+            raise self._parse_http_error(resp, "probe_models")
+
+        model_ids = []
+        try:
+            data = resp.json()
+            raw_list = []
+            if isinstance(data, dict):
+                raw_list = data.get("data") or data.get("models") or []
+            elif isinstance(data, list):
+                raw_list = data
+            for item in raw_list:
+                if isinstance(item, dict) and "id" in item:
+                    model_ids.append(str(item["id"]))
+                elif isinstance(item, str):
+                    model_ids.append(item)
+        except Exception:
+            pass
+
+        return {
+            "provider_id": self._provider_id,
+            "base_url": self.base_url,
+            "status": "AUTHENTICATED",
+            "status_code": resp.status_code,
+            "latency_ms": round((t1 - t0) * 1000.0, 2),
+            "model_count": len(model_ids),
+            "model_ids": sorted(model_ids),
+        }
+
+    async def probe_models_async(self, timeout_seconds: float = 15.0) -> Dict[str, Any]:
+        """Asynchronous metadata probe (GET /models)."""
+        api_key = self._get_api_key()
+        endpoint = f"{self.base_url}/models"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "SalesAI-Gateway/2.2",
+        }
+        timeout = httpx.Timeout(
+            timeout=timeout_seconds,
+            connect=10.0,
+            read=timeout_seconds,
+            write=10.0,
+        )
+        client_kwargs = {
+            "timeout": timeout,
+            "follow_redirects": False,
+        }
+        if self._async_transport:
+            client_kwargs["transport"] = self._async_transport
+
+        t0 = time.perf_counter()
+        try:
+            if self._injected_async_client:
+                resp = await self._injected_async_client.get(endpoint, headers=headers)
+            else:
+                async with httpx.AsyncClient(**client_kwargs) as client:
+                    resp = await client.get(endpoint, headers=headers)
+            t1 = time.perf_counter()
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError(
+                message=f"Model probe timed out after {timeout_seconds}s.",
+                provider=self._provider_id,
+                task_id="probe_models",
+            ) from e
+        except httpx.NetworkError as e:
+            raise LLMProviderUnavailableError(
+                message=f"Network error connecting to {self._provider_id} API at {self.base_url}.",
+                provider=self._provider_id,
+                task_id="probe_models",
+            ) from e
+
+        if resp.status_code != 200:
+            raise self._parse_http_error(resp, "probe_models")
+
+        model_ids = []
+        try:
+            data = resp.json()
+            raw_list = []
+            if isinstance(data, dict):
+                raw_list = data.get("data") or data.get("models") or []
+            elif isinstance(data, list):
+                raw_list = data
+            for item in raw_list:
+                if isinstance(item, dict) and "id" in item:
+                    model_ids.append(str(item["id"]))
+                elif isinstance(item, str):
+                    model_ids.append(item)
+        except Exception:
+            pass
+
+        return {
+            "provider_id": self._provider_id,
+            "base_url": self.base_url,
+            "status": "AUTHENTICATED",
+            "status_code": resp.status_code,
+            "latency_ms": round((t1 - t0) * 1000.0, 2),
+            "model_count": len(model_ids),
+            "model_ids": sorted(model_ids),
+        }
+

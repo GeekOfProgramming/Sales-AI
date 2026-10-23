@@ -76,15 +76,19 @@ from sales_engine.benchmark.ground_truth_evaluator import (
     GroundTruthEvaluationResult,
     SCORER_VERSION,
 )
+from sales_engine.benchmark.provider_catalog import (
+    OPENAI_SPEC,
+    GEMINI_SPEC,
+    GROQ_SPEC,
+    XAI_SPEC,
+    get_provider_spec,
+    get_candidate_spec,
+    list_supported_providers,
+    list_supported_candidates,
+)
 
 # S3.2 Verified Live Model Pricing for standard short-context gpt-6-luna (verified 2026-10-22)
-TIER1_LIVE_LUNA_PRICING = PricingMetadata(
-    currency="USD",
-    input_per_1m=0.10,
-    output_per_1m=0.50,
-    effective_date="2026-10-22",
-    source_url="https://developers.openai.com/api/docs/pricing",
-)
+TIER1_LIVE_LUNA_PRICING = OPENAI_SPEC.pricing
 
 
 @dataclass
@@ -117,6 +121,9 @@ class BenchmarkCaseExecutionResult:
     forbidden_tokens_found: List[str] = field(default_factory=list)
     raw_output_snippet: str = ""
     validation_safe_log: Dict[str, Any] = field(default_factory=dict)
+    sqlite_reservation_status: Optional[str] = None
+    spend_provenance: Optional[str] = None
+    estimated_spend_usd: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -405,6 +412,10 @@ class ExternalBenchmarkRunner:
         stop_on_first_qualifying: bool = True,
         api_key: Optional[str] = None,
         real_provider_transport: Optional[httpx.BaseTransport] = None,
+        provider_filter: Optional[str] = None,
+        free_only: bool = False,
+        allow_xai_generation: bool = False,
+        is_connectivity_smoke: bool = False,
     ):
         self.dry_run = dry_run
         self.confirm_paid = confirm_paid
@@ -413,6 +424,10 @@ class ExternalBenchmarkRunner:
         self._api_key = api_key
         self._real_provider_transport = real_provider_transport
         self._attempted_requests_count = 0
+        self.provider_filter = provider_filter.strip().lower() if provider_filter else None
+        self.free_only = free_only
+        self.allow_xai_generation = allow_xai_generation
+        self.is_connectivity_smoke = is_connectivity_smoke
 
         # LIVE-02: Strict validation of numeric caps across all modes
         if not isinstance(max_requests, int) or isinstance(max_requests, bool) or max_requests <= 0:
@@ -532,57 +547,94 @@ class ExternalBenchmarkRunner:
                 allowed_tasks=["*"],
             )
 
-    def _configure_live_candidate(self, candidate_id: str = "t1_c1") -> None:
+    def _configure_live_candidate(
+        self,
+        candidate_id: Optional[str] = None,
+        provider_id: Optional[str] = None,
+    ) -> None:
         """
         Configure one explicitly selected verified Tier 1 candidate for live smoke execution.
-        Targeting OpenAIProvider and official model ID gpt-6-luna.
-        All other slots remain disabled.
+        Supports OpenAI (t1_c1), Google Gemini (t1_c2), GroqCloud (t1_c3), and xAI Grok (t1_c4).
+        Enforces candidate/provider identity, free-only gates, xAI generation lock,
+        and leaves all other slots disabled.
         """
-        if candidate_id != "t1_c1":
+        # 1. Resolve ProviderConnectionSpec
+        spec = None
+        target_provider = provider_id or self.provider_filter
+        target_candidate = candidate_id
+
+        if target_provider:
+            spec = get_provider_spec(target_provider)
+            if not spec:
+                raise LLMNotConfiguredError(
+                    f"Provider '{target_provider}' is not verified in S3.3. Supported providers: {list_supported_providers()}"
+                )
+            if target_candidate and target_candidate != spec.candidate_id:
+                raise LLMNotConfiguredError(
+                    f"Candidate '{target_candidate}' does not match provider '{spec.provider_id}' (expected '{spec.candidate_id}')."
+                )
+        elif target_candidate:
+            spec = get_candidate_spec(target_candidate)
+            if not spec:
+                raise LLMNotConfiguredError(
+                    f"Candidate '{target_candidate}' is not verified in S3.3. Supported candidates: {list_supported_candidates()}"
+                )
+        else:
+            # Default to verified baseline candidate t1_c1 (OpenAI)
+            spec = OPENAI_SPEC
+
+        # 2. Free-Only Gate Enforcement
+        if self.free_only and spec.billing_mode != "VERIFIED_FREE_TIER":
             raise LLMNotConfiguredError(
-                f"Candidate '{candidate_id}' is not verified for live benchmarking in S3.2. "
-                "Only 't1_c1' (gpt-6-luna) is verified."
+                f"FREE_ELIGIBILITY_UNCONFIRMED: Provider '{spec.provider_id}' billing mode is '{spec.billing_mode}', "
+                "not 'VERIFIED_FREE_TIER'. Free-only execution refused (no paid fallback)."
             )
 
-        api_key = self._api_key or os.environ.get("OPENAI_API_KEY")
+        # 3. xAI Grok Generation Lock Enforcement
+        if spec.provider_id == "xai" and not spec.is_generation_enabled and not self.allow_xai_generation:
+            raise LLMNotConfiguredError(
+                f"XAI_GENERATION_DISABLED: Generation with xAI Grok ({spec.exact_model_id}) is disabled by default "
+                "until explicit operator authorization (--allow-xai-paid)."
+            )
+
+        # 4. Environment Key Resolution (fail-closed, no cross-vendor fallback)
+        api_key = os.environ.get(spec.env_var)
+        if not api_key and self._api_key and spec.provider_id == "openai":
+            api_key = self._api_key
+
         if not api_key and not self._real_provider_transport:
             raise LLMNotConfiguredError(
-                "Missing OPENAI_API_KEY in environment for live benchmark execution."
+                f"Missing {spec.env_var} in environment for live benchmark execution with provider '{spec.provider_id}'."
             )
 
-        # Register real OpenAIProvider with verified capabilities
+        # 5. Register real provider instance with approved endpoints and capabilities
         self.real_provider = OpenAIProvider(
-            provider_id="openai",
-            base_url="https://api.openai.com/v1",
-            api_key=api_key or "sk-live-smoke-test-key",
+            provider_id=spec.provider_id,
+            base_url=spec.base_url,
+            allowed_hosts=spec.allowed_hosts,
+            env_var=spec.env_var,
+            api_key=api_key or f"sk-{spec.provider_id}-live-smoke-test-key",
             transport=self._real_provider_transport,
+            default_model=spec.exact_model_id,
             model_capabilities={
-                "gpt-6-luna": {
-                    "is_reasoning_model": True,
-                    "supports_json_schema": True,
-                    "supports_system_prompt": True,
-                    "max_tokens_key": "max_completion_tokens",
-                }
+                spec.exact_model_id: spec.capabilities
             },
         )
         self.registry.register(self.real_provider)
+        self.gateway_config.default_provider = spec.provider_id
 
-        # Disable all 16 slots first
+        # 6. Disable all 16 slots first
         for c in list(self.catalog.candidates.values()):
             self.catalog.disable_candidate(c.candidate_id)
 
-        # Enable strictly t1_c1 with verified rates
+        # 7. Enable strictly the single chosen candidate slot
         self.catalog.enable_candidate(
-            candidate_id="t1_c1",
-            provider_id="openai",
-            exact_model_id="gpt-6-luna",
-            verified_capabilities={
-                "json_mode": True,
-                "strict_schema": True,
-                "reasoning_model": True,
-            },
-            pricing=TIER1_LIVE_LUNA_PRICING,
-            verification_notes="S3.2 verified Tier 1 candidate (gpt-6-luna) for live smoke benchmarking",
+            candidate_id=spec.candidate_id,
+            provider_id=spec.provider_id,
+            exact_model_id=spec.exact_model_id,
+            verified_capabilities=spec.capabilities,
+            pricing=spec.pricing,
+            verification_notes=spec.verification_notes,
             allowed_tasks=["*"],
         )
 
@@ -695,8 +747,16 @@ class ExternalBenchmarkRunner:
                     "Live smoke execution requires an explicit single task (e.g. --task website_extraction:pass_a). "
                     "Multiple tasks or 'all' not permitted in live smoke pilot."
                 )
-            if candidate_filter == "t1_c1":
-                self._configure_live_candidate("t1_c1")
+            if self.provider_filter:
+                self._configure_live_candidate(
+                    candidate_id=candidate_filter,
+                    provider_id=self.provider_filter,
+                )
+                # Filter solely to the newly enabled candidate
+                enabled_cands = [c.candidate_id for c in self.catalog.candidates.values() if c.enabled]
+                candidate_filter = enabled_cands[0] if enabled_cands else "t1_c1"
+            elif candidate_filter == "t1_c1":
+                self._configure_live_candidate("t1_c1", provider_id="openai")
             else:
                 raise LLMNotConfiguredError(
                     "Real benchmarking requires verified live provider configuration with non-mock pricing. "
@@ -871,7 +931,7 @@ class ExternalBenchmarkRunner:
                 break
 
         total = len(fixtures)
-        is_smoke = total < 10
+        is_smoke = (total < 10) or self.is_connectivity_smoke
 
         syn_rate = (syntactic_passes / total) if total > 0 else 0.0
         sem_rate = (semantic_passes / total) if total > 0 else 0.0
@@ -965,6 +1025,24 @@ class ExternalBenchmarkRunner:
             metadata=meta,
         )
 
+        prompt_chars = len(fixture.prompt) + (len(fixture.system_prompt) if fixture.system_prompt else 0)
+        est_input_tokens = max(1, math.ceil(prompt_chars / self.budget_policy.chars_per_token_estimate))
+        est_output_tokens = request.max_output_tokens
+        pricing = candidate.pricing
+        if pricing and pricing.input_per_1m is not None and pricing.output_per_1m is not None:
+            est_spend = round((
+                est_input_tokens * pricing.input_per_1m
+                + est_output_tokens * pricing.output_per_1m
+            ) / 1_000_000.0, 6)
+        else:
+            est_spend = (self.max_cost_usd + 1.0) if not self.dry_run else 0.0
+
+        spend_prov = (
+            "VERIFIED_FREE_TIER"
+            if (pricing and pricing.currency == "FREE")
+            else ("VERIFIED_PAID" if not self.dry_run else "OFFLINE_MOCK")
+        )
+
         # Check request and cost ceilings before dispatch (enforced for live runs)
         if not self.dry_run:
             if self._attempted_requests_count >= self.max_requests:
@@ -985,21 +1063,10 @@ class ExternalBenchmarkRunner:
                     failure_reasons=[
                         f"Per-run request ceiling of {self.max_requests} reached. Case not dispatched."
                     ],
+                    sqlite_reservation_status="PRE_DISPATCH_ABORT",
+                    spend_provenance=spend_prov,
+                    estimated_spend_usd=est_spend,
                 )
-
-            # Estimate conservative spend for preflight ceiling check
-            prompt_chars = len(fixture.prompt) + (len(fixture.system_prompt) if fixture.system_prompt else 0)
-            est_input_tokens = max(1, math.ceil(prompt_chars / self.budget_policy.chars_per_token_estimate))
-            est_output_tokens = request.max_output_tokens
-            pricing = candidate.pricing
-            if pricing and pricing.input_per_1m is not None and pricing.output_per_1m is not None:
-                est_spend = (
-                    est_input_tokens * pricing.input_per_1m
-                    + est_output_tokens * pricing.output_per_1m
-                ) / 1_000_000.0
-                est_spend = round(est_spend, 6)
-            else:
-                est_spend = self.max_cost_usd + 1.0
 
             if est_spend > self.max_cost_usd:
                 raise LLMBudgetExceededError(
@@ -1042,6 +1109,9 @@ class ExternalBenchmarkRunner:
                 overall_pass=False,
                 failure_categories=["GATEWAY_DISPATCH_ERROR"],
                 failure_reasons=[str(e)],
+                sqlite_reservation_status="FAILED",
+                spend_provenance=spend_prov,
+                estimated_spend_usd=est_spend,
             )
 
         # -----------------------------------------------------------------------
@@ -1067,6 +1137,12 @@ class ExternalBenchmarkRunner:
         )
 
         raw_snippet = (response.content or "")[:200].replace("\n", " ")
+
+        sqlite_status = (
+            "RECONCILED"
+            if (response.input_tokens is not None and response.output_tokens is not None)
+            else "UNCERTAIN"
+        )
 
         return BenchmarkCaseExecutionResult(
             case_id=fixture.case_id,
@@ -1095,4 +1171,7 @@ class ExternalBenchmarkRunner:
             forbidden_tokens_found=eval_result.forbidden_tokens_found,
             raw_output_snippet=raw_snippet,
             validation_safe_log=val_result.safe_log_dict(),
+            sqlite_reservation_status=sqlite_status,
+            spend_provenance=spend_prov,
+            estimated_spend_usd=est_spend,
         )

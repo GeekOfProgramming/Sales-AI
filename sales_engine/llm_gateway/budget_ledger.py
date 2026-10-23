@@ -365,11 +365,11 @@ class BudgetLedger:
             pricing is None
             or pricing.input_per_1m is None
             or pricing.output_per_1m is None
-            or pricing.currency != "USD"
+            or pricing.currency not in ("USD", "FREE")
         ):
             raise LLMNotConfiguredError(
                 message=f"Candidate '{candidate.candidate_id}' ({candidate.exact_model_id}) "
-                "has missing or unverified USD pricing metadata. Cannot safely reserve budget (fail-closed).",
+                "has missing or unverified USD/FREE pricing metadata. Cannot safely reserve budget (fail-closed).",
                 provider=candidate.provider_id,
                 task_id=request.task_id,
             )
@@ -638,12 +638,15 @@ class BudgetLedger:
                             task_id=response.task_id,
                         )
 
-                    # Verified actual cost calculation
-                    actual_cost = (
-                        response.input_tokens * pricing.input_per_1m
-                        + response.output_tokens * pricing.output_per_1m
-                    ) / 1_000_000.0
-                    actual_cost = round(actual_cost, 6)
+                    # Verified actual cost calculation (FREE tier reconciles to $0.000000 actual spend)
+                    if pricing.currency == "FREE":
+                        actual_cost = 0.0
+                    else:
+                        actual_cost = (
+                            response.input_tokens * pricing.input_per_1m
+                            + response.output_tokens * pricing.output_per_1m
+                        ) / 1_000_000.0
+                        actual_cost = round(actual_cost, 6)
 
                     # Set cost on response object
                     response.cost_usd = actual_cost
