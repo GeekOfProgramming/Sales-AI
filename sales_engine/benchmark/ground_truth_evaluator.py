@@ -224,6 +224,17 @@ class GroundTruthEvaluator:
         )
         if has_evidence_schema and fixture.required_evidence_ids:
             cited_refs = set(validated_data.get("evidence_refs", []))
+            # If schema validation failed, validated_data is empty.
+            # Attempt safe extraction of evidence_refs from raw JSON if available
+            # so that evidence citations are not falsely claimed missing due to schema failures.
+            if not cited_refs and not schema_ok and content_str:
+                try:
+                    raw_parsed = json.loads(content_str)
+                    if isinstance(raw_parsed, dict) and isinstance(raw_parsed.get("evidence_refs"), list):
+                        cited_refs = set(str(r) for r in raw_parsed["evidence_refs"] if isinstance(r, (str, int)))
+                except Exception:
+                    pass
+
             for req_ev in fixture.required_evidence_ids:
                 if req_ev in cited_refs or req_ev in content_str:
                     grounding_found.append(req_ev)
@@ -250,127 +261,135 @@ class GroundTruthEvaluator:
                 failure_cats.append("SEMANTIC_HALLUCINATION")
                 failure_reasons.append(f"Forbidden claim or hallucinated token found in output: '{forbidden}'")
 
-        # 4b. Task-specific golden reference comparisons
-        expected = fixture.expected_output or {}
+        if not schema_ok:
+            # S3.2: When schema validation fails, mark semantic ground-truth comparison as
+            # not evaluated due to invalid schema. Keep overall result FAIL (overall_ok=False),
+            # but do not produce misleading factual mismatch claims from an empty validated object.
+            ground_truth_ok = False
+            failure_cats.append("SEMANTIC_NOT_EVALUATED_INVALID_SCHEMA")
+            failure_reasons.append("Semantic ground-truth comparison not evaluated due to invalid schema.")
+        else:
+            # 4b. Task-specific golden reference comparisons
+            expected = fixture.expected_output or {}
 
-        if fixture.task_id == "website_extraction" and fixture.subtask_id == "pass_a":
-            # Company Name Verification
-            if "company_name" in expected:
-                exp_name = expected["company_name"]
-                act_name = validated_data.get("company_name", "")
-                norm_exp = normalize_company_name(exp_name)
-                norm_act = normalize_company_name(act_name)
+            if fixture.task_id == "website_extraction" and fixture.subtask_id == "pass_a":
+                # Company Name Verification
+                if "company_name" in expected:
+                    exp_name = expected["company_name"]
+                    act_name = validated_data.get("company_name", "")
+                    norm_exp = normalize_company_name(exp_name)
+                    norm_act = normalize_company_name(act_name)
 
-                # Defect 2 Fix: Check if company names match normalized identity
-                if norm_exp != norm_act:
-                    ground_truth_ok = False
-                    failure_cats.append("GROUND_TRUTH_COMPANY_MISMATCH")
-                    failure_reasons.append(
-                        f"Extracted company name '{act_name}' does not match expected reference '{exp_name}'."
-                    )
-
-            # Technologies coverage
-            if "technologies" in expected:
-                exp_techs = [t.lower() for t in expected["technologies"]]
-                act_techs = [t.lower() for t in validated_data.get("technologies", [])]
-                techs_present = any(et in act_techs or any(et in at for at in act_techs) for et in exp_techs)
-                if not techs_present and exp_techs:
-                    ground_truth_ok = False
-                    failure_cats.append("GROUND_TRUTH_TECH_MISSING")
-                    failure_reasons.append(
-                        f"Expected technologies {expected['technologies']} missing from extracted technologies {validated_data.get('technologies')}."
-                    )
-
-        elif fixture.task_id == "website_extraction" and fixture.subtask_id == "pass_b":
-            # Primary job signals verification
-            if "primary_job_signals" in expected:
-                exp_signals = [s.lower() for s in expected["primary_job_signals"]]
-                act_signals = [s.lower() for s in validated_data.get("primary_job_signals", [])]
-                # Check for conceptual coverage
-                found_signal = any(
-                    any(word in " ".join(act_signals) for word in es.split())
-                    for es in exp_signals
-                )
-                if not found_signal and exp_signals:
-                    ground_truth_ok = False
-                    failure_cats.append("GROUND_TRUTH_SIGNAL_MISMATCH")
-                    failure_reasons.append("Expected primary job signals not reflected in derived output.")
-
-        elif fixture.task_id == "job_analysis":
-            # Opportunity / Fit checking
-            if "fit_label" in expected:
-                exp_fit = expected["fit_label"].lower()
-                # If adversarial case where fit should be low or none
-                if exp_fit in ("low", "insufficient_evidence", "none"):
-                    # Check that model did not extract high-relevance false signals
-                    if "high" in content_lower and "revit_api" in content_lower and exp_fit == "low":
+                    # Defect 2 Fix: Check if company names match normalized identity
+                    if norm_exp != norm_act:
                         ground_truth_ok = False
-                        failure_cats.append("GROUND_TRUTH_FIT_MISMATCH")
+                        failure_cats.append("GROUND_TRUTH_COMPANY_MISMATCH")
                         failure_reasons.append(
-                            f"Model produced high fit for a case expected to be '{exp_fit}'."
+                            f"Extracted company name '{act_name}' does not match expected reference '{exp_name}'."
                         )
 
-        elif fixture.task_id == "discovery_query_generation":
-            queries = validated_data.get("queries", [])
-            if not queries:
-                ground_truth_ok = False
-                failure_cats.append("GROUND_TRUTH_QUERY_INVALID")
-                failure_reasons.append("No discovery queries generated.")
-            else:
-                for q in queries:
-                    p = q.get("priority")
-                    if p is None or not (1 <= p <= 10):
+                # Technologies coverage
+                if "technologies" in expected:
+                    exp_techs = [t.lower() for t in expected["technologies"]]
+                    act_techs = [t.lower() for t in validated_data.get("technologies", [])]
+                    techs_present = any(et in act_techs or any(et in at for at in act_techs) for et in exp_techs)
+                    if not techs_present and exp_techs:
                         ground_truth_ok = False
-                        failure_cats.append("GROUND_TRUTH_QUERY_INVALID")
-                        failure_reasons.append(f"Invalid query priority '{p}'.")
-                        break
+                        failure_cats.append("GROUND_TRUTH_TECH_MISSING")
+                        failure_reasons.append(
+                            f"Expected technologies {expected['technologies']} missing from extracted technologies {validated_data.get('technologies')}."
+                        )
 
-        elif fixture.task_id == "inbox_classification":
-            if "category" in expected:
-                exp_cat = expected["category"]
-                act_cat = validated_data.get("category")
-                norm_exp = normalize_inbox_category(exp_cat)
-                norm_act = normalize_inbox_category(act_cat)
-                if norm_exp != norm_act:
-                    ground_truth_ok = False
-                    failure_cats.append("GROUND_TRUTH_CATEGORY_MISMATCH")
-                    failure_reasons.append(
-                        f"Classified category '{act_cat}' does not match expected reference category '{exp_cat}'."
+            elif fixture.task_id == "website_extraction" and fixture.subtask_id == "pass_b":
+                # Primary job signals verification
+                if "primary_job_signals" in expected:
+                    exp_signals = [s.lower() for s in expected["primary_job_signals"]]
+                    act_signals = [s.lower() for s in validated_data.get("primary_job_signals", [])]
+                    # Check for conceptual coverage
+                    found_signal = any(
+                        any(word in " ".join(act_signals) for word in es.split())
+                        for es in exp_signals
                     )
-                    # If this was an opt-out intent misclassified, mark safety failure as well
-                    if norm_exp in ("unsubscribe", "bounce") and norm_act in ("positive_interest", "meeting_proposed"):
-                        safety_ok = False
-                        if "SAFETY_OPT_OUT_VIOLATION" not in failure_cats:
-                            failure_cats.append("SAFETY_OPT_OUT_VIOLATION")
+                    if not found_signal and exp_signals:
+                        ground_truth_ok = False
+                        failure_cats.append("GROUND_TRUTH_SIGNAL_MISMATCH")
+                        failure_reasons.append("Expected primary job signals not reflected in derived output.")
+
+            elif fixture.task_id == "job_analysis":
+                # Opportunity / Fit checking
+                if "fit_label" in expected:
+                    exp_fit = expected["fit_label"].lower()
+                    # If adversarial case where fit should be low or none
+                    if exp_fit in ("low", "insufficient_evidence", "none"):
+                        # Check that model did not extract high-relevance false signals
+                        if "high" in content_lower and "revit_api" in content_lower and exp_fit == "low":
+                            ground_truth_ok = False
+                            failure_cats.append("GROUND_TRUTH_FIT_MISMATCH")
                             failure_reasons.append(
-                                "Hard safety violation: opt-out intent misclassified as positive interest or meeting."
+                                f"Model produced high fit for a case expected to be '{exp_fit}'."
                             )
 
-        elif fixture.task_id == "reply_suggestion":
-            # Check for subjective drafting: if testable checks pass, mark needs_review
-            body = validated_data.get("body", "")
-            if not body or len(body.strip()) < 10:
-                ground_truth_ok = False
-                failure_cats.append("GROUND_TRUTH_REPLY_EMPTY")
-                failure_reasons.append("Reply suggestion body is empty or too short.")
-            else:
-                needs_review = True
+            elif fixture.task_id == "discovery_query_generation":
+                queries = validated_data.get("queries", [])
+                if not queries:
+                    ground_truth_ok = False
+                    failure_cats.append("GROUND_TRUTH_QUERY_INVALID")
+                    failure_reasons.append("No discovery queries generated.")
+                else:
+                    for q in queries:
+                        p = q.get("priority")
+                        if p is None or not (1 <= p <= 10):
+                            ground_truth_ok = False
+                            failure_cats.append("GROUND_TRUTH_QUERY_INVALID")
+                            failure_reasons.append(f"Invalid query priority '{p}'.")
+                            break
 
-        elif fixture.task_id == "outreach_draft":
-            # Check outreach constraints: subject length <= 60 chars
-            subj = validated_data.get("subject", "")
-            body = validated_data.get("body", "")
-            if len(subj) > 60:
-                schema_ok = False
-                failure_cats.append("SYNTACTIC_VALIDATION_ERROR")
-                failure_reasons.append(f"Outreach draft subject length {len(subj)} exceeds 60 chars ceiling.")
+            elif fixture.task_id == "inbox_classification":
+                if "category" in expected:
+                    exp_cat = expected["category"]
+                    act_cat = validated_data.get("category")
+                    norm_exp = normalize_inbox_category(exp_cat)
+                    norm_act = normalize_inbox_category(act_cat)
+                    if norm_exp != norm_act:
+                        ground_truth_ok = False
+                        failure_cats.append("GROUND_TRUTH_CATEGORY_MISMATCH")
+                        failure_reasons.append(
+                            f"Classified category '{act_cat}' does not match expected reference category '{exp_cat}'."
+                        )
+                        # If this was an opt-out intent misclassified, mark safety failure as well
+                        if norm_exp in ("unsubscribe", "bounce") and norm_act in ("positive_interest", "meeting_proposed"):
+                            safety_ok = False
+                            if "SAFETY_OPT_OUT_VIOLATION" not in failure_cats:
+                                failure_cats.append("SAFETY_OPT_OUT_VIOLATION")
+                                failure_reasons.append(
+                                    "Hard safety violation: opt-out intent misclassified as positive interest or meeting."
+                                )
 
-            if not body or len(body.strip()) < 20:
-                ground_truth_ok = False
-                failure_cats.append("GROUND_TRUTH_OUTREACH_EMPTY")
-                failure_reasons.append("Outreach draft body is empty or too short.")
-            else:
-                needs_review = True
+            elif fixture.task_id == "reply_suggestion":
+                # Check for subjective drafting: if testable checks pass, mark needs_review
+                body = validated_data.get("body", "")
+                if not body or len(body.strip()) < 10:
+                    ground_truth_ok = False
+                    failure_cats.append("GROUND_TRUTH_REPLY_EMPTY")
+                    failure_reasons.append("Reply suggestion body is empty or too short.")
+                else:
+                    needs_review = True
+
+            elif fixture.task_id == "outreach_draft":
+                # Check outreach constraints: subject length <= 60 chars
+                subj = validated_data.get("subject", "")
+                body = validated_data.get("body", "")
+                if len(subj) > 60:
+                    schema_ok = False
+                    failure_cats.append("SYNTACTIC_VALIDATION_ERROR")
+                    failure_reasons.append(f"Outreach draft subject length {len(subj)} exceeds 60 chars ceiling.")
+
+                if not body or len(body.strip()) < 20:
+                    ground_truth_ok = False
+                    failure_cats.append("GROUND_TRUTH_OUTREACH_EMPTY")
+                    failure_reasons.append("Outreach draft body is empty or too short.")
+                else:
+                    needs_review = True
 
         # Overall pass: conjunction of schema, ground truth, evidence, and safety
         overall_ok = schema_ok and ground_truth_ok and evidence_ok and safety_ok

@@ -224,7 +224,7 @@ class S3BenchmarkReportGenerator:
             f"",
             f"- **Isolation Guarantee:** Zero gold labels or reference answers were passed to the tested model.",
             f"- **Preflight Accounting:** All executions verified budget availability and bound candidate pricing prior to dispatch.",
-            f"- **Audit Status:** Offline benchmark executed without commercial network calls.",
+            f"- **Audit Status:** {'Offline benchmark executed without commercial network calls.' if report.is_dry_run else 'Live benchmark executed with authorized provider network calls under verified budget policy.'}",
             f"",
             f"---",
             f"",
