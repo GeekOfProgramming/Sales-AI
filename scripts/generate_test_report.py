@@ -85,7 +85,7 @@ def generate_report():
         f"- **Python Version:** `{sys.version.split()[0]}`",
         f"- **SALES_LLM_MODEL:** `{llm_model}`",
         f"- **Ollama Version:** `{ollama_ver}`",
-        f"- **Brave enabled?** {'Yes' if os.environ.get('BRAVE_API_KEY') else 'No'}",
+        f"- **Brave enabled?** {'Yes' if os.environ.get('BRAVE_SEARCH_API_KEY') else 'No'}",
         f"- **Apollo enabled?** {'Yes' if os.environ.get('APOLLO_API_KEY') else 'No'}",
         f"- **Hunter enabled?** {'Yes' if os.environ.get('HUNTER_API_KEY') else 'No'}",
         f"- **Offline Tests:** Yes",

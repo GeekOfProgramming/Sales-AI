@@ -10,6 +10,7 @@
   </div>
   <div style="display: flex; gap: 0.5rem;">
     <a href="/sales/candidates" class="btn btn-secondary">← Back to Candidates</a>
+    <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary" title="Launch bounded company research and review 13-field proposals">🔬 Research Company</a>
     {% if detail.can_research %}
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -31,6 +32,34 @@
   </div>
 </div>
 
+<!-- Operator Review & Decision Bar (Phase 5 MVP-01) -->
+<div class="card" style="border: 2px solid #10b981; background: rgba(16, 185, 129, 0.03); margin-bottom: 1.5rem;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Operator Review Decision (Human-in-the-Loop)</span>
+    <span class="badge badge-success">Manual Decision Authority</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+    Manually approve or reject this discovered company candidate, mark as duplicate, or record operator notes.
+  </p>
+  <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/review" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="width: 220px;">
+      <label class="form-label" style="font-size: 0.8rem;">Decision</label>
+      <select name="decision" class="form-control" required>
+        <option value="approve">✅ Approve Lead</option>
+        <option value="reject">❌ Reject Candidate</option>
+        <option value="duplicate">🔄 Mark Duplicate</option>
+        <option value="needs_research">🔍 Needs Research</option>
+      </select>
+    </div>
+    <div style="flex: 2; min-width: 280px;">
+      <label class="form-label" style="font-size: 0.8rem;">Review Notes</label>
+      <input type="text" name="notes" class="form-control" placeholder="Operator notes or qualification rationale...">
+    </div>
+    <button type="submit" class="btn btn-success">Save Decision</button>
+  </form>
+</div>
+
 <!-- Candidate Overview Cards -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
   <div class="card">
@@ -42,8 +71,8 @@
       {% endif %}
     </div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
-      <div><strong>Country:</strong> {{ detail.candidate.country or 'Global' }}</div>
-      <div><strong>City:</strong> {{ detail.candidate.city or '-' }}</div>
+      <div><strong>Country:</strong> {{ detail.candidate.country or 'Not Verified' }}</div>
+      <div><strong>City:</strong> {{ detail.candidate.city or 'Not Verified' }}</div>
       <div><strong>Legal Form:</strong> {{ detail.legal_form or '-' }}</div>
       <div><strong>Employee Size:</strong> {{ detail.employee_size_hint or 'Unknown' }}</div>
       <div><strong>Tier:</strong> <span class="badge badge-tier">{{ detail.candidate.tier or 'unknown' }}</span></div>
@@ -52,6 +81,18 @@
       <div><strong>Intent Level:</strong> <span class="badge badge-intent">{{ detail.candidate.intent or 'unknown' }}</span></div>
       <div><strong>Discovery Status:</strong> <span class="badge badge-info">{{ detail.candidate.status }}</span></div>
       <div><strong>Suppression:</strong> <span class="badge {% if detail.candidate.is_suppressed %}badge-suppressed{% else %}badge-muted{% endif %}">{{ 'Suppressed' if detail.candidate.is_suppressed else 'Clear' }}</span></div>
+      <div><strong>Trust State:</strong>
+        {% if detail.candidate.status == 'approved' %}
+          <span class="badge badge-success">APPROVED_LEAD</span>
+        {% elif detail.candidate.domain and not detail.candidate.is_previously_contacted %}
+          <span class="badge badge-info">POTENTIAL_COMPANY</span>
+        {% elif detail.candidate.is_previously_contacted %}
+          <span class="badge badge-historical">KNOWN_COMPANY</span>
+        {% else %}
+          <span class="badge badge-muted">SEARCH_RESULT</span>
+        {% endif %}
+      </div>
+      <div><strong>AI Analysis:</strong> <span class="badge badge-muted">NOT_ANALYZED</span></div>
     </div>
     {% if detail.candidate.discovery_sources %}
     <div style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted);">

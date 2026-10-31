@@ -206,6 +206,15 @@ class DiscoveryEngineV2:
                     city = item.get("city")
                     raw_data = item.get("raw", {})
                     ext_data = {k: v for k, v in item.items() if k not in ("raw", "company_name", "name", "domain", "website")}
+                    trust_level = item.get("trust_level", "SEARCH_RESULT")
+
+                    # Discovery Quality Guard:
+                    # In company_first mode, REJECTED_IRRELEVANT items (training, academic, pure aggregators)
+                    # should not be promoted to CandidateCompany database entities.
+                    if discovery_mode != "job_first" and trust_level == "REJECTED_IRRELEVANT":
+                        run_rec.observations_found += 1
+                        logger.info(f"Skipping promotion of irrelevant search item: {c_name} ({c_domain}) - reason: {trust_level}")
+                        continue
 
                     # Check if candidate already exists
                     canon = self.store.canonicalize_domain(c_domain) if c_domain else None

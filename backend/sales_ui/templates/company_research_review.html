@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+
+{% block title %}Research Review — {{ candidate.company_name }} — SalesAI{% endblock %}
+
+{% block content %}
+<style>
+  /* Improved High-Contrast Styling for Light & Dark Mode */
+  .review-table th {
+    background-color: #1e293b !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #334155;
+  }
+  .review-table td {
+    padding: 0.75rem 1rem;
+    vertical-align: top;
+    color: #0f172a;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .review-table code {
+    font-weight: 600;
+    color: #1d4ed8;
+    background-color: #f1f5f9;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+  }
+  .review-table input[type="text"], .review-table textarea, .review-table select {
+    color: #0f172a;
+    background-color: #ffffff;
+    border: 1px solid #94a3b8;
+    font-size: 0.88rem;
+    padding: 0.4rem 0.6rem;
+    width: 100%;
+    border-radius: 4px;
+  }
+  .review-table input[type="text"]:focus, .review-table textarea:focus, .review-table select:focus {
+    border-color: #2563eb;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  }
+  .citation-tag {
+    display: block;
+    font-size: 0.76rem;
+    color: #334155;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    margin-top: 0.4rem;
+    word-break: break-all;
+  }
+  .stat-card-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: #334155;
+    font-weight: 700;
+  }
+  .stat-card-sub {
+    font-size: 0.75rem;
+    color: #475569;
+    margin-top: 0.2rem;
+  }
+</style>
+
+<div class="page-header" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+      <h1 class="page-title">Company Research &amp; Enrichment Review</h1>
+      <p class="page-subtitle">
+        Candidate: <strong style="color: #0f172a;">{{ research.company_name if research else candidate.company_name }}</strong> | 
+        Domain: <code>{{ research.canonical_domain if research else candidate.company_domain }}</code> | 
+        Candidate ID: <code>{{ candidate.candidate_id }}</code>
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="/sales/candidates/{{ candidate.candidate_id }}" class="btn btn-secondary">&larr; Back to Candidate</a>
+      <a href="/sales/register" class="btn btn-secondary">Lead Register</a>
+    </div>
+  </div>
+</div>
+
+{% if message %}
+<div class="alert alert-success" style="margin-bottom: 1.25rem;">
+  {{ message }}
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-danger" style="margin-bottom: 1.25rem;">
+  {{ error }}
+</div>
+{% endif %}
+
+{% if research.is_dnc_or_restricted %}
+<div class="alert alert-warning" style="margin-bottom: 1.25rem; border-left: 5px solid #d9534f; background-color: #fdf7f7; color: #b52b27; padding: 1rem;">
+  <h4 style="margin: 0 0 0.5rem 0; font-size: 1.05rem;">&Delta; Operational Outreach Restriction</h4>
+  <p style="margin: 0;"><strong>{{ research.restriction_reason }}</strong></p>
+  <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem;">Cold outreach is prohibited. Status is held as <code>relationship_review_pending</code>.</p>
+</div>
+{% endif %}
+
+<!-- Top Stats Banner & Provenance -->
+{% if not research %}
+<div class="card" style="padding: 2.5rem; text-align: center; border: 1px solid #cbd5e1; background-color: #ffffff; margin-bottom: 2rem;">
+  <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔬</div>
+  <h2 style="font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem;">No Research Snapshot Found</h2>
+  <p style="color: #475569; max-width: 650px; margin: 0 auto 1.5rem auto; font-size: 0.95rem;">
+    No crawled website pages or structured research snapshot currently exist for <strong>{{ candidate.company_name }}</strong> (<code>{{ candidate.company_domain }}</code>).
+    Initiating research will execute a safe, bounded same-domain crawl (max 6 pages) and store immutable compressed evidence for offline analysis.
+  </p>
+  <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research" style="display: inline-block;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem; font-weight: 600;">
+      🔬 Start Company Research
+    </button>
+  </form>
+</div>
+{% else %}
+<div class="card" style="padding: 1rem 1.25rem; border: 1px solid #cbd5e1; background-color: #f8fafc; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+      <span class="badge" style="background-color: {% if research.is_from_snapshot %}#0369a1{% else %}#15803d{% endif %}; color: #ffffff; font-size: 0.8rem; padding: 0.25rem 0.6rem; border-radius: 4px; font-weight: 600;">
+        {% if research.is_from_snapshot %}📦 Stored Snapshot (Offline Replay){% else %}⚡ Newly Crawled Session{% endif %}
+      </span>
+      <span style="font-size: 0.88rem; font-weight: 700; color: #1e293b;">
+        Snapshot ID: <code>{{ research.snapshot_id or (snapshot.snapshot_id if snapshot else 'In-Memory Only') }}</code>
+      </span>
+    </div>
+    <div style="font-size: 0.8rem; color: #475569;">
+      Retrieved: <strong>{{ snapshot.created_at if snapshot else (research.research_timestamp or 'N/A') }}</strong> | 
+      Pages: <strong>{{ snapshot.pages_succeeded if snapshot else research.fetched_pages|length }}</strong> succeeded / {{ snapshot.pages_attempted if snapshot else research.fetched_pages|length }} attempted | 
+      Dataset SHA-256: <code>{{ snapshot.content_checksum[:16] if snapshot and snapshot.content_checksum else 'N/A' }}...</code>
+    </div>
+  </div>
+  <div>
+    <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research" style="display: inline-block;" onsubmit="return confirm('Initiate a new live web crawl for {{ candidate.company_name }}? This will record a new research snapshot.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.45rem 1rem;">
+        🔄 Crawl &amp; Research Again
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if research %}
+<!-- Top Stats Banner -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid #cbd5e1; background-color: #ffffff;">
+    <div class="stat-card-title">Proposed Priority</div>
+    <div style="font-size: 1.3rem; font-weight: 700; color: {% if 'A' in proposed_record.priority_level %}#15803d{% else %}#b45309{% endif %}; margin-top: 0.25rem;">
+      Priority {{ proposed_record.priority_level }}
+    </div>
+    <div class="stat-card-sub">(Hypothesis pending validation)</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid #cbd5e1; background-color: #ffffff;">
+    <div class="stat-card-title">Italian P.IVA</div>
+    <div style="font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-top: 0.25rem;">
+      <code>{{ research.p_iva or 'Not Found' }}</code>
+    </div>
+    <div class="stat-card-sub">Format: {% if research.p_iva %}VALID MOD-10 CHECKSUM{% else %}N/A{% endif %}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid #cbd5e1; background-color: #ffffff;">
+    <div class="stat-card-title">Pages Inspected</div>
+    <div style="font-size: 1.2rem; font-weight: 700; color: #0f172a; margin-top: 0.25rem;">
+      {{ research.fetched_pages|length }} Public Pages
+    </div>
+    <div class="stat-card-sub">Bounded same-domain fetch</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid #cbd5e1; background-color: #ffffff;">
+    <div class="stat-card-title">Local AI Analysis</div>
+    <div style="font-size: 1rem; font-weight: 700; color: {% if research.llm_analysis_status == 'SUCCESS' %}#15803d{% else %}#334155{% endif %}; margin-top: 0.25rem;">
+      {{ research.llm_analysis_status }}
+    </div>
+    <div class="stat-card-sub">Local schema validation only</div>
+  </div>
+</div>
+
+<!-- Comparison & Approval Form -->
+<form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research/save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="candidate_id" value="{{ candidate.candidate_id }}">
+
+  <div class="card" style="margin-bottom: 1.5rem; border: 1px solid #cbd5e1;">
+    <div class="card-header" style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; padding: 0.85rem 1.25rem;">
+      <h3 style="margin: 0; font-size: 1.1rem; color: #0f172a; font-weight: 700;">13-Field Lead Register Comparison &amp; Field Approval</h3>
+      <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: #475569;">
+        Checkboxes default to unchecked. Only explicitly selected fields will overwrite or enrich existing Lead Register data.
+      </p>
+    </div>
+    <div class="card-body" style="padding: 0;">
+      <div class="table-responsive">
+        <table class="table review-table" style="margin-bottom: 0;">
+          <thead>
+            <tr>
+              <th style="width: 18%;">Field Name</th>
+              <th style="width: 32%;">Currently Stored Value</th>
+              <th style="width: 36%;">Proposed Researched Value</th>
+              <th style="width: 14%; text-align: center;">Approve Field</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 1. Company Name -->
+            <tr>
+              <td><strong>1. Company Name</strong></td>
+              <td><code>{{ current_record.company_name if current_record else candidate.company_name }}</code></td>
+              <td>
+                <input type="text" name="company_name" class="form-control" value="{{ proposed_record.company_name }}">
+                {% if research.evidence_items.get('company_name') %}
+                <div class="citation-tag">Source: {{ research.evidence_items['company_name'].source_url }} ({{ research.evidence_items['company_name'].validation_status }})</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_company_name" value="1">
+              </td>
+            </tr>
+
+            <!-- 2. Priority Level & Rationale -->
+            <tr>
+              <td><strong>2. Priority Level &amp; Rationale</strong></td>
+              <td>
+                <span class="badge badge-secondary">{{ current_record.priority_level if current_record else 'Unassigned' }}</span>
+                <div style="font-size: 0.82rem; color: #475569; margin-top: 0.25rem;">{{ current_record.priority_rationale if current_record else 'None' }}</div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.35rem;">
+                  <select name="priority_level" class="form-control" style="width: 130px; font-weight: 600;">
+                    <option value="A" {% if proposed_record.priority_level == 'A' %}selected{% endif %}>Priority A</option>
+                    <option value="B" {% if proposed_record.priority_level == 'B' %}selected{% endif %}>Priority B</option>
+                    <option value="C" {% if proposed_record.priority_level == 'C' %}selected{% endif %}>Priority C</option>
+                  </select>
+                </div>
+                <textarea name="priority_rationale" class="form-control" rows="2">{{ proposed_record.priority_rationale }}</textarea>
+                <div class="citation-tag">Evidence: Capacity/Teaming Hypothesis (Pending verification)</div>
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_priority" value="1">
+              </td>
+            </tr>
+
+            <!-- 3. Legal Identity / P.IVA -->
+            <tr>
+              <td><strong>3. Legal Identity (P.IVA)</strong></td>
+              <td><code>{{ current_record.legal_identity if current_record else 'Not Found' }}</code></td>
+              <td>
+                <input type="text" name="legal_identity" class="form-control" value="{{ proposed_record.legal_identity }}">
+                {% if research.evidence_items.get('p_iva') %}
+                <div class="citation-tag">Source: {{ research.evidence_items['p_iva'].source_url }} (Checksum Validated)</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_legal_identity" value="1">
+              </td>
+            </tr>
+
+            <!-- 4. Geographic Location -->
+            <tr>
+              <td><strong>4. Geographic Location</strong></td>
+              <td>{{ current_record.geographic_location if current_record else (candidate.city or 'Not Verified') }}</td>
+              <td>
+                <input type="text" name="geographic_location" class="form-control" value="{{ proposed_record.geographic_location }}">
+                {% if research.evidence_items.get('geographic_location') %}
+                <div class="citation-tag">
+                  <strong>Source:</strong> <a href="{{ research.evidence_items['geographic_location'].source_url }}" target="_blank" rel="noopener">{{ research.evidence_items['geographic_location'].source_url }}</a><br>
+                  <strong>Status:</strong> {{ research.evidence_items['geographic_location'].validation_status }}<br>
+                  {% if research.evidence_items['geographic_location'].notes %}
+                  <strong>Excerpt/Note:</strong> {{ research.evidence_items['geographic_location'].notes }}
+                  {% endif %}
+                </div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_geographic_location" value="1">
+              </td>
+            </tr>
+
+            <!-- 5. Telephone Numbers -->
+            <tr>
+              <td><strong>5. Telephone</strong></td>
+              <td><code>{{ current_record.telephone_numbers if current_record else 'Not Found' }}</code></td>
+              <td>
+                <input type="text" name="telephone_numbers" class="form-control" value="{{ proposed_record.telephone_numbers }}">
+                {% if research.evidence_items.get('telephone') %}
+                <div class="citation-tag">Source: {{ research.evidence_items['telephone'].source_url }} (Normalized)</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_telephone_numbers" value="1">
+              </td>
+            </tr>
+
+            <!-- 6. Contact Emails -->
+            <tr>
+              <td><strong>6. Email Addresses</strong></td>
+              <td><code>{{ current_record.contact_email_addresses if current_record else 'Not Found' }}</code></td>
+              <td>
+                <input type="text" name="contact_email_addresses" class="form-control" value="{{ proposed_record.contact_email_addresses }}">
+                {% if research.evidence_items.get('email') %}
+                <div class="citation-tag">Source: {{ research.evidence_items['email'].source_url }}</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_contact_email_addresses" value="1">
+              </td>
+            </tr>
+
+            <!-- 7. Responsible Person / Key Contact -->
+            <tr>
+              <td><strong>7. Responsible Person</strong></td>
+              <td>{{ current_record.responsible_person if current_record else 'Not Found' }}</td>
+              <td>
+                <input type="text" name="responsible_person" class="form-control" value="{{ proposed_record.responsible_person }}">
+                {% if research.evidence_items.get('responsible_person') %}
+                <div class="citation-tag">Source: {{ research.evidence_items['responsible_person'].source_url }}</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_responsible_person" value="1">
+              </td>
+            </tr>
+
+            <!-- 8. Business Activities & BIM -->
+            <tr>
+              <td><strong>8. Business Activities</strong></td>
+              <td style="font-size: 0.85rem;">{{ current_record.business_activities if current_record else 'Not Found' }}</td>
+              <td>
+                <textarea name="business_activities" class="form-control" rows="2">{{ proposed_record.business_activities }}</textarea>
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_business_activities" value="1">
+              </td>
+            </tr>
+
+            <!-- 9. Official Website -->
+            <tr>
+              <td><strong>9. Official Website</strong></td>
+              <td><a href="{{ current_record.official_website if current_record else proposed_record.official_website }}" target="_blank" rel="noopener">{{ current_record.official_website if current_record else proposed_record.official_website }}</a></td>
+              <td>
+                <input type="text" name="official_website" class="form-control" value="{{ proposed_record.official_website }}">
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_official_website" value="1">
+              </td>
+            </tr>
+
+            <!-- 10. Descriptions & Notes -->
+            <tr>
+              <td><strong>10. Notes &amp; Projects</strong></td>
+              <td style="font-size: 0.82rem; white-space: pre-wrap;">{{ current_record.descriptions_and_notes if current_record else 'None' }}</td>
+              <td>
+                <textarea name="descriptions_and_notes" class="form-control" rows="4">{{ proposed_record.descriptions_and_notes }}</textarea>
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_descriptions_and_notes" value="1">
+              </td>
+            </tr>
+
+            <!-- 11. Careers & Opportunities -->
+            <tr>
+              <td><strong>11. Job / Supplier Links</strong></td>
+              <td style="font-size: 0.82rem;">{{ current_record.job_advertisement_links if current_record else 'Not Found' }}</td>
+              <td>
+                <input type="text" name="job_advertisement_links" class="form-control" value="{{ proposed_record.job_advertisement_links }}">
+                {% if research.opportunity_urls %}
+                <div class="citation-tag">Extracted {{ research.opportunity_urls|length }} verified URL(s) from anchors</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_job_advertisement_links" value="1">
+              </td>
+            </tr>
+
+            <!-- 12. References & Evidence URLs -->
+            <tr>
+              <td><strong>12. Reference URLs</strong></td>
+              <td style="font-size: 0.82rem;">{{ current_record.other_links_and_references if current_record else 'Not Found' }}</td>
+              <td>
+                <input type="text" name="other_links_and_references" class="form-control" value="{{ proposed_record.other_links_and_references }}">
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_other_links_and_references" value="1">
+              </td>
+            </tr>
+
+            <!-- 13. Provenance & Research Date -->
+            <tr>
+              <td><strong>13. Provenance &amp; Verification</strong></td>
+              <td>
+                <span class="badge badge-info">{{ current_record.provenance_source if current_record else 'unregistered' }}</span>
+                <span class="badge badge-secondary">{{ current_record.verification_status if current_record else 'Unverified' }}</span>
+              </td>
+              <td>
+                <span class="badge badge-primary">local_research_mvp</span>
+                <span class="badge badge-info">EXTRACTED (Checksum/HQ Validated)</span>
+                <div style="font-size: 0.8rem; color: #475569; margin-top: 0.25rem;">Research Date: {{ proposed_record.research_date }}</div>
+              </td>
+              <td style="text-align: center; vertical-align: middle; color: #888;">
+                &mdash;
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source Evidence Citations Accordion / Panel -->
+  <div class="card" style="margin-bottom: 1.5rem; border: 1px solid #cbd5e1;">
+    <div class="card-header" style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; padding: 0.85rem 1.25rem;">
+      <h3 style="margin: 0; font-size: 1.05rem; color: #0f172a; font-weight: 700;">Source Citations, Supplier Portals &amp; Opportunity Grounding</h3>
+    </div>
+    <div class="card-body" style="padding: 1rem 1.25rem; background-color: #ffffff;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div>
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: #1e293b; font-weight: 600;">Verified Supplier Intake Portals &amp; Forms</h4>
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 1rem;">
+            {% for s in research.supplier_signals %}
+            <li style="margin-bottom: 0.35rem; color: #15803d; font-weight: 500;">
+              {{ s }}
+            </li>
+            {% else %}
+            <li style="color: #64748b;">No explicit supplier onboarding form or vendor portal identified.</li>
+            {% endfor %}
+          </ul>
+
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: #1e293b; font-weight: 600;">Recruitment &amp; Career Opportunities</h4>
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 0;">
+            {% for c in research.career_opportunities %}
+            <li style="margin-bottom: 0.35rem; color: #0369a1;">
+              {{ c }}
+            </li>
+            {% else %}
+            <li style="color: #64748b;">No active career or internal hiring links identified.</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div>
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: #1e293b; font-weight: 600;">Identified Work-Package Hypothesis</h4>
+          <div style="font-size: 0.85rem; background-color: #f8fafc; color: #0f172a; padding: 0.75rem; border-radius: 4px; border-left: 3px solid #0284c7; border: 1px solid #cbd5e1; margin-bottom: 1rem;">
+            {{ research.work_package_hypothesis or 'No specific BIM package hypothesis generated.' }}
+          </div>
+
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: #1e293b; font-weight: 600;">Direct Opportunity URLs</h4>
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 0;">
+            {% for u in research.opportunity_urls %}
+            <li style="margin-bottom: 0.25rem;"><a href="{{ u }}" target="_blank" rel="noopener">{{ u }}</a></li>
+            {% else %}
+            <li style="color: #64748b;">No opportunity URLs identified.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operator Action Buttons -->
+  <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0;">
+    <div>
+      <a href="/sales/candidates/{{ candidate.candidate_id }}" class="btn btn-secondary">Cancel &amp; Discard</a>
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+      <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.5rem; font-weight: 600;">
+        &check; Approve Selected Fields &amp; Save to Lead Register
+      </button>
+    </div>
+  </div>
+</form>
+{% endif %}
+
+{% if historical_snapshots and historical_snapshots|length > 0 %}
+<!-- Historical Snapshots Table -->
+<div class="card" style="margin-top: 2rem; border: 1px solid #cbd5e1;">
+  <div class="card-header" style="background-color: #f1f5f9; border-bottom: 1px solid #cbd5e1; padding: 0.75rem 1.25rem;">
+    <h4 style="margin: 0; font-size: 0.95rem; color: #1e293b; font-weight: 700;">Research Snapshot History ({{ historical_snapshots|length }})</h4>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    <div class="table-responsive">
+      <table class="table" style="margin-bottom: 0; font-size: 0.85rem;">
+        <thead>
+          <tr style="background-color: #f8fafc;">
+            <th style="padding: 0.5rem 1rem;">Snapshot ID</th>
+            <th style="padding: 0.5rem 1rem;">Retrieved At</th>
+            <th style="padding: 0.5rem 1rem;">Status</th>
+            <th style="padding: 0.5rem 1rem;">Pages</th>
+            <th style="padding: 0.5rem 1rem;">Checksum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sn in historical_snapshots %}
+          <tr>
+            <td style="padding: 0.5rem 1rem;"><code>{{ sn.snapshot_id }}</code></td>
+            <td style="padding: 0.5rem 1rem;">{{ sn.created_at }}</td>
+            <td style="padding: 0.5rem 1rem;"><span class="badge" style="background-color: #e2e8f0; color: #1e293b;">{{ sn.research_status }}</span></td>
+            <td style="padding: 0.5rem 1rem;">{{ sn.pages_succeeded }} / {{ sn.pages_attempted }}</td>
+            <td style="padding: 0.5rem 1rem;"><code>{{ sn.content_checksum[:12] if sn.content_checksum else 'N/A' }}...</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

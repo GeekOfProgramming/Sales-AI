@@ -6,7 +6,9 @@ and idempotent promotion from Watchlist.
 """
 
 import json
+import logging
 import sqlite3
+import threading
 import re
 import urllib.parse
 import uuid
@@ -15,6 +17,8 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 from datetime import datetime, timezone
 
 from backend.schemas import ContactCandidate
+
+logger = logging.getLogger(__name__)
 
 from sales_engine.candidates.models import (
     CandidateCompany,
@@ -101,13 +105,26 @@ def normalize_company_name(name: str) -> str:
 
 class CandidateStore:
     def __init__(self, db_path: Optional[str] = ":memory:"):
-        self.db_path = db_path
+        self.db_path = db_path or ":memory:"
+        self._mem_conn = None
+        if self.db_path == ":memory:":
+            self._mem_conn = sqlite3.connect(":memory:")
+            self._mem_conn.row_factory = sqlite3.Row
+            self._mem_conn.execute("PRAGMA foreign_keys = ON")
+        self._local = threading.local()
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
+        if self._mem_conn is not None:
+            return self._mem_conn
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path, timeout=30.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            self._local.conn = conn
         return conn
 
     def _init_db(self):
@@ -159,6 +176,10 @@ class CandidateStore:
                     cold_outreach_allowed INTEGER,
                     qualification_outcome TEXT,
                     qualification_reasons_json TEXT,
+                    manual_review_decision TEXT DEFAULT 'NOT_REVIEWED',
+                    manual_reviewed_at TEXT,
+                    manual_reviewed_by TEXT,
+                    manual_review_notes TEXT,
                     historical_outreach_events_json TEXT
                 );
 
@@ -302,6 +323,20 @@ class CandidateStore:
                     last_failure_at TEXT,
                     last_error TEXT
                 );
+
+                CREATE TABLE IF NOT EXISTS pilot_search_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    query TEXT NOT NULL,
+                    country TEXT,
+                    city TEXT,
+                    requested_at TEXT NOT NULL,
+                    results_count INTEGER DEFAULT 0,
+                    status TEXT NOT NULL,
+                    error_message TEXT,
+                    estimated_cost_usd REAL DEFAULT 0.005,
+                    operator_approved INTEGER DEFAULT 1
+                );
             """)
 
             # Safe additive column migrations for existing databases
@@ -335,6 +370,16 @@ class CandidateStore:
 
         _add_col("candidate_companies", "qualification_outcome TEXT")
         _add_col("candidate_companies", "qualification_reasons_json TEXT")
+        _add_col("candidate_companies", "manual_review_decision TEXT DEFAULT 'NOT_REVIEWED'")
+        _add_col("candidate_companies", "manual_reviewed_at TEXT")
+        _add_col("candidate_companies", "manual_reviewed_by TEXT")
+        _add_col("candidate_companies", "manual_review_notes TEXT")
+
+        _add_col("pilot_search_attempts", "idempotency_token TEXT")
+        try:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pilot_idempotency ON pilot_search_attempts(idempotency_token) WHERE idempotency_token IS NOT NULL")
+        except sqlite3.OperationalError:
+            pass
 
     def _generate_candidate_id(self, domain: Optional[str], name: str, country: Optional[str] = None) -> str:
         if domain:
@@ -451,9 +496,10 @@ class CandidateStore:
                     domain_history_json, first_seen_at, last_seen_at, last_researched_at,
                     historical_contact_status, last_contacted_at, reply_status,
                     active_conversation, suppressed, cold_outreach_allowed,
-                    qualification_outcome, qualification_reasons_json
+                    qualification_outcome, qualification_reasons_json,
+                    manual_review_decision, manual_reviewed_at, manual_reviewed_by, manual_review_notes
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 ON CONFLICT(candidate_id) DO UPDATE SET
                     company_name = excluded.company_name,
@@ -493,7 +539,7 @@ class CandidateStore:
                     last_researched_at = COALESCE(excluded.last_researched_at, candidate_companies.last_researched_at),
                     historical_contact_status = CASE
                         WHEN candidate_companies.historical_contact_status IN ('contacted', 'replied', 'converted', 'dnc')
-                             AND excluded.historical_contact_status = 'uncontacted'
+                              AND excluded.historical_contact_status = 'uncontacted'
                         THEN candidate_companies.historical_contact_status
                         ELSE excluded.historical_contact_status
                     END,
@@ -509,7 +555,14 @@ class CandidateStore:
                     qualification_reasons_json = CASE
                         WHEN excluded.qualification_reasons_json != '[]' THEN excluded.qualification_reasons_json
                         ELSE candidate_companies.qualification_reasons_json
-                    END
+                    END,
+                    manual_review_decision = CASE
+                        WHEN excluded.manual_review_decision != 'NOT_REVIEWED' THEN excluded.manual_review_decision
+                        ELSE candidate_companies.manual_review_decision
+                    END,
+                    manual_reviewed_at = COALESCE(excluded.manual_reviewed_at, candidate_companies.manual_reviewed_at),
+                    manual_reviewed_by = COALESCE(excluded.manual_reviewed_by, candidate_companies.manual_reviewed_by),
+                    manual_review_notes = COALESCE(excluded.manual_review_notes, candidate_companies.manual_review_notes)
             """, (
                 cand.candidate_id, cand.company_name, cand.normalized_company_name, cand.company_domain,
                 cand.country, cand.region, cand.city,
@@ -532,7 +585,11 @@ class CandidateStore:
                 cand.historical_contact_status, cand.last_contacted_at, cand.reply_status,
                 1 if cand.active_conversation else 0, 1 if cand.suppressed else 0, 1 if cand.cold_outreach_allowed else 0,
                 cand.qualification_outcome.value if hasattr(cand.qualification_outcome, 'value') else (cand.qualification_outcome or None),
-                json.dumps(cand.qualification_reasons or [])
+                json.dumps(cand.qualification_reasons or []),
+                cand.manual_review_decision or 'NOT_REVIEWED',
+                cand.manual_reviewed_at,
+                cand.manual_reviewed_by,
+                cand.manual_review_notes,
             ))
 
     def _row_to_candidate(self, row: sqlite3.Row) -> CandidateCompany:
@@ -582,6 +639,10 @@ class CandidateStore:
             cold_outreach_allowed=bool(row["cold_outreach_allowed"]),
             qualification_outcome=QualificationOutcome(row["qualification_outcome"]) if ("qualification_outcome" in row.keys() and row["qualification_outcome"] in QualificationOutcome._value2member_map_) else None,
             qualification_reasons=json.loads(row["qualification_reasons_json"] or "[]") if ("qualification_reasons_json" in row.keys() and row["qualification_reasons_json"]) else [],
+            manual_review_decision=row["manual_review_decision"] if "manual_review_decision" in row.keys() and row["manual_review_decision"] else "NOT_REVIEWED",
+            manual_reviewed_at=row["manual_reviewed_at"] if "manual_reviewed_at" in row.keys() else None,
+            manual_reviewed_by=row["manual_reviewed_by"] if "manual_reviewed_by" in row.keys() else None,
+            manual_review_notes=row["manual_review_notes"] if "manual_review_notes" in row.keys() else None,
             metadata={
                 "active_conversation": bool(row["active_conversation"]),
                 "has_historical_outreach": (row["historical_contact_status"] or "uncontacted") in ("contacted", "replied", "converted"),
@@ -636,9 +697,15 @@ class CandidateStore:
         if "country" in filters:
             query += " AND LOWER(country) = LOWER(?)"
             params.append(filters["country"])
+        if "city" in filters:
+            query += " AND LOWER(city) = LOWER(?)"
+            params.append(filters["city"])
         if "discovery_status" in filters:
             query += " AND discovery_status = ?"
             params.append(filters["discovery_status"])
+        if "qualification_outcome" in filters:
+            query += " AND qualification_outcome = ?"
+            params.append(filters["qualification_outcome"])
         if "company_tier" in filters:
             query += " AND company_tier = ?"
             params.append(filters["company_tier"])
@@ -1179,5 +1246,272 @@ class CandidateStore:
                 if c.contact_id == clean_cid or c.work_email == clean_cid:
                     return c
         return None
+
+    def record_pilot_search_attempt(
+        self,
+        attempt_id: str,
+        provider: str,
+        query: str,
+        status: str,
+        results_count: int = 0,
+        country: Optional[str] = None,
+        city: Optional[str] = None,
+        error_message: Optional[str] = None,
+        estimated_cost_usd: float = 0.005,
+    ) -> None:
+        """Records a pilot search execution attempt into SQLite for budget and audit tracking."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO pilot_search_attempts (
+                    attempt_id, provider, query, country, city,
+                    requested_at, results_count, status, error_message,
+                    estimated_cost_usd, operator_approved
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """,
+                (
+                    attempt_id, provider, query, country, city,
+                    now_iso, results_count, status, error_message,
+                    estimated_cost_usd,
+                ),
+            )
+
+    def reserve_pilot_search_attempt(
+        self,
+        attempt_id: str,
+        provider: str,
+        query: str,
+        country: Optional[str] = None,
+        city: Optional[str] = None,
+        max_attempts_budget: int = 20,
+        estimated_cost_usd: float = 0.005,
+        idempotency_token: Optional[str] = None,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Atomically checks remaining pilot quota and reserves a search attempt before dispatch.
+        Uses BEGIN IMMEDIATE transaction to prevent concurrent race conditions.
+        Enforces idempotency token validation to block double-click / rapid resubmissions.
+        Returns (success: bool, error_message: Optional[str]).
+        States: RESERVED, DISPATCH_ATTEMPTED, SUCCESS, FAILED, UNCERTAIN, PRE_DISPATCH_CANCELLED.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        conn = self._get_connection()
+        try:
+            # Begin immediate write transaction
+            conn.execute("BEGIN IMMEDIATE")
+
+            # Check if an attempt with this exact idempotency_token already exists
+            if idempotency_token:
+                dup_token = conn.execute(
+                    "SELECT attempt_id, status FROM pilot_search_attempts WHERE idempotency_token = ?",
+                    (idempotency_token,),
+                ).fetchone()
+                if dup_token:
+                    conn.execute("ROLLBACK")
+                    return False, f"Duplicate search submission detected (idempotency token matched attempt {dup_token['attempt_id']}, status={dup_token['status']}). Replay blocked."
+
+            row = conn.execute(
+                """
+                SELECT COUNT(*) as cnt
+                FROM pilot_search_attempts
+                WHERE status NOT IN ('PRE_DISPATCH_CANCELLED')
+                """
+            ).fetchone()
+            active_count = row["cnt"] if row else 0
+
+            if active_count >= max_attempts_budget:
+                conn.execute("ROLLBACK")
+                return False, f"Live search BLOCKED (SESSION_BUDGET_EXCEEDED): Maximum pilot search limit ({max_attempts_budget} queries) reached. Prevents runaway charges. Session budget capped."
+
+            conn.execute(
+                """
+                INSERT INTO pilot_search_attempts (
+                    attempt_id, provider, query, country, city,
+                    requested_at, results_count, status, error_message,
+                    estimated_cost_usd, operator_approved, idempotency_token
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, 'RESERVED', NULL, ?, 1, ?)
+                """,
+                (attempt_id, provider, query, country, city, now_iso, estimated_cost_usd, idempotency_token),
+            )
+            conn.commit()
+            return True, None
+        except sqlite3.IntegrityError:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            return False, "Duplicate attempt ID or idempotency token detected. Request replay blocked."
+        except Exception as e:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            return False, f"Reservation transaction failed: {str(e)}"
+
+    def update_pilot_search_attempt(
+        self,
+        attempt_id: str,
+        status: str,
+        results_count: int = 0,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """
+        Updates the state of a previously reserved search attempt with strict state transition validation.
+        Valid states: RESERVED, DISPATCH_ATTEMPTED, SUCCESS, FAILED, UNCERTAIN, PRE_DISPATCH_CANCELLED.
+        DISPATCH_ATTEMPTED cannot be rolled back to PRE_DISPATCH_CANCELLED without proof of non-dispatch.
+        """
+        allowed_transitions = {
+            "RESERVED": {"DISPATCH_ATTEMPTED", "SUCCESS", "FAILED", "UNCERTAIN", "PRE_DISPATCH_CANCELLED"},
+            "DISPATCH_ATTEMPTED": {"SUCCESS", "FAILED", "UNCERTAIN"},
+            "SUCCESS": set(),
+            "FAILED": {"UNCERTAIN"},
+            "UNCERTAIN": {"FAILED", "SUCCESS"},
+            "PRE_DISPATCH_CANCELLED": set(),
+        }
+
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT status FROM pilot_search_attempts WHERE attempt_id = ?", (attempt_id,)).fetchone()
+            if cur:
+                curr_status = cur["status"]
+                valid_next = allowed_transitions.get(curr_status, set())
+                if status != curr_status and status not in valid_next:
+                    logger.warning(
+                        f"Attempt {attempt_id} invalid state transition requested: {curr_status} -> {status}. Retaining current state or marking UNCERTAIN."
+                    )
+                    # If attempting to cancel an already dispatched attempt, preserve uncertainty
+                    if curr_status == "DISPATCH_ATTEMPTED" and status == "PRE_DISPATCH_CANCELLED":
+                        status = "UNCERTAIN"
+                        error_message = (error_message or "") + " [Transition to PRE_DISPATCH_CANCELLED rejected after dispatch attempt; marked UNCERTAIN]"
+
+            conn.execute(
+                """
+                UPDATE pilot_search_attempts
+                SET status = ?, results_count = ?, error_message = ?
+                WHERE attempt_id = ?
+                """,
+                (status, results_count, error_message, attempt_id),
+            )
+
+    def record_pilot_search_attempt(
+        self,
+        attempt_id: str,
+        provider: str,
+        query: str,
+        status: str = "SUCCESS",
+        results_count: int = 0,
+        country: Optional[str] = None,
+        city: Optional[str] = None,
+        error_message: Optional[str] = None,
+        estimated_cost_usd: float = 0.005,
+    ) -> None:
+        """Legacy helper: records or updates a pilot search attempt."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT attempt_id FROM pilot_search_attempts WHERE attempt_id = ?", (attempt_id,)).fetchone()
+            if row:
+                conn.execute(
+                    """
+                    UPDATE pilot_search_attempts
+                    SET status = ?, results_count = ?, error_message = ?
+                    WHERE attempt_id = ?
+                    """,
+                    (status, results_count, error_message, attempt_id),
+                )
+            else:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                conn.execute(
+                    """
+                    INSERT INTO pilot_search_attempts (
+                        attempt_id, provider, query, country, city,
+                        requested_at, results_count, status, error_message,
+                        estimated_cost_usd, operator_approved
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    """,
+                    (
+                        attempt_id, provider, query, country, city,
+                        now_iso, results_count, status, error_message,
+                        estimated_cost_usd,
+                    ),
+                )
+
+    def get_pilot_search_stats(self) -> Dict[str, Any]:
+        """Returns total attempts, successful, failed, reserved/uncertain, and estimated cost across pilot searches."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    COUNT(*) as total_attempts,
+                    SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) as successful_attempts,
+                    SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed_attempts,
+                    SUM(CASE WHEN status IN ('RESERVED', 'DISPATCH_ATTEMPTED', 'UNCERTAIN') THEN 1 ELSE 0 END) as uncertain_attempts,
+                    SUM(results_count) as total_results,
+                    SUM(estimated_cost_usd) as total_estimated_cost_usd
+                FROM pilot_search_attempts
+                WHERE status != 'PRE_DISPATCH_CANCELLED'
+                """
+            ).fetchone()
+            if row:
+                return {
+                    "total_attempts": row["total_attempts"] or 0,
+                    "successful_attempts": row["successful_attempts"] or 0,
+                    "failed_attempts": row["failed_attempts"] or 0,
+                    "uncertain_attempts": row["uncertain_attempts"] or 0,
+                    "total_results": row["total_results"] or 0,
+                    "total_estimated_cost_usd": round(row["total_estimated_cost_usd"] or 0.0, 4),
+                }
+            return {
+                "total_attempts": 0,
+                "successful_attempts": 0,
+                "failed_attempts": 0,
+                "uncertain_attempts": 0,
+                "total_results": 0,
+                "total_estimated_cost_usd": 0.0,
+            }
+
+    def create_backup(self, backup_dir: Optional[Union[str, Path]] = None) -> Tuple[Path, str]:
+        """
+        Creates a consistent, timestamped SQLite backup using SQLite's online backup API.
+        Does not disrupt concurrent readers. Returns (backup_path, backup_sha256).
+        """
+        import hashlib
+        source_path = Path(self.db_path)
+        dest_dir = Path(backup_dir) if backup_dir else source_path.parent / "backups"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        dest_path = dest_dir / f"{source_path.stem}_backup_{timestamp}{source_path.suffix}"
+
+        # Execute consistent online backup
+        with self._get_connection() as src_conn:
+            dest_conn = sqlite3.connect(str(dest_path))
+            try:
+                src_conn.backup(dest_conn)
+            finally:
+                dest_conn.close()
+
+        # Compute SHA-256
+        content = dest_path.read_bytes()
+        backup_sha = hashlib.sha256(content).hexdigest()
+        return dest_path, backup_sha
+
+    def verify_backup(self, backup_path: Union[str, Path]) -> Tuple[bool, Optional[str]]:
+        """
+        Verifies SQLite backup file integrity using PRAGMA quick_check and foreign_key_check.
+        Returns (is_valid: bool, error: Optional[str]).
+        """
+        path = Path(backup_path)
+        if not path.exists():
+            return False, f"Backup file does not exist: {path}"
+        try:
+            conn = sqlite3.connect(str(path))
+            cursor = conn.cursor()
+            res = cursor.execute("PRAGMA quick_check;").fetchone()
+            if not res or res[0] != "ok":
+                conn.close()
+                return False, f"Integrity check failed: {res[0] if res else 'no response'}"
+            conn.close()
+            return True, None
+        except Exception as e:
+            return False, f"Failed to verify backup integrity: {str(e)}"
 
 

@@ -36,41 +36,56 @@
         <option value="tier_3" {% if tier == 'tier_3' %}selected{% endif %}>Tier 3</option>
       </select>
     </div>
-    <div style="width: 120px;">
+    <div style="width: 110px;">
       <input type="text" name="country" value="{{ country or '' }}" class="form-control" placeholder="Country">
+    </div>
+    <div style="width: 110px;">
+      <input type="text" name="city" value="{{ city or '' }}" class="form-control" placeholder="City">
     </div>
     <button type="submit" class="btn btn-secondary">Filter</button>
     <a href="/sales/candidates" class="btn btn-secondary btn-sm" style="padding: 0.55rem 0.75rem;">Reset</a>
+    <div style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
+      <a href="/sales/candidates/export?format=csv&approved_only=true" class="btn btn-primary btn-sm" title="Export only operator-approved qualified leads">✅ Export Approved Leads (CSV)</a>
+      <a href="/sales/candidates/export?format=xlsx&approved_only=true" class="btn btn-primary btn-sm" title="Export only operator-approved qualified leads">✅ Export Approved Leads (XLSX)</a>
+      <a href="/sales/candidates/export?format=csv&approved_only=false" class="btn btn-secondary btn-sm" title="Export all candidates">📥 Export All (CSV)</a>
+    </div>
   </form>
 </div>
 
 <!-- Candidates Table -->
 <div class="card">
-  <div class="card-title">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
     <span>Candidates ({{ total }} total, showing page {{ page }})</span>
+    <button type="submit" form="batch-research-form" class="btn btn-secondary btn-sm" title="Batch research up to 3 selected candidates">🔬 Batch Research (Max 3)</button>
   </div>
   {% if candidates %}
-  <div class="table-responsive">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Company</th>
-          <th>Domain</th>
-          <th>Country</th>
-          <th>Tier</th>
-          <th>Fit</th>
-          <th>Intent</th>
-          <th>BIM Maturity</th>
-          <th>Sources</th>
-          <th>Status</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in candidates %}
-        <tr>
-          <td>
-            <strong>{{ c.company_name }}</strong>
+  <form id="batch-research-form" method="POST" action="/sales/candidates/batch-research">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 35px; text-align: center;">&check;</th>
+            <th>Company</th>
+            <th>Domain</th>
+            <th>Country</th>
+            <th>Tier</th>
+            <th>Fit</th>
+            <th>Intent</th>
+            <th>BIM Maturity</th>
+            <th>Sources</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            <td style="text-align: center;">
+              <input type="checkbox" name="candidate_ids" value="{{ c.candidate_id }}">
+            </td>
+            <td>
+              <strong>{{ c.company_name }}</strong>
             {% if c.is_previously_contacted %}
             <span class="badge badge-previously-contacted" title="Contacted previously">Previously Contacted</span>
             {% endif %}
@@ -79,7 +94,7 @@
             {% endif %}
           </td>
           <td><code>{{ c.domain or 'N/A' }}</code></td>
-          <td>{{ c.country or 'Global' }}</td>
+          <td>{{ c.country or 'Not Verified' }}</td>
           <td>
             <span class="badge {% if c.tier == 'tier_1' %}badge-primary{% elif c.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}">
               {{ c.tier or 'Unassigned' }}
@@ -117,6 +132,7 @@
       </tbody>
     </table>
   </div>
+  </form>
 
   <!-- Pagination controls -->
   <div class="pagination">

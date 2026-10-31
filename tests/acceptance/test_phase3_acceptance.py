@@ -93,7 +93,7 @@ async def test_phase3_discovery_golden(case, qa_logger):
         assert metrics["forbidden_pattern_count"] == 0, "Forbidden patterns detected"
 
     elif case_id == "P3-LIVE-001":
-        brave_key = os.environ.get("BRAVE_API_KEY")
+        brave_key = os.environ.get("BRAVE_SEARCH_API_KEY")
         if not brave_key:
             qa_logger["status"] = "NOT_RUN"
             qa_logger["reason"] = "Brave API key not configured in environment"

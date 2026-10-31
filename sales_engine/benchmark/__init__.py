@@ -24,6 +24,9 @@ from .external_runner import (
     CandidateTaskSummary,
     BenchmarkRunReport,
     MockBenchmarkProvider,
+    CampaignBudgetGuard,
+    CampaignLifecycleStatus,
+    read_only_historical_liability_preflight,
 )
 from .report_s3 import S3BenchmarkReportGenerator
 
@@ -49,5 +52,8 @@ __all__ = [
     "CandidateTaskSummary",
     "BenchmarkRunReport",
     "MockBenchmarkProvider",
+    "CampaignBudgetGuard",
+    "CampaignLifecycleStatus",
+    "read_only_historical_liability_preflight",
     "S3BenchmarkReportGenerator",
 ]

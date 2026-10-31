@@ -4,7 +4,7 @@ Standardized exception hierarchy for SalesAI LLM Gateway.
 Ensures zero leakage of sensitive data, prompts, or credentials in strings/repr.
 """
 
-from typing import Optional
+from typing import Optional, Any
 
 from sales_engine.llm_gateway.contracts import sanitize_log_str
 
@@ -66,12 +66,30 @@ class LLMNotConfiguredError(LLMError):
         )
 
 
-class LLMAuthenticationError(LLMError):
-    """Raised when provider authentication fails (e.g., invalid/missing API key)."""
+class LLMInvalidRequestError(LLMError):
+    """Raised when provider returns HTTP 400 Bad Request (invalid arguments, malformed request, unparseable payload)."""
 
     def __init__(
         self,
-        message: str = "Authentication failed with LLM provider.",
+        message: str = "Invalid request or arguments sent to LLM provider.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="INVALID_REQUEST",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMAuthenticationError(LLMError):
+    """Raised when provider authentication fails (HTTP 401, invalid/missing API key)."""
+
+    def __init__(
+        self,
+        message: str = "Authentication failed with LLM provider (HTTP 401).",
         provider: Optional[str] = None,
         task_id: Optional[str] = None,
     ):
@@ -84,6 +102,23 @@ class LLMAuthenticationError(LLMError):
         )
 
 
+class LLMPermissionError(LLMAuthenticationError):
+    """Raised when provider returns HTTP 403 Forbidden (permission denied, unauthorized access). Subclasses LLMAuthenticationError for backward compatibility."""
+
+    def __init__(
+        self,
+        message: str = "Permission denied by LLM provider (HTTP 403).",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            provider=provider,
+            task_id=task_id,
+        )
+        self.error_code = "PERMISSION_DENIED"
+
+
 class LLMTimeoutError(LLMError):
     """Raised when an LLM call exceeds the configured timeout."""
 
@@ -92,6 +127,7 @@ class LLMTimeoutError(LLMError):
         message: str = "LLM request timed out.",
         provider: Optional[str] = None,
         task_id: Optional[str] = None,
+        timeout_category: Optional[str] = None,
     ):
         super().__init__(
             message=message,
@@ -100,6 +136,7 @@ class LLMTimeoutError(LLMError):
             provider=provider,
             task_id=task_id,
         )
+        self.timeout_category = timeout_category or "REQUEST_TIMEOUT"
 
 
 class LLMRateLimitError(LLMError):
@@ -110,6 +147,10 @@ class LLMRateLimitError(LLMError):
         message: str = "LLM provider rate limit exceeded.",
         provider: Optional[str] = None,
         task_id: Optional[str] = None,
+        cause_category: str = "UNKNOWN_RATE_LIMIT",
+        retry_after_seconds: Optional[float] = None,
+        definitive_cause_proven: bool = False,
+        diagnostic: Optional[Any] = None,
     ):
         super().__init__(
             message=message,
@@ -118,6 +159,10 @@ class LLMRateLimitError(LLMError):
             provider=provider,
             task_id=task_id,
         )
+        self.cause_category = cause_category
+        self.retry_after_seconds = retry_after_seconds
+        self.definitive_cause_proven = definitive_cause_proven
+        self.diagnostic = diagnostic
 
 
 class LLMQuotaExceededError(LLMError):
@@ -168,6 +213,24 @@ class LLMInvalidSchemaError(LLMError):
         super().__init__(
             message=message,
             error_code="INVALID_SCHEMA",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMNotFoundError(LLMError):
+    """Raised when provider returns HTTP 404 Not Found (e.g. unknown model, invalid endpoint path)."""
+
+    def __init__(
+        self,
+        message: str = "Requested resource or model was not found (HTTP 404).",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="NOT_FOUND",
             retryable=False,
             provider=provider,
             task_id=task_id,

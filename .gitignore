@@ -48,3 +48,12 @@ cloudflared.exe
 *.exe
 *.zip
 
+# Research Snapshots & Persistent Crawl Evidence
+data/research_snapshots/
+research_cache.sqlite3
+research_cache.sqlite3-wal
+research_cache.sqlite3-shm
+data/staging/
+*.xlsx
+*.xlsm
+*.xls

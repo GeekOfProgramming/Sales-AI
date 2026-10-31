@@ -158,6 +158,8 @@ class BudgetReservation(BaseModel):
     status: ReservationStatus = Field(default=ReservationStatus.RESERVED)
     failure_code: Optional[str] = Field(default=None, max_length=64)
     pricing_version: Optional[str] = Field(default=None, max_length=128)
+    billable_cost_usd: Optional[float] = Field(default=None, ge=0.0)
+    spend_provenance: Optional[str] = Field(default=None, max_length=64)
 
 
 class BudgetSummary(BaseModel):
@@ -265,9 +267,18 @@ class BudgetLedger:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_res_year_month ON llm_reservations(year_month, status);"
             )
+            # Backward-compatible additive migration for S3.5.4C dual cost accounting
+            cursor = conn.execute("PRAGMA table_info(llm_reservations);")
+            existing_cols = {row[1] for row in cursor.fetchall()}
+            if "billable_cost_usd" not in existing_cols:
+                conn.execute("ALTER TABLE llm_reservations ADD COLUMN billable_cost_usd REAL;")
+            if "spend_provenance" not in existing_cols:
+                conn.execute("ALTER TABLE llm_reservations ADD COLUMN spend_provenance TEXT;")
 
     @staticmethod
     def _row_to_reservation(row: tuple) -> BudgetReservation:
+        billable_cost = row[19] if len(row) > 19 else None
+        spend_prov = row[20] if len(row) > 20 else None
         return BudgetReservation(
             reservation_id=row[0],
             request_id=row[1],
@@ -288,6 +299,8 @@ class BudgetLedger:
             status=ReservationStatus(row[16]),
             failure_code=row[17],
             pricing_version=row[18],
+            billable_cost_usd=billable_cost,
+            spend_provenance=spend_prov,
         )
 
     def reserve(
@@ -426,7 +439,7 @@ class BudgetLedger:
                                created_at, updated_at, year_month, date_day, input_tokens_cap,
                                output_tokens_cap, reserved_usd, reported_input_tokens,
                                reported_output_tokens, final_cost_usd, status, failure_code,
-                               pricing_version
+                               pricing_version, billable_cost_usd, spend_provenance
                         FROM llm_reservations
                         WHERE request_id = ?
                         LIMIT 1;
@@ -447,7 +460,6 @@ class BudgetLedger:
                                 provider=candidate.provider_id,
                                 task_id=request.task_id,
                             )
-
 
                     # Calculate current daily spend (RESERVED, RECONCILED, UNCERTAIN)
                     cur_day = conn.execute(
@@ -491,6 +503,18 @@ class BudgetLedger:
                             task_id=request.task_id,
                         )
 
+                    # Determine spend provenance
+                    spend_prov = None
+                    if request.metadata and isinstance(request.metadata, dict):
+                        spend_prov = request.metadata.get("spend_provenance")
+                    if spend_prov is None:
+                        if pricing.currency == "FREE":
+                            spend_prov = "VERIFIED_FREE_TIER"
+                        elif candidate.provider_id == "cohere" and "trial" in (candidate.verification_notes or "").lower():
+                            spend_prov = "VERIFIED_COHERE_TRIAL"
+                        else:
+                            spend_prov = "VERIFIED_PAID"
+
                     reservation_id = f"res_{uuid.uuid4().hex[:12]}"
                     conn.execute(
                         """
@@ -499,8 +523,8 @@ class BudgetLedger:
                             created_at, updated_at, year_month, date_day, input_tokens_cap,
                             output_tokens_cap, reserved_usd, reported_input_tokens,
                             reported_output_tokens, final_cost_usd, status, failure_code,
-                            pricing_version
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, ?);
+                            pricing_version, billable_cost_usd, spend_provenance
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, NULL, ?, NULL, ?);
                         """,
                         (
                             reservation_id,
@@ -518,6 +542,7 @@ class BudgetLedger:
                             projected_spend,
                             ReservationStatus.RESERVED.value,
                             pricing_ver,
+                            spend_prov,
                         ),
                     )
 
@@ -537,6 +562,8 @@ class BudgetLedger:
                     reserved_usd=projected_spend,
                     status=ReservationStatus.RESERVED,
                     pricing_version=pricing_ver,
+                    billable_cost_usd=None,
+                    spend_provenance=spend_prov,
                 )
             finally:
                 if not self._is_memory:
@@ -582,7 +609,7 @@ class BudgetLedger:
                                created_at, updated_at, year_month, date_day, input_tokens_cap,
                                output_tokens_cap, reserved_usd, reported_input_tokens,
                                reported_output_tokens, final_cost_usd, status, failure_code,
-                               pricing_version
+                               pricing_version, billable_cost_usd, spend_provenance
                         FROM llm_reservations
                         WHERE reservation_id = ?;
                         """,
@@ -640,29 +667,40 @@ class BudgetLedger:
 
                     # Verified actual cost calculation (FREE tier reconciles to $0.000000 actual spend)
                     if pricing.currency == "FREE":
-                        actual_cost = 0.0
+                        commercial_cost = 0.0
                     else:
-                        actual_cost = (
+                        commercial_cost = (
                             response.input_tokens * pricing.input_per_1m
                             + response.output_tokens * pricing.output_per_1m
                         ) / 1_000_000.0
-                        actual_cost = round(actual_cost, 6)
+                        commercial_cost = round(commercial_cost, 6)
 
-                    # Set cost on response object
-                    response.cost_usd = actual_cost
+                    # Determine actual external billable spend
+                    row_spend_prov = row[20] if len(row) > 20 else None
+                    if (
+                        row_spend_prov in ("VERIFIED_COHERE_TRIAL", "VERIFIED_FREE_TIER")
+                        or pricing.currency == "FREE"
+                    ):
+                        billable_cost = 0.0
+                    else:
+                        billable_cost = commercial_cost
+
+                    # Set cost on response object (commercial-equivalent preserved for comparisons)
+                    response.cost_usd = commercial_cost
 
                     conn.execute(
                         """
                         UPDATE llm_reservations
                         SET status = ?, reported_input_tokens = ?, reported_output_tokens = ?,
-                            final_cost_usd = ?, updated_at = ?, failure_code = NULL
+                            final_cost_usd = ?, billable_cost_usd = ?, updated_at = ?, failure_code = NULL
                         WHERE reservation_id = ?;
                         """,
                         (
                             ReservationStatus.RECONCILED.value,
                             response.input_tokens,
                             response.output_tokens,
-                            actual_cost,
+                            commercial_cost,
+                            billable_cost,
                             now_iso,
                             reservation_id,
                         ),
@@ -675,7 +713,7 @@ class BudgetLedger:
                                created_at, updated_at, year_month, date_day, input_tokens_cap,
                                output_tokens_cap, reserved_usd, reported_input_tokens,
                                reported_output_tokens, final_cost_usd, status, failure_code,
-                               pricing_version
+                               pricing_version, billable_cost_usd, spend_provenance
                         FROM llm_reservations
                         WHERE reservation_id = ?;
                         """,

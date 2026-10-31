@@ -26,6 +26,7 @@ EXCLUDED_DIR_NAMES: Set[str] = {
     "chroma_data",
     "runtime",
     "logs",
+    "research_snapshots",
 }
 
 # Dangerous file extensions (compiled artifacts, databases, private keys, certificates, logs, executables)
@@ -51,12 +52,17 @@ EXCLUDED_EXTENSIONS: Set[str] = {
     ".cer",
     ".log",
     ".zip",
+    ".sha256",
     ".exe",
+    ".xlsx",
+    ".xlsm",
+    ".xls",
 }
 
 # Explicit sensitive filenames or tokens to reject
 SENSITIVE_FILENAME_SUBSTRINGS: Set[str] = {
     "sales_outreach.db",
+    "research_cache.sqlite3",
     "chroma.sqlite3",
     "candidates.db",
     "client_secret",
@@ -228,13 +234,20 @@ def build_release_zip(
 
 
 if __name__ == "__main__":
-    import shutil
+    import hashlib
     src = Path(__file__).parent.parent
     dest = src.parent / "SalesAI_export.zip"
     stats = build_release_zip_stats(src, dest, profile="developer_source")
-    shutil.copy2(dest, src / "SalesAI_export.zip")
+
+    # Compute SHA-256 of the finalized archive
+    sha256 = hashlib.sha256(dest.read_bytes()).hexdigest()
+    sidecar_dest = dest.with_suffix(".zip.sha256")
+    sidecar_dest.write_text(f"{sha256} *SalesAI_export.zip\n", encoding="utf-8")
+
     print(f"Package profile:       {stats['profile']}")
     print(f"Included file count:   {stats['included_count']}")
     print(f"Excluded file count:   {stats['excluded_count']}")
     print(f"Denylist violations:   {stats['denylist_violations_count']}")
-    print(f"Successfully packaged {stats['included_count']} files into {dest} and {src / 'SalesAI_export.zip'}")
+    print(f"Final SHA-256:         {sha256}")
+    print(f"Sidecar created:       {sidecar_dest}")
+    print(f"Successfully packaged {stats['included_count']} files into {dest}")

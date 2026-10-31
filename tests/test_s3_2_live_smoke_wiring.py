@@ -334,17 +334,24 @@ def test_cumulative_per_run_cost_cap_enforced():
     transport = httpx.MockTransport(mock_handler)
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         db_path = str(Path(tmp_dir) / "test_cumulative.db")
-        # For web_a_01: conservative reservation is ~$0.001017.
-        # Reconciled cost after response is $0.000060.
-        # For web_a_02: conservative reservation is ~$0.001010.
-        # Total projected spend for 2nd case: 0.000060 + 0.001010 = 0.001070.
-        # Setting max_cost_usd = 0.00105 allows case 1 (0.001017 <= 0.00105)
-        # but blocks case 2 (0.001070 > 0.00105).
+        # Derive test cost threshold directly from isolated fixture data and conservative reservation
+        from sales_engine.benchmark.fixtures_s3 import PASS_A_CASES
+        f1 = PASS_A_CASES[0]
+        p1_chars = len(f1.prompt) + (len(f1.system_prompt) if f1.system_prompt else 0)
+        p1_tokens = max(1, math.ceil(p1_chars / 3.0))
+        # Candidate t1_c1 rate card: $0.10 input / $0.50 output per 1M; max_output_tokens=2000
+        res1 = round((p1_tokens * 0.10 + 2000 * 0.50) / 1_000_000.0, 6)
+        # Mock response usage is 100 prompt + 100 completion tokens = $0.000060 reconciled
+        reconciled1 = round((100 * 0.10 + 100 * 0.50) / 1_000_000.0, 6)
+        # Setting max_cost_usd halfway between res1 and projected second call (reconciled1 + res2)
+        # guarantees Case 1 dispatches (res1 <= max_cost_usd) while Case 2 blocks before dispatch.
+        derived_cap = round(res1 + (reconciled1 / 2.0), 6)
+
         runner = ExternalBenchmarkRunner(
             dry_run=False,
             confirm_paid=True,
             max_requests=5,
-            max_cost_usd=0.00105,
+            max_cost_usd=derived_cap,
             db_path=db_path,
             api_key="sk-test-mocked-key",
             real_provider_transport=transport,

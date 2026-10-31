@@ -26,6 +26,7 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -39,7 +40,7 @@ from sales_engine.benchmark.report_s3 import S3BenchmarkReportGenerator
 from sales_engine.llm_gateway.errors import LLMNotConfiguredError, LLMBudgetExceededError
 
 
-def parse_args() -> argparse.Namespace:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="SalesAI S3.0 External LLM Benchmark Runner (Offline-First Dry-Run)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -86,7 +87,7 @@ def parse_args() -> argparse.Namespace:
         "--candidate",
         type=str,
         default=None,
-        help="Evaluate specific candidate (e.g. 't1_c1', 't1_c2') instead of sequential Tier 1 evaluation.",
+        help="Evaluate specific candidate (e.g. 't1_c1', 't1_c2', 't1_c5') instead of sequential Tier 1 evaluation.",
     )
     parser.add_argument(
         "--max-cases",
@@ -104,8 +105,8 @@ def parse_args() -> argparse.Namespace:
         "--provider",
         type=str,
         default=None,
-        choices=["openai", "gemini", "groq", "xai"],
-        help="Target provider for live smoke benchmark (openai, gemini, groq, xai).",
+        choices=["openai", "gemini", "groq", "openrouter", "cohere", "nvidia", "cloudflare", "xai"],
+        help="Target provider for live smoke benchmark (openai, gemini, groq, openrouter, cohere, nvidia, cloudflare, xai).",
     )
     parser.add_argument(
         "--free-only",
@@ -122,6 +123,19 @@ def parse_args() -> argparse.Namespace:
         help="Execute single-case connectivity smoke (SMOKE_ONLY). Capped at 1 case and 1 request.",
     )
     parser.add_argument(
+        "--require-cohere-trial",
+        dest="require_cohere_trial",
+        action="store_true",
+        default=False,
+        help="Fail-closed restriction: enforce verified Cohere Trial key entitlement before inference.",
+    )
+    parser.add_argument(
+        "--cohere-trial-timeout-seconds",
+        type=float,
+        default=None,
+        help="Explicit bounded timeout override in seconds for Cohere Trial smoke (max 60.0).",
+    )
+    parser.add_argument(
         "--allow-xai-paid",
         dest="allow_xai_paid",
         action="store_true",
@@ -136,6 +150,19 @@ def parse_args() -> argparse.Namespace:
         help="Run read-only GET /models metadata probe for the selected provider without generating text.",
     )
     parser.add_argument(
+        "--inter-request-delay",
+        dest="inter_request_delay",
+        type=float,
+        default=0.0,
+        help="Inter-request delay pacing in seconds between consecutive requests (0.0 to 10.0, default: 0.0).",
+    )
+    parser.add_argument(
+        "--campaign-id",
+        type=str,
+        default=None,
+        help="Persistent campaign ID for shared campaign budget and request cap tracking across runs.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default="runtime/benchmarks",
@@ -148,7 +175,28 @@ def parse_args() -> argparse.Namespace:
         default="all",
         help="Report export format (default: all).",
     )
-    return parser.parse_args()
+    return parser
+
+
+def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = build_parser()
+    parsed = parser.parse_args(args)
+
+    # Validate --inter-request-delay
+    delay = parsed.inter_request_delay
+    if (
+        not isinstance(delay, (int, float))
+        or isinstance(delay, bool)
+        or math.isnan(delay)
+        or math.isinf(delay)
+        or delay < 0.0
+        or delay > 10.0
+    ):
+        parser.error(
+            f"Invalid --inter-request-delay: must be a non-negative finite number <= 10.0 (got {delay!r})."
+        )
+
+    return parsed
 
 
 def main() -> int:
@@ -180,17 +228,24 @@ def main() -> int:
     )
 
     print("=" * 72)
-    print("SalesAI S3.3 - Four-Provider External Benchmark & Connectivity Smoke")
+    print("SalesAI S3.4 - Seven-Provider External Benchmark & Safe Inference Readiness")
     print("=" * 72)
     print(f"Mode: {'OFFLINE DRY-RUN (Deterministic Mock)' if args.dry_run else 'LIVE DISPATCH'}")
     if not args.dry_run:
         print(f"  Target Provider: {args.provider or 'openai (default)'}")
         print(f"  Confirm Paid Key: {args.confirm_paid}")
         print(f"  Free-Only Gate: {args.free_only}")
+        print(f"  Require Cohere Trial: {args.require_cohere_trial}")
+        if args.cohere_trial_timeout_seconds is not None:
+            print(f"  Cohere Trial Timeout Override: {args.cohere_trial_timeout_seconds}s")
         print(f"  Connectivity Smoke: {args.connectivity_smoke}")
         print(f"  Max Requests Cap: {eff_max_requests}")
         print(f"  Max Spend Cap: ${args.max_cost_usd:.2f}")
         print(f"  Ledger DB: {args.db_path or 'data/benchmark_budget.db'}")
+    if args.inter_request_delay > 0.0:
+        print(f"  Inter-Request Delay: {args.inter_request_delay}s")
+    if args.campaign_id:
+        print(f"  Campaign ID: {args.campaign_id}")
     print(f"Task Filter: {args.task}")
     print(f"Candidate Filter: {args.candidate or 'Selected Provider Tier 1 Candidate'}")
     print(f"Max Cases per Task: {eff_max_cases or 'All available fixtures'}")
@@ -208,6 +263,10 @@ def main() -> int:
             free_only=args.free_only,
             allow_xai_generation=args.allow_xai_paid,
             is_connectivity_smoke=args.connectivity_smoke,
+            require_cohere_trial=args.require_cohere_trial,
+            cohere_trial_timeout_seconds=args.cohere_trial_timeout_seconds,
+            inter_request_delay_seconds=args.inter_request_delay,
+            campaign_id=args.campaign_id,
         )
     except (LLMNotConfiguredError, LLMBudgetExceededError) as e:
         print(f"\n[SAFETY GATE TRIPPED] Execution Refused:\n  {e}", file=sys.stderr)
@@ -216,7 +275,17 @@ def main() -> int:
         print(f"\n[INITIALIZATION ERROR] Failed to initialize runner:\n  {e}", file=sys.stderr)
         return 2
 
-    print("Running benchmark evaluation...")
+    if hasattr(runner, "historical_preflight_summary"):
+        hist = runner.historical_preflight_summary
+        print("\nHistorical Ledger Preflight Summary:")
+        print(f"  Operational DB: {hist.get('db_path')}")
+        print(f"  Historical Exists: {hist.get('exists')}")
+        print(f"  Historical Reservations: {hist.get('total_reservations', 0)}")
+        print(f"  Historical Commercial Exposure: ${hist.get('total_commercial_usd', 0.0):.6f}")
+        print(f"  Historical Billable Spend: ${hist.get('total_billable_usd', 0.0):.6f}")
+        print(f"  Historical Uncertain Exposure: ${hist.get('uncertain_commercial_usd', 0.0):.6f}")
+
+    print("\nRunning benchmark evaluation...")
     try:
         report = runner.run_benchmark(
             task_filter=args.task,

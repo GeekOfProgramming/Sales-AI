@@ -26,10 +26,11 @@ MAPPING TABLE (Existing Live Prompt / Models -> S2.5 Schemas):
 +-------------------------------+----------------------------------+--------------------------------------+------------------------------------------+
 """
 
-from typing import Dict, List, Optional, Any, Type, Literal
+from typing import Dict, List, Optional, Any, Type, Literal, Set, Union
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from sales_engine.llm_gateway.model_catalog import normalize_task_id, validate_subtask_id
+from sales_engine.llm_gateway.errors import LLMInvalidSchemaError
 
 SCHEMA_REGISTRY_VERSION = "1.0.0"
 
@@ -406,3 +407,98 @@ class SchemaRegistry:
     def list_registered_keys(cls) -> List[str]:
         """Return sorted list of all registered schema keys."""
         return sorted(list(TASK_OUTPUT_SCHEMAS.keys()))
+
+    @classmethod
+    def get_cohere_schema(cls, task_id: str, subtask_id: Optional[str] = None) -> Dict[str, Any]:
+        """Lookup schema model class and convert to a Cohere-compatible JSON schema."""
+        schema_cls = cls.get_schema(task_id, subtask_id)
+        return to_cohere_json_schema(schema_cls)
+
+
+# ---------------------------------------------------------------------------
+# Cohere Structured Output Schema Conversion (S3.5.4C)
+# ---------------------------------------------------------------------------
+
+COHERE_UNSUPPORTED_KEYWORDS: Set[str] = {
+    "minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum",
+    "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "patternProperties",
+    "dependencies", "propertyNames", "allOf", "oneOf", "not"
+}
+
+
+def sanitize_cohere_schema_node(node: Any, defs: Dict[str, Any]) -> Any:
+    """Recursively resolve $ref definitions and strip Cohere-unsupported keywords."""
+    if isinstance(node, dict):
+        if "$ref" in node:
+            ref = node["$ref"]
+            if ref.startswith("#/$defs/"):
+                def_name = ref.split("/")[-1]
+                if def_name in defs:
+                    resolved = sanitize_cohere_schema_node(defs[def_name], defs)
+                    if "description" in node and "description" not in resolved:
+                        resolved["description"] = node["description"]
+                    return resolved
+                raise LLMInvalidSchemaError(
+                    f"Unresolvable $ref in schema: '{ref}'. Fail closed."
+                )
+            raise LLMInvalidSchemaError(
+                f"Unsupported $ref format in schema: '{ref}'. Fail closed."
+            )
+
+        for kw in ("allOf", "oneOf", "not"):
+            if kw in node:
+                raise LLMInvalidSchemaError(
+                    f"Unsupported schema composition keyword '{kw}' for Cohere structured outputs."
+                )
+
+        new_dict: Dict[str, Any] = {}
+        for k, v in node.items():
+            if k in COHERE_UNSUPPORTED_KEYWORDS:
+                continue
+            if k == "title":
+                continue
+            if k == "$defs":
+                continue
+            new_dict[k] = sanitize_cohere_schema_node(v, defs)
+        return new_dict
+    elif isinstance(node, list):
+        return [sanitize_cohere_schema_node(item, defs) for item in node]
+    return node
+
+
+def to_cohere_json_schema(model_cls_or_dict: Union[Type[BaseModel], Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Generate or sanitize a Cohere-compatible JSON Schema from a Pydantic model or schema dictionary.
+    - Strictly preserves expected field types, required fields, arrays, and nested objects.
+    - Inlines all $defs/$ref definitions into self-contained schemas.
+    - Strips unsupported validation keywords (minLength, maxLength, maxItems, minItems, etc.).
+    - Explicitly verifies that evidence_refs is an array of strings when present.
+    - Rejects unsupported schema constructs (allOf, oneOf, not) before dispatch.
+    """
+    if isinstance(model_cls_or_dict, dict):
+        raw_schema = model_cls_or_dict
+    elif isinstance(model_cls_or_dict, type) and issubclass(model_cls_or_dict, BaseModel):
+        raw_schema = model_cls_or_dict.model_json_schema()
+    else:
+        raise LLMInvalidSchemaError(
+            f"Expected BaseModel class or dict for Cohere schema, got {type(model_cls_or_dict).__name__}."
+        )
+
+    defs = raw_schema.get("$defs", {})
+    sanitized = sanitize_cohere_schema_node(raw_schema, defs)
+
+    if not isinstance(sanitized, dict) or sanitized.get("type") != "object":
+        raise LLMInvalidSchemaError("Cohere JSON schema root must have type 'object'.")
+    if "properties" not in sanitized or not isinstance(sanitized["properties"], dict):
+        raise LLMInvalidSchemaError("Cohere JSON schema root must define 'properties'.")
+
+    # Explicitly enforce evidence_refs as array of strings when present
+    props = sanitized["properties"]
+    if "evidence_refs" in props:
+        ev_prop = props["evidence_refs"]
+        if ev_prop.get("type") != "array" or ev_prop.get("items", {}).get("type") != "string":
+            raise LLMInvalidSchemaError(
+                "evidence_refs in Cohere schema must strictly be an array of strings."
+            )
+
+    return sanitized

@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Lead Register (13-Field pyBIM Core) | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Lead Register — 13-Field Core Workbook</h1>
+    <p class="page-subtitle">Durable, editable lead register matching the first 13 information columns of the pyBIM workbook.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/register/export?format=xlsx" class="btn btn-primary">📊 Export 13-Field Register (XLSX)</a>
+    <a href="/sales/register/export?format=csv" class="btn btn-secondary">📥 Export CSV</a>
+    <a href="/sales/research/pilot" class="btn btn-secondary">🔬 Pilot Targets</a>
+  </div>
+</div>
+
+<!-- Operator Controls Bar: Search & New Research Submission -->
+<div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <span style="font-weight: 600; font-size: 1rem;">Total Records in Register:</span>
+      <span class="badge badge-primary" style="font-size: 0.9rem; margin-left: 0.5rem;">{{ total_count }}</span>
+    </div>
+    <form method="GET" action="/sales/register" style="display: flex; gap: 0.5rem; margin: 0;">
+      <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company, phone, email, notes..." class="form-control" style="width: 280px;">
+      <button type="submit" class="btn btn-secondary">Search</button>
+      {% if query %}
+        <a href="/sales/register" class="btn btn-outline-secondary">Reset</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <!-- Bounded New Company Research Form -->
+  <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.85rem;">
+    <summary style="font-weight: 600; cursor: pointer; color: #3b82f6;">
+      ➕ Add &amp; Research New Company (Bounded Official-Website Research)
+    </summary>
+    <form method="POST" action="/sales/register/research-new" style="margin-top: 1rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 600;">Company Name *</label>
+          <input type="text" name="company_name" required placeholder="e.g. Acme Engineering S.r.l." class="form-control">
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 600;">Official Website URL *</label>
+          <input type="url" name="website_url" required placeholder="https://www.example.it" class="form-control">
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; font-weight: 600;">Provisional Priority</label>
+          <select name="priority_level" class="form-control">
+            <option value="A">Priority A (High Potential / Urgent)</option>
+            <option value="B" selected>Priority B (Standard Engineering Lead)</option>
+            <option value="C">Priority C (Specialist / Boutique / Low Urgency)</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <label style="font-size: 0.8rem; font-weight: 600;">Initial Operator Notes / Research Focus</label>
+        <input type="text" name="operator_notes" placeholder="Initial context or project rationale..." class="form-control">
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">
+          🛡️ Strictly bounded: 1 safe HTTP fetch of public facts. Zero LLM billing. Missing fields stay Unverified.
+        </span>
+        <button type="submit" class="btn btn-primary btn-sm">
+          🔍 Research &amp; Add to Register
+        </button>
+      </div>
+    </form>
+  </details>
+</div>
+
+<!-- 13-Field Lead Register Table (Horizontal Scroll / Full Visibility) -->
+<div class="card" style="padding: 0; overflow-x: auto;">
+  <div style="padding: 0.75rem 1rem; background: var(--bg-hover); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 0.85rem; color: var(--text-secondary);">
+      💡 Showing exact 13 pyBIM workbook columns. Click <strong>Edit</strong> or company name to modify details.
+    </span>
+    <span style="font-size: 0.8rem; color: var(--text-muted);">Scroll horizontally → to see all 13 columns</span>
+  </div>
+
+  <table class="table" style="width: 100%; min-width: 1700px; border-collapse: collapse; text-align: left; font-size: 0.825rem;">
+    <thead>
+      <tr style="background: var(--bg-hover); border-bottom: 2px solid var(--border-color);">
+        <th style="padding: 0.6rem 0.75rem; width: 60px;">#1 Row</th>
+        <th style="padding: 0.6rem 0.75rem; width: 70px;">#2 Tier</th>
+        <th style="padding: 0.6rem 0.75rem; width: 160px;">#3 Priority Rationale</th>
+        <th style="padding: 0.6rem 0.75rem; width: 220px;">#4 Company &amp; Legal Identity</th>
+        <th style="padding: 0.6rem 0.75rem; width: 160px;">#5 Geographic Location</th>
+        <th style="padding: 0.6rem 0.75rem; width: 140px;">#6 Phone Numbers</th>
+        <th style="padding: 0.6rem 0.75rem; width: 180px;">#7 Activities / Services</th>
+        <th style="padding: 0.6rem 0.75rem; width: 160px;">#8 Official Website</th>
+        <th style="padding: 0.6rem 0.75rem; width: 160px;">#9 Responsible Person</th>
+        <th style="padding: 0.6rem 0.75rem; width: 200px;">#10 Descriptions &amp; Notes</th>
+        <th style="padding: 0.6rem 0.75rem; width: 140px;">#11 Job Links</th>
+        <th style="padding: 0.6rem 0.75rem; width: 140px;">#12 Other Links</th>
+        <th style="padding: 0.6rem 0.75rem; width: 180px;">#13 Contact Emails</th>
+        <th style="padding: 0.6rem 0.75rem; width: 80px; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rec in records %}
+      <tr style="border-bottom: 1px solid var(--border-color); vertical-align: top;">
+        <!-- 1. Row Number -->
+        <td style="padding: 0.6rem 0.75rem; font-weight: 600;">
+          {{ rec.record_number or loop.index }}
+        </td>
+
+        <!-- 2. Priority -->
+        <td style="padding: 0.6rem 0.75rem;">
+          <span class="badge {% if rec.priority_level == 'A' %}badge-success{% elif rec.priority_level == 'B' %}badge-primary{% else %}badge-warning{% endif %}">
+            Priority {{ rec.priority_level or 'B' }}
+          </span>
+        </td>
+
+        <!-- 3. Rationale -->
+        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 160px; word-break: break-word;">
+          {{ rec.priority_rationale or 'Not Found' }}
+        </td>
+
+        <!-- 4. Company & Legal Identity -->
+        <td style="padding: 0.6rem 0.75rem;">
+          <a href="/sales/register/{{ rec.candidate_id }}" style="font-weight: 700; color: #3b82f6; text-decoration: none;">
+            {{ rec.company_name }}
+          </a>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+            {{ rec.legal_identity or 'Not Found' }}
+          </div>
+        </td>
+
+        <!-- 5. Location -->
+        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
+          {{ rec.geographic_location or 'Not Found' }}
+        </td>
+
+        <!-- 6. Phone Numbers -->
+        <td style="padding: 0.6rem 0.75rem;">
+          {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
+            <code>{{ rec.telephone_numbers }}</code>
+          {% else %}
+            <span style="color: var(--text-muted);">Not Found</span>
+          {% endif %}
+        </td>
+
+        <!-- 7. Activities / Services -->
+        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 180px; word-break: break-word;">
+          {{ rec.business_activities or 'Not Found' }}
+        </td>
+
+        <!-- 8. Official Website -->
+        <td style="padding: 0.6rem 0.75rem; max-width: 160px; word-break: break-all;">
+          {% if rec.official_website and rec.official_website != 'Not Found' %}
+            <a href="{{ rec.official_website }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+              {{ rec.official_website }}
+            </a>
+          {% else %}
+            <span style="color: var(--text-muted);">Not Found</span>
+          {% endif %}
+        </td>
+
+        <!-- 9. Responsible Person -->
+        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
+          {{ rec.responsible_person or 'Not Found' }}
+        </td>
+
+        <!-- 10. Descriptions & Notes -->
+        <td style="padding: 0.6rem 0.75rem; max-width: 200px; color: var(--text-secondary); word-break: break-word; white-space: pre-wrap;">
+          {{ rec.descriptions_and_notes or 'Not Found' }}
+        </td>
+
+        <!-- 11. Job Links -->
+        <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
+          {% if rec.job_advertisement_links and rec.job_advertisement_links != 'Not Found' %}
+            {% if rec.job_advertisement_links.startswith('http://') or rec.job_advertisement_links.startswith('https://') %}
+              <a href="{{ rec.job_advertisement_links }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+                {{ rec.job_advertisement_links }}
+              </a>
+            {% else %}
+              <span style="color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">
+                {{ rec.job_advertisement_links }}
+              </span>
+            {% endif %}
+          {% else %}
+            <span style="color: var(--text-muted);">Not Found</span>
+          {% endif %}
+        </td>
+
+        <!-- 12. Other Links -->
+        <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
+          {% if rec.other_links_and_references and rec.other_links_and_references != 'Not Found' %}
+            {{ rec.other_links_and_references }}
+          {% else %}
+            <span style="color: var(--text-muted);">Not Found</span>
+          {% endif %}
+        </td>
+
+        <!-- 13. Contact Emails -->
+        <td style="padding: 0.6rem 0.75rem;">
+          {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
+            <a href="mailto:{{ rec.contact_email_addresses }}" style="color: #3b82f6;">
+              {{ rec.contact_email_addresses }}
+            </a>
+          {% else %}
+            <span style="color: var(--text-muted);">Not Found</span>
+          {% endif %}
+        </td>
+
+        <!-- Actions Sticky Column -->
+        <td style="padding: 0.6rem 0.75rem; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">
+          <a href="/sales/register/{{ rec.candidate_id }}" class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
+            Edit 13 Fields
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

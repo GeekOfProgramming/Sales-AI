@@ -1,26 +1,18 @@
 #!/usr/bin/env python3
 """
 scripts/probe_llm_providers.py
-SalesAI S3.3 CLI — Metadata & Authentication Probe for LLM Providers.
+SalesAI S3.4 CLI — Metadata & Authentication Probe for Seven LLM Providers.
 
-Performs read-only HTTP GET /models queries to verify authentication, endpoint reachability,
+Performs read-only HTTP GET queries to verify authentication, endpoint reachability,
 and candidate model availability without initiating any text generation or token spend.
 
-Usage examples:
-    # 1. Probe Google Gemini metadata/auth:
-    python scripts/probe_llm_providers.py --provider gemini
+Supports all seven canonical providers:
+  openai, gemini, groq, openrouter, cohere, nvidia, cloudflare (and historical xai).
 
-    # 2. Probe GroqCloud metadata/auth:
-    python scripts/probe_llm_providers.py --provider groq
-
-    # 3. Probe xAI Grok metadata/auth (safe credential check):
-    python scripts/probe_llm_providers.py --provider xai
-
-    # 4. Probe OpenAI metadata/auth:
-    python scripts/probe_llm_providers.py --provider openai
-
-    # 5. Probe all four providers sequentially:
-    python scripts/probe_llm_providers.py --provider all
+Guarantees:
+- Zero prompt or completion generation.
+- Zero credential exposure in console, logs, or reports.
+- Safe structured diagnostics with provider-specific API nuances.
 """
 
 from __future__ import annotations
@@ -37,9 +29,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from sales_engine.benchmark.provider_catalog import (
+    ALL_SUPPORTED_PROVIDERS,
+    CANONICAL_SEVEN_PROVIDERS,
     PROVIDER_SPECS_BY_ID,
     ProviderConnectionSpec,
     get_provider_spec,
+    list_canonical_seven_providers,
     list_supported_providers,
 )
 from sales_engine.llm_gateway.errors import (
@@ -50,6 +45,8 @@ from sales_engine.llm_gateway.errors import (
     LLMRateLimitError,
     LLMTimeoutError,
 )
+from sales_engine.llm_gateway.providers.cloudflare_provider import CloudflareProvider
+from sales_engine.llm_gateway.providers.cohere_provider import CohereProvider
 from sales_engine.llm_gateway.providers.openai_provider import OpenAIProvider
 
 
@@ -71,25 +68,62 @@ def probe_single_provider(spec: ProviderConnectionSpec) -> Dict[str, Any]:
             "base_url": spec.base_url,
         }
 
-    provider = OpenAIProvider(
-        provider_id=spec.provider_id,
-        base_url=spec.base_url,
-        allowed_hosts=spec.allowed_hosts,
-        env_var=spec.env_var,
-        api_key=api_key.strip(),
-        default_model=spec.exact_model_id,
-        model_capabilities={spec.exact_model_id: spec.capabilities},
-    )
-
+    # Instantiate provider adapter
     try:
+        if spec.provider_id == "cohere":
+            provider = CohereProvider(
+                provider_id=spec.provider_id,
+                base_url=spec.base_url,
+                allowed_hosts=spec.allowed_hosts,
+                env_var=spec.env_var,
+                api_key=api_key.strip(),
+                default_model=spec.exact_model_id,
+                model_capabilities={spec.exact_model_id: spec.capabilities},
+            )
+        elif spec.provider_id == "cloudflare":
+            provider = CloudflareProvider(
+                provider_id=spec.provider_id,
+                base_url=spec.base_url,
+                allowed_hosts=spec.allowed_hosts,
+                env_var=spec.env_var,
+                api_key=api_key.strip(),
+                default_model=spec.exact_model_id,
+                model_capabilities={spec.exact_model_id: spec.capabilities},
+            )
+        else:
+            extra_headers = spec.capabilities.get("extra_headers")
+            provider = OpenAIProvider(
+                provider_id=spec.provider_id,
+                base_url=spec.base_url,
+                allowed_hosts=spec.allowed_hosts,
+                env_var=spec.env_var,
+                api_key=api_key.strip(),
+                default_model=spec.exact_model_id,
+                model_capabilities={spec.exact_model_id: spec.capabilities},
+                extra_headers=extra_headers,
+            )
+
         res = provider.probe_models(timeout_seconds=15.0)
-        target_model_present = spec.exact_model_id in res["model_ids"]
-        # Partial model match check (some providers prefix or suffix IDs)
+        target_model = spec.exact_model_id
+        model_ids = res["model_ids"]
+
+        target_model_present = target_model in model_ids
         if not target_model_present:
-            for m in res["model_ids"]:
-                if spec.exact_model_id.lower() in m.lower():
+            # Check prefix/suffix matches (e.g. models/gemini-2.5-flash-lite or case-insensitive)
+            for m in model_ids:
+                cleaned_m = m.replace("models/", "").lower()
+                cleaned_target = target_model.replace("models/", "").lower()
+                if cleaned_target == cleaned_m or cleaned_target in cleaned_m or cleaned_m in cleaned_target:
                     target_model_present = True
                     break
+
+        extra_notes = []
+        if spec.provider_id == "openrouter":
+            extra_notes.append("OpenRouter Free Tier requires explicit :free model tag.")
+        elif spec.provider_id == "nvidia":
+            extra_notes.append("Catalog availability does not guarantee active inference entitlement.")
+        elif spec.provider_id == "cloudflare":
+            extra_notes.append("Cloudflare Workers AI validated with verified 32-hex Account ID.")
 
         return {
             "provider_id": spec.provider_id,
@@ -102,6 +136,16 @@ def probe_single_provider(spec: ProviderConnectionSpec) -> Dict[str, Any]:
             "billing_mode": spec.billing_mode,
             "base_url": spec.base_url,
             "model_ids_sample": res["model_ids"][:10],
+            "notes": " ".join(extra_notes),
+        }
+    except LLMNotConfiguredError as e:
+        return {
+            "provider_id": spec.provider_id,
+            "status": "NOT_CONFIGURED",
+            "message": str(e),
+            "target_model": spec.exact_model_id,
+            "billing_mode": spec.billing_mode,
+            "base_url": spec.base_url,
         }
     except LLMAuthenticationError as e:
         return {
@@ -178,7 +222,7 @@ def print_probe_result(result: Dict[str, Any]) -> None:
         print(f"  HTTP Status:   {result.get('status_code')}")
         print(f"  Latency:       {result.get('latency_ms')} ms")
         print(f"  Models Found:  {result.get('model_count')}")
-        avail_str = "YES (Verified available)" if result.get("target_model_available") else "NOT IN TOP LIST"
+        avail_str = "YES (Verified in catalog)" if result.get("target_model_available") else "NOT IN TOP LIST"
         print(f"  Target Model:  {avail_str}")
         sample = result.get("model_ids_sample", [])
         if sample:
@@ -186,6 +230,8 @@ def print_probe_result(result: Dict[str, Any]) -> None:
             if len(sample) > 5:
                 sample_str += f" ... (+{result.get('model_count') - 5} more)"
             print(f"  Sample Models: {sample_str}")
+        if result.get("notes"):
+            print(f"  Advisory Note: {result.get('notes')}")
     elif status == "NOT_CONFIGURED":
         print(f"  Notice:        {result.get('message')}")
     else:
@@ -195,15 +241,15 @@ def print_probe_result(result: Dict[str, Any]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="SalesAI S3.3 — Metadata & Authentication Probe (Zero-Generation)",
+        description="SalesAI S3.4 — Seven-Provider Metadata & Authentication Probe (Zero-Generation)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--provider",
         type=str,
         default="all",
-        choices=["openai", "gemini", "groq", "xai", "all"],
-        help="Target provider to probe (default: all).",
+        choices=ALL_SUPPORTED_PROVIDERS + ["all"],
+        help="Target provider to probe (default: all seven canonical providers).",
     )
     return parser.parse_args()
 
@@ -212,14 +258,15 @@ def main() -> int:
     args = parse_args()
 
     print("=" * 72)
-    print("SalesAI S3.3 - LLM Provider Metadata & Authentication Probe")
+    print("SalesAI S3.4 - Seven-Provider Metadata & Authentication Probe")
     print("=" * 72)
-    print("Zero-Generation Guarantee: Performs read-only GET /models requests.")
+    print("Zero-Generation Guarantee: Performs read-only model/key metadata queries.")
     print("Zero-Secret Guarantee: No API keys, credentials, or prompts displayed.")
     print("-" * 72)
 
     if args.provider == "all":
-        target_specs = list(PROVIDER_SPECS_BY_ID.values())
+        target_specs = [get_provider_spec(p) for p in CANONICAL_SEVEN_PROVIDERS]
+        target_specs = [s for s in target_specs if s is not None]
     else:
         spec = get_provider_spec(args.provider)
         if not spec:

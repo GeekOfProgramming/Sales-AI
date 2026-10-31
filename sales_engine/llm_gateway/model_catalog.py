@@ -112,7 +112,7 @@ class ModelCandidate(BaseModel):
 
     candidate_id: str = Field(..., min_length=1, max_length=64)
     tier: ModelTier
-    priority: int = Field(..., ge=1, le=4, description="Default priority slot within tier (1..4)")
+    priority: int = Field(..., ge=1, le=8, description="Default priority slot within tier (1..8)")
     provider_id: str = Field(..., min_length=1, max_length=32)
     exact_model_id: str = Field(..., min_length=1, max_length=128)
     enabled: bool = Field(default=False, description="Default is disabled (fail-closed)")
@@ -397,5 +397,4 @@ class ModelCatalog(BaseModel):
                         verification_notes=None,
                     )
                 )
-
         return catalog

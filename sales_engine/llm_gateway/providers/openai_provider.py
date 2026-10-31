@@ -17,13 +17,17 @@ import httpx
 from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
 from sales_engine.llm_gateway.errors import (
     LLMAuthenticationError,
+    LLMInvalidRequestError,
     LLMInvalidSchemaError,
     LLMNotConfiguredError,
+    LLMNotFoundError,
+    LLMPermissionError,
     LLMProviderUnavailableError,
     LLMQuotaExceededError,
     LLMRateLimitError,
     LLMTimeoutError,
 )
+from sales_engine.llm_gateway.rate_limit_diagnostics import classify_http_429
 from sales_engine.llm_gateway.interface import BaseLLMProvider
 
 
@@ -32,6 +36,10 @@ DEFAULT_ALLOWED_HOSTS: Set[str] = {
     "generativelanguage.googleapis.com",
     "api.groq.com",
     "api.x.ai",
+    "openrouter.ai",
+    "api.cohere.com",
+    "integrate.api.nvidia.com",
+    "api.cloudflare.com",
 }
 
 
@@ -87,7 +95,7 @@ class OpenAIProvider(BaseLLMProvider):
     """
     OpenAI-compatible Chat Completions HTTPS REST adapter.
     Implements BaseLLMProvider with fail-closed configuration and strict boundary guards.
-    Supports OpenAI, Google Gemini (OpenAI compat), GroqCloud, and xAI Grok.
+    Supports OpenAI, Google Gemini, GroqCloud, OpenRouter, NVIDIA NIM, and Cloudflare Workers AI.
     """
 
     PROVIDER_ENV_VARS: Dict[str, str] = {
@@ -95,6 +103,10 @@ class OpenAIProvider(BaseLLMProvider):
         "gemini": "GEMINI_API_KEY",
         "groq": "GROQ_API_KEY",
         "xai": "XAI_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "cohere": "COHERE_API_KEY",
+        "nvidia": "NVIDIA_API_KEY",
+        "cloudflare": "CLOUDFLARE_API_TOKEN",
     }
 
     def __init__(
@@ -111,6 +123,7 @@ class OpenAIProvider(BaseLLMProvider):
         default_model: Optional[str] = None,
         model_capabilities: Optional[Dict[str, Dict[str, Any]]] = None,
         max_response_bytes: int = 1_000_000,
+        extra_headers: Optional[Dict[str, str]] = None,
     ):
         self._provider_id = provider_id
         self._api_key = api_key
@@ -120,6 +133,7 @@ class OpenAIProvider(BaseLLMProvider):
         self.default_model = default_model
         self.model_capabilities = model_capabilities or {}
         self.max_response_bytes = max_response_bytes
+        self.extra_headers = extra_headers or {}
 
         # Transports and clients (for dependency injection / testing)
         self._injected_client = client
@@ -212,6 +226,12 @@ class OpenAIProvider(BaseLLMProvider):
                 )
             payload["response_format"] = {"type": "json_object"}
 
+        # OpenRouter-specific routing controls (Hardened S3.5.3B)
+        # Explicitly disable OpenRouter provider fallback with provider.allow_fallbacks=false
+        # Ensures no unexpected paid-provider or cross-model routing can occur
+        if self._provider_id == "openrouter" or cap.get("provider_fallbacks") is False:
+            payload["provider"] = {"allow_fallbacks": False}
+
         return payload
 
     def _parse_http_error(self, resp: httpx.Response, task_id: str) -> Exception:
@@ -236,40 +256,68 @@ class OpenAIProvider(BaseLLMProvider):
         except Exception:
             pass
 
-        if status in (401, 403):
+        if status == 400:
+            return LLMInvalidRequestError(
+                message=f"{self._provider_id.capitalize()} invalid request or invalid arguments (HTTP 400): {err_msg}",
+                provider=self._provider_id,
+                task_id=task_id,
+            )
+
+        if status == 401:
             return LLMAuthenticationError(
-                message=f"OpenAI authentication failed (HTTP {status})",
+                message=f"{self._provider_id.capitalize()} authentication failed (HTTP 401): {err_msg}",
+                provider=self._provider_id,
+                task_id=task_id,
+            )
+
+        if status == 403:
+            return LLMPermissionError(
+                message=f"{self._provider_id.capitalize()} permission denied (HTTP 403): {err_msg}",
+                provider=self._provider_id,
+                task_id=task_id,
+            )
+
+        if status == 404:
+            return LLMNotFoundError(
+                message=f"{self._provider_id.capitalize()} resource or model not found (HTTP 404): {err_msg}",
                 provider=self._provider_id,
                 task_id=task_id,
             )
 
         if status == 429:
-            is_quota = (
-                error_code in ("insufficient_quota", "billing_not_active")
-                or error_type == "insufficient_quota"
-                or "quota" in err_msg.lower()
+            diag = classify_http_429(
+                status_code=status,
+                error_code=error_code,
+                error_type=error_type,
+                error_message=err_msg,
+                headers=dict(resp.headers) if hasattr(resp, "headers") else {},
+                provider_id=self._provider_id,
             )
-            if is_quota:
+            if diag.cause_category == "ACCOUNT_QUOTA":
                 return LLMQuotaExceededError(
-                    message="OpenAI account quota or billing credits exhausted (HTTP 429)",
+                    message=f"{self._provider_id.capitalize()} account quota or billing credits exhausted (HTTP 429)",
                     provider=self._provider_id,
                     task_id=task_id,
                 )
             return LLMRateLimitError(
-                message="OpenAI rate limit exceeded (HTTP 429)",
+                message=f"{self._provider_id.capitalize()} rate limit exceeded (HTTP 429)",
                 provider=self._provider_id,
                 task_id=task_id,
+                cause_category=diag.cause_category,
+                retry_after_seconds=diag.retry_after_seconds,
+                definitive_cause_proven=diag.definitive_cause_proven,
+                diagnostic=diag,
             )
 
         if status >= 500:
             return LLMProviderUnavailableError(
-                message=f"OpenAI service temporarily unavailable (HTTP {status})",
+                message=f"{self._provider_id.capitalize()} service temporarily unavailable (HTTP {status})",
                 provider=self._provider_id,
                 task_id=task_id,
             )
 
         return LLMProviderUnavailableError(
-            message=f"OpenAI unexpected HTTP error {status}",
+            message=f"{self._provider_id.capitalize()} unexpected HTTP error {status}",
             provider=self._provider_id,
             task_id=task_id,
         )
@@ -415,6 +463,11 @@ class OpenAIProvider(BaseLLMProvider):
             "Content-Type": "application/json",
             "User-Agent": "SalesAI-Gateway/2.2",
         }
+        if self.extra_headers:
+            headers.update(self.extra_headers)
+        if self._provider_id == "openrouter" and "HTTP-Referer" not in headers:
+            headers["HTTP-Referer"] = "https://pybim.it/salesai"
+            headers["X-Title"] = "SalesAI"
 
         timeout = httpx.Timeout(
             timeout=request.timeout_seconds,
@@ -470,6 +523,11 @@ class OpenAIProvider(BaseLLMProvider):
             "Content-Type": "application/json",
             "User-Agent": "SalesAI-Gateway/2.2",
         }
+        if self.extra_headers:
+            headers.update(self.extra_headers)
+        if self._provider_id == "openrouter" and "HTTP-Referer" not in headers:
+            headers["HTTP-Referer"] = "https://pybim.it/salesai"
+            headers["X-Title"] = "SalesAI"
 
         timeout = httpx.Timeout(
             timeout=request.timeout_seconds,
@@ -527,6 +585,11 @@ class OpenAIProvider(BaseLLMProvider):
             "Authorization": f"Bearer {api_key}",
             "User-Agent": "SalesAI-Gateway/2.2",
         }
+        if self.extra_headers:
+            headers.update(self.extra_headers)
+        if self._provider_id == "openrouter" and "HTTP-Referer" not in headers:
+            headers["HTTP-Referer"] = "https://pybim.it/salesai"
+            headers["X-Title"] = "SalesAI"
         timeout = httpx.Timeout(
             timeout=timeout_seconds,
             connect=10.0,
@@ -569,12 +632,14 @@ class OpenAIProvider(BaseLLMProvider):
             data = resp.json()
             raw_list = []
             if isinstance(data, dict):
-                raw_list = data.get("data") or data.get("models") or []
+                raw_list = data.get("data") or data.get("models") or data.get("result") or []
             elif isinstance(data, list):
                 raw_list = data
             for item in raw_list:
-                if isinstance(item, dict) and "id" in item:
-                    model_ids.append(str(item["id"]))
+                if isinstance(item, dict):
+                    m_id = item.get("id") or item.get("name")
+                    if m_id:
+                        model_ids.append(str(m_id))
                 elif isinstance(item, str):
                     model_ids.append(item)
         except Exception:
@@ -598,6 +663,11 @@ class OpenAIProvider(BaseLLMProvider):
             "Authorization": f"Bearer {api_key}",
             "User-Agent": "SalesAI-Gateway/2.2",
         }
+        if self.extra_headers:
+            headers.update(self.extra_headers)
+        if self._provider_id == "openrouter" and "HTTP-Referer" not in headers:
+            headers["HTTP-Referer"] = "https://pybim.it/salesai"
+            headers["X-Title"] = "SalesAI"
         timeout = httpx.Timeout(
             timeout=timeout_seconds,
             connect=10.0,
@@ -640,12 +710,14 @@ class OpenAIProvider(BaseLLMProvider):
             data = resp.json()
             raw_list = []
             if isinstance(data, dict):
-                raw_list = data.get("data") or data.get("models") or []
+                raw_list = data.get("data") or data.get("models") or data.get("result") or []
             elif isinstance(data, list):
                 raw_list = data
             for item in raw_list:
-                if isinstance(item, dict) and "id" in item:
-                    model_ids.append(str(item["id"]))
+                if isinstance(item, dict):
+                    m_id = item.get("id") or item.get("name")
+                    if m_id:
+                        model_ids.append(str(m_id))
                 elif isinstance(item, str):
                     model_ids.append(item)
         except Exception:

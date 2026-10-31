@@ -212,6 +212,12 @@ class CandidateCompany(BaseModel):
     qualification_outcome: Optional[QualificationOutcome] = None
     qualification_reasons: List[str] = Field(default_factory=list)
 
+    # Manual Operator Review (MVP-01.2)
+    manual_review_decision: str = "NOT_REVIEWED"  # APPROVED, REJECTED, DUPLICATE, NEEDS_RESEARCH, NOT_REVIEWED
+    manual_reviewed_at: Optional[str] = None
+    manual_reviewed_by: Optional[str] = None
+    manual_review_notes: Optional[str] = None
+
     # Metadata & State
     metadata: Dict[str, Any] = Field(default_factory=dict)
     suppression_state: Dict[str, Any] = Field(default_factory=dict)

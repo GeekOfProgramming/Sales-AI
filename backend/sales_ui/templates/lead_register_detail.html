@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Edit 13-Field Lead Record: {{ record.company_name }} | SalesAI Console{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Lead Record #{{ record.record_number or 'New' }} — {{ record.company_name }}</h1>
+    <p class="page-subtitle">Candidate ID: <code>{{ record.candidate_id }}</code> | Provenance: <strong>{{ record.provenance_source }}</strong> ({{ record.verification_status }})</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/register" class="btn btn-secondary">← Back to 13-Field Register</a>
+    <a href="/sales/candidates/{{ record.candidate_id }}" class="btn btn-secondary">Candidate Overview</a>
+  </div>
+</div>
+
+<!-- Operator Guidance Alert -->
+<div class="card" style="border-left: 4px solid #10b981; margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+    <span style="font-weight: 600; color: var(--text-primary); font-size: 1rem;">📝 Persistent 13-Field pyBIM Workbook Schema</span>
+    <span class="badge badge-success">Durable Local Persistence</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
+    All changes made in this form are persisted to the authoritative SQLite database. Multiline notes, multiple links, telephone numbers, and source-language text (Italian, German, English, etc.) are strictly preserved.
+  </p>
+  <div style="font-size: 0.8rem; color: var(--text-muted);">
+    Missing or unverified fields should remain <code>Not Found</code> or <code>Unverified</code> rather than manufactured.
+  </div>
+</div>
+
+<!-- 13-Field Edit Form -->
+<form method="POST" action="/sales/register/{{ record.candidate_id }}/update">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-title">Core Identification &amp; Priority (Fields 1 - 4)</div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1rem;">
+      <!-- Field 1: Row / Record Number -->
+      <div>
+        <label class="form-label">1. Row / Record Number</label>
+        <input type="number" name="record_number" value="{{ record.record_number or '' }}" class="form-control" placeholder="Automatic if blank">
+        <small class="form-text" style="color: var(--text-muted);">Corresponds to original row index or sequence.</small>
+      </div>
+
+      <!-- Field 2: Priority A/B/C -->
+      <div>
+        <label class="form-label">2. Company Priority Level</label>
+        <select name="priority_level" class="form-control">
+          <option value="A" {% if record.priority_level == 'A' %}selected{% endif %}>Priority A (High Value / Active Opportunity)</option>
+          <option value="B" {% if record.priority_level == 'B' %}selected{% endif %}>Priority B (Standard Engineering Lead)</option>
+          <option value="C" {% if record.priority_level == 'C' %}selected{% endif %}>Priority C (Boutique / Specialist / Low Priority)</option>
+          <option value="UNKNOWN" {% if record.priority_level == 'UNKNOWN' %}selected{% endif %}>Unknown</option>
+        </select>
+      </div>
+
+      <!-- Field 3: Priority Rationale -->
+      <div style="grid-column: 1 / -1;">
+        <label class="form-label">3. Priority Rationale</label>
+        <input type="text" name="priority_rationale" value="{{ record.priority_rationale or '' }}" class="form-control" placeholder="e.g. Active BIM hiring signal, large civil infrastructure focus...">
+      </div>
+
+      <!-- Field 4: Company Name & Legal Identity -->
+      <div>
+        <label class="form-label">4a. Company Name *</label>
+        <input type="text" name="company_name" value="{{ record.company_name or '' }}" required class="form-control">
+      </div>
+      <div>
+        <label class="form-label">4b. Legal Identity (P.IVA / C.F. / Form)</label>
+        <input type="text" name="legal_identity" value="{{ record.legal_identity or '' }}" class="form-control" placeholder="e.g. P.IVA 03340490279 / S.r.l.">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-title">Location, Activities &amp; Web Presence (Fields 5 - 8)</div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1rem;">
+      <!-- Field 5: Geographic Location -->
+      <div>
+        <label class="form-label">5. Geographic Location</label>
+        <input type="text" name="geographic_location" value="{{ record.geographic_location or '' }}" class="form-control" placeholder="e.g. Via Roma 1, 35129 Padova (PD), Italy">
+      </div>
+
+      <!-- Field 6: Telephone Numbers -->
+      <div>
+        <label class="form-label">6. Telephone Numbers</label>
+        <input type="text" name="telephone_numbers" value="{{ record.telephone_numbers or '' }}" class="form-control" placeholder="e.g. +39 049 8774150">
+      </div>
+
+      <!-- Field 7: Business Activities / Services -->
+      <div style="grid-column: 1 / -1;">
+        <label class="form-label">7. Business Activities / Services</label>
+        <textarea name="business_activities" rows="2" class="form-control" placeholder="e.g. Integrated structural and MEP engineering, BIM management...">{{ record.business_activities or '' }}</textarea>
+      </div>
+
+      <!-- Field 8: Official Website -->
+      <div style="grid-column: 1 / -1;">
+        <label class="form-label">8. Official Website URL</label>
+        <input type="text" name="official_website" value="{{ record.official_website or '' }}" class="form-control" placeholder="https://www.company.it">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-title">Contacts, Notes &amp; References (Fields 9 - 13)</div>
+
+    <div style="display: grid; grid-template-columns: 1fr; gap: 1.25rem; margin-top: 1rem;">
+      <!-- Field 9: Responsible Person / Contact -->
+      <div>
+        <label class="form-label">9. Responsible Person / Contact</label>
+        <input type="text" name="responsible_person" value="{{ record.responsible_person or '' }}" class="form-control" placeholder="e.g. Ing. Mario Rossi (BIM Director) or 'Not Found'">
+      </div>
+
+      <!-- Field 10: Descriptions & Operator Notes (Multiline) -->
+      <div>
+        <label class="form-label">10. Descriptions &amp; Operator Notes (Multiline text preserved)</label>
+        <textarea name="descriptions_and_notes" rows="4" class="form-control" placeholder="Enter detailed qualitative notes, historical context, or research findings...">{{ record.descriptions_and_notes or '' }}</textarea>
+      </div>
+
+      <!-- Field 11: Job Advertisement Links -->
+      <div>
+        <label class="form-label">11. Job Advertisement Links</label>
+        <input type="text" name="job_advertisement_links" value="{{ record.job_advertisement_links or '' }}" class="form-control" placeholder="https://www.company.it/carriere/progettista-bim">
+      </div>
+
+      <!-- Field 12: Other Links / Projects / References (Multiline or piped links) -->
+      <div>
+        <label class="form-label">12. Other Links / Projects / References</label>
+        <textarea name="other_links_and_references" rows="3" class="form-control" placeholder="Enter portfolio URLs, references, or project links...">{{ record.other_links_and_references or '' }}</textarea>
+      </div>
+
+      <!-- Field 13: Contact Email Addresses -->
+      <div>
+        <label class="form-label">13. Contact Email Addresses</label>
+        <input type="text" name="contact_email_addresses" value="{{ record.contact_email_addresses or '' }}" class="form-control" placeholder="info@company.it, technical@company.it">
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Bar -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <a href="/sales/register" class="btn btn-secondary">Cancel</a>
+    <button type="submit" class="btn btn-success" style="padding: 0.6rem 1.5rem; font-size: 0.95rem;">
+      💾 Save 13-Field Record
+    </button>
+  </div>
+</form>
+{% endblock %}

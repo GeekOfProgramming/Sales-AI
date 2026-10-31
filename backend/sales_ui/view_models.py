@@ -286,7 +286,30 @@ class HistoricalImportPreviewResult(BaseModel):
     historical_outreach_events: int = 0
     dnc_count: int = 0
     active_conversations: int = 0
+    sheets: List[Dict[str, Any]] = Field(default_factory=list)
+    column_mappings: Dict[str, str] = Field(default_factory=dict)
     warnings: List[str] = Field(default_factory=list)
+    # MVP-01.3 / MVP-01.4 Acceptance & Readiness breakdown fields
+    readiness_status: str = "READY"  # READY, REVIEW_REQUIRED, BLOCKED
+    readiness_reasons: List[str] = Field(default_factory=list)
+    distinct_canonical_domains: int = 0
+    domain_collisions_count: int = 0
+    domain_collisions: List[Dict[str, Any]] = Field(default_factory=list)
+    status_distribution: Dict[str, int] = Field(default_factory=dict)
+    classification_counts: Dict[str, int] = Field(default_factory=dict)
+    populated_contact_name_count: int = 0
+    missing_domain_count: int = 0
+    missing_email_count: int = 0
+    malformed_domain_count: int = 0
+    unmapped_columns_count: int = 0
+    # MVP-01.4.1 Multi-link website intelligence metrics
+    valid_website_rows_count: int = 0
+    multiline_cells_count: int = 0
+    total_extracted_links: int = 0
+    placeholders_count: int = 0
+    multiple_plausible_domains_count: int = 0
+    ambiguous_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    missing_domain_rows: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class DraftRequestChangesUiRequest(BaseModel):

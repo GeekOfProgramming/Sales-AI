@@ -12,17 +12,24 @@ from sales_engine.llm_gateway.contracts import (
 from sales_engine.llm_gateway.errors import (
     LLMError,
     LLMNotConfiguredError,
+    LLMInvalidRequestError,
     LLMAuthenticationError,
+    LLMPermissionError,
     LLMTimeoutError,
     LLMRateLimitError,
     LLMQuotaExceededError,
     LLMBudgetExceededError,
     LLMInvalidSchemaError,
+    LLMNotFoundError,
     LLMProviderUnavailableError,
     LLMPrivacyError,
     LLMUntrustedContentError,
     LLMAllowlistViolationError,
     LLMPrivacyRejectionError,
+)
+from sales_engine.llm_gateway.rate_limit_diagnostics import (
+    RateLimitDiagnostic,
+    classify_http_429,
 )
 from sales_engine.llm_gateway.privacy_filter import (
     PrivacyFilter,
@@ -112,12 +119,15 @@ __all__ = [
     # Exceptions
     "LLMError",
     "LLMNotConfiguredError",
+    "LLMInvalidRequestError",
     "LLMAuthenticationError",
+    "LLMPermissionError",
     "LLMTimeoutError",
     "LLMRateLimitError",
     "LLMQuotaExceededError",
     "LLMBudgetExceededError",
     "LLMInvalidSchemaError",
+    "LLMNotFoundError",
     "LLMProviderUnavailableError",
     "LLMPrivacyError",
     "LLMUntrustedContentError",

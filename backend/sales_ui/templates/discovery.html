@@ -9,7 +9,8 @@
     <p class="page-subtitle">Configure search profiles, preview deterministic execution plans, and trigger discovery runs safely.</p>
   </div>
   <div style="display: flex; gap: 0.5rem;">
-    <a href="#create-profile-section" class="btn btn-primary" onclick="document.getElementById('create-profile-section').scrollIntoView({behavior: 'smooth'});">+ Create Search Profile</a>
+    <a href="/sales/research/pilot" class="btn btn-primary" style="background: #059669; border-color: #059669;">🔬 Lead Research Pilot (7 Targets)</a>
+    <a href="#create-profile-section" class="btn btn-secondary" onclick="document.getElementById('create-profile-section').scrollIntoView({behavior: 'smooth'});">+ Create Search Profile</a>
     <a href="/sales/sources" class="btn btn-secondary">Manage Sources</a>
   </div>
 </div>
@@ -32,6 +33,121 @@
     <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Registered Sources</div>
     <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ sources|length }}</div>
   </div>
+</div>
+
+<!-- Operator-Controlled Small-Scale Real Search (Phase 4 MVP-01) -->
+<div class="card" id="operator-search-card" style="border: 2px solid #3b82f6; background: rgba(59, 130, 246, 0.03); margin-bottom: 2rem;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>🎯 Small-Scale Lead Discovery Pilot (Brave Web Search)</span>
+    <span class="badge badge-primary">MVP-01 Operator Controlled</span>
+  </div>
+  <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Execute an explicitly authorized, bounded discovery search. Strictly enforced safety limits: <strong>Maximum 1 query</strong>, <strong>Maximum 10 search results</strong>, zero automatic crawlers, zero fake attributes, and zero autonomous LLM billing.
+  </p>
+
+  <!-- Provider Readiness / Quota Gate Notice -->
+  <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.85rem; margin-bottom: 1.25rem; font-size: 0.85rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <strong>Search Provider:</strong> Brave Search Web API (<code>brave_job_search</code>) &bull;
+        <strong>Credential Status:</strong>
+        {% if brave_configured %}
+          <span class="badge badge-success">BRAVE_SEARCH_API_KEY Configured</span>
+        {% else %}
+          <span class="badge badge-warning">BRAVE_SEARCH_API_KEY Not Set</span>
+        {% endif %}
+      </div>
+      <div>
+        <span class="badge badge-info">Pilot Limit: Max 1 Query / 10 Results</span>
+      </div>
+    </div>
+    {% if not brave_configured %}
+    <div style="margin-top: 0.5rem; color: #f59e0b;">
+      ⚠️ <em>Live search is blocked until <code>BRAVE_SEARCH_API_KEY</code> is set in environment. Dry Run / Preview remains fully available.</em>
+    </div>
+    {% endif %}
+  </div>
+
+  <form method="POST" action="/sales/discovery/run">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="discovery_mode" value="company_first">
+    <input type="hidden" name="sources" value="brave_job_search">
+    <input type="hidden" name="idempotency_token" value="{{ preview_token or '' }}">
+
+    <!-- Exact Verified Preview Banner -->
+    {% if preview_query %}
+    <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 0.85rem; margin-bottom: 1.25rem;">
+      <div style="font-size: 0.85rem; font-weight: 700; color: #1e40af; margin-bottom: 0.35rem;">
+        🔍 Verified Preview Parameters Ready for Authorization
+      </div>
+      <div style="font-size: 0.8rem; color: #1e3a8a; font-family: monospace; background: #ffffff; padding: 0.4rem 0.6rem; border-radius: 4px; border: 1px solid #dbeafe; margin-bottom: 0.35rem;">
+        <strong>Brave Query:</strong> {{ preview_query }}
+      </div>
+      <div style="font-size: 0.75rem; color: #3b82f6;">
+        <strong>Target Region:</strong> {{ form_country }} (code: {{ preview_country_code }}, lang: {{ preview_search_lang }}) &bull;
+        <strong>Exclusions:</strong> [{{ preview_exclusions or 'None' }}] &bull;
+        <strong>Limit:</strong> Exactly 1 Query, Max 10 Results (~$0.005 USD)
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+      <div class="form-group">
+        <label class="form-label">Country</label>
+        <select name="country" class="form-control" id="search-country">
+          {% for cntry in ["Italy", "Germany", "United Kingdom", "Switzerland", "France", "Spain"] %}
+          <option value="{{ cntry }}" {% if (form_country or 'Italy') == cntry %}selected{% endif %}>{{ cntry }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">City / Region</label>
+        <input type="text" name="city" class="form-control" placeholder="e.g. Milano, Roma, Torino" value="{{ form_city }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Business Category</label>
+        <select name="category" class="form-control">
+          {% for cat in ["BIM Engineering", "Architectural Practice", "MEP Design", "General Contractor", "Structural Engineering"] %}
+          <option value="{{ cat }}" {% if (form_category or 'BIM Engineering') == cat %}selected{% endif %}>{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Search Keywords</label>
+        <input type="text" name="query" class="form-control" value="{{ form_query }}" required>
+      </div>
+    </div>
+
+    <div style="background: rgba(0,0,0,0.03); border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem;">
+      <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer;">
+        <input type="checkbox" name="billing_confirmed" value="true" {% if billing_confirmed %}checked{% endif %} style="margin-top: 0.2rem;">
+        <span>
+          <strong>Operator Billing Authorization:</strong> I acknowledge that Brave Search Web API charges ~$0.005 USD per query, that no automated zero-cost quota API exists, and I explicitly authorize executing 1 search call (capped at 10 results).
+        </span>
+      </label>
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+      <div style="font-size: 0.8rem; color: var(--text-secondary);">
+        🔒 <strong>Operator Financial Guard:</strong> Exactly 1 query &bull; Max 10 results &bull; No retries &bull; Est. ~$0.005 USD
+      </div>
+      <div style="display: flex; gap: 0.75rem;">
+        <button type="submit" name="is_preview" value="true" class="btn btn-secondary">🔍 1. Preview Query (Dry Run)</button>
+        {% if brave_configured %}
+        <button type="submit" name="confirm_live" value="true" class="btn btn-primary" onclick="return confirm('Authorize small-scale live search? (1 Brave Query, Max 10 Results, ~$0.005 USD)');">
+          🚀 Confirm &amp; Run Live Search
+        </button>
+        {% else %}
+        <button type="button" class="btn btn-primary" disabled title="Set BRAVE_SEARCH_API_KEY in environment to enable live search">
+          🚀 Run Live Search (Key Required)
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </form>
 </div>
 
 <!-- Execution Plan Preview (If triggered) -->

@@ -466,6 +466,7 @@ class Phase10ConsoleBridge:
                 "name": c.name,
                 "canonical_domain": c.canonical_domain,
                 "country": c.country,
+                "city": c.city,
                 "status": _get_val(c.status),
                 "company_tier": _get_val(c.company_tier),
                 "bim_maturity": _get_val(c.bim_maturity),
@@ -476,7 +477,12 @@ class Phase10ConsoleBridge:
                 "cold_outreach_allowed": c.cold_outreach_allowed,
                 "qualification_outcome": _get_val(c.qualification_outcome) if c.qualification_outcome else None,
                 "qualification_reason": c.qualification_reason,
+                "manual_review_decision": getattr(c, "manual_review_decision", "NOT_REVIEWED") or "NOT_REVIEWED",
+                "manual_reviewed_at": getattr(c, "manual_reviewed_at", None),
+                "manual_reviewed_by": getattr(c, "manual_reviewed_by", None),
+                "manual_review_notes": getattr(c, "manual_review_notes", None),
                 "historical_outreach_summary": c.historical_contact_status,
+                "discovery_sources": getattr(c, "discovery_sources", getattr(c, "source_refs", [])),
                 "created_at": c.first_seen_at,
             })
         return results

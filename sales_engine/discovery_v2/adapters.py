@@ -27,10 +27,15 @@ from sales_engine.discovery_v2.source_registry import SourceConfig, SourceRegist
 logger = logging.getLogger(__name__)
 
 
-def create_search_engine_adapter(config: SourceConfig) -> Callable[[str], List[Dict[str, Any]]]:
+def create_search_engine_adapter(
+    config: SourceConfig,
+    country: Optional[str] = None,
+    search_lang: Optional[str] = None,
+) -> Callable[[str], List[Dict[str, Any]]]:
     """
     Adapter for web search discovery (e.g., Brave search engine).
     Validates API key and executes search query or extracts structured candidates.
+    Supports regional country and language filtering.
     """
     def adapter(query: str) -> List[Dict[str, Any]]:
         # Enforce API key requirement
@@ -59,31 +64,112 @@ def create_search_engine_adapter(config: SourceConfig) -> Callable[[str], List[D
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     search_results = executor.submit(
-                        asyncio.run, provider.search(query, num_results=min(config.max_results_per_run, 20))
+                        asyncio.run,
+                        provider.search(
+                            query,
+                            num_results=min(config.max_results_per_run, 10),
+                            country=country,
+                            search_lang=search_lang,
+                        )
                     ).result()
             else:
                 search_results = loop.run_until_complete(
-                    provider.search(query, num_results=min(config.max_results_per_run, 20))
+                    provider.search(
+                        query,
+                        num_results=min(config.max_results_per_run, 10),
+                        country=country,
+                        search_lang=search_lang,
+                    )
                 )
 
             for r in search_results:
                 domain = None
                 if r.url:
                     parsed = urlparse(r.url)
-                    domain = parsed.netloc or parsed.path
+                    # Safe URL validation: reject unsafe protocols or local files
+                    if parsed.scheme not in ("http", "https"):
+                        continue
+                    host = parsed.netloc.lower()
+                    if host in ("localhost", "127.0.0.1", "0.0.0.0") or host.startswith("192.168.") or host.startswith("10."):
+                        continue
+                    domain = host
                     if domain.startswith("www."):
                         domain = domain[4:]
 
-                c_name = r.title.split("-")[0].split("|")[0].strip() or "Discovered Company"
+                from sales_engine.discovery.presets import (
+                    triage_search_result,
+                    ResultTriageStatus,
+                    extract_provisional_company_name,
+                )
+
+                c_name = extract_provisional_company_name(r.title, domain, snippet=r.snippet)
+
+                # Verified extraction only: NEVER fabricate defaults (BIM Modeling, Revit, AutoCAD, Italy)
+                snippet_text = f"{r.title} {r.snippet}".lower()
+                extracted_services = []
+                extracted_technologies = []
+
+                if "bim" in snippet_text:
+                    extracted_services.append("BIM Services")
+                if "architect" in snippet_text:
+                    extracted_services.append("Architectural Services")
+                if "engineering" in snippet_text:
+                    extracted_services.append("Engineering Services")
+
+                for tech in ["revit", "autocad", "archicad", "navisworks", "solibri", "rhino", "tekla"]:
+                    if tech in snippet_text:
+                        extracted_technologies.append(tech.capitalize())
+
+                # Triage search result using SalesAI triage classifier
+                from sales_engine.discovery.presets import triage_search_result, ResultTriageStatus
+                from sales_engine.discovery.url_classifier import URLClassifier
+                url_type = URLClassifier().classify(r.url) if r.url else "unknown"
+
+                triage_status, triage_reasons = triage_search_result(
+                    title=r.title,
+                    snippet=r.snippet,
+                    url=r.url,
+                    discovery_mode="company_first",
+                )
+
+                is_directory_or_job = url_type in ("ats_job", "job_posting", "career_page") or any(
+                    d in (domain or "") for d in ["linkedin.com", "indeed.com", "glassdoor.com", "paginegialle.it", "europages.com", "kompass.com"]
+                )
+
+                # Map triage status to trust_level:
+                # - SEARCH_RESULT
+                # - POTENTIAL_COMPANY
+                # - VERIFIED_OFFICIAL_COMPANY
+                # - NEEDS_REVIEW
+                # - REJECTED_IRRELEVANT
+                if triage_status == ResultTriageStatus.REJECTED_IRRELEVANT:
+                    trust_level = ResultTriageStatus.REJECTED_IRRELEVANT
+                elif triage_status == ResultTriageStatus.NEEDS_REVIEW:
+                    trust_level = ResultTriageStatus.NEEDS_REVIEW
+                elif triage_status == ResultTriageStatus.POTENTIAL_COMPANY:
+                    trust_level = ResultTriageStatus.POTENTIAL_COMPANY
+                elif is_directory_or_job:
+                    trust_level = ResultTriageStatus.SEARCH_RESULT
+                elif domain:
+                    trust_level = ResultTriageStatus.POTENTIAL_COMPANY
+                else:
+                    trust_level = ResultTriageStatus.SEARCH_RESULT
+
                 results.append({
                     "company_name": c_name,
                     "domain": domain,
                     "website": r.url,
-                    "country": config.countries[0] if config.countries else "Italy",
-                    "services": ["BIM Modeling", "Architectural Design"],
-                    "technologies": ["Revit", "AutoCAD"],
-                    "job_title": r.title if "engineer" in r.title.lower() or "bim" in r.title.lower() else None,
-                    "raw": {"title": r.title, "snippet": r.snippet, "url": r.url, "source": r.source},
+                    "country": None,  # Verified only: do not guess country unless evidence supports it
+                    "city": None,
+                    "services": extracted_services,
+                    "technologies": extracted_technologies,
+                    "url_classification": url_type,
+                    "is_directory_or_job": is_directory_or_job,
+                    "trust_level": trust_level,
+                    "evidence_type": "title_and_snippet_keyword_match",
+                    "evidence_source_url": r.url,
+                    "job_title": r.title if ("engineer" in r.title.lower() or "bim" in r.title.lower()) else None,
+                    "raw": {"title": r.title, "snippet": r.snippet, "url": r.url, "source": r.source, "rank": getattr(r, "rank", 1)},
                 })
         except Exception as e:
             # If search provider fails or cannot connect, re-raise sanitized
@@ -98,13 +184,15 @@ def create_search_engine_adapter(config: SourceConfig) -> Callable[[str], List[D
 def create_directory_adapter(config: SourceConfig) -> Callable[[str], List[Dict[str, Any]]]:
     """
     Adapter for directory / registry sources.
+    Returns NOT_AVAILABLE when specialized crawler is not implemented.
     """
     def adapter(query: str) -> List[Dict[str, Any]]:
+        if getattr(config, "adapter_status", "AVAILABLE") == "NOT_AVAILABLE" or not config.base_url:
+            raise RuntimeError(f"Source '{config.id}' adapter is NOT_AVAILABLE (no specialized directory crawler configured)")
         if config.requires_api_key:
             env_var = config.credential_env_var or f"{config.id.upper()}_API_KEY"
             if not os.environ.get(env_var):
                 raise RuntimeError(f"Missing required credential in environment variable '{env_var}' for source '{config.id}'")
-        # Directory returns seeded or queried records up to max_results_per_run
         return []
 
     return adapter
@@ -113,8 +201,11 @@ def create_directory_adapter(config: SourceConfig) -> Callable[[str], List[Dict[
 def create_ats_adapter(config: SourceConfig) -> Callable[[str], List[Dict[str, Any]]]:
     """
     Adapter for ATS sources (Greenhouse, Lever, etc.).
+    Returns NOT_AVAILABLE when specialized parser is not configured.
     """
     def adapter(query: str) -> List[Dict[str, Any]]:
+        if getattr(config, "adapter_status", "AVAILABLE") == "NOT_AVAILABLE" or not config.base_url:
+            raise RuntimeError(f"Source '{config.id}' adapter is NOT_AVAILABLE (no ATS crawler configured)")
         if config.requires_api_key:
             env_var = config.credential_env_var or f"{config.id.upper()}_API_KEY"
             if not os.environ.get(env_var):

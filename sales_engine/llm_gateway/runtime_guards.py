@@ -30,6 +30,7 @@ from sales_engine.llm_gateway.errors import (
     LLMProviderUnavailableError,
     LLMDuplicateRequestError,
     LLMCandidateMismatchError,
+    LLMTimeoutError,
 )
 from sales_engine.llm_gateway.model_catalog import ModelCandidate
 
@@ -312,6 +313,13 @@ class RuntimeGuard:
             try:
                 dispatched = True
                 response = call_fn(request)
+            except LLMTimeoutError as err:
+                cat = getattr(err, "timeout_category", "REQUEST_TIMEOUT")
+                error_code = f"TIMEOUT_{cat}" if cat else "TIMEOUT"
+                self.ledger.mark_reservation_failed(
+                    reservation.reservation_id, error_code=error_code, dispatched=dispatched
+                )
+                raise
             except (LLMRateLimitError, LLMProviderUnavailableError) as err:
                 error_code = getattr(err, "error_code", "PROVIDER_ERROR")
                 self.ledger.mark_reservation_failed(
@@ -418,6 +426,13 @@ class RuntimeGuard:
             try:
                 dispatched = True
                 response = await call_async_fn(request)
+            except LLMTimeoutError as err:
+                cat = getattr(err, "timeout_category", "REQUEST_TIMEOUT")
+                error_code = f"TIMEOUT_{cat}" if cat else "TIMEOUT"
+                self.ledger.mark_reservation_failed(
+                    reservation.reservation_id, error_code=error_code, dispatched=dispatched
+                )
+                raise
             except (LLMRateLimitError, LLMProviderUnavailableError) as err:
                 error_code = getattr(err, "error_code", "PROVIDER_ERROR")
                 self.ledger.mark_reservation_failed(

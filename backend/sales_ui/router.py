@@ -7,20 +7,35 @@ Enforces CSRF / Same-Origin protections, authoritative suppression,
 safe path resolution, and explicit human confirmation.
 """
 
+import io
+import csv
 import os
 import re
 import json
+import uuid
 import secrets
 import hashlib
 import hmac
+import logging
+import tempfile
+import sqlite3
 import urllib.request
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode, quote
 
-from fastapi import APIRouter, Request, Form, Query, HTTPException, status, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+try:
+    import openpyxl
+    from tempfile import NamedTemporaryFile
+except ImportError:
+    openpyxl = None
+    NamedTemporaryFile = None
+
+logger = logging.getLogger(__name__)
+
+from fastapi import APIRouter, Request, Form, Query, HTTPException, status, Depends, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response, FileResponse
 from fastapi.templating import Jinja2Templates
 
 from backend.sales_ui.view_models import (
@@ -45,7 +60,7 @@ from backend.sales_ui.timeline_service import TimelineService
 from sales_engine.candidates.candidate_store import CandidateStore
 from sales_engine.candidates.models import CandidateCompany
 from sales_engine.candidates.classifier import CompanyClassifier
-from sales_engine.discovery_v2.source_registry import SourceRegistry
+from sales_engine.discovery_v2.source_registry import SourceRegistry, sanitize_secret_text
 from sales_engine.discovery_v2.discovery_engine import DiscoveryEngineV2
 from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge, Phase10ConsoleBridge
 from sales_engine.discovery_v2.scope import (
@@ -62,7 +77,12 @@ from sales_engine.discovery_v2.scope import (
     SUPPORTED_COMPANY_TIERS,
     SUPPORTED_BIM_MATURITY,
 )
-from sales_engine.historical.importer import HistoricalImporter
+from sales_engine.historical.importer import (
+    HistoricalImporter,
+    normalize_outreach_status,
+    OperatorDecisionType,
+    is_disallowed_or_unsafe_host,
+)
 
 from sales_engine.sending import (
     ReviewStore,
@@ -345,7 +365,21 @@ def resolve_safe_import_path(file_path: str) -> Path:
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid file path")
 
-    allowed_roots = [base_dir.resolve(), (base_dir / "data").resolve()]
+    staging_dir = (base_dir / "data" / "staging").resolve()
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    # Allow repository base dir, data dir, staging dir, workspace parent root (e.g. C:\Sales-AI), and configured roots
+    allowed_roots = [
+        base_dir.resolve(),
+        (base_dir / "data").resolve(),
+        staging_dir,
+        base_dir.parent.resolve(),
+        Path(r"C:\Sales-AI").resolve() if Path(r"C:\Sales-AI").exists() else None,
+    ]
+    env_root = os.getenv("SALESAI_ALLOWED_IMPORT_ROOT")
+    if env_root:
+        allowed_roots.append(Path(env_root).resolve())
+    allowed_roots = [r for r in allowed_roots if r is not None]
+
     is_allowed = False
     for root in allowed_roots:
         try:
@@ -438,6 +472,16 @@ async def discovery_view(
     preview_scope_id: Optional[str] = None,
     message: Optional[str] = None,
     error: Optional[str] = None,
+    country: Optional[str] = None,
+    city: Optional[str] = None,
+    category: Optional[str] = None,
+    query: Optional[str] = None,
+    preview_query: Optional[str] = None,
+    preview_token: Optional[str] = None,
+    preview_country_code: Optional[str] = None,
+    preview_search_lang: Optional[str] = None,
+    preview_exclusions: Optional[str] = None,
+    billing_confirmed: Optional[str] = None,
 ):
     svcs = get_console_services()
     scope_store: DiscoveryScopeStore = svcs["scope_store"]
@@ -540,9 +584,20 @@ async def discovery_view(
             "supported_company_tiers": SUPPORTED_COMPANY_TIERS,
             "supported_bim_maturity": SUPPORTED_BIM_MATURITY,
             "preview_plan": preview_plan,
+            "brave_configured": bool(os.getenv("BRAVE_SEARCH_API_KEY")),
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
+            "form_country": country or "Italy",
+            "form_city": city if city is not None else "Milano",
+            "form_category": category or "BIM Engineering",
+            "form_query": query or "BIM Revit ingegneria",
+            "preview_query": preview_query,
+            "preview_token": preview_token,
+            "preview_country_code": preview_country_code,
+            "preview_search_lang": preview_search_lang,
+            "preview_exclusions": preview_exclusions,
+            "billing_confirmed": billing_confirmed in ("true", "1", "yes", "on", True),
         },
     )
 
@@ -903,6 +958,13 @@ async def run_discovery_profile_action(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
+    # Financial / Pilot Guard: Automated/Multi-source profile runs cannot bypass operator live-search financial gates
+    # In MVP-01.1, profiles containing external paid search engines are gated
+    profile_sources = getattr(scope, "source_ids", None) or getattr(scope, "included_sources", None) or []
+    if any(s in ("brave_job_search", "brave_search") for s in profile_sources):
+        err = "Automated Profile Run BLOCKED: Search profile contains live search engine ('brave_job_search'). In MVP-01.1, live searches require explicit single-query operator authorization in the Small-Scale Lead Discovery Pilot panel."
+        return RedirectResponse(f"/sales/discovery?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
     try:
         run = runner.run(scope_id)
         msg = f"Discovery run completed: {run.results_found} found, {run.companies_created} created, {run.companies_updated} updated."
@@ -920,33 +982,190 @@ async def run_discovery_profile_action(
 @router.post("/discovery/run")
 @router.post("/discoveries/run")
 async def trigger_discovery_run_action(
+    request: Request,
     query: str = Form("BIM"),
+    country: Optional[str] = Form("Italy"),
+    city: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
     discovery_mode: str = Form("company_first"),
-    sources: Optional[str] = Form(None),
+    sources: Optional[str] = Form("brave_job_search"),
     scope_id: Optional[str] = Form(None),
+    is_preview: Optional[str] = Form(None),
+    confirm_live: Optional[str] = Form(None),
+    billing_confirmed: Optional[str] = Form(None),
+    idempotency_token: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
     svcs = get_console_services()
-    if scope_id:
-        runner: DiscoveryRunner = svcs["discovery_runner"]
-        try:
-            run = runner.run(scope_id)
-            msg = f"Discovery run completed: {run.results_found} results found."
-            return RedirectResponse(f"/sales/discovery/runs/{run.run_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
-        except Exception as e:
-            return RedirectResponse(f"/sales/discovery?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+    store = svcs["cand_store"]
 
-    source_list = [s.strip() for s in sources.split(",")] if sources else None
+    if scope_id:
+        # Legacy/Profile route redirection: enforce profile run gate
+        return await run_discovery_profile_action(scope_id=scope_id, csrf=csrf)
+
+    # 1. Compose optimized query using Category presets & Regional settings
+    from sales_engine.discovery.presets import compose_search_query, get_regional_settings
+    reg_settings = get_regional_settings(country)
+    mapped_country_code = reg_settings.get("country", "IT")
+    mapped_search_lang = reg_settings.get("search_lang", "it")
+    lang_notes = reg_settings.get("notes", "")
+
+    full_query, applied_exclusions = compose_search_query(
+        raw_query=query,
+        city=city,
+        country=country,
+        category=category,
+        discovery_mode=discovery_mode,
+        include_exclusions=True,
+    )
+
+    # STRICT PILOT POLICY ENFORCEMENT:
+    # MVP-01.1 Pilot Policy: Exactly 1 permitted source: "brave_job_search"
+    requested_sources = [s.strip() for s in (sources or "").split(",") if s.strip()]
+    if not requested_sources:
+        requested_sources = ["brave_job_search"]
+
+    if any(s != "brave_job_search" for s in requested_sources):
+        raise HTTPException(
+            status_code=400,
+            detail="MVP Pilot Policy Violation: Exactly one permitted source is authorized in this pilot: 'brave_job_search'. Manipulated source lists are blocked.",
+        )
+
+    brave_key = os.getenv("BRAVE_SEARCH_API_KEY")
+    cred_state = "CREDENTIAL_PRESENT" if (brave_key and brave_key.strip()) else "CREDENTIAL_MISSING"
+
+    # Compute deterministic parameter token for the current parameters
+    param_token = hashlib.sha256(f"{full_query}:{country or ''}:{city or ''}:{category or ''}".encode("utf-8")).hexdigest()[:16]
+
+    if is_preview or not confirm_live:
+        exclusions_str = ", ".join(applied_exclusions) if applied_exclusions else "None"
+        msg = (
+            f"Query Preview Ready: \"{full_query}\" • "
+            f"Category: {category or 'General'} • "
+            f"Region: {country or 'Italy'} (code: {mapped_country_code}, lang: {mapped_search_lang}) • "
+            f"Exclusions: [{exclusions_str}] • "
+            f"Brave Source: ENABLED • "
+            f"Credential: {cred_state} • "
+            f"Max Results: 10 • "
+            f"Est. Cost: ~$0.005 USD • "
+            f"No network calls made."
+        )
+        redirect_params = {
+            "message": msg,
+            "country": country or "Italy",
+            "city": city or "",
+            "category": category or "BIM Engineering",
+            "query": query or "",
+            "preview_query": full_query,
+            "preview_token": param_token,
+            "preview_country_code": mapped_country_code,
+            "preview_search_lang": mapped_search_lang,
+            "preview_exclusions": exclusions_str,
+            "billing_confirmed": "true" if billing_confirmed in ("true", "1", "yes", "on", True) else "false",
+        }
+        return RedirectResponse(
+            "/sales/discovery?" + urlencode(redirect_params, quote_via=quote),
+            status_code=303,
+        )
+
+    # 2. Live Search Gate (Operator Financial, Quota & Billing Guard)
+    # Integrity check: Ensure operator previewed this exact query configuration
+    if idempotency_token and idempotency_token != param_token:
+        err = "Live search BLOCKED: Form parameters changed after preview. You must click 'Preview Query (Dry Run)' again before executing live search."
+        redirect_params = {
+            "error": err,
+            "country": country or "Italy",
+            "city": city or "",
+            "category": category or "BIM Engineering",
+            "query": query or "",
+        }
+        return RedirectResponse("/sales/discovery?" + urlencode(redirect_params, quote_via=quote), status_code=status.HTTP_303_SEE_OTHER)
+
+    brave_key = os.getenv("BRAVE_SEARCH_API_KEY")
+    if not brave_key or not brave_key.strip():
+        err = "Live search BLOCKED (CREDENTIAL_MISSING): BRAVE_SEARCH_API_KEY is not configured in environment. Free quota and billing conditions cannot be verified. Live search blocked."
+        return RedirectResponse(f"/sales/discovery?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Operator Per-Search Explicit Billing Confirmation Check:
+    # Brave Web Search has no public read-only quota/billing inspection API.
+    # Therefore, operator must explicitly acknowledge billing exposure per search session.
+    if not billing_confirmed or billing_confirmed.lower() not in ("true", "1", "yes", "on"):
+        err = "Live search BLOCKED (BILLING_UNVERIFIED): Brave does not provide automated read-only billing inspection. You must check 'I acknowledge estimated search cost and confirm account billing authorization' before executing live search."
+        return RedirectResponse(f"/sales/discovery?error={err}", status_code=status.HTTP_303_SEE_OTHER)
+
+    attempt_id = f"search_attempt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
+    # Compute deterministic idempotency token bound to operator action and search parameters if not provided
+    token = idempotency_token or hashlib.sha256(f"{full_query}:{country or ''}:{city or ''}:{category or ''}".encode("utf-8")).hexdigest()[:16]
+
+    # Atomic SQLite reserve-before-dispatch guard with double-click idempotency token
+    reserved, reserve_err = store.reserve_pilot_search_attempt(
+        attempt_id=attempt_id,
+        provider="brave_job_search",
+        query=full_query,
+        country=country,
+        city=city,
+        max_attempts_budget=20,
+        estimated_cost_usd=0.005,
+        idempotency_token=token,
+    )
+    if not reserved:
+        return RedirectResponse(f"/sales/discovery?error={reserve_err}", status_code=status.HTTP_303_SEE_OTHER)
+
     try:
+        # Enforce pilot strict limits: 1 query, maximum 10 results, no auto-expansion
+        from sales_engine.discovery_v2.adapters import create_search_engine_adapter
+        cfg = svcs["engine"].registry.get_source("brave_job_search")
+        regional_fetcher = create_search_engine_adapter(
+            cfg,
+            country=mapped_country_code,
+            search_lang=mapped_search_lang,
+        ) if cfg else None
+
+        fetchers = {"brave_job_search": regional_fetcher} if regional_fetcher else None
+
         run_rec = svcs["engine"].run_multi_source_discovery(
-            sources=source_list,
-            query=query,
+            sources=["brave_job_search"],
+            query=full_query,
+            fetcher_funcs=fetchers,
             discovery_mode=discovery_mode,
         )
-        msg = f"Discovery run completed: {run_rec.new_candidates} new candidates, {run_rec.observations_found} observations."
-        return RedirectResponse(f"/sales/discovery?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+        if run_rec and run_rec.errors:
+            clean_err = sanitize_secret_text("; ".join(run_rec.errors))
+            store.update_pilot_search_attempt(
+                attempt_id=attempt_id,
+                status="FAILED",
+                results_count=0,
+                error_message=clean_err,
+            )
+            return RedirectResponse(f"/sales/discovery?error=Search+FAILED:+{clean_err}", status_code=status.HTTP_303_SEE_OTHER)
+
+        res_count = run_rec.observations_found
+        store.update_pilot_search_attempt(
+            attempt_id=attempt_id,
+            status="SUCCESS",
+            results_count=res_count,
+        )
+        # Detailed Operator Outcome Summary:
+        # Exact executed query, observations received, new candidates, duplicates, and category review metrics
+        msg = (
+            f"Discovery Run Successful • "
+            f"Query: \"{full_query}\" • "
+            f"Observations: {res_count} • "
+            f"New Candidates: {run_rec.new_candidates} • "
+            f"Existing / Updated: {run_rec.known_candidates} • "
+            f"Triage & Candidate Entities Recorded."
+        )
+        return RedirectResponse(f"/sales/candidates?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
-        return RedirectResponse(f"/sales/discovery?error={str(e)}", status_code=status.HTTP_303_SEE_OTHER)
+        clean_err = sanitize_secret_text(str(e))
+        store.update_pilot_search_attempt(
+            attempt_id=attempt_id,
+            status="FAILED",
+            results_count=0,
+            error_message=clean_err,
+        )
+        return RedirectResponse(f"/sales/discovery?error=Search+FAILED:+{clean_err}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
@@ -1183,17 +1402,78 @@ async def manual_seed_action(
     return RedirectResponse(f"/sales/candidates/{saved.candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+def evaluate_import_readiness(
+    records: List[Any],
+    unmapped_columns_count: int,
+    domain_collisions_count: int,
+    distinct_canonical_domains: int,
+    multiple_plausible_domains_count: int,
+    missing_domain_count: int,
+) -> Tuple[str, List[str]]:
+    """
+    Single authoritative readiness evaluator shared by Preview and Confirm.
+    Returns (readiness_status: 'READY' | 'REVIEW_REQUIRED' | 'BLOCKED', readiness_reasons: List[str]).
+    """
+    reasons = []
+    if len(records) == 0:
+        return "BLOCKED", ["Zero company records detected in workbook."]
+    if unmapped_columns_count > 0:
+        return "BLOCKED", [f"{unmapped_columns_count} unmapped column(s) detected in company sheets."]
+
+    if domain_collisions_count > 0:
+        reasons.append(
+            f"{domain_collisions_count} canonical domain collision(s) detected across {len(records)} rows ({distinct_canonical_domains} unique domains). Human identity review required."
+        )
+    if multiple_plausible_domains_count > 0:
+        reasons.append(
+            f"{multiple_plausible_domains_count} company row(s) contain multiple plausible primary domains requiring human review."
+        )
+    if missing_domain_count > 0:
+        reasons.append(
+            f"{missing_domain_count} company row(s) have unresolvable website placeholders [link removed] or missing primary websites."
+        )
+
+    if reasons:
+        return "REVIEW_REQUIRED", reasons
+
+    return "READY", [f"All {len(records)} rows validated with 0 unmapped headers and 0 collisions."]
+
+
 # P10_5-ADV-009 / ADV-012 / ADV-013: Preview Historical Import (Zero Mutations)
 @router.post("/import/historical/preview")
 @router.post("/sources/import-history/preview")
 @router.post("/sources/historical/preview")
 async def preview_historical_import_action(
     request: Request,
-    file_path: str = Form(...),
+    file_path: Optional[str] = Form(None),
     sheet_name: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     csrf: None = Depends(validate_csrf),
 ):
-    resolved = resolve_safe_import_path(file_path)
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    staging_dir = (base_dir / "data" / "staging").resolve()
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    if file and file.filename:
+        # File upload flow: validate extension and size limit (max 25MB)
+        fname = Path(file.filename).name
+        suffix = Path(fname).suffix.lower()
+        if suffix not in (".xlsx", ".xlsm", ".csv"):
+            raise HTTPException(status_code=400, detail="Unsupported file format (CSV/XLSX only)")
+
+        # Read content with 25MB size cap
+        content = await file.read()
+        if len(content) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large (maximum allowed size: 25MB)")
+
+        safe_fname = f"upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{re.sub(r'[^a-zA-Z0-9_.-]', '_', fname)}"
+        resolved = staging_dir / safe_fname
+        resolved.write_bytes(content)
+    elif file_path and file_path.strip():
+        resolved = resolve_safe_import_path(file_path)
+    else:
+        raise HTTPException(status_code=400, detail="Please choose an Excel/CSV file to upload or specify a valid file path.")
+
     file_bytes = resolved.read_bytes()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
@@ -1213,9 +1493,98 @@ async def preview_historical_import_action(
 
     unique_comps = set(r.domain or r.company_name for r in records)
     total_contacts = sum(len(r.emails) for r in records)
-    has_outreach_count = sum(1 for r in records if (r.contact_date or r.reply_status or r.notes))
+    # Count true historical outreach events: only supported by explicit send/contact/reply evidence
+    has_outreach_count = sum(
+        1 for r in records
+        if (r.contact_date or r.reply_date or normalize_outreach_status(r.raw_outreach_status)["has_past_contact"])
+    )
     dnc_count = sum(1 for r in records if r.is_dnc)
     active_conv_count = sum(1 for r in records if r.has_active_conversation)
+
+    sheets_data = []
+    column_mappings = {}
+    distinct_canonical_domains = 0
+    domain_collisions_count = 0
+    domain_collisions = []
+    status_distribution = {}
+    classification_counts = {}
+    populated_contact_name_count = 0
+    missing_domain_count = 0
+    missing_email_count = 0
+
+    ambiguous_rows = []
+    missing_domain_rows = []
+
+    if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+        try:
+            inspection = importer.inspect_workbook(resolved)
+            sheets_data = inspection.get("sheets", [])
+            distinct_canonical_domains = inspection.get("distinct_canonical_domains", 0)
+            domain_collisions_count = inspection.get("domain_collisions_count", 0)
+            domain_collisions = inspection.get("domain_collisions", [])
+            status_distribution = inspection.get("status_distribution", {})
+            classification_counts = inspection.get("classification_counts", {})
+            populated_contact_name_count = inspection.get("populated_contact_name_count", 0)
+            missing_domain_count = inspection.get("missing_domain_count", 0)
+            missing_email_count = inspection.get("missing_email_count", 0)
+            valid_website_rows_count = inspection.get("valid_website_rows_count", 0)
+            multiline_cells_count = inspection.get("multiline_cells_count", 0)
+            total_extracted_links = inspection.get("total_extracted_links", 0)
+            placeholders_count = inspection.get("placeholders_count", 0)
+            multiple_plausible_domains_count = inspection.get("multiple_plausible_domains_count", 0)
+            ambiguous_rows = inspection.get("ambiguous_rows", [])
+            missing_domain_rows = inspection.get("missing_domain_rows", [])
+
+            if sheets_data:
+                # Top sheet or selected sheet column mapping
+                target_sheet_info = next((s for s in sheets_data if s["sheet_name"] == sheet_name), sheets_data[0])
+                column_mappings = target_sheet_info.get("column_mappings", {})
+        except Exception:
+            pass
+    else:
+        valid_website_rows_count = sum(1 for r in records if r.domain)
+        multiline_cells_count = sum(1 for r in records if getattr(r, "primary_website_info", {}).get("is_multiline"))
+        total_extracted_links = sum(len(getattr(r, "website_links", [])) for r in records)
+        placeholders_count = sum(getattr(r, "primary_website_info", {}).get("placeholders_count", 0) for r in records)
+        multiple_plausible_domains_count = sum(1 for r in records if getattr(r, "primary_website_info", {}).get("multiple_plausible_domains"))
+        ambiguous_rows = [
+            {
+                "sheet": r.sheet_name,
+                "row_number": r.row_number,
+                "company_name": r.company_name,
+                "selected_primary_host": r.domain,
+                "candidate_hosts": getattr(r, "primary_website_info", {}).get("plausible_domains", []),
+            }
+            for r in records
+            if getattr(r, "primary_website_info", {}).get("multiple_plausible_domains")
+        ]
+        missing_domain_rows = [
+            {
+                "sheet": r.sheet_name,
+                "row_number": r.row_number,
+                "company_name": r.company_name,
+                "raw_website_cell": r.raw_website_cell,
+            }
+            for r in records
+            if not r.domain
+        ]
+
+    # Count unmapped columns across active sheets
+    unmapped_columns_count = 0
+    if sheets_data:
+        for s in sheets_data:
+            if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
+                unmapped_columns_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
+
+    # Evaluate Readiness with authoritative shared function
+    readiness_status, readiness_reasons = evaluate_import_readiness(
+        records=records,
+        unmapped_columns_count=unmapped_columns_count,
+        domain_collisions_count=domain_collisions_count,
+        distinct_canonical_domains=distinct_canonical_domains,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        missing_domain_count=missing_domain_count,
+    )
 
     preview_res = HistoricalImportPreviewResult(
         file_path=str(resolved),
@@ -1228,6 +1597,26 @@ async def preview_historical_import_action(
         historical_outreach_events=has_outreach_count,
         dnc_count=dnc_count,
         active_conversations=active_conv_count,
+        sheets=sheets_data,
+        column_mappings=column_mappings,
+        readiness_status=readiness_status,
+        readiness_reasons=readiness_reasons,
+        distinct_canonical_domains=distinct_canonical_domains,
+        domain_collisions_count=domain_collisions_count,
+        domain_collisions=domain_collisions,
+        status_distribution=status_distribution,
+        classification_counts=classification_counts,
+        populated_contact_name_count=populated_contact_name_count,
+        missing_domain_count=missing_domain_count,
+        missing_email_count=missing_email_count,
+        unmapped_columns_count=unmapped_columns_count,
+        valid_website_rows_count=valid_website_rows_count,
+        multiline_cells_count=multiline_cells_count,
+        total_extracted_links=total_extracted_links,
+        placeholders_count=placeholders_count,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        ambiguous_rows=ambiguous_rows,
+        missing_domain_rows=missing_domain_rows,
     )
 
     # Check if request prefers JSON (e.g. from test or API client)
@@ -1259,6 +1648,7 @@ async def confirm_historical_import_action(
     file_hash: Optional[str] = Form(None),
     preview_token: str = Form(...),
     sheet_name: Optional[str] = Form(None),
+    operator_decisions_json: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
     resolved = resolve_safe_import_path(file_path)
@@ -1280,20 +1670,721 @@ async def confirm_historical_import_action(
         raise HTTPException(status_code=400, detail="Invalid preview confirmation token.")
 
     svcs = get_console_services()
-    importer = HistoricalImporter(store=svcs["cand_store"])
+    store: CandidateStore = svcs["cand_store"]
+    importer = HistoricalImporter(store=store)
+
     if resolved.suffix.lower() == ".csv":
         records = importer.parse_csv(resolved)
+        unmapped_count = 0
+        domain_collisions_count = 0
+        distinct_canonical_domains = len(records)
+        multiple_plausible_domains_count = 0
+        missing_domain_count = sum(1 for r in records if not r.domain)
     else:
         records = importer.parse_xlsx(resolved, sheet_name=sheet_name)
+        inspection = importer.inspect_workbook(resolved)
+        unmapped_count = 0
+        for s in inspection.get("sheets", []):
+            if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
+                unmapped_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
+        domain_collisions_count = inspection.get("domain_collisions_count", 0)
+        distinct_canonical_domains = inspection.get("distinct_canonical_domains", 0)
+        multiple_plausible_domains_count = inspection.get("multiple_plausible_domains_count", 0)
+        missing_domain_count = inspection.get("missing_domain_count", 0)
 
-    result = importer.import_records(records)
+    # Server-side validation gate parity with Preview
+    readiness_status, readiness_reasons = evaluate_import_readiness(
+        records=records,
+        unmapped_columns_count=unmapped_count,
+        domain_collisions_count=domain_collisions_count,
+        distinct_canonical_domains=distinct_canonical_domains,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        missing_domain_count=missing_domain_count,
+    )
+
+    # Parse and rigorously validate operator decisions if supplied
+    parsed_decisions = []
+    if operator_decisions_json and operator_decisions_json.strip():
+        try:
+            parsed_decisions = json.loads(operator_decisions_json)
+            if not isinstance(parsed_decisions, list):
+                raise ValueError("operator_decisions_json must be a JSON array of decision objects.")
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Malformed operator_decisions_json payload: {str(e)}",
+            )
+
+    # Collect required review rows: ambiguous rows + missing-domain rows
+    ambiguous_rows = inspection.get("ambiguous_rows", []) if resolved.suffix.lower() in (".xlsx", ".xlsm") else []
+    missing_domain_rows = inspection.get("missing_domain_rows", []) if resolved.suffix.lower() in (".xlsx", ".xlsm") else []
+    
+    # Map required review rows by (sheet, row_number)
+    required_review_map = {}
+    for a in ambiguous_rows:
+        key = (str(a["sheet"]), int(a["row_number"]))
+        required_review_map[key] = {
+            "type": "AMBIGUOUS",
+            "sheet": str(a["sheet"]),
+            "row_number": int(a["row_number"]),
+            "company_name": str(a.get("company_name") or ""),
+            "selected_primary_host": a.get("selected_primary_host"),
+            "candidate_hosts": a.get("candidate_hosts") or [],
+        }
+    for m in missing_domain_rows:
+        key = (str(m["sheet"]), int(m["row_number"]))
+        required_review_map[key] = {
+            "type": "MISSING_DOMAIN",
+            "sheet": str(m["sheet"]),
+            "row_number": int(m["row_number"]),
+            "company_name": str(m.get("company_name") or ""),
+            "selected_primary_host": None,
+            "candidate_hosts": [],
+        }
+
+    # If readiness is BLOCKED, reject unconditionally
+    if readiness_status == "BLOCKED":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Import blocked: {'; '.join(readiness_reasons)}",
+        )
+
+    # If readiness is REVIEW_REQUIRED:
+    # Requires explicit, unique, and valid operator decisions covering all required review rows
+    if readiness_status == "REVIEW_REQUIRED":
+        if not parsed_decisions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Import requires explicit human review and row-level resolution. Unresolved rows: {'; '.join(readiness_reasons)}",
+            )
+
+        seen_decision_rows = set()
+        for idx, d in enumerate(parsed_decisions):
+            if not isinstance(d, dict):
+                raise HTTPException(status_code=400, detail=f"Decision at index {idx} is not a valid JSON object.")
+
+            # Validate sheet and row number
+            s_name = d.get("sheet_name")
+            r_num_raw = d.get("row_number")
+            if not s_name or not isinstance(s_name, str):
+                raise HTTPException(status_code=400, detail=f"Decision at index {idx} missing valid 'sheet_name'.")
+            try:
+                r_num = int(r_num_raw)
+                if r_num <= 0:
+                    raise ValueError()
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail=f"Decision at index {idx} has invalid row_number '{r_num_raw}'. Must be positive integer.")
+
+            row_key = (s_name, r_num)
+
+            # Reject duplicate decisions for the same row
+            if row_key in seen_decision_rows:
+                raise HTTPException(status_code=400, detail=f"Duplicate operator decision submitted for row {s_name} R{r_num}.")
+            seen_decision_rows.add(row_key)
+
+            # Check if row is in required_review_map
+            row_meta = required_review_map.get(row_key)
+            if not row_meta:
+                raise HTTPException(status_code=400, detail=f"Decision submitted for row {s_name} R{r_num} which does not require review.")
+
+            # Validate company identity
+            submitted_company = str(d.get("company_name") or "").strip()
+            expected_company = str(row_meta.get("company_name") or "").strip()
+            # Support full match, first-line match, or prefix/common-prefix match
+            if submitted_company and expected_company:
+                exp_first = expected_company.split('\n')[0].strip()
+                sub_first = submitted_company.split('\n')[0].strip()
+                s_low = submitted_company.lower()
+                e_low = expected_company.lower()
+                sf_low = sub_first.lower()
+                ef_low = exp_first.lower()
+                matches = (
+                    submitted_company == expected_company
+                    or sub_first == exp_first
+                    or sf_low in ef_low
+                    or ef_low in sf_low
+                )
+                if not matches:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Company name mismatch for row {s_name} R{r_num}: submitted '{submitted_company[:30]}', expected '{expected_company[:30]}'.",
+                    )
+
+            # Validate decision_type against canonical OperatorDecisionType
+            d_type = d.get("decision_type")
+            valid_types = {e.value for e in OperatorDecisionType}
+            if not d_type or d_type not in valid_types:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid decision_type '{d_type}' for row {s_name} R{r_num}. Allowed: {sorted(valid_types)}.",
+                )
+
+            # Validate action-specific constraints
+            selected_host = d.get("selected_host")
+            if d_type == OperatorDecisionType.ACCEPT_DEFAULT.value:
+                # Retain the source-selected host only after explicit approval
+                default_host = row_meta.get("selected_primary_host")
+                if not default_host:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot ACCEPT_DEFAULT for row {s_name} R{r_num} because no default primary host was identified.",
+                    )
+                if is_disallowed_or_unsafe_host(default_host):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Proposed default host '{default_host}' for row {s_name} R{r_num} fails domain safety checks.",
+                    )
+            elif d_type == OperatorDecisionType.SELECT_PRIMARY_HOST.value:
+                # Must be one of the legitimate candidate options for that exact row
+                legit_candidates = set(row_meta.get("candidate_hosts") or [])
+                if not selected_host:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"SELECT_PRIMARY_HOST requires a non-empty 'selected_host' for row {s_name} R{r_num}.",
+                    )
+                if selected_host not in legit_candidates:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Chosen host '{selected_host}' is not a legitimate candidate for row {s_name} R{r_num}. Legitimate candidates: {sorted(legit_candidates)}.",
+                    )
+                if is_disallowed_or_unsafe_host(selected_host):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Chosen host '{selected_host}' for row {s_name} R{r_num} fails domain safety checks.",
+                    )
+            elif d_type in (OperatorDecisionType.QUARANTINE_NO_PRIMARY.value, OperatorDecisionType.EXTERNAL_REFERENCE.value):
+                # Valid actions that clear primary domain
+                pass
+
+        # Verify all required review rows are resolved
+        unresolved_keys = set(required_review_map.keys()) - seen_decision_rows
+        if unresolved_keys:
+            unresolved_desc = [f"{s} R{r}" for s, r in sorted(unresolved_keys)]
+            raise HTTPException(
+                status_code=400,
+                detail=f"Import requires explicit human review and row-level resolution. Unresolved rows: {', '.join(unresolved_desc)}",
+            )
+
+    # CRITICAL DEFECT 2: AUTOMATIC BACKUP AND VERIFICATION BEFORE MUTATION
+    backup_path = None
+    backup_sha = None
+    if store.db_path and store.db_path != ":memory:":
+        try:
+            backup_path, backup_sha = store.create_backup()
+            valid, err = store.verify_backup(backup_path)
+            if not valid:
+                raise RuntimeError(f"Backup verification failed: {err}")
+            logger.info(f"Verified pre-import SQLite backup created: {backup_path} (SHA: {backup_sha})")
+        except Exception as e:
+            logger.error(f"Failed to create/verify pre-import database backup: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Pre-import database backup failed: {str(e)}. Mutation aborted for safety.",
+            )
+
+    # CRITICAL DEFECT 3: ALL-OR-NOTHING STAGED TRANSACTION BOUNDARY & CONCURRENCY PROTECTION
+    # We clone the database, execute import_records on the clone, verify target data version, and promote
+    if store.db_path and store.db_path != ":memory:":
+        staging_clone = tempfile.NamedTemporaryFile(suffix="_import_stage.db", delete=False)
+        staging_path = staging_clone.name
+        staging_clone.close()
+        try:
+            # 1. Capture initial data_version and online backup source into staging clone
+            with store._get_connection() as src_conn:
+                initial_version = src_conn.execute("PRAGMA data_version;").fetchone()[0]
+                clone_conn = sqlite3.connect(staging_path)
+                try:
+                    src_conn.backup(clone_conn)
+                finally:
+                    clone_conn.close()
+
+            # 2. Execute import on staging store
+            staged_store = CandidateStore(staging_path)
+            staged_importer = HistoricalImporter(store=staged_store)
+            result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
+
+            # 3. Promote staged store into live target ONLY if target had no concurrent writes
+            with store._get_connection() as s_conn:
+                current_version = s_conn.execute("PRAGMA data_version;").fetchone()[0]
+                if current_version != initial_version:
+                    raise RuntimeError(
+                        f"Concurrent database modification detected during staging (version changed from {initial_version} to {current_version}). Promotion aborted to prevent silent data loss."
+                    )
+                with staged_store._get_connection() as c_conn:
+                    c_conn.backup(s_conn)
+
+        except Exception as e:
+            logger.error(f"Historical import transaction rolled back due to error: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Import failed during execution and was completely rolled back: {str(e)}",
+            )
+        finally:
+            try:
+                if os.path.exists(staging_path):
+                    os.remove(staging_path)
+            except Exception:
+                pass
+    else:
+        # In-memory execution
+        result = importer.import_records(records, operator_decisions=parsed_decisions)
+
     msg = f"Import completed: {result.companies_created} new companies, {result.records_parsed} records, {result.duplicates_skipped} duplicates skipped."
 
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
-        return JSONResponse({"status": "completed", "companies_created": result.companies_created, "records_parsed": result.records_parsed})
+        return JSONResponse({
+            "status": "completed",
+            "companies_created": result.companies_created,
+            "records_parsed": result.records_parsed,
+            "backup_path": str(backup_path) if backup_path else None,
+            "backup_sha": backup_sha,
+        })
 
     return RedirectResponse(f"/sales/sources?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------------------------------------------------------------------------
+# 3.9 LEAD RESEARCH PILOT (7 VERIFIED COMPANIES)
+# ---------------------------------------------------------------------------
+@router.get("/research/pilot", response_class=HTMLResponse)
+async def pilot_research_view(
+    request: Request,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    from sales_engine.research.pilot_research import get_pilot_research_profiles
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+    
+    profiles = get_pilot_research_profiles()
+    pilot_items = []
+    saved_count = 0
+    
+    for prof in profiles:
+        existing = cand_store.get_candidate_by_domain(prof.canonical_domain)
+        if existing:
+            saved_count += 1
+            db_status = {
+                "saved": True,
+                "candidate_id": existing.candidate_id,
+                "manual_review_decision": existing.manual_review_decision or "NOT_REVIEWED",
+                "discovery_status": existing.discovery_status.value if hasattr(existing.discovery_status, "value") else str(existing.discovery_status)
+            }
+        else:
+            db_status = {
+                "saved": False,
+                "candidate_id": None,
+                "manual_review_decision": None,
+                "discovery_status": None
+            }
+        pilot_items.append({
+            "profile": prof,
+            "db_status": db_status
+        })
+
+    return render_console_template(
+        request=request,
+        name="pilot_research.html",
+        context={
+            "request": request,
+            "active_tab": "discovery",
+            "pilot_items": pilot_items,
+            "saved_count": saved_count,
+            "total_count": len(profiles),
+            "message": message,
+            "error": error,
+        }
+    )
+
+
+@router.post("/research/pilot/save-single")
+async def pilot_save_single_action(
+    request: Request,
+    domain: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+):
+    from sales_engine.research.pilot_research import get_pilot_research_profiles, save_pilot_candidate_to_store
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+    
+    profiles = get_pilot_research_profiles()
+    target_prof = next((p for p in profiles if p.canonical_domain.lower() == domain.strip().lower()), None)
+    if not target_prof:
+        raise HTTPException(status_code=404, detail="Pilot profile not found for domain")
+
+    cand, is_new = save_pilot_candidate_to_store(target_prof, cand_store, auto_approve=False)
+    msg = f"Saved lead '{target_prof.company_name}' to Candidates database."
+    return RedirectResponse(
+        f"/sales/research/pilot?{urlencode({'message': msg}, quote_via=quote)}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/research/pilot/save-all")
+async def pilot_save_all_action(
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+):
+    from sales_engine.research.pilot_research import get_pilot_research_profiles, save_pilot_candidate_to_store
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+    
+    profiles = get_pilot_research_profiles()
+    saved_now = 0
+    for prof in profiles:
+        _, is_new = save_pilot_candidate_to_store(prof, cand_store, auto_approve=False)
+        if is_new:
+            saved_now += 1
+
+    msg = f"Successfully synced all 7 pilot leads into Candidates database ({saved_now} newly added)."
+    return RedirectResponse(
+        f"/sales/research/pilot?{urlencode({'message': msg}, quote_via=quote)}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/research/pilot/review-candidate")
+async def pilot_review_candidate_action(
+    request: Request,
+    candidate_id: str = Form(...),
+    decision: str = Form(...),
+    domain: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+    cand = cand_store.get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Guard: validate domain matches intended candidate
+    if domain and cand.company_domain:
+        if domain.strip().lower() != cand.company_domain.strip().lower():
+            raise HTTPException(status_code=400, detail="Mismatched candidate domain identity")
+
+    decision_clean = decision.strip().upper()
+    if decision_clean not in ("APPROVED", "REJECTED", "NOT_REVIEWED", "NEEDS_RESEARCH"):
+        raise HTTPException(status_code=400, detail=f"Invalid review decision: {decision}")
+
+    now = datetime.now(timezone.utc).isoformat()
+    cand.manual_review_decision = decision_clean
+    cand.manual_reviewed_at = now
+    cand.manual_reviewed_by = "operator"
+    
+    if decision_clean == "APPROVED":
+        cand.qualification_outcome = QualificationOutcome.qualified_for_enrichment
+        cand.discovery_status = DiscoveryStatus.qualified
+        cand.cold_outreach_allowed = True
+        cand.manual_review_notes = "Operator approved lead from verified pilot research."
+    elif decision_clean == "REJECTED":
+        cand.qualification_outcome = QualificationOutcome.reject
+        cand.discovery_status = DiscoveryStatus.rejected
+        cand.cold_outreach_allowed = False
+        cand.manual_review_notes = "Operator rejected lead from pilot research."
+    elif decision_clean == "NEEDS_RESEARCH":
+        cand.qualification_outcome = QualificationOutcome.research_more
+        cand.discovery_status = DiscoveryStatus.researching
+        cand.cold_outreach_allowed = False
+
+    cand_store.save_candidate(cand)
+    msg = f"Candidate '{cand.company_name}' updated to {decision_clean}."
+    return RedirectResponse(
+        f"/sales/research/pilot?{urlencode({'message': msg}, quote_via=quote)}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3.10 LEAD REGISTER — 13-FIELD pyBIM WORKBOOK CORE
+# ---------------------------------------------------------------------------
+@router.get("/register", response_class=HTMLResponse)
+async def lead_register_view(
+    request: Request,
+    q: Optional[str] = Query(None),
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.candidates.candidate_store import canonicalize_domain
+    svcs = get_console_services()
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    
+    records = reg_store.list_records(limit=2000, query=q)
+
+    return render_console_template(
+        request=request,
+        name="lead_register.html",
+        context={
+            "request": request,
+            "active_tab": "register",
+            "records": records,
+            "total_count": len(records),
+            "query": q,
+            "message": message,
+            "error": error,
+        }
+    )
+
+
+@router.get("/register/export")
+async def lead_register_export_action(
+    request: Request,
+    format: str = Query("xlsx"),
+    q: Optional[str] = Query(None),
+):
+    from sales_engine.leads.register_store import LeadRegisterStore
+    svcs = get_console_services()
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    records = reg_store.list_records(limit=5000, query=q)
+
+    # Format 13 fields in exact pyBIM order with safe cell formulas
+    headers = [
+        "Record Number",
+        "Company Priority",
+        "Priority Rationale",
+        "Company Name & Legal Identity",
+        "Geographic Location",
+        "Telephone Numbers",
+        "Business Activities / Services",
+        "Official Website",
+        "Responsible Person / Contact",
+        "Descriptions & Operator Notes",
+        "Job Advertisement Links",
+        "Other Links / Projects / References",
+        "Contact Email Addresses",
+    ]
+
+    rows = []
+    for r in records:
+        d = r.to_13_field_dict()
+        rows.append({h: sanitize_spreadsheet_cell(d.get(h, "Not Found")) for h in headers})
+
+    if not rows:
+        rows = [{h: "" for h in headers}]
+
+    now_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+    if format.lower() == "xlsx":
+        import openpyxl
+        from tempfile import NamedTemporaryFile
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "13-Field Lead Register"
+        ws.append(headers)
+        for r in rows:
+            ws.append([r[h] for h in headers])
+
+        with NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            wb.save(tmp.name)
+            tmp_path = tmp.name
+
+        return FileResponse(
+            path=tmp_path,
+            filename=f"SalesAI_13_Field_Lead_Register_{now_ts}.xlsx",
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=headers)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+
+        return Response(
+            content=output.getvalue().encode("utf-8-sig"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=SalesAI_13_Field_Lead_Register_{now_ts}.csv"}
+        )
+
+
+
+
+@router.get("/register/{candidate_id}", response_class=HTMLResponse)
+async def lead_register_detail_view(
+    candidate_id: str,
+    request: Request,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    from sales_engine.leads.register_store import LeadRegisterStore
+    svcs = get_console_services()
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    
+    record = reg_store.get_record(candidate_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Lead register record not found")
+
+    return render_console_template(
+        request=request,
+        name="lead_register_detail.html",
+        context={
+            "request": request,
+            "active_tab": "register",
+            "record": record,
+            "message": message,
+            "error": error,
+        }
+    )
+
+
+@router.post("/register/{candidate_id}/update")
+async def lead_register_update_action(
+    candidate_id: str,
+    request: Request,
+    record_number: Optional[str] = Form(None),
+    priority_level: str = Form("B"),
+    priority_rationale: Optional[str] = Form(None),
+    company_name: str = Form(...),
+    legal_identity: Optional[str] = Form(None),
+    geographic_location: Optional[str] = Form(None),
+    telephone_numbers: Optional[str] = Form(None),
+    business_activities: Optional[str] = Form(None),
+    official_website: Optional[str] = Form(None),
+    responsible_person: Optional[str] = Form(None),
+    descriptions_and_notes: Optional[str] = Form(None),
+    job_advertisement_links: Optional[str] = Form(None),
+    other_links_and_references: Optional[str] = Form(None),
+    contact_email_addresses: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.models import CompanyTier
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+    reg_store = LeadRegisterStore(db_path=cand_store.db_path)
+
+    existing = reg_store.get_record(candidate_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Lead record not found")
+
+    rec_num = int(record_number.strip()) if record_number and record_number.strip().isdigit() else existing.record_number
+
+    v_status = existing.verification_status
+    if v_status in ("Unverified", "EXTRACTED", "Needs Review"):
+        v_status = "OPERATOR_REVIEWED"
+
+    # Mark record as operator_edited when edited through the actual HTTP editor,
+    # preserving original research evidence URLs and created_at timestamps.
+    updated_rec = LeadRegisterRecord(
+        candidate_id=candidate_id,
+        record_number=rec_num,
+        priority_level=priority_level.strip().upper(),
+        priority_rationale=priority_rationale.strip() if priority_rationale else None,
+        company_name=company_name.strip(),
+        legal_identity=legal_identity.strip() if legal_identity else None,
+        geographic_location=geographic_location.strip() if geographic_location else None,
+        telephone_numbers=telephone_numbers.strip() if telephone_numbers else None,
+        business_activities=business_activities.strip() if business_activities else None,
+        official_website=official_website.strip() if official_website else None,
+        responsible_person=responsible_person.strip() if responsible_person else None,
+        descriptions_and_notes=descriptions_and_notes,  # preserve multiline text exactly
+        job_advertisement_links=job_advertisement_links.strip() if job_advertisement_links else None,
+        other_links_and_references=other_links_and_references,  # preserve multiline text
+        contact_email_addresses=contact_email_addresses.strip() if contact_email_addresses else None,
+        provenance_source="operator_edited",
+        research_date=existing.research_date,
+        verification_status=v_status,
+        confidence_score=existing.confidence_score,
+        evidence_urls=existing.evidence_urls,
+        created_at=existing.created_at,
+    )
+
+    reg_store.save_record(updated_rec)
+
+    # Sync back to candidate_companies basic fields without disturbing historical suppression
+    # CRITICAL BUG 3 FIX: Keep descriptions_and_notes strictly separate from manual_review_notes (audit trail).
+    cand = cand_store.get_by_id(candidate_id)
+    if cand:
+        cand.company_name = updated_rec.company_name
+        if not cand.company_domain and updated_rec.official_website:
+            cand.company_domain = canonicalize_domain(updated_rec.official_website)
+        if updated_rec.priority_level == "A":
+            cand.company_tier = CompanyTier.tier_1
+        elif updated_rec.priority_level == "B":
+            cand.company_tier = CompanyTier.tier_2
+        elif updated_rec.priority_level == "C":
+            cand.company_tier = CompanyTier.tier_3
+        # Do NOT overwrite manual_review_notes with editorial descriptions_and_notes!
+        cand_store.save_candidate(cand)
+
+    msg = f"Successfully saved 13-field record for '{updated_rec.company_name}'."
+    return RedirectResponse(
+        f"/sales/register/{candidate_id}?{urlencode({'message': msg}, quote_via=quote)}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/register/research-new")
+async def lead_register_research_new_action(
+    request: Request,
+    company_name: str = Form(...),
+    website_url: str = Form(...),
+    priority_level: str = Form("B"),
+    operator_notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    from sales_engine.research.lead_researcher import create_lead_from_researched_website
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.candidates.candidate_store import canonicalize_domain
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+    reg_store = LeadRegisterStore(db_path=cand_store.db_path)
+
+    # Create bounded research record
+    rec = create_lead_from_researched_website(
+        company_name=company_name,
+        website_url=website_url,
+        provisional_priority=priority_level,
+        operator_notes=operator_notes
+    )
+
+    # Save to candidate store (Save for Research, NOT auto-approved outreach!)
+    cand, is_new = cand_store.get_or_create_candidate(
+        company_name=rec.company_name,
+        company_domain=canonicalize_domain(rec.official_website),
+        country="Italy" if ("italia" in rec.geographic_location.lower() or ".it" in rec.official_website) else None,
+        source_id="operator_research",
+    )
+    if is_new:
+        # CRITICAL BUG 2 FIX: Only newly created candidates start with sending disabled / NOT_REVIEWED
+        cand.cold_outreach_allowed = False
+        cand.manual_review_decision = "NOT_REVIEWED"
+        cand_store.save_candidate(cand)
+    else:
+        # Existing candidate retains all manual review decisions, suppression states, and contact permissions
+        pass
+
+    # Persist in register store non-destructively
+    existing_reg = reg_store.get_record(cand.candidate_id)
+    if existing_reg and existing_reg.provenance_source in ("manual_entry", "operator_researched", "operator_edited"):
+        # Preserve user edits; only fill missing values
+        if not existing_reg.company_name or existing_reg.company_name == "Not Found":
+            existing_reg.company_name = rec.company_name
+        if not existing_reg.official_website or existing_reg.official_website == "Not Found":
+            existing_reg.official_website = rec.official_website
+        if not existing_reg.telephone_numbers or existing_reg.telephone_numbers == "Not Found":
+            existing_reg.telephone_numbers = rec.telephone_numbers
+        if not existing_reg.contact_email_addresses or existing_reg.contact_email_addresses == "Not Found":
+            existing_reg.contact_email_addresses = rec.contact_email_addresses
+        if not existing_reg.legal_identity or existing_reg.legal_identity == "Not Found":
+            existing_reg.legal_identity = rec.legal_identity
+        if not existing_reg.business_activities or existing_reg.business_activities == "Not Found":
+            existing_reg.business_activities = rec.business_activities
+        reg_store.save_record(existing_reg)
+        rec = existing_reg
+    else:
+        rec.candidate_id = cand.candidate_id
+        if existing_reg:
+            rec.record_number = existing_reg.record_number
+        reg_store.save_record(rec)
+
+    msg = f"Researched and added '{rec.company_name}' to 13-field register (Status: {rec.verification_status})."
+    return RedirectResponse(
+        f"/sales/register/{cand.candidate_id}?{urlencode({'message': msg}, quote_via=quote)}",
+        status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1306,6 +2397,7 @@ async def candidates_list_view(
     status: Optional[str] = Query(None),
     tier: Optional[str] = Query(None),
     country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     message: Optional[str] = None,
@@ -1323,6 +2415,8 @@ async def candidates_list_view(
     filtered = all_summaries
     if country:
         filtered = [c for c in filtered if (c.get("country") or "").lower() == country.lower()]
+    if city:
+        filtered = [c for c in filtered if (c.get("city") or "").lower() == city.lower()]
     if q:
         query_lower = q.lower()
         filtered = [
@@ -1381,11 +2475,113 @@ async def candidates_list_view(
             "status": status,
             "tier": tier,
             "country": country,
+            "city": city,
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
         },
     )
+
+
+def sanitize_spreadsheet_cell(val: Any) -> Any:
+    """Safe spreadsheet-cell handling: prevent formula injection (=, +, -, @)."""
+    if val is None:
+        return ""
+    s = str(val)
+    if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{s}"
+    return s
+
+
+@router.get("/candidates/export")
+async def export_candidates_action(
+    request: Request,
+    format: str = Query("csv"),
+    status: Optional[str] = Query(None),
+    approved_only: bool = Query(True),
+):
+    """
+    Exports candidates with safe spreadsheet-cell formula injection protection.
+    Defaults to exporting only operator-approved leads (approved_only=True).
+    Set approved_only=False to export all candidates.
+    Never conflates historical imported companies with newly approved leads.
+    """
+    svcs = get_console_services()
+    bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
+    candidates = bridge.get_candidate_list_summary(status=status, limit=5000)
+
+    if approved_only:
+        # Strictly include only explicitly human operator-approved leads
+        # Rule qualification (qualified_for_enrichment) alone is NOT human approval
+        candidates = [
+            c for c in candidates
+            if str(c.get("manual_review_decision") or "").upper() == "APPROVED"
+        ]
+
+    rows = []
+    for c in candidates:
+        is_hist = "historical_seed" in c.get("discovery_sources", [])
+        record_type = "Historical Imported Company" if is_hist else "Discovered Lead"
+        rows.append({
+            "Candidate ID": sanitize_spreadsheet_cell(c.get("company_id") or c.get("candidate_id")),
+            "Record Type": sanitize_spreadsheet_cell(record_type),
+            "Company Name": sanitize_spreadsheet_cell(c.get("name") or c.get("company_name")),
+            "Domain": sanitize_spreadsheet_cell(c.get("canonical_domain") or c.get("company_domain")),
+            "Country": sanitize_spreadsheet_cell(c.get("country")),
+            "City": sanitize_spreadsheet_cell(c.get("city")),
+            "Status": sanitize_spreadsheet_cell(c.get("status") or c.get("discovery_status")),
+            "Qualification Outcome": sanitize_spreadsheet_cell(c.get("qualification_outcome")),
+            "Manual Review Decision": sanitize_spreadsheet_cell(c.get("manual_review_decision")),
+            "Manual Reviewed By": sanitize_spreadsheet_cell(c.get("manual_reviewed_by")),
+            "Manual Reviewed At": sanitize_spreadsheet_cell(c.get("manual_reviewed_at")),
+            "Manual Review Notes": sanitize_spreadsheet_cell(c.get("manual_review_notes") or c.get("qualification_reason")),
+            "Tier": sanitize_spreadsheet_cell(c.get("company_tier")),
+            "BIM Maturity": sanitize_spreadsheet_cell(c.get("bim_maturity")),
+            "Fit Level": sanitize_spreadsheet_cell(c.get("fit_level")),
+            "Intent Level": sanitize_spreadsheet_cell(c.get("intent_level")),
+            "Cold Outreach Allowed": sanitize_spreadsheet_cell(c.get("cold_outreach_allowed")),
+            "Historical Contact": sanitize_spreadsheet_cell(c.get("historical_outreach_summary")),
+            "Discovery Sources": sanitize_spreadsheet_cell(", ".join(c.get("discovery_sources", []))),
+            "Created At": sanitize_spreadsheet_cell(c.get("created_at")),
+        })
+
+    if not rows:
+        headers = ["Candidate ID", "Company Name", "Domain", "Country", "City", "Status", "Qualification Outcome", "Manual Review Decision", "Tier", "BIM Maturity", "Fit Level", "Intent Level", "Cold Outreach Allowed", "Historical Contact", "Discovery Sources", "Created At"]
+        rows = [{h: "" for h in headers}]
+
+    if format.lower() == "xlsx":
+        import openpyxl
+        from tempfile import NamedTemporaryFile
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Discovered Leads"
+        headers = list(rows[0].keys())
+        ws.append(headers)
+        for r in rows:
+            ws.append([r[h] for h in headers])
+
+        with NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            wb.save(tmp.name)
+            tmp_path = tmp.name
+
+        return FileResponse(
+            path=tmp_path,
+            filename=f"SalesAI_Leads_Export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx",
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        output = io.StringIO()
+        headers = list(rows[0].keys())
+        writer = csv.DictWriter(output, fieldnames=headers)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=SalesAI_Leads_Export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"}
+        )
 
 
 @router.get("/candidates/{candidate_id}", response_class=HTMLResponse)
@@ -1498,16 +2694,309 @@ async def candidate_detail_view(
     )
 
 
-@router.post("/candidates/{candidate_id}/research")
-async def research_candidate_action(candidate_id: str, csrf: None = Depends(validate_csrf)):
+# In-memory session cache for latest explicit research results
+# candidate_id -> CompanyResearchResult
+_RESEARCH_SESSION_CACHE: Dict[str, Any] = {}
+
+
+@router.get("/candidates/{candidate_id}/research", response_class=HTMLResponse)
+async def candidate_research_view(
+    candidate_id: str,
+    request: Request,
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    from sales_engine.research.company_research_service import (
+        convert_research_to_lead_record,
+        load_research_from_snapshot,
+    )
+    from sales_engine.research.research_store import ResearchSnapshotStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    domain = cand.company_domain
+    if not domain:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Cannot+research+candidate+without+a+canonical+domain.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    current_reg = reg_store.get_record(candidate_id)
+
+    # 1. Check in-memory session cache first
+    research_res = _RESEARCH_SESSION_CACHE.get(candidate_id)
+
+    # 2. If not in memory, check persistent ResearchSnapshotStore (zero external network calls!)
+    snap_store = ResearchSnapshotStore()
+    latest_snapshot = None
+    if not research_res:
+        latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
+        if latest_snapshot:
+            research_res = load_research_from_snapshot(latest_snapshot, use_llm=False)
+            _RESEARCH_SESSION_CACHE[candidate_id] = research_res
+    else:
+        if research_res.snapshot_id:
+            latest_snapshot = snap_store.get_snapshot_by_id(research_res.snapshot_id)
+
+    # 3. If still no snapshot exists, do NOT crawl implicitly! Show explicit action view.
+    proposed_rec = None
+    if research_res:
+        proposed_rec = convert_research_to_lead_record(research_res, existing_record=current_reg)
+
+    historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
+
+    return render_console_template(
+        request=request,
+        name="company_research_review.html",
+        context={
+            "request": request,
+            "active_tab": "candidates",
+            "candidate": cand,
+            "research": research_res,
+            "snapshot": latest_snapshot,
+            "historical_snapshots": historical_snapshots,
+            "current_record": current_reg,
+            "proposed_record": proposed_rec,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.post("/candidates/{candidate_id}/research")
+async def research_candidate_action(candidate_id: str, csrf: None = Depends(validate_csrf)):
+    from sales_engine.research.company_research_service import perform_company_research
+
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    domain = cand.company_domain
+    if not domain:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate+has+no+domain+for+research.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Explicit operator trigger: crawl website now, create snapshot, and update cache
+    try:
+        research_res = perform_company_research(
+            company_name=cand.company_name or domain,
+            canonical_domain=domain,
+            candidate_id=candidate_id,
+            use_llm=True,
+        )
+    except Exception as exc:
+        logger.error(f"Company research execution failed for {candidate_id}: {exc}", exc_info=True)
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error=Company+research+failed:+{urllib.parse.quote(str(exc))}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Require valid snapshot persistence
+    if not research_res.snapshot_id:
+        logger.error(f"Snapshot persistence failed for candidate {candidate_id}")
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error=Research+completed+but+snapshot+persistence+failed.+Please+check+database+storage.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    _RESEARCH_SESSION_CACHE[candidate_id] = research_res
+
+    # Redirect to research review preview
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}/research",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/candidates/{candidate_id}/research/save")
+async def save_candidate_research_action(
+    candidate_id: str,
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+    company_name: str = Form(...),
+    priority_level: str = Form("B"),
+    priority_rationale: str = Form(...),
+    legal_identity: str = Form("Not Found"),
+    geographic_location: str = Form("Not Found"),
+    telephone_numbers: str = Form("Not Found"),
+    contact_email_addresses: str = Form("Not Found"),
+    responsible_person: str = Form("Not Found"),
+    business_activities: str = Form("Not Found"),
+    official_website: str = Form("Not Found"),
+    descriptions_and_notes: str = Form("Not Found"),
+    job_advertisement_links: str = Form("Not Found"),
+    other_links_and_references: str = Form("Not Found"),
+    apply_company_name: Optional[str] = Form(None),
+    apply_priority: Optional[str] = Form(None),
+    apply_legal_identity: Optional[str] = Form(None),
+    apply_geographic_location: Optional[str] = Form(None),
+    apply_telephone_numbers: Optional[str] = Form(None),
+    apply_contact_email_addresses: Optional[str] = Form(None),
+    apply_responsible_person: Optional[str] = Form(None),
+    apply_business_activities: Optional[str] = Form(None),
+    apply_official_website: Optional[str] = Form(None),
+    apply_descriptions_and_notes: Optional[str] = Form(None),
+    apply_job_advertisement_links: Optional[str] = Form(None),
+    apply_other_links_and_references: Optional[str] = Form(None),
+):
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    existing = reg_store.get_record(candidate_id)
+
+    # Check if any field is approved by operator
+    approved_any = any([
+        apply_company_name, apply_priority, apply_legal_identity,
+        apply_geographic_location, apply_telephone_numbers,
+        apply_contact_email_addresses, apply_responsible_person,
+        apply_business_activities, apply_official_website,
+        apply_descriptions_and_notes, apply_job_advertisement_links,
+        apply_other_links_and_references
+    ])
+
+    # P0 DEFECT FIX: Reject save with zero approved fields; produce ZERO SQLite writes.
+    if not approved_any:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?message={quote('No fields selected. Record left unchanged.')}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Determine field values based on explicit operator checkboxes:
+    # If a field is NOT checked, preserve existing value completely!
+    final_company_name = company_name if apply_company_name else (existing.company_name if existing else cand.company_name)
+    final_priority_level = priority_level if apply_priority else (existing.priority_level if existing else "B")
+    final_priority_rationale = priority_rationale if apply_priority else (existing.priority_rationale if existing else "Not Found")
+    final_legal_identity = legal_identity if apply_legal_identity else (existing.legal_identity if existing else "Not Found")
+    final_geographic_location = geographic_location if apply_geographic_location else (existing.geographic_location if existing else "Not Found")
+    final_telephone_numbers = telephone_numbers if apply_telephone_numbers else (existing.telephone_numbers if existing else "Not Found")
+    final_contact_email_addresses = contact_email_addresses if apply_contact_email_addresses else (existing.contact_email_addresses if existing else "Not Found")
+    final_responsible_person = responsible_person if apply_responsible_person else (existing.responsible_person if existing else "Not Found")
+    final_business_activities = business_activities if apply_business_activities else (existing.business_activities if existing else "Not Found")
+    final_official_website = official_website if apply_official_website else (existing.official_website if existing else "Not Found")
+    final_descriptions_and_notes = descriptions_and_notes if apply_descriptions_and_notes else (existing.descriptions_and_notes if existing else "Not Found")
+    final_job_advertisement_links = job_advertisement_links if apply_job_advertisement_links else (existing.job_advertisement_links if existing else "Not Found")
+    final_other_links_and_references = other_links_and_references if apply_other_links_and_references else (existing.other_links_and_references if existing else "Not Found")
+
+    now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Preserve original provenance source if existing and operator didn't approve new fields;
+    # if operator approved fields, set 'operator_edited' while preserving creation metadata.
+    final_provenance = (
+        "operator_edited" if (approved_any or (existing and existing.provenance_source == "operator_edited"))
+        else (existing.provenance_source if existing else "local_research_mvp")
+    )
+    orig_created_at = existing.created_at if existing and existing.created_at else datetime.now(timezone.utc).isoformat()
+    orig_record_number = existing.record_number if existing else None
+
+    # Retrieve source evidence mapping from research cache if available
+    research_cached = _RESEARCH_SESSION_CACHE.get(candidate_id)
+    if research_cached and hasattr(research_cached, "fetched_pages") and research_cached.fetched_pages:
+        evidence_urls = research_cached.fetched_pages
+    elif existing and existing.evidence_urls:
+        evidence_urls = existing.evidence_urls
+    elif final_official_website and final_official_website != "Not Found":
+        evidence_urls = [final_official_website]
+    else:
+        evidence_urls = []
+
+    rec = LeadRegisterRecord(
+        candidate_id=candidate_id,
+        record_number=orig_record_number,
+        priority_level=final_priority_level,
+        priority_rationale=final_priority_rationale,
+        company_name=final_company_name,
+        legal_identity=final_legal_identity,
+        geographic_location=final_geographic_location,
+        telephone_numbers=final_telephone_numbers,
+        business_activities=final_business_activities,
+        official_website=final_official_website,
+        responsible_person=final_responsible_person,
+        descriptions_and_notes=final_descriptions_and_notes,
+        job_advertisement_links=final_job_advertisement_links,
+        other_links_and_references=final_other_links_and_references,
+        contact_email_addresses=final_contact_email_addresses,
+        provenance_source=final_provenance,
+        research_date=now_date,
+        verification_status="EXTRACTED" if approved_any else (existing.verification_status if existing else "Unverified"),
+        confidence_score=0.75 if approved_any else (existing.confidence_score if existing else 0.0),
+        evidence_urls=evidence_urls,
+        created_at=orig_created_at,
+        updated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    reg_store.save_record(rec)
+
+    # Update candidate metadata without altering DNC, historical restrictions, or auto-approving outreach
     cand.last_researched_at = datetime.now(timezone.utc).isoformat()
-    cand.discovery_status = "needs_research"
+    if final_company_name and final_company_name != "Not Found":
+        cand.company_name = final_company_name
     svcs["cand_store"].save_candidate(cand)
-    return RedirectResponse(f"/sales/candidates/{candidate_id}?message=Research timestamp updated.", status_code=status.HTTP_303_SEE_OTHER)
+
+    msg = f"Enriched record for '{final_company_name}' saved to Lead Register."
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}?message={quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/candidates/batch-research", response_class=HTMLResponse)
+async def batch_research_candidates_action(
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+    candidate_ids: List[str] = Form(...),
+):
+    from sales_engine.research.company_research_service import (
+        perform_company_research,
+    )
+
+    svcs = get_console_services()
+    cand_store = svcs["cand_store"]
+
+    # Enforce small batch limit: maximum 3 candidates
+    selected_ids = candidate_ids[:3]
+    batch_results = []
+
+    for cid in selected_ids:
+        cand = cand_store.get_by_id(cid)
+        if not cand or not cand.company_domain:
+            continue
+
+        res = perform_company_research(
+            company_name=cand.company_name or cand.company_domain,
+            canonical_domain=cand.company_domain,
+            candidate_id=cid,
+            use_llm=True,
+        )
+        batch_results.append({
+            "candidate": cand,
+            "research": res,
+        })
+
+    msg = f"Completed batch research for {len(batch_results)} candidate(s)."
+    return render_console_template(
+        request=request,
+        name="company_research_batch.html",
+        context={
+            "request": request,
+            "active_tab": "candidates",
+            "results": batch_results,
+            "message": msg,
+        },
+    )
 
 
 @router.post("/candidates/{candidate_id}/qualify")
@@ -1567,7 +3056,69 @@ async def suppress_candidate_action(
         cand.cold_outreach_allowed = False
         svcs["cand_store"].save_candidate(cand)
 
-    return RedirectResponse(f"/sales/candidates/{candidate_id}?message=Recipient and domain added to suppression list.", status_code=status.HTTP_303_SEE_OTHER)
+@router.post("/candidates/{candidate_id}/review")
+async def review_candidate_action(
+    candidate_id: str,
+    decision: str = Form(...),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    Operator manual review decision: approve, reject, duplicate, needs_research.
+    Preserves prior outreach history, meeting status, and email dates.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    decision_clean = decision.strip().lower()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    note_text = f"Manual Operator Review ({decision_clean}): {notes.strip()}" if notes and notes.strip() else f"Manual Operator Review: {decision_clean}"
+
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    cand.manual_review_notes = notes.strip() if notes and notes.strip() else None
+
+    if decision_clean == "approve":
+        cand.manual_review_decision = "APPROVED"
+        cand.qualification_outcome = QualificationOutcome.qualified_for_enrichment
+        cand.discovery_status = DiscoveryStatus.qualified
+        cand.fit_assessment = "high"
+        # Only allow cold outreach if company was NOT previously contacted and NOT suppressed
+        if not cand.previous_outreach_detected and cand.historical_contact_status in ("uncontacted", None, "") and not cand.suppressed:
+            cand.cold_outreach_allowed = True
+        else:
+            cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' manually APPROVED as qualified lead."
+    elif decision_clean == "reject":
+        cand.manual_review_decision = "REJECTED"
+        cand.qualification_outcome = QualificationOutcome.reject
+        cand.discovery_status = DiscoveryStatus.rejected
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' manually REJECTED."
+    elif decision_clean == "duplicate":
+        cand.manual_review_decision = "DUPLICATE"
+        cand.qualification_outcome = QualificationOutcome.known_company
+        cand.discovery_status = DiscoveryStatus.known_company
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' marked as DUPLICATE."
+    elif decision_clean == "needs_research":
+        cand.manual_review_decision = "NEEDS_RESEARCH"
+        cand.discovery_status = DiscoveryStatus.researching
+        cand.last_researched_at = now_iso
+        msg = f"Candidate '{cand.name}' marked for FURTHER RESEARCH."
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported review decision '{decision}'")
+
+    if note_text not in cand.qualification_reasons:
+        cand.qualification_reasons.append(note_text)
+
+    svcs["cand_store"].save_candidate(cand)
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+
 
 
 # P10_5-ADV-022 / P10_5-FINAL-001..009: Phase 8 Outreach Generation Delegation

@@ -11,7 +11,7 @@ import ast
 import time
 from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Union, Tuple
 
 # Ensure UTF-8 stdout encoding for Windows console
 if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf-8":
@@ -24,12 +24,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-from sales_engine.web.website_fetcher import WebsiteFetcher
-from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
-from ai_engine.rag_retriever import BIMRAGRetriever
-from ai_engine.data_ingestor import BIMDataIngestor
-from ai_engine.ingest_queue import ingest_queue
+# Safe lazy import guards for heavy optional AI/scraping dependencies (ChromaDB, Scrapling, Ollama)
+try:
+    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+except ImportError:
+    BIMLLMClient = None  # type: ignore
+    CodeGenerationRequest = None  # type: ignore
+
+try:
+    from sales_engine.web.website_fetcher import WebsiteFetcher
+except ImportError:
+    WebsiteFetcher = None  # type: ignore
+
+try:
+    from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
+except ImportError:
+    WebsiteAnalyzer = None  # type: ignore
+
+try:
+    from ai_engine.rag_retriever import BIMRAGRetriever
+except ImportError:
+    BIMRAGRetriever = None  # type: ignore
+
+try:
+    from ai_engine.data_ingestor import BIMDataIngestor
+except ImportError:
+    BIMDataIngestor = None  # type: ignore
+
+try:
+    from ai_engine.ingest_queue import ingest_queue
+except ImportError:
+    ingest_queue = None  # type: ignore
+
 from backend.auth import authenticate_admin, create_access_token, verify_admin_token
 from backend.schemas import (
     ScriptGenerationRequest,
@@ -59,9 +85,13 @@ from sales_engine.outreach.schemas import GenerateDraftsRequest
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager: initializes SalesAI AI services on startup."""
+    """Lifecycle manager: initializes SalesAI AI services on startup without blocking on Ollama."""
     print("🚀 Initializing SalesAI services...")
-    app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
+    try:
+        app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
+    except Exception as e:
+        print(f"ℹ️ Local LLM (Ollama) not available at startup ({e}). Deterministic operation ready.")
+        app.state.llm_client = None
     print("🎉 SalesAI Gateway is ready to serve requests.")
     yield
     print("🛑 Shutting down SalesAI Gateway.")
@@ -112,15 +142,19 @@ def ui_endpoint():
     return RedirectResponse(url="/sales", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
-def get_llm_client() -> BIMLLMClient:
+def get_llm_client():
     """Safely get or lazy-initialize the LLM client."""
+    if BIMLLMClient is None:
+        raise HTTPException(status_code=503, detail="Local LLM client dependencies (Ollama) not installed or available.")
     if not hasattr(app.state, "llm_client") or app.state.llm_client is None:
         app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
     return app.state.llm_client
 
 
-def get_rag_retriever() -> BIMRAGRetriever:
+def get_rag_retriever():
     """Safely get or lazy-initialize the ChromaDB RAG retriever."""
+    if BIMRAGRetriever is None:
+        raise HTTPException(status_code=503, detail="RAG retriever dependencies (ChromaDB) not installed or available.")
     if not hasattr(app.state, "rag_retriever") or app.state.rag_retriever is None:
         project_root = Path(__file__).parent.parent
         persist_dir = str(project_root / "chroma_db")

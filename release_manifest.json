@@ -26,6 +26,7 @@
         "README-TEST.md",
         "start_server.py",
         "run_sales_ai.bat",
+        "run_sales_ai.ps1",
         "release_manifest.json",
         "repo_manifest.json"
       ]
@@ -65,7 +66,9 @@
       "chroma_db",
       "chroma_data",
       "runtime",
-      "logs"
+      "logs",
+      "research_snapshots",
+      "data/research_snapshots"
     ],
     "excluded_extensions": [
       ".pyc",
@@ -89,7 +92,10 @@
       ".cer",
       ".log",
       ".zip",
-      ".exe"
+      ".exe",
+      ".xlsx",
+      ".xlsm",
+      ".xls"
     ],
     "sensitive_filename_substrings": [
       "sales_outreach.db",
@@ -100,7 +106,8 @@
       "oauth",
       "token.json",
       "smtp_pass",
-      ".env"
+      ".env",
+      "research_cache.sqlite3"
     ]
   }
 }
