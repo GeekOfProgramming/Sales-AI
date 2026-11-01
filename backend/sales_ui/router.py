@@ -2868,6 +2868,24 @@ async def candidate_detail_view(
     # Also query confirmed manual outreach dispatches for this candidate
     candidate_manual_logs = svcs["rev_store"].list_manual_outreach_logs(candidate_id=candidate_id, limit=50)
 
+    # UX-02.1 Unified Company Workspace: Authoritative Lead Register, Research Snapshot, and Draft integrations
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.research.research_store import ResearchSnapshotStore
+
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    company_lead_record = reg_store.get_explicit_record(candidate_id)
+
+    snap_store = ResearchSnapshotStore(svcs["cand_store"].db_path)
+    latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
+    historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
+
+    company_drafts, _ = svcs["rev_store"].list_drafts(filters={"candidate_id": candidate_id}, limit=50)
+
+    # Verification state summaries
+    verified_contacts = [c for c in contacts_view if c.get("email_status") == "verified"]
+    likely_contacts = [c for c in contacts_view if c.get("email_status") == "likely"]
+    unverified_contacts = [c for c in contacts_view if c.get("email_status") not in ("verified", "likely")]
+
     return render_console_template(
         request=request,
         name="candidate_detail.html",
@@ -2876,9 +2894,18 @@ async def candidate_detail_view(
             "active_tab": "candidates",
             "detail": view,
             "contacts": contacts_view,
+            "verified_contacts": verified_contacts,
+            "likely_contacts": likely_contacts,
+            "unverified_contacts": unverified_contacts,
+            "lead_record": company_lead_record,
+            "latest_snapshot": latest_snapshot,
+            "historical_snapshots": historical_snapshots,
+            "company_drafts": company_drafts,
             "manual_logs": candidate_manual_logs,
             "email_send_enabled": is_email_send_enabled(),
             "can_generate_draft": can_generate_draft,
+            "is_suppressed": is_supp,
+            "is_previously_contacted": is_contacted,
             "message": message,
             "error": error,
         },

@@ -71,6 +71,17 @@ class LeadRegisterStore:
         ).fetchone()
         return bool(row)
 
+    def get_explicit_record(self, candidate_id: str) -> Optional[LeadRegisterRecord]:
+        """Fetch explicitly stored lead register record by candidate_id without synthetic fallback."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM lead_register_records WHERE candidate_id = ?",
+                (candidate_id,)
+            ).fetchone()
+            if row:
+                return self._row_to_record(row)
+            return None
+
     def get_record(self, candidate_id: str) -> Optional[LeadRegisterRecord]:
         """Fetch lead register record by candidate_id, synthesizing from observation/candidate if not yet explicitly stored."""
         with self._get_connection() as conn:
