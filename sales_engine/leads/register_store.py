@@ -176,55 +176,254 @@ class LeadRegisterStore:
 
         return record
 
-    def list_records(self, limit: int = 1000, offset: int = 0, query: Optional[str] = None, priority_filter: Optional[str] = None) -> List[LeadRegisterRecord]:
-        """Lists records across all candidates, prioritizing explicitly stored register records and synthesizing remaining."""
-        with self._get_connection() as conn:
-            if not self._table_exists(conn, "candidate_companies"):
-                # Return explicitly saved lead_register_records if candidate_companies does not exist
-                rows = conn.execute(
-                    "SELECT * FROM lead_register_records ORDER BY record_number ASC LIMIT ? OFFSET ?",
-                    (limit, offset)
-                ).fetchall()
-                records = [self._row_to_record(r) for r in rows]
-                if query:
-                    ql = query.lower()
-                    records = [
-                        r for r in records
-                        if ql in f"{r.company_name} {r.official_website} {r.geographic_location} {r.descriptions_and_notes} {r.contact_email_addresses} {r.telephone_numbers} {r.responsible_person}".lower()
-                    ]
-                return records
+    def query_records(
+        self,
+        limit: int = 25,
+        offset: int = 0,
+        query: str = None,
+        priority: str = None,
+        country: str = None,
+        city: str = None,
+        status: str = None,
+        sort_by: str = "record_number",
+        sort_order: str = "asc",
+    ) -> Tuple[List[LeadRegisterRecord], int, int]:
+        """
+        Server-side filtered and paginated query across lead register records and candidate companies.
+        Applies SQL-level filtering and deterministic ordering BEFORE pagination.
+        Returns: (records, total_matching_count, total_register_count)
+        """
+        valid_sort_fields = {
+            "record_number": "effective_record_number",
+            "company_name": "effective_company_name",
+            "priority": "effective_priority",
+        }
+        order_col = valid_sort_fields.get(sort_by, "effective_record_number")
+        order_dir = "DESC" if str(sort_order).lower() == "desc" else "ASC"
 
-            cand_rows = conn.execute(
-                "SELECT rowid, * FROM candidate_companies ORDER BY rowid ASC LIMIT ? OFFSET ?",
-                (limit, offset)
-            ).fetchall()
+        with self._get_connection() as conn:
+            cand_exists = self._table_exists(conn, "candidate_companies")
+            reg_exists = self._table_exists(conn, "lead_register_records")
+
+            if not cand_exists and not reg_exists:
+                return [], 0, 0
+
+            if not cand_exists:
+                where_clauses = []
+                params = []
+
+                if query and query.strip():
+                    ql = f"%{query.strip()}%"
+                    where_clauses.append("""(
+                        company_name LIKE ? OR
+                        official_website LIKE ? OR
+                        geographic_location LIKE ? OR
+                        descriptions_and_notes LIKE ? OR
+                        contact_email_addresses LIKE ? OR
+                        telephone_numbers LIKE ? OR
+                        responsible_person LIKE ?
+                    )""")
+                    params.extend([ql] * 7)
+
+                if priority and priority.strip():
+                    where_clauses.append("UPPER(priority_level) = ?")
+                    params.append(priority.strip().upper())
+
+                if status and status.strip():
+                    where_clauses.append("verification_status = ?")
+                    params.append(status.strip())
+
+                where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+                total_row = conn.execute("SELECT COUNT(1) FROM lead_register_records").fetchone()
+                total_register_count = total_row[0] if total_row else 0
+
+                match_row = conn.execute(f"SELECT COUNT(1) FROM lead_register_records {where_sql}", params).fetchone()
+                matching_count = match_row[0] if match_row else 0
+
+                records_sql = f"""
+                    SELECT * FROM lead_register_records
+                    {where_sql}
+                    ORDER BY {sort_by if sort_by in ('record_number', 'company_name') else 'record_number'} {order_dir}
+                    LIMIT ? OFFSET ?
+                """
+                page_params = list(params) + [max(0, limit), max(0, offset)]
+                rows = conn.execute(records_sql, page_params).fetchall()
+                records = [self._row_to_record(r) for r in rows]
+                return records, matching_count, total_register_count
+
+            base_cte = """
+                WITH unified_leads AS (
+                    SELECT 
+                        COALESCE(l.candidate_id, c.candidate_id) AS candidate_id,
+                        COALESCE(l.record_number, c.rowid) AS effective_record_number,
+                        COALESCE(
+                            l.priority_level,
+                            CASE 
+                                WHEN c.company_tier LIKE '%tier_1%' OR c.company_tier = 'A' THEN 'A'
+                                WHEN c.company_tier LIKE '%tier_3%' OR c.company_tier = 'C' THEN 'C'
+                                ELSE 'B'
+                            END
+                        ) AS effective_priority,
+                        COALESCE(l.company_name, c.company_name) AS effective_company_name,
+                        COALESCE(l.geographic_location, '') AS geographic_location,
+                        COALESCE(c.country, '') AS country,
+                        COALESCE(c.city, '') AS city,
+                        COALESCE(c.company_domain, '') AS domain,
+                        COALESCE(l.official_website, '') AS reg_website,
+                        COALESCE(l.telephone_numbers, '') AS telephone_numbers,
+                        COALESCE(l.business_activities, '') AS business_activities,
+                        COALESCE(l.responsible_person, '') AS responsible_person,
+                        COALESCE(l.descriptions_and_notes, '') AS descriptions_and_notes,
+                        COALESCE(l.job_advertisement_links, '') AS job_advertisement_links,
+                        COALESCE(l.other_links_and_references, '') AS other_links_and_references,
+                        COALESCE(l.contact_email_addresses, '') AS contact_email_addresses,
+                        COALESCE(l.verification_status, 'Unverified') AS verification_status,
+                        COALESCE(l.provenance_source, 'candidate_store') AS provenance_source,
+                        l.candidate_id AS is_explicit,
+                        c.rowid AS cand_rowid
+                    FROM candidate_companies c
+                    FULL OUTER JOIN lead_register_records l ON c.candidate_id = l.candidate_id
+                )
+            """
+
+            where_clauses = []
+            params = []
+
+            if query and query.strip():
+                ql = f"%{query.strip()}%"
+                where_clauses.append("""(
+                    effective_company_name LIKE ? OR
+                    domain LIKE ? OR
+                    reg_website LIKE ? OR
+                    contact_email_addresses LIKE ? OR
+                    telephone_numbers LIKE ? OR
+                    descriptions_and_notes LIKE ? OR
+                    responsible_person LIKE ? OR
+                    business_activities LIKE ? OR
+                    geographic_location LIKE ? OR
+                    country LIKE ? OR
+                    city LIKE ?
+                )""")
+                params.extend([ql] * 11)
+
+            if priority and priority.strip():
+                where_clauses.append("effective_priority = ?")
+                params.append(priority.strip().upper())
+
+            if country and country.strip():
+                c_val = country.strip()
+                if c_val.lower() == "unknown":
+                    where_clauses.append("(country IS NULL OR country = '' OR country = 'Not Found')")
+                else:
+                    where_clauses.append("LOWER(country) = LOWER(?)")
+                    params.append(c_val)
+
+            if city and city.strip():
+                ct_val = city.strip()
+                if ct_val.lower() == "unknown":
+                    where_clauses.append("(city IS NULL OR city = '' OR city = 'Not Found')")
+                else:
+                    where_clauses.append("LOWER(city) = LOWER(?)")
+                    params.append(ct_val)
+
+            if status and status.strip():
+                where_clauses.append("LOWER(verification_status) = LOWER(?)")
+                params.append(status.strip())
+
+            where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+            total_sql = f"{base_cte} SELECT COUNT(1) FROM unified_leads"
+            total_register_count = conn.execute(total_sql).fetchone()[0]
+
+            match_sql = f"{base_cte} SELECT COUNT(1) FROM unified_leads {where_sql}"
+            matching_count = conn.execute(match_sql, params).fetchone()[0]
+
+            page_sql = f"""
+                {base_cte}
+                SELECT candidate_id, is_explicit, cand_rowid
+                FROM unified_leads
+                {where_sql}
+                ORDER BY {order_col} {order_dir}, candidate_id ASC
+                LIMIT ? OFFSET ?
+            """
+            page_params = list(params) + [max(0, limit), max(0, offset)]
+            id_rows = conn.execute(page_sql, page_params).fetchall()
 
             records = []
-            for r in cand_rows:
+            for r in id_rows:
                 cid = r["candidate_id"]
-                reg_row = conn.execute(
-                    "SELECT * FROM lead_register_records WHERE candidate_id = ?",
-                    (cid,)
-                ).fetchone()
-                if reg_row:
-                    rec = self._row_to_record(reg_row)
-                else:
-                    rec = self._synthesize_record_from_candidate(conn, r)
-
-                if query:
-                    ql = query.lower()
-                    haystack = f"{rec.company_name} {rec.official_website} {rec.geographic_location} {rec.descriptions_and_notes} {rec.contact_email_addresses} {rec.telephone_numbers} {rec.responsible_person}".lower()
-                    if ql not in haystack:
+                if r["is_explicit"]:
+                    reg_row = conn.execute("SELECT * FROM lead_register_records WHERE candidate_id = ?", (cid,)).fetchone()
+                    if reg_row:
+                        records.append(self._row_to_record(reg_row))
                         continue
+                
+                cand_row = conn.execute("SELECT rowid, * FROM candidate_companies WHERE candidate_id = ?", (cid,)).fetchone()
+                if cand_row:
+                    records.append(self._synthesize_record_from_candidate(conn, cand_row))
+                elif r["is_explicit"]:
+                    reg_row = conn.execute("SELECT * FROM lead_register_records WHERE candidate_id = ?", (cid,)).fetchone()
+                    if reg_row:
+                        records.append(self._row_to_record(reg_row))
 
-                if priority_filter and priority_filter.strip():
-                    pf = priority_filter.strip().upper()
-                    if rec.priority_level != pf:
-                        continue
+            return records, matching_count, total_register_count
 
-                records.append(rec)
+    def get_filter_options(self) -> Dict[str, Any]:
+        """
+        Retrieves authoritative distinct filter values (countries, cities by country, verification statuses).
+        Returns structured geographic and status options without inventing data.
+        """
+        with self._get_connection() as conn:
+            cand_exists = self._table_exists(conn, "candidate_companies")
+            reg_exists = self._table_exists(conn, "lead_register_records")
 
-            return records
+            countries = set()
+            cities_by_country = {}
+            all_cities = set()
+            statuses = set()
+
+            if cand_exists:
+                c_rows = conn.execute("""
+                    SELECT DISTINCT country, city 
+                    FROM candidate_companies 
+                    WHERE (country IS NOT NULL AND country != '') OR (city IS NOT NULL AND city != '')
+                """).fetchall()
+                for r in c_rows:
+                    cntry = (r["country"] or "").strip()
+                    ct = (r["city"] or "").strip()
+                    if cntry and cntry != "Not Found":
+                        countries.add(cntry)
+                        if ct and ct != "Not Found":
+                            cities_by_country.setdefault(cntry, []).append(ct)
+                    if ct and ct != "Not Found":
+                        all_cities.add(ct)
+
+            if reg_exists:
+                s_rows = conn.execute("SELECT DISTINCT verification_status FROM lead_register_records WHERE verification_status IS NOT NULL").fetchall()
+                for r in s_rows:
+                    st = (r[0] or "").strip()
+                    if st and st != "Not Found":
+                        statuses.add(st)
+
+            for k in cities_by_country:
+                cities_by_country[k] = sorted(list(set(cities_by_country[k])))
+
+            if not statuses:
+                statuses.update(["Unverified", "OPERATOR_REVIEWED", "EXTRACTED"])
+
+            return {
+                "countries": sorted(list(countries)),
+                "cities_by_country": cities_by_country,
+                "all_cities": sorted(list(all_cities)),
+                "statuses": sorted(list(statuses)),
+                "priorities": ["A", "B", "C"],
+            }
+
+    def list_records(self, limit: int = 1000, offset: int = 0, query: Optional[str] = None, priority_filter: Optional[str] = None) -> List[LeadRegisterRecord]:
+        """Lists records across all candidates, prioritizing explicitly stored register records and synthesizing remaining."""
+        records, _, _ = self.query_records(limit=limit, offset=offset, query=query, priority=priority_filter)
+        return records
 
     def _get_next_record_number(self) -> int:
         with self._get_connection() as conn:

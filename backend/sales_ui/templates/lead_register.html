@@ -1,389 +1,936 @@
 {% extends "base.html" %}
 
-{% block title %}Lead Register (13-Field pyBIM Core) | Email Led{% endblock %}
+{% block title %}Lead Register (13 Fields) — Email Led{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
-  <div>
-    <h1 class="page-title">Lead Register — 13-Field Core Workbook</h1>
-    <p class="page-subtitle">Durable, editable lead register matching the first 13 information columns of the pyBIM workbook.</p>
-  </div>
-  <div style="display: flex; gap: 0.5rem;">
-    <a href="/sales/register/export?format=xlsx" class="btn btn-primary">📊 Export 13-Field Register (XLSX)</a>
-    <a href="/sales/register/export?format=csv" class="btn btn-secondary">📥 Export CSV</a>
-    <a href="/sales/research/pilot" class="btn btn-secondary">🔬 Pilot Targets</a>
-  </div>
-</div>
+<style>
+/* Lead Register Styling */
+.lead-register-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
 
-<!-- Operator Controls Bar: Search & View Mode Toggle & New Research Submission -->
-<div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-      <div>
-        <span style="font-weight: 600; font-size: 1rem;">Total Records in Register:</span>
-        <span class="badge badge-primary" style="font-size: 0.9rem; margin-left: 0.5rem;">{{ total_count }}</span>
-      </div>
-      <div class="view-mode-toggle">
-        <a href="/sales/register?view=summary{% if query %}&q={{ query }}{% endif %}{% if priority %}&priority={{ priority }}{% endif %}" class="view-mode-btn {% if view_mode != 'full' %}active{% endif %}">
-          📋 Summary View
-        </a>
-        <a href="/sales/register?view=full{% if query %}&q={{ query }}{% endif %}{% if priority %}&priority={{ priority }}{% endif %}" class="view-mode-btn {% if view_mode == 'full' %}active{% endif %}">
-          📑 Full 13-Field Workbook
-        </a>
-      </div>
+.lr-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.lr-title-group h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-primary, #0f172a);
+}
+
+.lr-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #64748b);
+    margin-top: 0.25rem;
+}
+
+.lr-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* View switcher */
+.view-switcher {
+    display: inline-flex;
+    background: var(--bg-surface-secondary, #f1f5f9);
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color, #cbd5e1);
+}
+
+.view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border-radius: 0.375rem;
+    color: var(--text-secondary, #475569);
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.view-btn.active {
+    background: var(--bg-surface, #ffffff);
+    color: var(--color-primary, #2563eb);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    font-weight: 600;
+}
+
+/* Filter Bar */
+.filter-card {
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 0.625rem;
+    padding: 1rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.8fr) repeat(auto-fit, minmax(130px, 1fr)) auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.filter-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.filter-control {
+    width: 100%;
+    padding: 0.4375rem 0.625rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--border-color, #cbd5e1);
+    border-radius: 0.375rem;
+    background: var(--bg-surface, #ffffff);
+    color: var(--text-primary, #0f172a);
+    box-sizing: border-box;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* Status & Priority Badges */
+.badge-priority-A {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #f87171;
+    font-weight: 700;
+}
+.badge-priority-B {
+    background-color: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    font-weight: 700;
+}
+.badge-priority-C {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+}
+
+.badge-tag {
+    display: inline-block;
+    padding: 0.125rem 0.4375rem;
+    font-size: 0.6875rem;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.badge-verified {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.badge-unverified {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+}
+
+/* Tables */
+.table-wrapper {
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 0.625rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.lr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    text-align: left;
+}
+
+.lr-table th {
+    background: var(--bg-surface-secondary, #f8fafc);
+    color: var(--text-secondary, #475569);
+    font-weight: 600;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.lr-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-color, #f1f5f9);
+    vertical-align: middle;
+    color: var(--text-primary, #1e293b);
+}
+
+.lr-table tr:hover td {
+    background: var(--bg-surface-hover, #f8fafc);
+}
+
+/* Two-line text clamping */
+.clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.35;
+    max-height: 2.7em;
+    word-break: break-word;
+}
+
+.text-subtle {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #64748b);
+}
+
+/* Sticky Action Column for Workbook view */
+.workbook-scroll {
+    overflow-x: auto;
+    position: relative;
+    max-width: 100%;
+}
+
+.sticky-col-right {
+    position: sticky;
+    right: 0;
+    background: var(--bg-surface, #ffffff);
+    box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+    z-index: 5;
+}
+
+th.sticky-col-right {
+    background: var(--bg-surface-secondary, #f8fafc);
+    z-index: 15;
+}
+
+tr:hover .sticky-col-right {
+    background: var(--bg-surface-hover, #f8fafc);
+}
+
+/* Action button row */
+.action-btn-group {
+    display: inline-flex;
+    gap: 0.375rem;
+    align-items: center;
+}
+
+.btn-xs {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--border-color, #cbd5e1);
+    background: var(--bg-surface, #ffffff);
+    color: var(--text-primary, #334155);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.btn-xs:hover {
+    background: var(--bg-surface-hover, #f1f5f9);
+    border-color: #94a3b8;
+    color: var(--color-primary, #2563eb);
+}
+
+.btn-xs-primary {
+    background: var(--color-primary, #2563eb);
+    color: #ffffff;
+    border-color: var(--color-primary, #2563eb);
+}
+
+.btn-xs-primary:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #ffffff;
+}
+
+/* Pagination Footer */
+.pagination-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-surface, #ffffff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 0.5rem;
+}
+
+.pagination-stats {
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #64748b);
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.page-btn {
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border: 1px solid var(--border-color, #cbd5e1);
+    background: var(--bg-surface, #ffffff);
+    color: var(--text-primary, #334155);
+    border-radius: 0.375rem;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.page-btn:hover:not(.disabled) {
+    background: var(--bg-surface-hover, #f1f5f9);
+    border-color: #94a3b8;
+    color: var(--color-primary, #2563eb);
+}
+
+.page-btn.active {
+    background: var(--color-primary, #2563eb);
+    color: #ffffff;
+    border-color: var(--color-primary, #2563eb);
+    font-weight: 600;
+}
+
+.page-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.page-size-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary, #64748b);
+}
+
+.page-size-select {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--border-color, #cbd5e1);
+    border-radius: 0.25rem;
+    background: var(--bg-surface, #ffffff);
+    color: var(--text-primary, #0f172a);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #64748b);
+}
+.empty-state p {
+    margin: 0.5rem 0 1rem;
+}
+
+/* RTL Support */
+[dir="rtl"] {
+    text-align: right;
+    unicode-bidi: embed;
+}
+[dir="ltr"] {
+    text-align: left;
+    unicode-bidi: embed;
+}
+</style>
+
+<div class="lead-register-container">
+    <!-- Header -->
+    <div class="lr-header">
+        <div class="lr-title-group">
+            <h1>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="3" y1="9" x2="21" y2="9"></line>
+                    <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+                Lead Register (13 Fields)
+            </h1>
+            <div class="lr-subtitle">
+                Official Outreach Register • {{ matching_count }} matching of {{ total_count }} total records
+            </div>
+        </div>
+
+        <div class="lr-header-actions">
+            <!-- View Mode Switcher -->
+            <div class="view-switcher" role="tablist" aria-label="Lead Register View">
+                <a href="{{ url_for('lead_register_view') }}?view=summary&q={{ query_params.get('q','') }}&priority={{ query_params.get('priority','') }}&country={{ query_params.get('country','') }}&city={{ query_params.get('city','') }}&status={{ query_params.get('status','') }}&sort_by={{ current_sort_by }}&sort_order={{ current_sort_order }}&page_size={{ current_page_size }}" 
+                   class="view-btn {% if current_view == 'summary' %}active{% endif %}"
+                   title="Compact operational view with essential fields">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    Summary View
+                </a>
+                <a href="{{ url_for('lead_register_view') }}?view=full&q={{ query_params.get('q','') }}&priority={{ query_params.get('priority','') }}&country={{ query_params.get('country','') }}&city={{ query_params.get('city','') }}&status={{ query_params.get('status','') }}&sort_by={{ current_sort_by }}&sort_order={{ current_sort_order }}&page_size={{ current_page_size }}" 
+                   class="view-btn {% if current_view == 'full' %}active{% endif %}"
+                   title="Full horizontal 13-field workbook view">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+                    13-Field Core Workbook
+                </a>
+            </div>
+
+            <!-- Export Buttons (Exports all matching records) -->
+            <a href="/sales/register/export?format=xlsx&q={{ query_params.get('q','') }}&priority={{ query_params.get('priority','') }}&country={{ query_params.get('country','') }}&city={{ query_params.get('city','') }}&status={{ query_params.get('status','') }}&sort_by={{ current_sort_by }}&sort_order={{ current_sort_order }}" 
+               class="btn btn-xs" title="Export all matching records to Excel (.xlsx)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                Export Excel ({{ matching_count }})
+            </a>
+            <a href="/sales/register/export?format=csv&q={{ query_params.get('q','') }}&priority={{ query_params.get('priority','') }}&country={{ query_params.get('country','') }}&city={{ query_params.get('city','') }}&status={{ query_params.get('status','') }}&sort_by={{ current_sort_by }}&sort_order={{ current_sort_order }}" 
+               class="btn btn-xs" title="Export all matching records to CSV">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Export CSV
+            </a>
+        </div>
     </div>
-    <form method="GET" action="/sales/register" style="display: flex; gap: 0.5rem; margin: 0; align-items: center; flex-wrap: wrap;">
-      <input type="hidden" name="view" value="{{ view_mode }}">
-      <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company, phone, email, notes..." class="form-control" style="width: 260px;">
-      <select name="priority" class="form-control" style="width: 140px;">
-        <option value="">All Priorities</option>
-        <option value="A" {% if priority == 'A' %}selected{% endif %}>Priority A</option>
-        <option value="B" {% if priority == 'B' %}selected{% endif %}>Priority B</option>
-        <option value="C" {% if priority == 'C' %}selected{% endif %}>Priority C</option>
-      </select>
-      <button type="submit" class="btn btn-secondary">Filter</button>
-      {% if query or priority %}
-        <a href="/sales/register?view={{ view_mode }}" class="btn btn-outline-secondary" style="font-size: 0.85rem; padding: 0.45rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset</a>
-      {% endif %}
-    </form>
-  </div>
 
-  <!-- Bounded New Company Research Form -->
-  <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.85rem;">
-    <summary style="font-weight: 600; cursor: pointer; color: #3b82f6;">
-      ➕ Add &amp; Research New Company (Bounded Official-Website Research)
-    </summary>
-    <form method="POST" action="/sales/register/research-new" style="margin-top: 1rem;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-        <div>
-          <label style="font-size: 0.8rem; font-weight: 600;">Company Name *</label>
-          <input type="text" name="company_name" required placeholder="e.g. Acme Engineering S.r.l." class="form-control">
-        </div>
-        <div>
-          <label style="font-size: 0.8rem; font-weight: 600;">Official Website URL *</label>
-          <input type="url" name="website_url" required placeholder="https://www.example.it" class="form-control">
-        </div>
-        <div>
-          <label style="font-size: 0.8rem; font-weight: 600;">Provisional Priority</label>
-          <select name="priority_level" class="form-control">
-            <option value="A">Priority A (High Potential / Urgent)</option>
-            <option value="B" selected>Priority B (Standard Engineering Lead)</option>
-            <option value="C">Priority C (Specialist / Boutique / Low Urgency)</option>
-          </select>
-        </div>
-      </div>
-      <div style="margin-bottom: 1rem;">
-        <label style="font-size: 0.8rem; font-weight: 600;">Initial Operator Notes / Research Focus</label>
-        <input type="text" name="operator_notes" placeholder="Initial context or project rationale..." class="form-control">
-      </div>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.75rem; color: var(--text-muted);">
-          🛡️ Strictly bounded: 1 safe HTTP fetch of public facts. Zero LLM billing. Missing fields stay Unverified.
-        </span>
-        <button type="submit" class="btn btn-primary btn-sm">
-          🔍 Research &amp; Add to Register
-        </button>
-      </div>
-    </form>
-  </details>
-</div>
+    <!-- Filter Card -->
+    <div class="filter-card">
+        <form method="GET" action="{{ url_for('lead_register_view') }}" id="filterForm">
+            <input type="hidden" name="view" value="{{ current_view }}">
+            <input type="hidden" name="page" value="1">
+            <input type="hidden" name="page_size" value="{{ current_page_size }}">
 
-{% if view_mode == 'full' %}
-<!-- 13-Field Lead Register Table (Horizontal Scroll / Full Visibility) -->
-<div class="card" style="padding: 0;">
-  <div style="padding: 0.75rem 1rem; background: var(--bg-hover); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-    <span style="font-size: 0.85rem; color: var(--text-secondary);">
-      💡 Showing exact 13 pyBIM workbook columns. Click <strong>Edit</strong> or company name to modify details.
-    </span>
-    <span style="font-size: 0.8rem; color: var(--text-muted);">Scroll horizontally → to see all 13 columns</span>
-  </div>
-
-  <div class="table-scroll-container">
-    <table class="table" style="width: 100%; min-width: 1700px; border-collapse: collapse; text-align: left; font-size: 0.825rem;">
-      <thead>
-        <tr style="background: var(--bg-hover); border-bottom: 2px solid var(--border-color);">
-          <th style="padding: 0.6rem 0.75rem; width: 60px;">#1 Row</th>
-          <th style="padding: 0.6rem 0.75rem; width: 70px;">#2 Tier</th>
-          <th style="padding: 0.6rem 0.75rem; width: 160px;">#3 Priority Rationale</th>
-          <th style="padding: 0.6rem 0.75rem; width: 220px;">#4 Company &amp; Legal Identity</th>
-          <th style="padding: 0.6rem 0.75rem; width: 160px;">#5 Geographic Location</th>
-          <th style="padding: 0.6rem 0.75rem; width: 140px;">#6 Phone Numbers</th>
-          <th style="padding: 0.6rem 0.75rem; width: 180px;">#7 Activities / Services</th>
-          <th style="padding: 0.6rem 0.75rem; width: 160px;">#8 Official Website</th>
-          <th style="padding: 0.6rem 0.75rem; width: 160px;">#9 Responsible Person</th>
-          <th style="padding: 0.6rem 0.75rem; width: 200px;">#10 Descriptions &amp; Notes</th>
-          <th style="padding: 0.6rem 0.75rem; width: 140px;">#11 Job Links</th>
-          <th style="padding: 0.6rem 0.75rem; width: 140px;">#12 Other Links</th>
-          <th style="padding: 0.6rem 0.75rem; width: 180px;">#13 Contact Emails</th>
-          <th style="padding: 0.6rem 0.75rem; width: 80px; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for rec in records %}
-        <tr style="border-bottom: 1px solid var(--border-color); vertical-align: top;">
-          <!-- 1. Row Number -->
-          <td style="padding: 0.6rem 0.75rem; font-weight: 600;">
-            {{ rec.record_number or loop.index }}
-          </td>
-
-          <!-- 2. Priority -->
-          <td style="padding: 0.6rem 0.75rem;">
-            <span class="badge {% if rec.priority_level == 'A' %}badge-success{% elif rec.priority_level == 'B' %}badge-primary{% else %}badge-warning{% endif %}">
-              Priority {{ rec.priority_level or 'B' }}
-            </span>
-          </td>
-
-          <!-- 3. Rationale -->
-          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 160px; word-break: break-word;">
-            {{ rec.priority_rationale or 'Not Found' }}
-          </td>
-
-          <!-- 4. Company & Legal Identity -->
-          <td style="padding: 0.6rem 0.75rem;">
-            <a href="/sales/register/{{ rec.candidate_id }}" style="font-weight: 700; color: #3b82f6; text-decoration: none;">
-              {{ rec.company_name }}
-            </a>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
-              {{ rec.legal_identity or 'Not Found' }}
-            </div>
-          </td>
-
-          <!-- 5. Location -->
-          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
-            {{ rec.geographic_location or 'Not Found' }}
-          </td>
-
-          <!-- 6. Phone Numbers -->
-          <td style="padding: 0.6rem 0.75rem;">
-            {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
-              <code>{{ rec.telephone_numbers }}</code>
-            {% else %}
-              <span style="color: var(--text-muted);">Not Found</span>
-            {% endif %}
-          </td>
-
-          <!-- 7. Activities / Services -->
-          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 180px; word-break: break-word;">
-            {{ rec.business_activities or 'Not Found' }}
-          </td>
-
-          <!-- 8. Official Website -->
-          <td style="padding: 0.6rem 0.75rem; max-width: 160px; word-break: break-all;">
-            {% if rec.official_website and rec.official_website != 'Not Found' %}
-              <a href="{{ rec.official_website }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
-                {{ rec.official_website }}
-              </a>
-            {% else %}
-              <span style="color: var(--text-muted);">Not Found</span>
-            {% endif %}
-          </td>
-
-          <!-- 9. Responsible Person -->
-          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
-            {{ rec.responsible_person or 'Not Found' }}
-          </td>
-
-          <!-- 10. Descriptions & Notes -->
-          <td style="padding: 0.6rem 0.75rem; max-width: 260px; color: var(--text-secondary); word-break: break-word;">
-            {% if rec.descriptions_and_notes and rec.descriptions_and_notes != 'Not Found' %}
-              {% if rec.descriptions_and_notes|length > 100 %}
-                <details class="cell-expandable">
-                  <summary>{{ rec.descriptions_and_notes[:90] }}...</summary>
-                  <div class="cell-full-text">{{ rec.descriptions_and_notes }}</div>
-                </details>
-              {% else %}
-                <div style="font-size: 0.8rem; white-space: pre-wrap;">
-                  {{ rec.descriptions_and_notes }}
+            <div class="filter-grid">
+                <!-- Search text -->
+                <div class="filter-group">
+                    <label for="filterQuery">Search</label>
+                    <input type="text" id="filterQuery" name="q" value="{{ query_params.get('q','') }}" 
+                           placeholder="Company, domain, email, phone, notes..." class="filter-control">
                 </div>
-              {% endif %}
-            {% else %}
-              <span style="color: var(--text-muted);">Not Found</span>
-            {% endif %}
-          </td>
 
-          <!-- 11. Job Links -->
-          <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
-            {% if rec.job_advertisement_links and rec.job_advertisement_links != 'Not Found' %}
-              {% if rec.job_advertisement_links.startswith('http://') or rec.job_advertisement_links.startswith('https://') %}
-                <a href="{{ rec.job_advertisement_links }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
-                  {{ rec.job_advertisement_links }}
-                </a>
-              {% else %}
-                <span style="color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">
-                  {{ rec.job_advertisement_links }}
-                </span>
-              {% endif %}
-            {% else %}
-              <span style="color: var(--text-muted);">Not Found</span>
-            {% endif %}
-          </td>
-
-          <!-- 12. Other Links -->
-          <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
-            {% if rec.other_links_and_references and rec.other_links_and_references != 'Not Found' %}
-              {{ rec.other_links_and_references }}
-            {% else %}
-              <span style="color: var(--text-muted);">Not Found</span>
-            {% endif %}
-          </td>
-
-          <!-- 13. Contact Emails -->
-          <td style="padding: 0.6rem 0.75rem;">
-            {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
-              {% for single_email in rec.contact_email_addresses.replace(';', ',').split(',') %}
-                {% set em = single_email.strip() %}
-                {% if em %}
-                  <div>
-                    <a href="mailto:{{ em }}" style="color: #3b82f6; word-break: break-all;">
-                      {{ em }}
-                    </a>
-                  </div>
-                {% endif %}
-              {% endfor %}
-            {% else %}
-              <span style="color: var(--text-muted);">Not Found</span>
-            {% endif %}
-          </td>
-
-          <!-- Actions Sticky Column -->
-          <td style="padding: 0.6rem 0.75rem; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">
-            <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-              <a href="/sales/register/{{ rec.candidate_id }}" class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
-                ✏️ Edit 13 Fields
-              </a>
-              <a href="/sales/candidates/{{ rec.candidate_id }}/research" class="btn btn-sm btn-secondary" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; color: var(--border-focus);">
-                🔬 Snapshot Review
-              </a>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% else %}
-<!-- Default Company Summary Mode (Clean, High-Readability Operational View) -->
-<div class="card" style="padding: 0;">
-  <div class="table-responsive">
-    <table class="data-table crm-table">
-      <thead>
-        <tr>
-          <th style="width: 50px;">#</th>
-          <th>Company &amp; Legal Identity</th>
-          <th>Geographic Location</th>
-          <th>Priority &amp; Tier</th>
-          <th>Contact Channels</th>
-          <th>Descriptions &amp; Notes</th>
-          <th>Research &amp; Provenance</th>
-          <th style="text-align: right; min-width: 170px;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for rec in records %}
-        <tr>
-          <td style="font-weight: 600; color: var(--text-muted);">{{ rec.record_number or loop.index }}</td>
-          <td>
-            <a href="/sales/register/{{ rec.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none; font-size: 0.95rem;">
-              {{ rec.company_name }}
-            </a>
-            {% if rec.legal_identity and rec.legal_identity != 'Not Found' %}
-              <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">
-                {{ rec.legal_identity }}
-              </div>
-            {% endif %}
-            {% if rec.official_website and rec.official_website != 'Not Found' %}
-              <div style="font-size: 0.75rem; margin-top: 0.2rem;">
-                <a href="{{ rec.official_website }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); word-break: break-all;">
-                  🌐 {{ rec.official_website }}
-                </a>
-              </div>
-            {% endif %}
-          </td>
-          <td>
-            <span style="font-size: 0.85rem;">{{ rec.geographic_location or 'Not Found' }}</span>
-          </td>
-          <td>
-            <span class="badge {% if rec.priority_level == 'A' %}badge-success{% elif rec.priority_level == 'B' %}badge-primary{% else %}badge-warning{% endif %}">
-              Priority {{ rec.priority_level or 'B' }}
-            </span>
-            {% if rec.priority_rationale and rec.priority_rationale != 'Not Found' %}
-              {% if rec.priority_rationale|length > 70 %}
-                <details class="cell-expandable" style="margin-top: 0.25rem;">
-                  <summary>{{ rec.priority_rationale[:65] }}...</summary>
-                  <div class="cell-full-text">{{ rec.priority_rationale }}</div>
-                </details>
-              {% else %}
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; max-width: 180px;">
-                  {{ rec.priority_rationale }}
+                <!-- Country -->
+                <div class="filter-group">
+                    <label for="filterCountry">Country</label>
+                    <select id="filterCountry" name="country" class="filter-control" onchange="updateCityDropdown()">
+                        <option value="">All Countries</option>
+                        {% for c in filter_options.countries %}
+                            <option value="{{ c }}" {% if query_params.get('country') == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-              {% endif %}
-            {% endif %}
-          </td>
-          <td>
-            {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
-              <div>
-                {% for single_email in rec.contact_email_addresses.replace(';', ',').split(',') %}
-                  {% set em = single_email.strip() %}
-                  {% if em %}
-                    <div style="margin-bottom: 0.15rem;">
-                      <a href="mailto:{{ em }}" style="color: var(--border-focus); font-weight: 600; font-size: 0.82rem; word-break: break-all;">
-                        ✉️ {{ em }}
-                      </a>
-                    </div>
-                  {% endif %}
+
+                <!-- Dynamic City -->
+                <div class="filter-group">
+                    <label for="filterCity">City / Region</label>
+                    <select id="filterCity" name="city" class="filter-control">
+                        <option value="">All Cities</option>
+                        {% for ct in filter_options.cities %}
+                            <option value="{{ ct }}" {% if query_params.get('city') == ct %}selected{% endif %}>{{ ct }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Priority -->
+                <div class="filter-group">
+                    <label for="filterPriority">Priority</label>
+                    <select id="filterPriority" name="priority" class="filter-control">
+                        <option value="">All Priorities</option>
+                        {% for p in filter_options.priorities %}
+                            <option value="{{ p }}" {% if query_params.get('priority') == p %}selected{% endif %}>Priority {{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Research / Verification Status -->
+                <div class="filter-group">
+                    <label for="filterStatus">Status</label>
+                    <select id="filterStatus" name="status" class="filter-control">
+                        <option value="">All Statuses</option>
+                        {% for s in filter_options.statuses %}
+                            <option value="{{ s }}" {% if query_params.get('status') == s %}selected{% endif %}>{{ s|capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Sort By -->
+                <div class="filter-group">
+                    <label for="filterSortBy">Sort By</label>
+                    <select id="filterSortBy" name="sort_by" class="filter-control">
+                        <option value="record_number" {% if current_sort_by == 'record_number' %}selected{% endif %}>Record #</option>
+                        <option value="company_name" {% if current_sort_by == 'company_name' %}selected{% endif %}>Company Name</option>
+                        <option value="priority" {% if current_sort_by == 'priority' %}selected{% endif %}>Priority</option>
+                    </select>
+                </div>
+
+                <!-- Sort Order -->
+                <div class="filter-group">
+                    <label for="filterSortOrder">Order</label>
+                    <select id="filterSortOrder" name="sort_order" class="filter-control">
+                        <option value="asc" {% if current_sort_order == 'asc' %}selected{% endif %}>Ascending</option>
+                        <option value="desc" {% if current_sort_order == 'desc' %}selected{% endif %}>Descending</option>
+                    </select>
+                </div>
+
+                <!-- Actions -->
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-xs btn-xs-primary" style="padding: 0.4375rem 0.875rem;">Apply</button>
+                    {% if query_params.get('q') or query_params.get('country') or query_params.get('city') or query_params.get('priority') or query_params.get('status') %}
+                        <a href="{{ url_for('lead_register_view') }}?view={{ current_view }}" class="btn btn-xs" style="padding: 0.4375rem 0.625rem;" title="Reset all filters">Reset</a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Active Filters Summary Banner (if filtered) -->
+    {% if query_params.get('q') or query_params.get('country') or query_params.get('city') or query_params.get('priority') or query_params.get('status') %}
+    <div style="font-size: 0.8125rem; color: var(--text-secondary, #64748b); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <strong>Active Filters:</strong>
+        {% if query_params.get('q') %}<span>Search: "<em>{{ query_params.get('q') }}</em>"</span>{% endif %}
+        {% if query_params.get('country') %}<span class="badge-tag" style="background:#e0f2fe; color:#0369a1;">Country: {{ query_params.get('country') }}</span>{% endif %}
+        {% if query_params.get('city') %}<span class="badge-tag" style="background:#e0f2fe; color:#0369a1;">City: {{ query_params.get('city') }}</span>{% endif %}
+        {% if query_params.get('priority') %}<span class="badge-tag badge-priority-{{ query_params.get('priority') }}">Priority {{ query_params.get('priority') }}</span>{% endif %}
+        {% if query_params.get('status') %}<span class="badge-tag" style="background:#f1f5f9; color:#334155;">Status: {{ query_params.get('status') }}</span>{% endif %}
+        <span>— Showing {{ matching_count }} matching records</span>
+    </div>
+    {% endif %}
+
+    <!-- Top Pagination Controls -->
+    {% macro render_pagination() %}
+    <div class="pagination-container">
+        <div class="pagination-stats">
+            Showing {{ ((current_page - 1) * current_page_size) + 1 if matching_count > 0 else 0 }} to {{ [current_page * current_page_size, matching_count]|min }} of {{ matching_count }} records
+            {% if matching_count != total_count %}(filtered from {{ total_count }} total){% endif %}
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <!-- Page Size Dropdown -->
+            <div class="page-size-selector">
+                <label for="pageSizeSelect">Per page:</label>
+                <select id="pageSizeSelect" class="page-size-select" onchange="changePageSize(this.value)">
+                    <option value="10" {% if current_page_size == 10 %}selected{% endif %}>10</option>
+                    <option value="25" {% if current_page_size == 25 %}selected{% endif %}>25</option>
+                    <option value="50" {% if current_page_size == 50 %}selected{% endif %}>50</option>
+                </select>
+            </div>
+
+            <!-- Page Buttons -->
+            <div class="pagination-controls">
+                <!-- First & Prev -->
+                <a href="{{ build_page_url(1) }}" class="page-btn {% if current_page <= 1 %}disabled{% endif %}" title="First Page">«</a>
+                <a href="{{ build_page_url(current_page - 1) }}" class="page-btn {% if current_page <= 1 %}disabled{% endif %}" title="Previous Page">‹</a>
+
+                <!-- Clamped Page Numbers -->
+                {% set start_page = [1, current_page - 2]|max %}
+                {% set end_page = [total_pages, start_page + 4]|min %}
+                {% set start_page = [1, end_page - 4]|max %}
+
+                {% for p in range(start_page, end_page + 1) %}
+                    <a href="{{ build_page_url(p) }}" class="page-btn {% if p == current_page %}active{% endif %}">{{ p }}</a>
                 {% endfor %}
-              </div>
-            {% else %}
-              <span style="color: var(--text-muted); font-size: 0.78rem;">No email</span>
-            {% endif %}
-            {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
-              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">
-                📞 <code>{{ rec.telephone_numbers }}</code>
-              </div>
-            {% endif %}
-          </td>
-          <td>
-            {% if rec.descriptions_and_notes and rec.descriptions_and_notes != 'Not Found' %}
-              {% if rec.descriptions_and_notes|length > 80 %}
-                <details class="cell-expandable">
-                  <summary>{{ rec.descriptions_and_notes[:75] }}...</summary>
-                  <div class="cell-full-text">{{ rec.descriptions_and_notes }}</div>
-                </details>
-              {% else %}
-                <div class="cell-compact-preview">
-                  {{ rec.descriptions_and_notes }}
-                </div>
-              {% endif %}
-            {% else %}
-              <span style="color: var(--text-muted); font-size: 0.78rem;">Not Found</span>
-            {% endif %}
-          </td>
-          <td>
-            <span class="badge badge-info" style="font-size: 0.72rem;">{{ rec.provenance_source }}</span>
-            <span class="badge {% if rec.verification_status == 'OPERATOR_REVIEWED' %}badge-success{% else %}badge-muted{% endif %}" style="font-size: 0.68rem; margin-top: 0.2rem; display: inline-block;">
-              {{ rec.verification_status }}
-            </span>
-            {% if rec.responsible_person and rec.responsible_person != 'Not Found' %}
-              <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.2rem;">
-                👤 {{ rec.responsible_person }}
-              </div>
-            {% endif %}
-          </td>
-          <td style="text-align: right; white-space: nowrap;">
-            <a href="/sales/register/{{ rec.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
-              ✏️ Edit 13 Fields
-            </a>
-            <a href="/sales/candidates/{{ rec.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="Review Research Snapshot">
-              🔬 Snapshot
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+
+                <!-- Next & Last -->
+                <a href="{{ build_page_url(current_page + 1) }}" class="page-btn {% if current_page >= total_pages %}disabled{% endif %}" title="Next Page">›</a>
+                <a href="{{ build_page_url(total_pages) }}" class="page-btn {% if current_page >= total_pages %}disabled{% endif %}" title="Last Page">»</a>
+            </div>
+        </div>
+    </div>
+    {% endmacro %}
+
+    {% if total_pages > 1 %}
+        {{ render_pagination() }}
+    {% endif %}
+
+    <!-- Content Table Views -->
+    {% if current_view == 'summary' %}
+        <!-- COMPACT SUMMARY VIEW (Default) -->
+        <div class="table-wrapper">
+            <table class="lr-table" aria-label="Lead Register Compact Summary">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th style="min-width: 200px;">Company & Website</th>
+                        <th style="min-width: 140px;">Country / City</th>
+                        <th style="width: 80px; text-align: center;">Priority</th>
+                        <th style="min-width: 220px;">Contact Summary</th>
+                        <th style="min-width: 140px;">Status / Provenance</th>
+                        <th style="width: 170px; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in records %}
+                    <tr>
+                        <!-- Record Number -->
+                        <td style="font-weight: 600; color: var(--text-secondary, #64748b);">
+                            {{ rec.record_number or loop.index }}
+                        </td>
+
+                        <!-- Company & Website -->
+                        <td>
+                            <div style="font-weight: 600; font-size: 0.875rem;" dir="auto" title="{{ rec.company_name }}">
+                                <a href="/sales/candidates/{{ rec.candidate_id }}" 
+                                   style="color: var(--color-primary, #2563eb); text-decoration: none;">
+                                    {{ rec.company_name }}
+                                </a>
+                            </div>
+                            {% if rec.official_website %}
+                            <div class="text-subtle clamp-2">
+                                <a href="{{ rec.official_website if rec.official_website.startswith('http') else 'https://' ~ rec.official_website }}" 
+                                   target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary, #64748b); text-decoration: none;">
+                                    {{ rec.official_website|replace('https://','')|replace('http://','')|replace('www.','') }}
+                                </a>
+                            </div>
+                            {% endif %}
+                        </td>
+
+                        <!-- Location / Region -->
+                        <td>
+                            <div class="clamp-2" dir="auto" title="{{ rec.geographic_location }}">
+                                {% if rec.geographic_location and rec.geographic_location|lower != 'unknown' and rec.geographic_location != 'Not Found' %}
+                                    {{ rec.geographic_location }}
+                                {% else %}
+                                    <span class="text-subtle" style="font-style: italic;">Unknown / Not Specified</span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Priority Badge -->
+                        <td style="text-align: center;">
+                            {% set prio = (rec.priority_level or 'C')|upper %}
+                            {% if prio in ['A', 'B', 'C'] %}
+                                <span class="badge-tag badge-priority-{{ prio }}">P-{{ prio }}</span>
+                            {% else %}
+                                <span class="badge-tag badge-priority-C">{{ prio }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Contact Summary -->
+                        <td>
+                            {% if rec.responsible_person and rec.responsible_person != 'Not Found' %}
+                                <div style="font-weight: 500;" dir="auto" title="{{ rec.responsible_person }}">
+                                    {{ rec.responsible_person }}
+                                </div>
+                            {% endif %}
+                            <div class="clamp-2" style="font-size: 0.75rem;">
+                                {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
+                                    {% for em in rec.contact_email_addresses.replace(';', ',').split(',') %}
+                                        {% set clean_em = em.strip() %}
+                                        {% if clean_em %}
+                                            <a href="mailto:{{ clean_em }}" style="color: var(--color-primary, #2563eb); text-decoration: none; margin-right: 0.35rem;" title="{{ clean_em }}">
+                                                ✉ {{ clean_em }}
+                                            </a>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-subtle" style="font-style: italic;">No verified email</span>
+                                {% endif %}
+                                {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
+                                    <span class="text-subtle" style="margin-left: 0.5rem;" title="{{ rec.telephone_numbers }}">
+                                        ☎ {{ rec.telephone_numbers }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Status / Provenance -->
+                        <td>
+                            <div>
+                                {% if rec.verification_status == 'Verified' %}
+                                    <span class="badge-tag badge-verified">Verified Lead</span>
+                                {% else %}
+                                    <span class="badge-tag badge-unverified">{{ rec.verification_status or 'Discovered' }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-subtle clamp-2" style="margin-top: 0.125rem;">
+                                {{ rec.provenance_source or 'System' }}
+                            </div>
+                        </td>
+
+                        <!-- Actions -->
+                        <td style="text-align: right;">
+                            <div class="action-btn-group">
+                                <a href="/sales/candidates/{{ rec.candidate_id }}" 
+                                   class="btn-xs" title="Open Unified Company Workspace">
+                                    Workspace
+                                </a>
+                                <a href="/sales/register/{{ rec.candidate_id }}" 
+                                   class="btn-xs btn-xs-primary" title="Edit 13 Fields">
+                                    Edit
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7">
+                            <div class="empty-state">
+                                <h3>No Lead Records Found</h3>
+                                <p>No records match your active search filters or the database is empty.</p>
+                                {% if query_params.get('q') or query_params.get('country') or query_params.get('city') or query_params.get('priority') or query_params.get('status') %}
+                                    <a href="{{ url_for('lead_register_view') }}?view={{ current_view }}" class="btn btn-xs btn-xs-primary">Clear Filters</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <!-- FULL 13-FIELD WORKBOOK VIEW -->
+        <div class="table-wrapper workbook-scroll">
+            <table class="lr-table" style="min-width: 1700px;" aria-label="Lead Register 13-Field Workbook">
+                <thead>
+                    <tr>
+                        <th style="width: 45px;">#</th>
+                        <th style="width: 160px;">1. Company</th>
+                        <th style="width: 140px;">2. Website</th>
+                        <th style="width: 140px;">3. Location</th>
+                        <th style="width: 100px;">4. Country</th>
+                        <th style="width: 100px;">5. City</th>
+                        <th style="width: 150px;">6. Responsible</th>
+                        <th style="width: 160px;">7. Email</th>
+                        <th style="width: 120px;">8. Phone</th>
+                        <th style="width: 160px;">9. Activities</th>
+                        <th style="width: 160px;">10. BIM Tools</th>
+                        <th style="width: 180px;">11. Notes</th>
+                        <th style="width: 70px; text-align: center;">12. Prio</th>
+                        <th style="width: 120px;">13. Status</th>
+                        <th class="sticky-col-right" style="width: 130px; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in records %}
+                    <tr>
+                        <!-- # -->
+                        <td style="font-weight: 600; color: var(--text-secondary, #64748b);">
+                            {{ rec.record_number or loop.index }}
+                        </td>
+
+                        <!-- 1. Company Name -->
+                        <td>
+                            <div class="clamp-2" style="font-weight: 600;" dir="auto" title="{{ rec.company_name }}">
+                                <a href="/sales/candidates/{{ rec.candidate_id }}" 
+                                   style="color: var(--color-primary, #2563eb); text-decoration: none;">
+                                    {{ rec.company_name }}
+                                </a>
+                            </div>
+                        </td>
+
+                        <!-- 2. Website -->
+                        <td>
+                            <div class="clamp-2 text-subtle" title="{{ rec.official_website }}">
+                                {% if rec.official_website and rec.official_website != 'Not Found' %}
+                                    <a href="{{ rec.official_website if rec.official_website.startswith('http') else 'https://' ~ rec.official_website }}" 
+                                       target="_blank" rel="noopener noreferrer" style="color: var(--color-primary, #2563eb);">
+                                        {{ rec.official_website|replace('https://','')|replace('http://','')|replace('www.','') }}
+                                    </a>
+                                {% else %}
+                                    <span style="font-style: italic;">—</span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- 3. Geographic Location -->
+                        <td>
+                            <div class="clamp-2" dir="auto" title="{{ rec.geographic_location }}">
+                                {{ rec.geographic_location if (rec.geographic_location and rec.geographic_location != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 4. Country -->
+                        <td>
+                            <div class="clamp-2" dir="auto">
+                                {% if rec.geographic_location and ',' in rec.geographic_location %}
+                                    {{ rec.geographic_location.split(',')[-1].strip() }}
+                                {% elif rec.geographic_location and rec.geographic_location != 'Not Found' %}
+                                    {{ rec.geographic_location }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- 5. City -->
+                        <td>
+                            <div class="clamp-2" dir="auto">
+                                {% if rec.geographic_location and ',' in rec.geographic_location %}
+                                    {{ rec.geographic_location.split(',')[0].strip() }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- 6. Responsible Person -->
+                        <td>
+                            <div class="clamp-2" dir="auto" title="{{ rec.responsible_person }}">
+                                {{ rec.responsible_person if (rec.responsible_person and rec.responsible_person != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 7. Email Addresses -->
+                        <td>
+                            <div class="clamp-2 text-subtle" title="{{ rec.contact_email_addresses }}">
+                                {{ rec.contact_email_addresses if (rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 8. Telephone Numbers -->
+                        <td>
+                            <div class="clamp-2 text-subtle" title="{{ rec.telephone_numbers }}">
+                                {{ rec.telephone_numbers if (rec.telephone_numbers and rec.telephone_numbers != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 9. Business Activities -->
+                        <td>
+                            <div class="clamp-2 text-subtle" dir="auto" title="{{ rec.business_activities }}">
+                                {{ rec.business_activities if (rec.business_activities and rec.business_activities != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 10. BIM Tools / Links -->
+                        <td>
+                            <div class="clamp-2 text-subtle" dir="auto" title="{{ rec.other_links_and_references }}">
+                                {{ rec.other_links_and_references if (rec.other_links_and_references and rec.other_links_and_references != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 11. Notes -->
+                        <td>
+                            <div class="clamp-2 text-subtle" dir="auto" title="{{ rec.descriptions_and_notes }}">
+                                {{ rec.descriptions_and_notes if (rec.descriptions_and_notes and rec.descriptions_and_notes != 'Not Found') else '—' }}
+                            </div>
+                        </td>
+
+                        <!-- 12. Priority -->
+                        <td style="text-align: center;">
+                            {% set prio = (rec.priority_level or 'C')|upper %}
+                            {% if prio in ['A', 'B', 'C'] %}
+                                <span class="badge-tag badge-priority-{{ prio }}">{{ prio }}</span>
+                            {% else %}
+                                <span class="badge-tag badge-priority-C">{{ prio }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- 13. Status -->
+                        <td>
+                            <div class="clamp-2">
+                                {% if rec.verification_status == 'Verified' %}
+                                    <span class="badge-tag badge-verified">Verified</span>
+                                {% else %}
+                                    <span class="badge-tag badge-unverified">{{ rec.verification_status or 'Discovered' }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <!-- Sticky Actions Column -->
+                        <td class="sticky-col-right" style="text-align: right;">
+                            <div class="action-btn-group">
+                                <a href="/sales/register/{{ rec.candidate_id }}" 
+                                   class="btn-xs btn-xs-primary" title="Edit 13 Fields">
+                                    Edit
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="15">
+                            <div class="empty-state">
+                                <h3>No Lead Records Found</h3>
+                                <p>No records match your active search filters.</p>
+                                {% if query_params.get('q') or query_params.get('country') or query_params.get('city') or query_params.get('priority') or query_params.get('status') %}
+                                    <a href="{{ url_for('lead_register_view') }}?view={{ current_view }}" class="btn btn-xs btn-xs-primary">Clear Filters</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
+    <!-- Bottom Pagination Controls -->
+    {{ render_pagination() }}
 </div>
-{% endif %}
+
+<script>
+// Authoritative mapping of cities by country for dynamic dropdown
+const citiesByCountry = {{ filter_options.cities_by_country | tojson }};
+const allCities = {{ filter_options.all_cities | tojson }};
+const initialSelectedCity = "{{ query_params.get('city', '') }}";
+
+function updateCityDropdown() {
+    const countrySelect = document.getElementById('filterCountry');
+    const citySelect = document.getElementById('filterCity');
+    const selectedCountry = countrySelect.value;
+
+    let availableCities = [];
+    if (selectedCountry && citiesByCountry[selectedCountry]) {
+        availableCities = citiesByCountry[selectedCountry];
+    } else {
+        availableCities = allCities;
+    }
+
+    // Save previous value if possible
+    const currentCityVal = citySelect.value || initialSelectedCity;
+
+    // Reset options
+    citySelect.innerHTML = '<option value="">All Cities</option>';
+
+    availableCities.forEach(city => {
+        const opt = document.createElement('option');
+        opt.value = city;
+        opt.textContent = city;
+        if (city === currentCityVal) {
+            opt.selected = true;
+        }
+        citySelect.appendChild(opt);
+    });
+}
+
+function changePageSize(size) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page_size', size);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+</script>
 {% endblock %}

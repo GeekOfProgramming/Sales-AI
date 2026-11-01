@@ -2242,16 +2242,89 @@ async def lead_register_view(
     request: Request,
     q: Optional[str] = Query(None),
     priority: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("record_number"),
+    sort_order: Optional[str] = Query("asc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25),
     view: Optional[str] = Query("summary"),
     message: Optional[str] = None,
     error: Optional[str] = None,
 ):
     from sales_engine.leads.register_store import LeadRegisterStore
     from sales_engine.candidates.candidate_store import canonicalize_domain
+    import math
+
     svcs = get_console_services()
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
 
-    records = reg_store.list_records(limit=2000, query=q, priority_filter=priority)
+    # Validate & clamp page_size to allowed options: 10, 25, 50
+    if page_size not in (10, 25, 50):
+        page_size = 25
+
+    # Safe sort validation
+    allowed_sort_fields = ("record_number", "company_name", "priority")
+    safe_sort_by = sort_by if sort_by in allowed_sort_fields else "record_number"
+    safe_sort_order = "desc" if str(sort_order).lower() == "desc" else "asc"
+
+    # Preflight query to get total matching count and total register count
+    # Clamp page safely
+    temp_records, matching_count, total_register_count = reg_store.query_records(
+        limit=1,
+        offset=0,
+        query=q,
+        priority=priority,
+        country=country,
+        city=city,
+        status=status,
+        sort_by=safe_sort_by,
+        sort_order=safe_sort_order,
+    )
+
+    total_pages = max(1, math.ceil(matching_count / page_size)) if matching_count > 0 else 1
+    safe_page = max(1, min(page, total_pages))
+    offset = (safe_page - 1) * page_size
+
+    # Fetch paginated records
+    records, matching_count, total_register_count = reg_store.query_records(
+        limit=page_size,
+        offset=offset,
+        query=q,
+        priority=priority,
+        country=country,
+        city=city,
+        status=status,
+        sort_by=safe_sort_by,
+        sort_order=safe_sort_order,
+    )
+
+    filter_options = reg_store.get_filter_options()
+
+    def build_page_url(target_page: int) -> str:
+        qp = dict(request.query_params)
+        qp["page"] = str(target_page)
+        qp["view"] = view if view in ("summary", "full") else "summary"
+        qp["page_size"] = str(page_size)
+        if q:
+            qp["q"] = q
+        if priority:
+            qp["priority"] = priority
+        if country:
+            qp["country"] = country
+        if city:
+            qp["city"] = city
+        if status:
+            qp["status"] = status
+        if safe_sort_by:
+            qp["sort_by"] = safe_sort_by
+        if safe_sort_order:
+            qp["sort_order"] = safe_sort_order
+        import urllib.parse
+        return f"/sales/register?{urllib.parse.urlencode(qp)}"
+
+    query_params_dict = dict(request.query_params)
 
     return render_console_template(
         request=request,
@@ -2260,10 +2333,27 @@ async def lead_register_view(
             "request": request,
             "active_tab": "register",
             "records": records,
-            "total_count": len(records),
+            "total_count": total_register_count,
+            "matching_count": matching_count,
+            "current_page": safe_page,
+            "total_pages": total_pages,
+            "current_page_size": page_size,
+            "page_size": page_size,
             "query": q,
+            "q": q or "",
             "priority": priority,
+            "country": country,
+            "city": city,
+            "status_filter": status,
+            "current_sort_by": safe_sort_by,
+            "sort_by": safe_sort_by,
+            "current_sort_order": safe_sort_order,
+            "sort_order": safe_sort_order,
+            "filter_options": filter_options,
+            "current_view": view if view in ("summary", "full") else "summary",
             "view_mode": view if view in ("summary", "full") else "summary",
+            "query_params": query_params_dict,
+            "build_page_url": build_page_url,
             "message": message,
             "error": error,
         }
@@ -2275,11 +2365,29 @@ async def lead_register_export_action(
     request: Request,
     format: str = Query("xlsx"),
     q: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("record_number"),
+    sort_order: Optional[str] = Query("asc"),
 ):
     from sales_engine.leads.register_store import LeadRegisterStore
     svcs = get_console_services()
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
-    records = reg_store.list_records(limit=5000, query=q)
+
+    # Phase G Export Semantics: Export All matching active filters across all pages (unbounded by pagination limit)
+    records, _, _ = reg_store.query_records(
+        limit=50000,
+        offset=0,
+        query=q,
+        priority=priority,
+        country=country,
+        city=city,
+        status=status,
+        sort_by=sort_by if sort_by in ("record_number", "company_name", "priority") else "record_number",
+        sort_order="desc" if str(sort_order).lower() == "desc" else "asc",
+    )
 
     # Format 13 fields in exact pyBIM order with safe cell formulas
     headers = [
