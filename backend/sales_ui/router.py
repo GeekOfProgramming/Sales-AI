@@ -2855,7 +2855,7 @@ async def candidate_detail_view(
     for c in raw_contacts:
         st = (getattr(c, "email_status", None) or "unknown").strip().lower()
         w_email = (getattr(c, "work_email", None) or "").strip().lower()
-        is_usable = bool(w_email and EMAIL_REGEX.match(w_email) and st in ("verified", "likely"))
+        is_usable = bool(w_email and EMAIL_REGEX.match(w_email) and st == "verified")
         contacts_view.append({
             "contact_id": getattr(c, "contact_id", None) or f"email:{w_email}",
             "full_name": getattr(c, "full_name", None) or f"{c.first_name or ''} {c.last_name or ''}".strip() or "Unnamed Contact",
@@ -2875,9 +2875,21 @@ async def candidate_detail_view(
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
     company_lead_record = reg_store.get_explicit_record(candidate_id)
 
-    snap_store = ResearchSnapshotStore(svcs["cand_store"].db_path)
+    # Use authoritative ResearchSnapshotStore configuration respecting SALESAI_RESEARCH_CACHE_DB
+    # If not explicitly configured, fallback to svcs snapshot store if available or default
+    snap_store = ResearchSnapshotStore()
     latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
     historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
+    if not latest_snapshot and getattr(svcs["cand_store"], "db_path", None) != snap_store.db_path:
+        # Fallback check if candidate store DB also holds snapshots (e.g. unified test DBs)
+        try:
+            cand_snap_store = ResearchSnapshotStore(svcs["cand_store"].db_path)
+            cand_snap = cand_snap_store.get_latest_snapshot(candidate_id)
+            if cand_snap:
+                latest_snapshot = cand_snap
+                historical_snapshots = cand_snap_store.list_snapshots_for_candidate(candidate_id)
+        except Exception:
+            pass
 
     company_drafts, _ = svcs["rev_store"].list_drafts(filters={"candidate_id": candidate_id}, limit=50)
 
@@ -3649,10 +3661,10 @@ async def create_manual_draft_action(
     # If contact exists, check its status
     from sales_engine.leads.register_store import LeadRegisterStore
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
-    reg_record = reg_store.get_record(candidate_id)
+    reg_record = reg_store.get_explicit_record(candidate_id)
     reg_emails = []
-    if reg_record and reg_record.contact_email_addresses:
-        reg_emails = [e.strip().lower() for e in reg_record.contact_email_addresses.split(",") if e.strip()]
+    if reg_record and reg_record.contact_email_addresses and reg_record.contact_email_addresses.strip() != "Not Found":
+        reg_emails = [e.strip().lower() for e in reg_record.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
 
     is_verified_evidence = False
     resolved_contact_id = None
@@ -3662,10 +3674,13 @@ async def create_manual_draft_action(
         resolved_contact_id = matched_contact.contact_id
         resolved_contact_name = resolved_contact_name or matched_contact.full_name
         st = (matched_contact.email_status or "unknown").strip().lower()
-        if st in ("verified", "likely"):
+        if st == "verified":
+            is_verified_evidence = True
+        elif clean_email in reg_emails:
+            # Documented in Lead Register evidence path
             is_verified_evidence = True
     elif clean_email in reg_emails:
-        # Documented in Lead Register! Create contact record without fabricating verified confidence unless explicitly verified
+        # Documented in Lead Register! Create contact record with distinct documented evidence provenance without fabricating verified status
         is_verified_evidence = True
         resolved_contact_id = f"contact:{clean_email}"
         from backend.schemas import ContactCandidate
@@ -3674,10 +3689,10 @@ async def create_manual_draft_action(
             first_name=recipient_name.split()[0] if recipient_name else "Contact",
             last_name=" ".join(recipient_name.split()[1:]) if recipient_name and len(recipient_name.split()) > 1 else "",
             full_name=recipient_name or "Contact",
-            job_title="Lead Register Contact",
+            job_title="Lead Register Documented Contact",
             work_email=clean_email,
-            email_status="verified",
-            email_confidence=100,
+            email_status="unverified",
+            email_confidence=50,
             provider="lead_register_evidence",
         )
         svcs["cand_store"].save_contact(new_c, candidate_id=candidate_id)

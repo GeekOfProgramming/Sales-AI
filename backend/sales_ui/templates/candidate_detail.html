@@ -48,6 +48,87 @@
   </div>
 </div>
 
+<!-- Operational Workflow Stage Bar (UX-02.2) -->
+<div class="card" style="margin-bottom: 1.25rem; padding: 0.85rem 1.25rem; background: var(--bg-card); border-top: 3px solid var(--border-focus);">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+    <span style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.04em;">
+      Workflow Stage Pipeline
+    </span>
+    <span style="font-size: 0.78rem; color: var(--text-secondary);">
+      End-to-end human-in-the-loop candidate governance
+    </span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.82rem;">
+    <!-- Step 1: Research -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">1. Research</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if latest_snapshot %}
+          <span class="badge badge-success">Snapshot Available</span>
+        {% else %}
+          <span class="badge badge-secondary">Not Started</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 2: 13-Field Register -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">2. Lead Register</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if lead_record and lead_record.verification_status in ('OPERATOR_REVIEWED', 'EXTRACTED') %}
+          <span class="badge badge-success">Linked (#{{ lead_record.record_number }})</span>
+        {% elif lead_record %}
+          <span class="badge badge-warning">Review Pending</span>
+        {% else %}
+          <span class="badge badge-secondary">Not Linked</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 3: Contacts & Verification -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">3. Contact Status</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if verified_contacts %}
+          <span class="badge badge-success">{{ verified_contacts|length }} Verified</span>
+        {% elif lead_record and lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
+          <span class="badge badge-info">Documented</span>
+        {% elif likely_contacts or unverified_contacts %}
+          <span class="badge badge-warning">Unverified</span>
+        {% else %}
+          <span class="badge badge-secondary">Missing</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 4: Outreach Eligibility & Stage -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">4. Outreach State</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if is_suppressed or is_previously_contacted %}
+          <span class="badge badge-danger">Restricted</span>
+        {% elif manual_logs %}
+          <span class="badge badge-info">Manually Dispatched</span>
+        {% elif company_drafts %}
+          {% set has_approved = false %}
+          {% for d in company_drafts %}
+            {% if d.approval_status == 'approved' %}{% set has_approved = true %}{% endif %}
+          {% endfor %}
+          {% if has_approved %}
+            <span class="badge badge-success">Approved Draft</span>
+          {% else %}
+            <span class="badge badge-warning">Draft Pending</span>
+          {% endif %}
+        {% elif can_generate_draft %}
+          <span class="badge badge-success">Draft Eligible</span>
+        {% else %}
+          <span class="badge badge-secondary">Verification Required</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Operator Review & Decision Bar -->
 <div class="card" style="border: 2px solid #10b981; background: rgba(16, 185, 129, 0.03); margin-bottom: 1.25rem; padding: 1rem 1.25rem;">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -874,5 +955,16 @@ function populateVerifyModal(contactId, fullName, email) {
     sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
+
+// Support direct hash navigation, e.g. #research, #register, #contacts, #outreach
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.location.hash) {
+    var rawHash = window.location.hash.substring(1).toLowerCase();
+    var validTabs = ['overview', 'research', 'register', 'contacts', 'outreach'];
+    if (validTabs.indexOf(rawHash) !== -1) {
+      switchWorkspaceTab(rawHash);
+    }
+  }
+});
 </script>
 {% endblock %}
