@@ -4486,11 +4486,16 @@ async def create_manual_draft_action(
 @router.get("/leads", response_class=HTMLResponse)
 async def leads_view(
     request: Request,
+    queue: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
     tier: Optional[str] = Query(None),
     readiness: Optional[str] = Query(None),
     research_status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    sort_order: Optional[str] = Query("asc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1),
 ):
@@ -4507,7 +4512,9 @@ async def leads_view(
     # Pre-collect all qualified leads & evaluate authoritative readiness
     evaluated_leads = []
     available_countries = set()
+    available_cities = set()
     available_tiers = set()
+    available_priorities = set()
 
     for c in cands:
         # P0 Qualification filter: enforce unified authoritative qualification logic
@@ -4536,12 +4543,22 @@ async def leads_view(
         dom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
         clean_company_name = format_company_display_name(raw_company_name, dom)
         c_country = c.country or "Not Verified"
+        c_city = c.city or ""
         c_tier = format_company_tier_label(c.company_tier)
+
+        # Retrieve linked Lead Register record if present for priority & research date
+        reg_record = research_info.get("reg_record")
+        priority_val = getattr(reg_record, "priority_level", None) or "B"
+        research_date = getattr(reg_record, "research_date", None) or getattr(c, "last_researched_at", None) or ""
 
         if c_country and c_country != "Not Verified":
             available_countries.add(c_country)
+        if c_city:
+            available_cities.add(c_city)
         if c_tier:
             available_tiers.add(c_tier)
+        if priority_val:
+            available_priorities.add(priority_val)
 
         # Raw values without false positive defaults
         fit_val = getattr(c, "fit_assessment", None)
@@ -4549,13 +4566,34 @@ async def leads_view(
         bim_val = getattr(c, "bim_maturity", None)
         opp_val = getattr(c, "outsourcing_potential", None)
 
+        # Determine if candidate ID is invalid (empty or whitespace)
+        cid = getattr(c, "candidate_id", None) or ""
+        is_invalid_id = not bool(cid.strip())
+
+        # Pre-generate copy texts using existing UX-LP-03a generators
+        lead_copy_intel = generate_company_intelligence_text(
+            c, reg_record, research_info.get("latest_snapshot"), readiness_info, research_info
+        ) if not is_invalid_id else ""
+
+        lead_copy_13_fields = generate_reviewed_13_fields_text(
+            reg_record, c
+        ) if not is_invalid_id else ""
+
+        lead_copy_ai_brief = generate_ai_brief_text(
+            c, reg_record, research_info.get("latest_snapshot"), readiness_info, research_info
+        ) if not is_invalid_id else ""
+
         evaluated_leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
             "company_name": clean_company_name,
             "raw_company_name": raw_company_name,
             "domain": dom,
             "country": c_country,
+            "city": c_city,
+            "location_display": f"{c_city}, {c_country}".strip(", ") if (c_city or c_country != "Not Verified") else "Not Specified",
             "tier": c_tier,
+            "priority": priority_val,
+            "research_date": research_date,
             "fit": fit_val if fit_val and fit_val.lower() != "unknown" else "Unknown",
             "intent": intent_val if intent_val and intent_val.lower() != "unknown" else "Unknown",
             "bim_maturity": bim_val if bim_val and bim_val.lower() != "unknown" else "Unknown",
@@ -4577,20 +4615,41 @@ async def leads_view(
             "is_suppressed": readiness_info["is_suppressed"],
             "can_generate_draft": readiness_info["can_generate_draft"],
             "has_verified_recipient": readiness_info["has_verified_recipient"],
+            "is_invalid_id": is_invalid_id,
             "candidate_id": c.candidate_id or "",
+            "copy_intel_text": lead_copy_intel,
+            "copy_13_fields_text": lead_copy_13_fields,
+            "copy_ai_brief_text": lead_copy_ai_brief,
         })
 
-    # Summary KPI counts (calculated across all qualified leads prior to page/filter slicing)
+    # Summary Queue Counts (8 clearly separated queues)
     total_qualified = len(evaluated_leads)
-    count_research_ready = sum(1 for l in evaluated_leads if l["research_status"] == "research_ready")
+    count_needs_research = sum(1 for l in evaluated_leads if l["research_status"] == "unresearched")
     count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "missing_evidence"))
-    count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready")
+    count_research_ready = sum(1 for l in evaluated_leads if l["research_status"] == "research_ready")
+    count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"])
     count_verification_required = sum(1 for l in evaluated_leads if l["effective_readiness"] == "verification_required")
-    count_prior_contact = sum(1 for l in evaluated_leads if l["effective_readiness"] == "prior_contact")
+    count_previously_contacted = sum(1 for l in evaluated_leads if l["effective_readiness"] == "prior_contact")
     count_suppressed_or_ineligible = sum(1 for l in evaluated_leads if l["effective_readiness"] in ("suppressed", "not_eligible"))
 
-    # Apply Filters
+    # Apply Work Queue Filter first
     filtered_leads = evaluated_leads
+    target_queue = (queue or "").strip().lower()
+
+    if target_queue == "needs_research":
+        filtered_leads = [l for l in filtered_leads if l["research_status"] == "unresearched"]
+    elif target_queue == "review_required":
+        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "missing_evidence")]
+    elif target_queue == "research_ready":
+        filtered_leads = [l for l in filtered_leads if l["research_status"] == "research_ready"]
+    elif target_queue == "draft_ready":
+        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"]]
+    elif target_queue == "verification_required":
+        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "verification_required"]
+    elif target_queue == "previously_contacted":
+        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "prior_contact"]
+    elif target_queue == "suppressed_or_ineligible":
+        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] in ("suppressed", "not_eligible")]
 
     # 1. Search Query
     if q and q.strip():
@@ -4608,7 +4667,23 @@ async def leads_view(
             if l["country"].strip().lower() == target_country
         ]
 
-    # 3. Tier Filter
+    # 3. City / Region Filter
+    if city and city.strip() and city.strip() != "all":
+        target_city = city.strip().lower()
+        filtered_leads = [
+            l for l in filtered_leads
+            if target_city in l["city"].strip().lower() or target_city in l["location_display"].strip().lower()
+        ]
+
+    # 4. Priority Filter (A, B, C)
+    if priority and priority.strip() and priority.strip() != "all":
+        target_priority = priority.strip().upper()
+        filtered_leads = [
+            l for l in filtered_leads
+            if l["priority"].strip().upper() == target_priority
+        ]
+
+    # 5. Tier Filter
     if tier and tier.strip() and tier.strip() != "all":
         target_tier = tier.strip().lower()
         filtered_leads = [
@@ -4616,7 +4691,7 @@ async def leads_view(
             if l["tier"].strip().lower() == target_tier
         ]
 
-    # 4. Outreach Readiness Filter
+    # 6. Outreach Readiness Filter
     if readiness and readiness.strip() and readiness.strip() != "all":
         target_readiness = readiness.strip().lower()
         if target_readiness == "suppressed_or_ineligible":
@@ -4630,7 +4705,7 @@ async def leads_view(
                 if l["effective_readiness"] == target_readiness
             ]
 
-    # 5. Research Readiness Filter
+    # 7. Research Readiness Filter
     if research_status and research_status.strip() and research_status.strip() != "all":
         target_res = research_status.strip().lower()
         filtered_leads = [
@@ -4638,7 +4713,10 @@ async def leads_view(
             if l["research_status"] == target_res
         ]
 
-    # Deterministic Sorting: Draft Ready first, then Verification Required, then Prior Contact, then Ineligible/Suppressed, then alphabetical by Company Name
+    # Sorting
+    target_sort = (sort_by or "readiness").strip().lower()
+    reverse_order = (sort_order or "asc").strip().lower() == "desc"
+
     readiness_sort_order = {
         "draft_ready": 0,
         "verification_required": 1,
@@ -4646,16 +4724,38 @@ async def leads_view(
         "not_eligible": 3,
         "suppressed": 4,
     }
-    filtered_leads.sort(
-        key=lambda x: (
-            readiness_sort_order.get(x["effective_readiness"], 99),
-            (x["company_name"] or "").strip().lower(),
-            x["domain"] or "",
-        )
-    )
+    priority_sort_order = {"A": 0, "B": 1, "C": 2, "UNKNOWN": 3}
 
-    # Clamp page_size to valid values (10, 25, 50, 100)
-    allowed_page_sizes = [10, 25, 50, 100]
+    if target_sort == "priority":
+        filtered_leads.sort(
+            key=lambda x: (
+                priority_sort_order.get(x["priority"].upper(), 9),
+                (x["company_name"] or "").strip().lower(),
+            ),
+            reverse=reverse_order,
+        )
+    elif target_sort == "company_name":
+        filtered_leads.sort(
+            key=lambda x: (x["company_name"] or "").strip().lower(),
+            reverse=reverse_order,
+        )
+    elif target_sort == "research_date":
+        filtered_leads.sort(
+            key=lambda x: x["research_date"] or "",
+            reverse=reverse_order,
+        )
+    else:  # default 'readiness'
+        filtered_leads.sort(
+            key=lambda x: (
+                readiness_sort_order.get(x["effective_readiness"], 99),
+                (x["company_name"] or "").strip().lower(),
+                x["domain"] or "",
+            ),
+            reverse=reverse_order,
+        )
+
+    # Clamp page_size to valid values (10, 25, 50)
+    allowed_page_sizes = [10, 25, 50]
     if page_size not in allowed_page_sizes:
         page_size = 25
 
@@ -4676,11 +4776,13 @@ async def leads_view(
             "active_tab": "leads",
             "leads": paged_leads,
             "total_qualified": total_qualified,
-            "count_research_ready": count_research_ready,
+            "count_needs_research": count_needs_research,
             "count_review_required": count_review_required,
+            "count_research_ready": count_research_ready,
             "count_draft_ready": count_draft_ready,
             "count_verification_required": count_verification_required,
-            "count_prior_contact": count_prior_contact,
+            "count_prior_contact": count_previously_contacted,
+            "count_previously_contacted": count_previously_contacted,
             "count_suppressed_or_ineligible": count_suppressed_or_ineligible,
             "total_filtered": total_filtered,
             "page": page,
@@ -4691,11 +4793,18 @@ async def leads_view(
             "prev_page": page - 1,
             "next_page": page + 1,
             "available_countries": sorted(list(available_countries)),
+            "available_cities": sorted(list(available_cities)),
             "available_tiers": sorted(list(available_tiers)),
+            "available_priorities": sorted(list(available_priorities)),
+            "selected_queue": target_queue,
             "selected_country": country or "",
+            "selected_city": city or "",
+            "selected_priority": priority or "",
             "selected_tier": tier or "",
             "selected_readiness": readiness or "",
             "selected_research": research_status or "",
+            "selected_sort": target_sort,
+            "selected_order": "desc" if reverse_order else "asc",
             "query": q or "",
             "email_send_enabled": is_email_send_enabled(),
         },
