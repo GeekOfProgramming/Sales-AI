@@ -257,13 +257,14 @@ def test_scenario_04_prior_contact_company(env_setup):
     assert r_outreach["can_generate_draft"] is False
 
     brief_text = generate_ai_brief_text(cand, None, None, r_outreach, {"verification_status": "Unlinked", "record_number": None})
-    assert "PRIOR OUTREACH DETECTED" in brief_text
-    assert "Cold outreach drafting is blocked" in brief_text
+    assert "COLD OUTREACH BRIEF BLOCKED" in brief_text
+    assert "PRIOR CONTACT RECORDED" in brief_text
 
     resp = client.get(f"/sales/candidates/{cid}")
     assert resp.status_code == 200
     assert "PRIOR OUTREACH DETECTED" in resp.text
     assert "Historical communications exist for this company" in resp.text
+    assert "Cold AI Brief Blocked (Prior Contact)" in resp.text
 
 
 def test_scenario_05_suppressed_dnc_company(env_setup):
@@ -291,13 +292,14 @@ def test_scenario_05_suppressed_dnc_company(env_setup):
     assert r_outreach["can_generate_draft"] is False
 
     brief_text = generate_ai_brief_text(cand, None, None, r_outreach, {"verification_status": "Unlinked", "record_number": None})
-    assert "DO NOT SEND OUTREACH" in brief_text
-    assert "COMPANY / DOMAIN IS SUPPRESSED (DNC)" in brief_text
+    assert "OUTREACH BRIEF BLOCKED" in brief_text
+    assert "SUPPRESSED / DO NOT CONTACT" in brief_text
 
     resp = client.get(f"/sales/candidates/{cid}")
     assert resp.status_code == 200
     assert "INTERNAL INSPECTION ONLY — DO NOT CONTACT (SUPPRESSED)" in resp.text
     assert "Autonomous drafting or sales outreach is strictly blocked" in resp.text
+    assert "AI Brief Blocked (Suppressed)" in resp.text
 
 
 def test_scenario_06_ineligible_company(env_setup):

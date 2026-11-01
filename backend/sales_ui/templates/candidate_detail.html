@@ -346,9 +346,19 @@
         <button type="button" class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('raw-13-fields-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem;">
           📋 Copy Reviewed 13 Fields
         </button>
+        {% if is_suppressed %}
+        <button type="button" class="btn btn-secondary" disabled title="Outreach brief disabled for suppressed / DNC company" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; opacity: 0.5; cursor: not-allowed;">
+          🚫 AI Brief Blocked (Suppressed)
+        </button>
+        {% elif is_previously_contacted %}
+        <button type="button" class="btn btn-secondary" disabled title="Cold outreach brief blocked for previously contacted company" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; opacity: 0.5; cursor: not-allowed;">
+          ⚠️ Cold AI Brief Blocked (Prior Contact)
+        </button>
+        {% else %}
         <button type="button" class="btn btn-primary" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; background-color: #6366f1; border-color: #6366f1;">
           📋 Copy AI Brief
         </button>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -364,7 +374,11 @@
     <div class="card" style="margin-bottom: 0;">
       <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
         <span>AI Brief Preview (External Sales Prompt)</span>
+        {% if is_suppressed or is_previously_contacted %}
+        <span class="badge badge-danger">Outreach Blocked</span>
+        {% else %}
         <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)">Copy Brief</button>
+        {% endif %}
       </div>
       <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ ai_brief_text }}</pre>
     </div>
