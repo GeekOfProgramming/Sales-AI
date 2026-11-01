@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Settings & Status | SalesAI Console{% endblock %}
+{% block title %}Settings & Status | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -12,15 +12,30 @@
 
 <div class="card">
   <div class="card-title">
-    <span>Local Server & Binding</span>
-    <!-- P10_5-REG-016: localhost is default bind -->
+    <span>System Information</span>
     <span class="badge badge-success">Localhost Bound</span>
   </div>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
-    <div><strong>Host Address:</strong> <code>127.0.0.1</code> (Loopback)</div>
-    <div><strong>Port:</strong> <code>8000</code></div>
-    <div><strong>Console URL:</strong> <code>http://127.0.0.1:8000/sales</code></div>
+    <div><strong>Application Name:</strong> <code>{{ app_name or 'Email Led' }}</code></div>
+    <div><strong>Runtime Mode:</strong> <span class="badge badge-info">{{ runtime_mode or 'Local-First' }}</span></div>
+    <div><strong>Local Server Address:</strong> <code>{{ bind_address or '127.0.0.1:8000' }}</code> (Loopback)</div>
+    <div><strong>Console URL:</strong> <code>http://{{ bind_address or '127.0.0.1:8000' }}/sales</code></div>
     <div><strong>Database File:</strong> <code>{{ db_path }}</code></div>
+    <div><strong>Email Sending Status:</strong> 
+      <span class="badge {% if email_send_enabled %}badge-success{% else %}badge-warning{% endif %}">
+        {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED' }}
+      </span>
+    </div>
+    <div><strong>Research Storage:</strong> 
+      <span class="badge {% if research_storage_available %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Available (SQLite Snapshots)' if research_storage_available else 'Unavailable' }}
+      </span>
+    </div>
+    <div><strong>Brave Search API Key:</strong> 
+      <span class="badge {% if brave_configured %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Configured' if brave_configured else 'Not Configured' }}
+      </span>
+    </div>
   </div>
 </div>
 

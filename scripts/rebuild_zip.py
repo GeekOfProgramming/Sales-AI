@@ -27,6 +27,7 @@ EXCLUDED_DIR_NAMES: Set[str] = {
     "runtime",
     "logs",
     "research_snapshots",
+    "benchmark_results",
 }
 
 # Dangerous file extensions (compiled artifacts, databases, private keys, certificates, logs, executables)

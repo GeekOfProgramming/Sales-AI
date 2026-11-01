@@ -1,6 +1,61 @@
 {% extends "base.html" %}
 
-{% block title %}Sent History | SalesAI Console{% endblock %}
+{% block title %}Sent History | Email Led
+<!-- Confirmed Operator Manual Outbound Dispatch Log -->
+<div class="card" style="margin-top: 1.5rem;">
+  <div class="card-title">
+    <span>Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
+    <span class="badge badge-info">Operator Hand-Off Log</span>
+  </div>
+  {% if manual_logs %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Candidate ID</th>
+          <th>Recipient Email</th>
+          <th>Recipient Name</th>
+          <th>Subject</th>
+          <th>Channel</th>
+          <th>Logged At</th>
+          <th>External Ref</th>
+          <th>Logged By</th>
+          <th>Operator Notes</th>
+          <th>Linked Draft</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in manual_logs %}
+        <tr>
+          <td><code>{{ m.candidate_id }}</code></td>
+          <td><strong>{{ m.recipient_email }}</strong></td>
+          <td>{{ m.recipient_name or '-' }}</td>
+          <td>{{ m.subject }}</td>
+          <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
+          <td>{{ m.logged_at[:19] }}</td>
+          <td><code>{{ m.external_ref or 'N/A' }}</code></td>
+          <td>{{ m.logged_by }}</td>
+          <td>{{ m.operator_notes or '-' }}</td>
+          <td>
+            {% if m.draft_id %}
+            <a href="/sales/drafts/{{ m.draft_id }}" class="btn btn-secondary btn-sm">r{{ m.revision }} ↗</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No confirmed manual dispatches recorded yet.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -56,4 +111,59 @@
   </div>
   {% endif %}
 </div>
+
+<!-- Confirmed Operator Manual Outbound Dispatch Log -->
+<div class="card" style="margin-top: 1.5rem;">
+  <div class="card-title">
+    <span>Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
+    <span class="badge badge-info">Operator Hand-Off Log</span>
+  </div>
+  {% if manual_logs %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Candidate ID</th>
+          <th>Recipient Email</th>
+          <th>Recipient Name</th>
+          <th>Subject</th>
+          <th>Channel</th>
+          <th>Logged At</th>
+          <th>External Ref</th>
+          <th>Logged By</th>
+          <th>Operator Notes</th>
+          <th>Linked Draft</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in manual_logs %}
+        <tr>
+          <td><code>{{ m.candidate_id }}</code></td>
+          <td><strong>{{ m.recipient_email }}</strong></td>
+          <td>{{ m.recipient_name or '-' }}</td>
+          <td>{{ m.subject }}</td>
+          <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
+          <td>{{ m.logged_at[:19] }}</td>
+          <td><code>{{ m.external_ref or 'N/A' }}</code></td>
+          <td>{{ m.logged_by }}</td>
+          <td>{{ m.operator_notes or '-' }}</td>
+          <td>
+            {% if m.draft_id %}
+            <a href="/sales/drafts/{{ m.draft_id }}" class="btn btn-secondary btn-sm">r{{ m.revision }} ↗</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No confirmed manual dispatches recorded yet.</p>
+  </div>
+  {% endif %}
+</div>
+
 {% endblock %}

@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}{{ detail.candidate.company_name }} | SalesAI Console{% endblock %}
+{% block title %}{{ detail.candidate.company_name }} | Email Led{% endblock %}
 
 {% block content %}
+{% with flow_company_name=detail.candidate.company_name, flow_canonical_domain=detail.candidate.domain, flow_candidate_id=detail.candidate.candidate_id, flow_current_step='candidate_detail' %}
+  {% include "candidate_flow_bar.html" %}
+{% endwith %}
+
 <div class="page-header">
   <div>
     <h1 class="page-title">{{ detail.candidate.company_name }}</h1>
@@ -75,7 +79,7 @@
       <div><strong>City:</strong> {{ detail.candidate.city or 'Not Verified' }}</div>
       <div><strong>Legal Form:</strong> {{ detail.legal_form or '-' }}</div>
       <div><strong>Employee Size:</strong> {{ detail.employee_size_hint or 'Unknown' }}</div>
-      <div><strong>Tier:</strong> <span class="badge badge-tier">{{ detail.candidate.tier or 'unknown' }}</span></div>
+      <div><strong>Company Tier:</strong> <span class="badge badge-tier">{{ detail.candidate.tier or 'unknown' }}</span></div>
       <div><strong>BIM Maturity:</strong> <span class="badge badge-bim">{{ detail.candidate.bim_maturity }}</span></div>
       <div><strong>Fit Level:</strong> <span class="badge badge-fit">{{ detail.candidate.fit or 'unknown' }}</span></div>
       <div><strong>Intent Level:</strong> <span class="badge badge-intent">{{ detail.candidate.intent or 'unknown' }}</span></div>
@@ -147,10 +151,106 @@
     <button type="submit" class="btn btn-primary" id="btn-generate-draft">⚡ Generate Draft (Delegates to Phase 8)</button>
   </form>
   {% else %}
-  <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 0.85rem; color: #fca5a5; font-size: 0.875rem;">
-    ⚠️ No Phase 6 contacts discovered for this candidate company yet. Enrichment is required before generating outreach drafts.
+  <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 0.85rem; color: #fca5a5; font-size: 0.875rem; margin-bottom: 1rem;">
+    ℹ️ No auto-discovered Phase 6 contacts yet. You can prepare a manual draft using verified Lead Register contact details below without cloud LLM inference.
   </div>
   {% endif %}
+
+  <!-- Manual Email Draft Preparation (Zero LLM Billing) -->
+  <details style="margin-top: 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.85rem;">
+    <summary style="font-weight: 600; cursor: pointer; color: var(--border-focus); font-size: 0.9rem;">
+      ✍️ Prepare Manual Outreach Draft (Zero LLM / Offline Preparation)
+    </summary>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/create-manual-draft" style="margin-top: 1rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label">Select Verified Candidate Contact *</label>
+        <select name="contact_id" class="form-control" style="width: 100%;" onchange="
+          var opt = this.options[this.selectedIndex];
+          if(opt.dataset.email) {
+            document.getElementById('manual-recipient-email').value = opt.dataset.email;
+            document.getElementById('manual-recipient-name').value = opt.dataset.name;
+          }
+        ">
+          <option value="">-- Choose an existing contact or enter verified email below --</option>
+          {% for c in contacts %}
+            <option value="{{ c.contact_id }}" data-email="{{ c.work_email }}" data-name="{{ c.full_name }}" {% if not c.is_eligible %}style="color: var(--text-muted);"{% endif %}>
+              {{ c.full_name }} &lt;{{ c.work_email }}&gt; [{{ c.email_status|upper }}] {% if not c.is_eligible %}(Requires Verification){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+          🛡️ Only contacts with verified evidence or records documented in the 13-Field Lead Register are eligible for draft creation.
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+        <div>
+          <label class="form-label">Recipient Email *</label>
+          <input type="email" id="manual-recipient-email" name="recipient_email" required class="form-control" placeholder="verified@company.it">
+        </div>
+        <div>
+          <label class="form-label">Recipient Name</label>
+          <input type="text" id="manual-recipient-name" name="recipient_name" class="form-control" placeholder="e.g. Andrea Berro">
+        </div>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label">Subject Line *</label>
+        <input type="text" name="subject" required class="form-control" placeholder="e.g. BIM Coordination & Engineering Partnership">
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <label class="form-label">Email Body *</label>
+        <textarea name="body" required rows="6" class="form-control" placeholder="Compose draft message..."></textarea>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">
+          🛡️ Safe &amp; Offline: Stages draft directly into Pending Review. Zero external LLM calls.
+        </span>
+        <button type="submit" class="btn btn-secondary">
+          💾 Save Manual Draft to Review Queue
+        </button>
+      </div>
+    </form>
+  </details>
+
+  <!-- Explicit Evidence-Aware Contact Verification Action -->
+  <details style="margin-top: 0.75rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.85rem;">
+    <summary style="font-weight: 600; cursor: pointer; color: var(--text-secondary); font-size: 0.85rem;">
+      🔍 Verify Contact with Audit Trail (Explicit Evidence Source Required)
+    </summary>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/verify-contact" style="margin-top: 0.75rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label">Contact to Verify *</label>
+        <select name="contact_id" class="form-control" required style="width: 100%;">
+          <option value="" disabled selected>-- Select contact --</option>
+          {% for c in contacts %}
+            <option value="{{ c.contact_id }}">{{ c.full_name }} &lt;{{ c.work_email }}&gt; [Currently: {{ c.email_status }}]</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+        <div>
+          <label class="form-label">Evidence Source *</label>
+          <input type="text" name="evidence_source" required class="form-control" placeholder="e.g. Official website footer / Team page">
+        </div>
+        <div>
+          <label class="form-label">Evidence Reference (URL / Doc)</label>
+          <input type="text" name="evidence_reference" class="form-control" placeholder="e.g. https://company.it/contatti">
+        </div>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label">Operator Audit Notes</label>
+        <input type="text" name="notes" class="form-control" placeholder="Confirmed through official public company registry">
+      </div>
+      <div style="text-align: right;">
+        <button type="submit" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.4rem 0.85rem;">
+          ✅ Record Verification &amp; Upgrade Status
+        </button>
+      </div>
+    </form>
+  </details>
 </div>
 {% endif %}
 
@@ -241,6 +341,44 @@
   </div>
   {% endif %}
 </div>
+
+<!-- Confirmed Manual Outreach Dispatches -->
+{% if manual_logs %}
+<div class="card">
+  <div class="card-title">
+    <span>Confirmed Manual Outbound Events ({{ manual_logs|length }})</span>
+    <span class="badge badge-info">Operator Hand-Off</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Recipient</th>
+          <th>Channel</th>
+          <th>Subject</th>
+          <th>Logged At</th>
+          <th>External Ref</th>
+          <th>Logged By</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in manual_logs %}
+        <tr>
+          <td><strong>{{ m.recipient_name or '' }}</strong> &lt;{{ m.recipient_email }}&gt;</td>
+          <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
+          <td>{{ m.subject }}</td>
+          <td>{{ m.logged_at[:19] }}</td>
+          <td><code>{{ m.external_ref or 'N/A' }}</code></td>
+          <td>{{ m.logged_by }}</td>
+          <td>{{ m.operator_notes or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <!-- Chronological Audit Timeline -->
 <div class="card">

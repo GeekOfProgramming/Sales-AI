@@ -127,6 +127,58 @@ CSRF_COOKIE_NAME = "sales_csrf_token"
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+def format_company_tier_label(tier_val: Any) -> str:
+    """Safely format company tier value into a clean, human-readable UI label.
+    Preserves stored enum values while preventing raw Enum representation leakage
+    such as 'CompanyTier.unknown' or 'CompanyTier.tier_1'."""
+    if tier_val is None:
+        return "Unassigned"
+    if hasattr(tier_val, "value"):
+        tier_val = tier_val.value
+    raw = str(tier_val).strip()
+    if "." in raw and raw.startswith("CompanyTier."):
+        raw = raw.split(".", 1)[1]
+    raw_lower = raw.lower()
+    if raw_lower in ("tier_1", "tier1"):
+        return "Tier 1"
+    elif raw_lower in ("tier_2", "tier2"):
+        return "Tier 2"
+    elif raw_lower in ("tier_3", "tier3"):
+        return "Tier 3"
+    elif raw_lower == "unknown":
+        return "Unknown"
+    elif not raw_lower or raw_lower in ("none", "null"):
+        return "Unassigned"
+    return raw
+
+
+def is_candidate_qualified_lead(cand: Any) -> bool:
+    """
+    Authoritative qualification check shared between Dashboard KPI and Qualified Leads view.
+    A candidate company is an ICP-qualified lead if:
+    - qualification_outcome in ('qualified', 'qualified_for_enrichment')
+    - OR discovery_status in ('qualified', 'qualified_for_enrichment')
+    AND is not explicitly rejected or suppressed in qualification outcome.
+    """
+    outcome = getattr(cand, "qualification_outcome", None)
+    if hasattr(outcome, "value"):
+        outcome = outcome.value
+    outcome_str = str(outcome) if outcome else ""
+
+    disc_status = getattr(cand, "discovery_status", "")
+    if hasattr(disc_status, "value"):
+        disc_status = disc_status.value
+    disc_status_str = str(disc_status)
+
+    if outcome_str in ("reject", "suppressed", "watchlist"):
+        return False
+
+    return (
+        outcome_str in ("qualified", "qualified_for_enrichment")
+        or disc_status_str in ("qualified", "qualified_for_enrichment")
+    )
+
+
 def get_console_services():
     """Lazily instantiate or retrieve authoritative stores and services."""
     db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
@@ -139,17 +191,17 @@ def get_console_services():
         classifier=classifier,
         source_registry=registry,
     )
-    
+
     # Phase 9 Sending services
     rev_store = ReviewStore(db_path=cand_store.db_path)
     approval_svc = ApprovalService(rev_store)
     suppression_svc = SuppressionStore(rev_store)
     orchestrator = SendOrchestrator(review_store=rev_store, suppression_store=suppression_svc)
     audit_svc = AuditService(rev_store)
-    
+
     dash_svc = DashboardService(candidate_store=cand_store, review_store=rev_store)
     timeline_svc = TimelineService(candidate_store=cand_store, review_store=rev_store)
-    
+
     # Phase 11 Inbox and Reply Services
     inbox_store = InboxStore(db_path=cand_store.db_path)
     inbox_provider = MockMailboxProvider()
@@ -465,6 +517,43 @@ async def dashboard_view(request: Request):
 # ---------------------------------------------------------------------------
 # 2. DISCOVERY CONTROL & SEARCH PROFILES (Production Readiness Step 3)
 # ---------------------------------------------------------------------------
+def _classify_discovery_run_provenance(sources_exec: List[str], started_at_str: Optional[str], cand_store: Any) -> str:
+    """
+    Authoritative classification based on explicit persisted origin evidence:
+    - Multi-Source Discovery: if multiple sources executed.
+    - Quick Brave Search: only if solely brave_job_search AND corroborating pilot_search_attempt exists within 60s.
+    - Ad-hoc (brave_job_search) / Ad-hoc (<source>): for single source without verified pilot origin.
+    - Ad-hoc / Legacy Discovery: if no sources recorded.
+    """
+    if len(sources_exec) > 1:
+        return "Multi-Source Discovery"
+    if len(sources_exec) == 1:
+        src = sources_exec[0]
+        if src == "brave_job_search":
+            if started_at_str and started_at_str != "N/A" and cand_store and hasattr(cand_store, "_get_connection"):
+                try:
+                    r_dt = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+                    if r_dt.tzinfo is None:
+                        r_dt = r_dt.replace(tzinfo=timezone.utc)
+                    with cand_store._get_connection() as conn:
+                        attempts = conn.execute(
+                            "SELECT attempt_id, requested_at FROM pilot_search_attempts WHERE provider = 'brave_job_search'"
+                        ).fetchall()
+                        for att in attempts:
+                            req_at = att["requested_at"] if isinstance(att, dict) or hasattr(att, "keys") else att[1]
+                            if req_at:
+                                a_dt = datetime.fromisoformat(req_at.replace("Z", "+00:00"))
+                                if a_dt.tzinfo is None:
+                                    a_dt = a_dt.replace(tzinfo=timezone.utc)
+                                if abs((r_dt - a_dt).total_seconds()) <= 60:
+                                    return "Quick Brave Search"
+                except Exception:
+                    pass
+            return "Ad-hoc (brave_job_search)"
+        return f"Ad-hoc ({src})"
+    return "Ad-hoc / Legacy Discovery"
+
+
 @router.get("/discovery", response_class=HTMLResponse)
 @router.get("/discoveries", response_class=HTMLResponse)
 async def discovery_view(
@@ -521,15 +610,18 @@ async def discovery_view(
             )
         )
 
-    # 2. Recent Discovery Runs
+    # 2. Recent Discovery Runs (Aggregating Scope Runs and Quick Pilot Discovery Runs)
     raw_runs = scope_store.list_runs(limit=30)
     recent_runs: List[DiscoveryControlRunView] = []
+    seen_run_ids = set()
+
     for r in raw_runs:
+        seen_run_ids.add(r.run_id)
         recent_runs.append(
             DiscoveryControlRunView(
                 run_id=r.run_id,
                 scope_id=r.scope_id,
-                scope_name=r.scope_name,
+                scope_name=r.scope_name or "Search Profile Execution",
                 started_at=r.started_at,
                 finished_at=r.finished_at,
                 status=r.status,
@@ -544,6 +636,42 @@ async def discovery_view(
                 errors=r.errors,
             )
         )
+
+    # Safely aggregate candidate store discovery runs (Quick Brave Searches / Multi-Source / Ad-hoc runs)
+    cand_store = svcs.get("cand_store")
+    if cand_store and hasattr(cand_store, "list_discovery_runs"):
+        cand_runs = cand_store.list_discovery_runs(limit=30)
+        for cr in cand_runs:
+            c_run_id = cr.get("run_id")
+            if c_run_id and c_run_id not in seen_run_ids:
+                seen_run_ids.add(c_run_id)
+                source_name = cr.get("source_name") or ""
+                sources_exec = [s.strip() for s in source_name.split(",") if s.strip()]
+                classified_scope_name = _classify_discovery_run_provenance(sources_exec, cr.get("started_at"), cand_store)
+
+                recent_runs.append(
+                    DiscoveryControlRunView(
+                        run_id=c_run_id,
+                        scope_id=cr.get("mode") or "ad_hoc",
+                        scope_name=classified_scope_name,
+                        started_at=cr.get("started_at") or "N/A",
+                        finished_at=cr.get("completed_at"),
+                        status=cr.get("status") or "completed",
+                        markets=[],
+                        discovery_modes=[cr.get("mode") or "company_first"],
+                        sources_requested=sources_exec or ["unknown"],
+                        sources_executed=sources_exec or ["unknown"],
+                        skipped_sources=[],
+                        results_found=cr.get("observations_found", 0),
+                        companies_created=cr.get("new_candidates", 0),
+                        companies_updated=cr.get("updated_candidates", 0),
+                        errors=cr.get("errors") or [],
+                    )
+                )
+
+    # Sort aggregated runs descending by start time
+    recent_runs.sort(key=lambda x: str(x.started_at or ""), reverse=True)
+    recent_runs = recent_runs[:30]
 
     # 3. Authoritative sources from Step 2 SourceRegistry
     sources_raw = registry.list_sources()
@@ -704,22 +832,31 @@ async def discovery_run_detail_view(
         cand_run = cand_store.get_discovery_run(run_id) if hasattr(cand_store, "get_discovery_run") else None
         if not cand_run:
             raise HTTPException(status_code=404, detail=f"Discovery Run '{run_id}' not found")
+
+        source_name = cand_run.get("source_name") or ""
+        sources_exec = [s.strip() for s in source_name.split(",") if s.strip()]
+
+        classified_scope_name = _classify_discovery_run_provenance(sources_exec, cand_run.get("started_at"), cand_store)
+
+        raw_errors = cand_run.get("errors", [])
+        sanitized_errors = [sanitize_secret_text(str(e)) for e in raw_errors] if raw_errors else []
+
         run = DiscoveryRun(
             run_id=cand_run.get("run_id", run_id),
-            scope_id=cand_run.get("source_id"),
-            scope_name=cand_run.get("source_id"),
+            scope_id=cand_run.get("mode") or "ad_hoc",
+            scope_name=classified_scope_name,
             started_at=cand_run.get("started_at", "N/A"),
             finished_at=cand_run.get("completed_at"),
             status=cand_run.get("status", "completed"),
             markets=[],
-            discovery_modes=[cand_run.get("discovery_mode", "company_first")],
-            sources_requested=[cand_run.get("source_id", "multi-source")],
-            sources_executed=[cand_run.get("source_id", "multi-source")],
+            discovery_modes=[cand_run.get("mode", "company_first")],
+            sources_requested=sources_exec or ["unknown"],
+            sources_executed=sources_exec or ["unknown"],
             skipped_sources=[],
             results_found=cand_run.get("observations_found", 0),
             companies_created=cand_run.get("new_candidates", 0),
-            companies_updated=cand_run.get("known_candidates", 0),
-            errors=cand_run.get("errors", []),
+            companies_updated=cand_run.get("updated_candidates", 0),
+            errors=sanitized_errors,
         )
 
     return render_console_template(
@@ -1181,7 +1318,7 @@ async def sources_view(request: Request, message: Optional[str] = None, error: O
     sources = []
     for s in sources_raw:
         h = health.get(s.id, health.get(s.name, {}))
-        
+
         # P10_5-FINAL-012: Truthful credential configuration check using SourceConfig.credential_env_var
         is_conf = False
         config_error = False
@@ -1390,7 +1527,9 @@ async def manual_seed_action(
 ):
     svcs = get_console_services()
     store = svcs["cand_store"]
+    cid = store._generate_candidate_id(domain, company_name, country)
     cand = CandidateCompany(
+        candidate_id=cid,
         name=company_name,
         domain=domain,
         country=country,
@@ -1718,7 +1857,7 @@ async def confirm_historical_import_action(
     # Collect required review rows: ambiguous rows + missing-domain rows
     ambiguous_rows = inspection.get("ambiguous_rows", []) if resolved.suffix.lower() in (".xlsx", ".xlsm") else []
     missing_domain_rows = inspection.get("missing_domain_rows", []) if resolved.suffix.lower() in (".xlsx", ".xlsm") else []
-    
+
     # Map required review rows by (sheet, row_number)
     required_review_map = {}
     for a in ambiguous_rows:
@@ -1956,11 +2095,11 @@ async def pilot_research_view(
     from sales_engine.research.pilot_research import get_pilot_research_profiles
     svcs = get_console_services()
     cand_store = svcs["cand_store"]
-    
+
     profiles = get_pilot_research_profiles()
     pilot_items = []
     saved_count = 0
-    
+
     for prof in profiles:
         existing = cand_store.get_candidate_by_domain(prof.canonical_domain)
         if existing:
@@ -2007,7 +2146,7 @@ async def pilot_save_single_action(
     from sales_engine.research.pilot_research import get_pilot_research_profiles, save_pilot_candidate_to_store
     svcs = get_console_services()
     cand_store = svcs["cand_store"]
-    
+
     profiles = get_pilot_research_profiles()
     target_prof = next((p for p in profiles if p.canonical_domain.lower() == domain.strip().lower()), None)
     if not target_prof:
@@ -2029,7 +2168,7 @@ async def pilot_save_all_action(
     from sales_engine.research.pilot_research import get_pilot_research_profiles, save_pilot_candidate_to_store
     svcs = get_console_services()
     cand_store = svcs["cand_store"]
-    
+
     profiles = get_pilot_research_profiles()
     saved_now = 0
     for prof in profiles:
@@ -2071,7 +2210,7 @@ async def pilot_review_candidate_action(
     cand.manual_review_decision = decision_clean
     cand.manual_reviewed_at = now
     cand.manual_reviewed_by = "operator"
-    
+
     if decision_clean == "APPROVED":
         cand.qualification_outcome = QualificationOutcome.qualified_for_enrichment
         cand.discovery_status = DiscoveryStatus.qualified
@@ -2102,6 +2241,8 @@ async def pilot_review_candidate_action(
 async def lead_register_view(
     request: Request,
     q: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    view: Optional[str] = Query("summary"),
     message: Optional[str] = None,
     error: Optional[str] = None,
 ):
@@ -2109,8 +2250,8 @@ async def lead_register_view(
     from sales_engine.candidates.candidate_store import canonicalize_domain
     svcs = get_console_services()
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
-    
-    records = reg_store.list_records(limit=2000, query=q)
+
+    records = reg_store.list_records(limit=2000, query=q, priority_filter=priority)
 
     return render_console_template(
         request=request,
@@ -2121,6 +2262,8 @@ async def lead_register_view(
             "records": records,
             "total_count": len(records),
             "query": q,
+            "priority": priority,
+            "view_mode": view if view in ("summary", "full") else "summary",
             "message": message,
             "error": error,
         }
@@ -2210,7 +2353,7 @@ async def lead_register_detail_view(
     from sales_engine.leads.register_store import LeadRegisterStore
     svcs = get_console_services()
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
-    
+
     record = reg_store.get_record(candidate_id)
     if not record:
         raise HTTPException(status_code=404, detail="Lead register record not found")
@@ -2405,13 +2548,13 @@ async def candidates_list_view(
 ):
     svcs = get_console_services()
     bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
-    
+
     all_summaries = bridge.get_candidate_list_summary(
         status=status,
         tier=tier,
         limit=1000,
     )
-    
+
     filtered = all_summaries
     if country:
         filtered = [c for c in filtered if (c.get("country") or "").lower() == country.lower()]
@@ -2430,23 +2573,63 @@ async def candidates_list_view(
     end_idx = start_idx + page_size
     page_items = filtered[start_idx:end_idx]
 
+    # Pre-fetch snapshot status and contact counts offline for page items
+    cand_ids = [c.get("company_id") or c.get("candidate_id", "") for c in page_items if (c.get("company_id") or c.get("candidate_id"))]
+    snapshot_map = {}
+    contact_map = {}
+    if cand_ids:
+        try:
+            with svcs["cand_store"]._get_connection() as conn:
+                cur = conn.cursor()
+                # Check research_snapshots in main db
+                q_marks = ",".join(["?"] * len(cand_ids))
+                cur.execute(f"SELECT candidate_id, snapshot_id FROM research_snapshots WHERE candidate_id IN ({q_marks})", cand_ids)
+                for r in cur.fetchall():
+                    snapshot_map[r[0]] = r[1]
+
+                # Check research_cache if available
+                res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
+                if res_cache_path.exists():
+                    try:
+                        import sqlite3 as sq3
+                        c_conn = sq3.connect(str(res_cache_path), timeout=5.0)
+                        c_cur = c_conn.cursor()
+                        c_cur.execute(f"SELECT candidate_id, snapshot_id FROM research_snapshots WHERE candidate_id IN ({q_marks})", cand_ids)
+                        for cr in c_cur.fetchall():
+                            if cr[0] not in snapshot_map:
+                                snapshot_map[cr[0]] = cr[1]
+                        c_conn.close()
+                    except Exception:
+                        pass
+
+                # Check candidate_contacts
+                cur.execute(f"SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts WHERE candidate_id IN ({q_marks}) GROUP BY candidate_id", cand_ids)
+                for cr in cur.fetchall():
+                    contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+        except Exception:
+            pass
+
     candidates: List[CandidateListItem] = []
     for c in page_items:
+        cid = c.get("company_id") or c.get("candidate_id", "")
         dom = c.get("canonical_domain") or c.get("company_domain") or ""
         # Authoritative domain suppression check
         is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
-        
+
         raw_bim = c.get("bim_maturity")
         bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
 
+        snap_id = snapshot_map.get(cid)
+        c_stats = contact_map.get(cid, (0, 0))
+
         candidates.append(
             CandidateListItem(
-                candidate_id=c.get("company_id") or c.get("candidate_id", ""),
+                candidate_id=cid,
                 company_name=c.get("name") or c.get("company_name", ""),
                 domain=dom or None,
                 country=c.get("country"),
                 city=c.get("city"),
-                tier=c.get("company_tier"),
+                tier=format_company_tier_label(c.get("company_tier")),
                 fit=c.get("fit_assessment") or c.get("fit_level"),
                 intent=c.get("intent_assessment") or c.get("intent_level"),
                 bim_maturity=bim_display,
@@ -2456,6 +2639,10 @@ async def candidates_list_view(
                 status=c.get("status") or c.get("discovery_status", "new"),
                 is_previously_contacted=c.get("historical_contact_status") in ("contacted", "replied", "converted", "dnc") or c.get("historical_outreach_summary") in ("contacted", "replied", "converted", "dnc"),
                 is_suppressed=is_supp,
+                has_research_snapshot=bool(snap_id),
+                snapshot_id=snap_id,
+                contact_count=c_stats[0],
+                verified_contact_count=c_stats[1],
             )
         )
 
@@ -2598,14 +2785,14 @@ async def candidate_detail_view(
 
     bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
     detail_data = bridge.get_candidate_detail(candidate_id) or {}
-    
+
     ev_items = [e.model_dump() if hasattr(e, "model_dump") else e.__dict__ for e in svcs["cand_store"].get_evidence(candidate_id)]
     obs_items = [o.model_dump() if hasattr(o, "model_dump") else o.__dict__ for o in svcs["cand_store"].get_observations_for_company(candidate_id)]
     hist_outreach = svcs["cand_store"].get_historical_outreach_for_candidate(candidate_id)
 
     cand_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
     cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
-    
+
     # Authoritative domain suppression check
     is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand_domain)
     is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or bool(hist_outreach)
@@ -2620,7 +2807,7 @@ async def candidate_detail_view(
         country=cand.country,
         city=cand.city,
         company_type=cand.legal_form,
-        tier=cand.company_tier,
+        tier=format_company_tier_label(cand.company_tier),
         fit=cand.fit_assessment,
         intent=cand.intent_assessment,
         bim_maturity=bim_display,
@@ -2678,6 +2865,9 @@ async def candidate_detail_view(
             "is_eligible": is_usable,
         })
 
+    # Also query confirmed manual outreach dispatches for this candidate
+    candidate_manual_logs = svcs["rev_store"].list_manual_outreach_logs(candidate_id=candidate_id, limit=50)
+
     return render_console_template(
         request=request,
         name="candidate_detail.html",
@@ -2686,6 +2876,7 @@ async def candidate_detail_view(
             "active_tab": "candidates",
             "detail": view,
             "contacts": contacts_view,
+            "manual_logs": candidate_manual_logs,
             "email_send_enabled": is_email_send_enabled(),
             "can_generate_draft": can_generate_draft,
             "message": message,
@@ -2793,17 +2984,19 @@ async def research_candidate_action(candidate_id: str, csrf: None = Depends(vali
             use_llm=True,
         )
     except Exception as exc:
-        logger.error(f"Company research execution failed for {candidate_id}: {exc}", exc_info=True)
+        diag_id = f"diag_{uuid.uuid4().hex[:10]}"
+        logger.error(f"Company research execution failed for {candidate_id} [{diag_id}]: {exc}", exc_info=True)
         return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error=Company+research+failed:+{urllib.parse.quote(str(exc))}",
+            f"/sales/candidates/{candidate_id}/research?error=Company+research+could+not+be+completed.+Reference:+{diag_id}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
     # Require valid snapshot persistence
     if not research_res.snapshot_id:
-        logger.error(f"Snapshot persistence failed for candidate {candidate_id}")
+        diag_id = f"diag_{uuid.uuid4().hex[:10]}"
+        logger.error(f"Snapshot persistence failed for candidate {candidate_id} [{diag_id}]")
         return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error=Research+completed+but+snapshot+persistence+failed.+Please+check+database+storage.",
+            f"/sales/candidates/{candidate_id}/research?error=Research+completed+but+snapshot+persistence+failed.+Reference:+{diag_id}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
@@ -3301,34 +3494,342 @@ async def generate_candidate_draft_action(
     )
 
 
+@router.post("/candidates/{candidate_id}/verify-contact")
+async def verify_candidate_contact_action(
+    candidate_id: str,
+    contact_id: str = Form(...),
+    evidence_source: str = Form(...),
+    evidence_reference: Optional[str] = Form(None),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """Explicit evidence-aware manual contact verification action with auditable provenance."""
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate company not found")
+
+    contact = svcs["cand_store"].get_contact_by_id(contact_id.strip(), candidate_id=candidate_id)
+    if not contact:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Contact not found for this candidate.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    clean_source = evidence_source.strip()
+    if not clean_source:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Evidence source is required for explicit contact verification.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    svcs["cand_store"].record_contact_verification(
+        candidate_id=candidate_id,
+        contact_id=contact.contact_id,
+        work_email=contact.work_email,
+        evidence_source=clean_source,
+        evidence_reference=evidence_reference.strip() if evidence_reference else None,
+        verified_by="local_operator",
+        notes=notes.strip() if notes else None,
+    )
+
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}?message=Contact {contact.work_email} explicitly verified with audit record.",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/candidates/{candidate_id}/create-manual-draft")
+async def create_manual_draft_action(
+    candidate_id: str,
+    contact_id: Optional[str] = Form(None),
+    recipient_email: str = Form(...),
+    recipient_name: Optional[str] = Form(None),
+    subject: str = Form(...),
+    body: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+):
+    """Creates a manual draft without LLM inference, strictly enforcing eligibility, suppression, and contact evidence."""
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate company not found")
+
+    # 1. Authoritative candidate eligibility check in POST handler
+    if not is_candidate_outreach_eligible(cand):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate company is not eligible for outreach draft creation.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    clean_email = recipient_email.strip().lower()
+
+    if not EMAIL_REGEX.match(clean_email):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Invalid recipient email format.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # 2. Authoritative suppression and DNC check
+    if check_authoritative_suppression(svcs["suppression_svc"], email=clean_email, domain=cand_domain):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Recipient email or domain is suppressed.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # 3. Check historical contact status and prior outreach events
+    hist_events = svcs["cand_store"].get_historical_outreach_for_candidate(candidate_id)
+    if hist_events or cand.historical_contact_status in ("contacted", "replied", "converted", "dnc"):
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate has prior outreach history; cold outreach drafting is blocked.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # 4. Validate contact and recipient evidence integrity
+    # Check if a contact_id was passed
+    target_cid = contact_id.strip() if contact_id and contact_id.strip() else None
+    matched_contact = None
+
+    if target_cid:
+        # Check contact exists strictly for THIS candidate (no cross-candidate assignment)
+        contact_by_cid = svcs["cand_store"].get_contact_by_id(target_cid, candidate_id=candidate_id)
+        if not contact_by_cid:
+            # Check if contact belongs to a different candidate
+            any_c = svcs["cand_store"].get_contact_by_id(target_cid)
+            if any_c:
+                return RedirectResponse(
+                    f"/sales/candidates/{candidate_id}?error=Cross-candidate contact reassignment is rejected.",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}?error=Specified contact ID was not found for this candidate.",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        # Check email matches the contact
+        if contact_by_cid.work_email and contact_by_cid.work_email.strip().lower() != clean_email:
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}?error=Recipient email does not match specified contact record.",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        matched_contact = contact_by_cid
+    else:
+        # Look up existing contact by email for this candidate
+        contact_by_email = svcs["cand_store"].get_contact_by_id(clean_email, candidate_id=candidate_id)
+        if contact_by_email:
+            matched_contact = contact_by_email
+
+    # If contact exists, check its status
+    from sales_engine.leads.register_store import LeadRegisterStore
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    reg_record = reg_store.get_record(candidate_id)
+    reg_emails = []
+    if reg_record and reg_record.contact_email_addresses:
+        reg_emails = [e.strip().lower() for e in reg_record.contact_email_addresses.split(",") if e.strip()]
+
+    is_verified_evidence = False
+    resolved_contact_id = None
+    resolved_contact_name = recipient_name
+
+    if matched_contact:
+        resolved_contact_id = matched_contact.contact_id
+        resolved_contact_name = resolved_contact_name or matched_contact.full_name
+        st = (matched_contact.email_status or "unknown").strip().lower()
+        if st in ("verified", "likely"):
+            is_verified_evidence = True
+    elif clean_email in reg_emails:
+        # Documented in Lead Register! Create contact record without fabricating verified confidence unless explicitly verified
+        is_verified_evidence = True
+        resolved_contact_id = f"contact:{clean_email}"
+        from backend.schemas import ContactCandidate
+        new_c = ContactCandidate(
+            contact_id=resolved_contact_id,
+            first_name=recipient_name.split()[0] if recipient_name else "Contact",
+            last_name=" ".join(recipient_name.split()[1:]) if recipient_name and len(recipient_name.split()) > 1 else "",
+            full_name=recipient_name or "Contact",
+            job_title="Lead Register Contact",
+            work_email=clean_email,
+            email_status="verified",
+            email_confidence=100,
+            provider="lead_register_evidence",
+        )
+        svcs["cand_store"].save_contact(new_c, candidate_id=candidate_id)
+
+    # Reject unverified arbitrary emails
+    if not is_verified_evidence:
+        # Save contact with email_status='unverified' if not exists, but DO NOT allow draft creation
+        if not matched_contact:
+            from backend.schemas import ContactCandidate
+            new_c = ContactCandidate(
+                contact_id=f"contact:{clean_email}",
+                first_name=recipient_name.split()[0] if recipient_name else "Contact",
+                last_name=" ".join(recipient_name.split()[1:]) if recipient_name and len(recipient_name.split()) > 1 else "",
+                full_name=recipient_name or "Contact",
+                job_title="Key Contact",
+                work_email=clean_email,
+                email_status="unverified",
+                email_confidence=0,
+                provider="manual_operator_unverified",
+            )
+            svcs["cand_store"].save_contact(new_c, candidate_id=candidate_id)
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Recipient email is not verified or documented in Lead Register. Please verify contact evidence first.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # 5. Generate draft payload without LLM (zero inference, offline)
+    import uuid
+    from sales_engine.sending.approval_service import compute_content_fingerprint
+    from sales_engine.sending.schemas import StoredDraft
+
+    draft_id = f"draft:manual:{uuid.uuid4().hex[:12]}"
+    lead_id = f"domain:{cand_domain}" if cand_domain else candidate_id
+
+    trusted_senders = get_trusted_senders()
+    primary_sender = trusted_senders[0] if trusted_senders else (os.environ.get("SMTP_FROM_EMAIL") or "outreach@pybim-studio.com")
+    primary_sender_name = os.environ.get("SMTP_FROM_NAME") or "pyBIM Team"
+
+    draft_dict = {
+        "draft_id": draft_id,
+        "revision": 1,
+        "lead_id": lead_id,
+        "contact_id": resolved_contact_id or f"contact:{clean_email}",
+        "recipient_name": resolved_contact_name or "Contact",
+        "recipient_title": "Key Contact",
+        "recipient_email": clean_email,
+        "sender_name": primary_sender_name,
+        "sender_email": primary_sender,
+        "subject": subject.strip(),
+        "body": body.strip(),
+        "service_used": "Tech-Enabled BIM Services",
+        "generation_model": "manual_operator_draft",
+        "approval_status": "pending_review",
+        "send_status": "not_sent",
+        "outreach_status": "draft_ready",
+        "reviewer": "local_operator",
+    }
+    fingerprint = compute_content_fingerprint(draft_dict)
+    stored_draft = StoredDraft(**draft_dict, content_hash=fingerprint)
+    svcs["rev_store"].save_draft(stored_draft)
+
+    return RedirectResponse(
+        f"/sales/drafts/{draft_id}?message=Manual draft r1 created and staged in Pending Review.",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 # ---------------------------------------------------------------------------
-# 5. LEADS
+# 5. LEADS (Qualified Leads Only - Authoritative ICP/Enrichment Qualification)
 # ---------------------------------------------------------------------------
 @router.get("/leads", response_class=HTMLResponse)
 async def leads_view(request: Request, q: Optional[str] = Query(None)):
     svcs = get_console_services()
     store = svcs["cand_store"]
     cands = store.list_candidates()
-    
+
     leads = []
     for c in cands:
+        # P0 Qualification filter: enforce unified authoritative qualification logic
+        if not is_candidate_qualified_lead(c):
+            continue
+
+        outcome = getattr(c, "qualification_outcome", None)
+        if hasattr(outcome, "value"):
+            outcome = outcome.value
+        outcome_str = str(outcome) if outcome else ""
+
         name = getattr(c, "company_name", None) or getattr(c, "name", "Company")
         dom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
-        is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
+        
+        # Authoritative domain suppression check from SuppressionStore
+        auth_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
+        cand_flag_supp = bool(getattr(c, "suppressed", False))
+        is_supp = auth_supp or cand_flag_supp
 
         if q:
             ql = q.lower()
             if ql not in name.lower() and (not dom or ql not in dom.lower()):
                 continue
 
+        # Check historical contact status and active conversation
+        hist_status = getattr(c, "historical_contact_status", None)
+        is_contacted = (
+            hist_status in ("contacted", "replied", "converted", "dnc")
+            or bool(getattr(c, "previous_outreach_detected", False))
+            or bool(getattr(c, "active_conversation", False))
+        )
+
+        # Candidate-level qualification & policy eligibility
+        base_eligible = is_candidate_outreach_eligible(c)
+
+        # Check if an eligible, verified recipient is available for this candidate
+        has_verified_recipient = False
+        try:
+            cand_contacts = store.get_contacts_for_candidate(c.candidate_id)
+            for cnt in cand_contacts:
+                w_email = (getattr(cnt, "work_email", None) or "").strip().lower()
+                st = (getattr(cnt, "email_status", None) or "unknown").strip().lower()
+                if w_email and EMAIL_REGEX.match(w_email) and st in ("verified", "likely"):
+                    # Recipient must not be individually suppressed
+                    if not check_authoritative_suppression(svcs["suppression_svc"], email=w_email):
+                        has_verified_recipient = True
+                        break
+        except Exception:
+            pass
+
+        # Effective Outreach Readiness status with strict precedence (no contradictory states):
+        # 1. Suppressed / DNC (authoritative suppression overrides all positive states)
+        # 2. Prior Contact / Active Conversation
+        # 3. Not Qualified
+        # 4. Contact Verification Required (qualified, clear, but missing verified recipient)
+        # 5. Eligible for Manual Draft (qualified, clear, verified recipient available)
+        if is_supp:
+            effective_readiness = "suppressed"
+            readiness_label = "Suppressed"
+            readiness_badge = "badge-danger"
+            readiness_title = "Domain or candidate is suppressed (Do Not Contact)"
+        elif is_contacted:
+            effective_readiness = "prior_contact"
+            readiness_label = "Prior Contact"
+            readiness_badge = "badge-warning"
+            readiness_title = "Previous outreach history or active conversation detected"
+        elif not base_eligible:
+            effective_readiness = "not_eligible"
+            readiness_label = "Ineligible"
+            readiness_badge = "badge-muted"
+            readiness_title = "Candidate does not meet outreach eligibility criteria"
+        elif not has_verified_recipient:
+            effective_readiness = "verification_required"
+            readiness_label = "Contact Verification Required"
+            readiness_badge = "badge-warning"
+            readiness_title = "Company is qualified, but no verified or likely recipient email is on file"
+        else:
+            effective_readiness = "draft_ready"
+            readiness_label = "Eligible for Manual Draft"
+            readiness_badge = "badge-success"
+            readiness_title = "Qualified and verified recipient available for offline draft preparation"
+
+        # Raw values without false positive defaults
+        fit_val = getattr(c, "fit_assessment", None)
+        intent_val = getattr(c, "intent_assessment", None)
+        bim_val = getattr(c, "bim_maturity", None)
+        opp_val = getattr(c, "outsourcing_potential", None)
+
         leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
             "company_name": name,
             "domain": dom,
-            "country": c.country,
-            "tier": c.company_tier,
+            "country": c.country or "Not Verified",
+            "tier": format_company_tier_label(c.company_tier),
+            "fit": fit_val if fit_val and fit_val.lower() != "unknown" else "Unknown",
+            "intent": intent_val if intent_val and intent_val.lower() != "unknown" else "Unknown",
+            "bim_maturity": bim_val if bim_val and bim_val.lower() != "unknown" else "Unknown",
+            "outsourcing_potential": opp_val if opp_val and opp_val.lower() != "unknown" else "Not Evaluated",
             "discovery_status": c.discovery_status,
-            "bim_maturity": c.bim_maturity if c.bim_maturity and c.bim_maturity.lower() != "unknown" else "Unknown",
+            "qualification_outcome": outcome_str or "qualified",
+            "effective_readiness": effective_readiness,
+            "readiness_label": readiness_label,
+            "readiness_badge": readiness_badge,
+            "readiness_title": readiness_title,
+            "is_previously_contacted": is_contacted,
             "is_suppressed": is_supp,
             "candidate_id": c.candidate_id,
         })
@@ -3341,6 +3842,7 @@ async def leads_view(request: Request, q: Optional[str] = Query(None)):
             "active_tab": "leads",
             "leads": leads,
             "email_send_enabled": is_email_send_enabled(),
+            "query": q,
         },
     )
 
@@ -3682,7 +4184,7 @@ async def suppress_draft_recipient_action(
     if not target_email:
         return RedirectResponse(f"/sales/drafts/{draft_id}?error=Missing recipient email for suppression.", status_code=status.HTTP_303_SEE_OTHER)
     company_dom = draft.lead_id.replace("domain:", "") if draft else None
-    
+
     valid_reasons = {"manual", "opt_out", "bounce", "spam_complaint", "competitor"}
     clean_reason = reason.strip().lower() if reason else "manual"
     if clean_reason not in valid_reasons:
@@ -3696,6 +4198,112 @@ async def suppress_draft_recipient_action(
     )
     return RedirectResponse(f"/sales/drafts/{draft_id}?message=Recipient suppressed.", status_code=status.HTTP_303_SEE_OTHER)
 
+
+@router.post("/drafts/{draft_id}/log-manual-send")
+async def log_manual_send_action(
+    draft_id: str,
+    channel: str = Form("email"),
+    external_ref: Optional[str] = Form(None),
+    operator_notes: Optional[str] = Form(None),
+    confirm_external_transmission: Optional[str] = Form(None),
+    is_retrospective_audit: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """Records an explicit operator manual dispatch event for an existing draft with strict safety and duplicate guards.
+    Distinguishes newly initiated outreach from retrospective logging of completed historical events."""
+    svcs = get_console_services()
+    rev_store = svcs["rev_store"]
+    draft = rev_store.get_draft(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    # P0 Safety Guard: Explicit operator confirmation of external transmission required
+    if not confirm_external_transmission or confirm_external_transmission.strip().lower() not in ("1", "true", "yes", "on"):
+        return RedirectResponse(
+            f"/sales/drafts/{draft_id}?error=Explicit operator confirmation of external transmission is required before logging.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    valid_channels = {"email", "linkedin", "portal"}
+    clean_channel = channel.strip().lower() if channel else ""
+    if clean_channel not in valid_channels:
+        return RedirectResponse(
+            f"/sales/drafts/{draft_id}?error=Invalid outreach channel. Allowed channels: email, linkedin, portal.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    candidate_id = draft.lead_id if draft.lead_id.startswith("cand:") else f"cand:{draft.lead_id}"
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) if cand else None
+
+    is_retro = bool(is_retrospective_audit and is_retrospective_audit.strip().lower() in ("1", "true", "yes", "on"))
+
+    # 1. First check if this exact event has already been recorded (idempotent duplicate detection)
+    existing = rev_store.check_duplicate_manual_outreach(
+        candidate_id=candidate_id,
+        recipient_email=draft.recipient_email,
+        draft_id=draft.draft_id,
+        external_ref=external_ref.strip() if external_ref else None,
+    )
+    if existing:
+        msg = f"Notice: Duplicate manual dispatch event detected ({existing.get('log_id')}). Record preserved without duplicate entry."
+        return RedirectResponse(
+            f"/sales/drafts/{draft_id}?message={urllib.parse.quote(msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # 2. For newly initiated outreach (non-retrospective), strictly verify candidate eligibility & suppression
+    if not is_retro:
+        if cand and not is_candidate_outreach_eligible(cand):
+            return RedirectResponse(
+                f"/sales/drafts/{draft_id}?error=Candidate is not eligible for new outreach dispatch.",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        if check_authoritative_suppression(svcs["suppression_svc"], email=draft.recipient_email, domain=cand_domain):
+            return RedirectResponse(
+                f"/sales/drafts/{draft_id}?error=Recipient email or domain is suppressed; new outreach transmission is blocked.",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
+    log_res = rev_store.log_manual_outreach(
+        candidate_id=candidate_id,
+        recipient_email=draft.recipient_email,
+        subject=draft.subject,
+        draft_id=draft.draft_id,
+        revision=draft.revision,
+        contact_id=draft.contact_id,
+        recipient_name=draft.recipient_name,
+        channel=clean_channel,
+        logged_by="local_operator",
+        external_ref=external_ref,
+        operator_notes=operator_notes,
+        confirmed_sent_externally=True,
+    )
+
+    if log_res.get("duplicate"):
+        msg = f"Notice: Duplicate manual dispatch event detected ({log_res.get('log_id')}). Record preserved without duplicate entry."
+    else:
+        # Also record in candidate store historical outreach atomically so future cold outreach checks detect manual contact
+        if cand:
+            svcs["cand_store"].record_historical_outreach(
+                candidate_id=candidate_id,
+                source_ref="manual_operator_dispatch" if not is_retro else "retrospective_audit_log",
+                contact_name=draft.recipient_name,
+                contact_email=draft.recipient_email,
+                channel=clean_channel,
+                notes=operator_notes or f"Manual dispatch external ref: {external_ref or 'None'}",
+            )
+            # Update candidate status so is_candidate_outreach_eligible detects prior contact
+            cand.historical_contact_status = "contacted"
+            cand.previous_outreach_detected = True
+            cand.cold_outreach_allowed = False
+            svcs["cand_store"].save_candidate(cand)
+        msg = "Manual external dispatch event successfully confirmed and logged." if not is_retro else "Retrospective historical outreach event successfully recorded for audit."
+
+    return RedirectResponse(
+        f"/sales/drafts/{draft_id}?message={urllib.parse.quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3800,13 +4408,18 @@ async def sent_history_view(request: Request):
             )
         )
 
+    # Also fetch confirmed manual external outbound logs
+    manual_logs = svcs["rev_store"].list_manual_outreach_logs(limit=100)
+
     return render_console_template(
         request=request,
         name="sent.html",
         context={
             "request": request,
             "active_tab": "sent",
+            "sent_items": items,
             "items": items,
+            "manual_logs": manual_logs,
             "email_send_enabled": is_email_send_enabled(),
         },
     )
@@ -3831,7 +4444,7 @@ async def watchlist_view(request: Request):
                 company_name=name,
                 company_domain=dom,
                 country=c.country,
-                tier=c.company_tier,
+                tier=format_company_tier_label(c.company_tier),
                 fit=c.fit_assessment,
                 intent=c.intent_assessment,
                 watch_reason="Signal monitoring (e.g. pending hiring or tender)",
@@ -3994,7 +4607,7 @@ async def replies_view(
     try:
         with store._get_connection() as conn:
             rows = conn.execute("""
-                SELECT h.*, c.company_name 
+                SELECT h.*, c.company_name
                 FROM historical_outreach_events h
                 LEFT JOIN candidate_companies c ON h.candidate_id = c.candidate_id
                 WHERE h.reply_status IS NOT NULL AND h.reply_status != ''
@@ -4375,16 +4988,36 @@ async def settings_view(request: Request):
     except ImportError:
         chroma_operational = False
 
+    # Safe credential configuration indicators (NO secret values exposed)
+    brave_configured = bool(os.getenv("BRAVE_SEARCH_API_KEY"))
+    resend_configured = bool(os.getenv("RESEND_API_KEY"))
+
+    # Research storage availability
+    research_storage_available = False
+    try:
+        from sales_engine.research.research_store import ResearchSnapshotStore
+        store_path = svcs.get("cand_store").db_path if "cand_store" in svcs else "candidates.db"
+        snap_store = ResearchSnapshotStore(store_path)
+        research_storage_available = True
+    except Exception:
+        research_storage_available = False
+
     return render_console_template(
         request=request,
         name="settings.html",
         context={
             "request": request,
             "active_tab": "settings",
+            "app_name": "Email Led",
+            "runtime_mode": "Local-First",
+            "bind_address": "127.0.0.1:8000",
             "db_path": svcs["cand_store"].db_path,
             "email_send_enabled": is_email_send_enabled(),
             "provider_type": "SMTP (Phase 9 Provider)" if smtp_configured else "Mock Provider (Safe)",
             "smtp_configured": smtp_configured,
+            "brave_configured": brave_configured,
+            "resend_configured": resend_configured,
+            "research_storage_available": research_storage_available,
             "trusted_sender_email": trusted_sender_email,
             "trusted_sender_name": trusted_sender_name,
             "sheets_configured": sheets_configured,
@@ -4420,7 +5053,7 @@ async def global_search_view(request: Request, q: Optional[str] = Query(None)):
                     "name": name,
                     "domain": dom,
                     "city": city,
-                    "tier": c.company_tier,
+                    "tier": format_company_tier_label(c.company_tier),
                     "status": c.discovery_status,
                 })
 

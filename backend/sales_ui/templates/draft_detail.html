@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Draft {{ draft.draft_id }} (r{{ draft.revision }}) | SalesAI Console{% endblock %}
+{% block title %}Draft {{ draft.draft_id }} (r{{ draft.revision }}) | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -29,21 +29,80 @@
     <div><strong>Target Company:</strong> <code>{{ draft.company_name }}</code></div>
     <div><strong>Recipient Name:</strong> {{ draft.recipient_name }}</div>
     <div><strong>Recipient Title:</strong> {{ draft.recipient_title or 'N/A' }}</div>
-    <div><strong>Recipient Email:</strong> <code>{{ draft.recipient_email }}</code></div>
+    <div>
+      <strong>Recipient Email:</strong> <code>{{ draft.recipient_email }}</code>
+      <button type="button" class="copy-btn" onclick="copyToClipboard('{{ draft.recipient_email }}', this)">📋 Copy</button>
+    </div>
     <div><strong>Sender Name:</strong> {{ draft.sender_name or 'Sender not configured' }}</div>
     <div><strong>Sender Email:</strong> <code>{{ draft.sender_email or 'Sender not configured' }}</code></div>
     <div><strong>Service Pitched:</strong> {{ draft.service_used or 'Tech-Enabled BIM Services' }}</div>
     <div><strong>Approved Hash:</strong> <code>{{ draft.approved_fingerprint_short or 'None' }}</code></div>
   </div>
 
-  <!-- Email Content Box -->
-  <div style="background: var(--bg-surface); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
-    <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.75rem; color: var(--text-primary);">
-      Subject: {{ draft.subject }}
+  <!-- Email Content Box with Manual Copy Controls -->
+  <div style="background: var(--bg-hover); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="font-weight: 700; font-size: 1rem; color: var(--text-primary);">
+        Subject: {{ draft.subject }}
+      </div>
+      <div id="draft-subject-text" style="display: none;">{{ draft.subject }}</div>
+      <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('draft-subject-text').innerText, this)">
+        📋 Copy Subject
+      </button>
     </div>
-    <div style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); font-family: inherit;">
-{{ draft.body }}
+    <div style="position: relative;">
+      <div id="email-body-text" style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); font-family: inherit; background: var(--bg-card); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color);">{{ draft.body }}</div>
+      <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end;">
+        <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('email-body-text').innerText, this)">
+          📋 Copy Email Body
+        </button>
+      </div>
     </div>
+  </div>
+
+  <!-- Manual Outbound Dispatch Logging (Operator Hand-Off) -->
+  <div class="card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); background: rgba(56, 189, 248, 0.03);">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>📝 Manual Outbound Dispatch Log</span>
+      <span class="badge badge-info">Operator Hand-Off</span>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      If you manually copied this draft and sent it via your own email client, record the manual event here for audit compliance and suppression tracking. Copying or clicking does <strong>never</strong> mark the draft sent automatically.
+    </p>
+    <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/log-manual-send" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div style="width: 130px;">
+        <label class="form-label">Channel</label>
+        <select name="channel" class="form-control">
+          <option value="email">Email</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="portal">Web Portal</option>
+        </select>
+      </div>
+      <div style="width: 160px;">
+        <label class="form-label">External Ref (Optional)</label>
+        <input type="text" name="external_ref" class="form-control" placeholder="e.g. Message ID">
+      </div>
+      <div style="flex: 2; min-width: 240px;">
+        <label class="form-label">Operator Notes</label>
+        <input type="text" name="operator_notes" class="form-control" placeholder="Notes on manual transmission...">
+      </div>
+      <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="confirm_external_transmission" value="1" required>
+            I explicitly confirm this message was transmitted externally outside• Email Led.
+          </label>
+          <label style="font-size: 0.78rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="is_retrospective_audit" value="1">
+            Retrospective audit log: message was dispatched in the past (does not authorize new outreach).
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary">
+          📝 Confirm &amp; Log Manual Dispatch
+        </button>
+      </div>
+    </form>
   </div>
 
   <!-- Review Actions Bar (Human-in-the-Loop) -->

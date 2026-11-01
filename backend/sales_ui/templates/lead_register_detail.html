@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Edit 13-Field Lead Record: {{ record.company_name }} | SalesAI Console{% endblock %}
+{% block title %}Edit 13-Field Lead Record: {{ record.company_name }} | Email Led{% endblock %}
 
 {% block content %}
+{% with flow_company_name=record.company_name, flow_canonical_domain=(record.official_website or record.candidate_id), flow_candidate_id=record.candidate_id, flow_current_step='lead_register' %}
+  {% include "candidate_flow_bar.html" %}
+{% endwith %}
+
 <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
   <div>
     <h1 class="page-title">Lead Record #{{ record.record_number or 'New' }} — {{ record.company_name }}</h1>
@@ -10,6 +14,7 @@
   </div>
   <div style="display: flex; gap: 0.5rem;">
     <a href="/sales/register" class="btn btn-secondary">← Back to 13-Field Register</a>
+    <a href="/sales/candidates/{{ record.candidate_id }}/research" class="btn btn-secondary" style="color: var(--border-focus);">🔬 Research Snapshot</a>
     <a href="/sales/candidates/{{ record.candidate_id }}" class="btn btn-secondary">Candidate Overview</a>
   </div>
 </div>

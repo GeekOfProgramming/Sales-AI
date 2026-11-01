@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard | SalesAI Console{% endblock %}
+{% block title %}Dashboard | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -18,27 +18,27 @@
   <div class="metric-card">
     <span class="metric-label">New Candidates</span>
     <span class="metric-value">{{ summary.new_candidates }}</span>
-    <span class="metric-subtext">Awaiting initial triage</span>
+    <span class="metric-subtext">Awaiting initial discovery review</span>
   </div>
   <div class="metric-card">
     <span class="metric-label">Needs Research</span>
     <span class="metric-value">{{ summary.needs_research }}</span>
-    <span class="metric-subtext">Pending deep enrichment</span>
+    <span class="metric-subtext">Assigned to research queue</span>
   </div>
   <div class="metric-card">
     <span class="metric-label">Watchlist</span>
     <span class="metric-value">{{ summary.watchlist }}</span>
-    <span class="metric-subtext">Monitored for new signals</span>
+    <span class="metric-subtext">Monitored for new hiring/signals</span>
   </div>
   <div class="metric-card">
     <span class="metric-label">Qualified Leads</span>
     <span class="metric-value">{{ summary.qualified_leads }}</span>
-    <span class="metric-subtext">Fit & intent verified</span>
+    <span class="metric-subtext">Passed automated ICP qualification</span>
   </div>
   <div class="metric-card">
-    <span class="metric-label">Contacts Found</span>
+    <span class="metric-label">Historical Outreach Contacts</span>
     <span class="metric-value">{{ summary.contacts_found }}</span>
-    <span class="metric-subtext">{{ summary.usable_contacts }} usable</span>
+    <span class="metric-subtext">{{ summary.usable_contacts }} non-bounced emails</span>
   </div>
   <div class="metric-card">
     <span class="metric-label">Drafts Pending Review</span>
@@ -63,7 +63,7 @@
   <div class="metric-card">
     <span class="metric-label">Historical Companies</span>
     <span class="metric-value">{{ summary.historical_known_companies }}</span>
-    <span class="metric-subtext">Known outreach history</span>
+    <span class="metric-subtext">Prior contact / known companies</span>
   </div>
 </div>
 

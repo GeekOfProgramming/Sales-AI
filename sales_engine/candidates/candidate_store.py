@@ -293,6 +293,23 @@ class CandidateStore:
 
                 CREATE INDEX IF NOT EXISTS idx_contact_cand ON candidate_contacts(candidate_id);
 
+                CREATE TABLE IF NOT EXISTS candidate_contact_verifications (
+                    verification_id TEXT PRIMARY KEY,
+                    candidate_id TEXT NOT NULL,
+                    contact_id TEXT NOT NULL,
+                    work_email TEXT NOT NULL,
+                    evidence_source TEXT NOT NULL,
+                    evidence_reference TEXT,
+                    verified_by TEXT NOT NULL DEFAULT 'local_operator',
+                    verified_at TEXT NOT NULL,
+                    notes TEXT,
+                    FOREIGN KEY (candidate_id) REFERENCES candidate_companies(candidate_id) ON DELETE CASCADE,
+                    FOREIGN KEY (contact_id) REFERENCES candidate_contacts(contact_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_verif_cand ON candidate_contact_verifications(candidate_id);
+                CREATE INDEX IF NOT EXISTS idx_verif_contact ON candidate_contact_verifications(contact_id);
+                CREATE INDEX IF NOT EXISTS idx_verif_email ON candidate_contact_verifications(work_email);
+
                 CREATE TABLE IF NOT EXISTS discovery_runs (
                     run_id TEXT PRIMARY KEY,
                     mode TEXT NOT NULL,
@@ -466,6 +483,9 @@ class CandidateStore:
         return new_cand, True
 
     def save_candidate(self, cand: CandidateCompany):
+        if not cand.candidate_id or not str(cand.candidate_id).strip():
+            raise ValueError("Cannot persist candidate: candidate_id must be a non-empty, non-whitespace string.")
+
         with self._get_connection() as conn:
             # Monotonic outreach guard enforcement in Python memory
             existing_row = conn.execute(
@@ -1247,35 +1267,77 @@ class CandidateStore:
                     return c
         return None
 
-    def record_pilot_search_attempt(
+    def record_contact_verification(
         self,
-        attempt_id: str,
-        provider: str,
-        query: str,
-        status: str,
-        results_count: int = 0,
-        country: Optional[str] = None,
-        city: Optional[str] = None,
-        error_message: Optional[str] = None,
-        estimated_cost_usd: float = 0.005,
-    ) -> None:
-        """Records a pilot search execution attempt into SQLite for budget and audit tracking."""
-        now_iso = datetime.now(timezone.utc).isoformat()
+        candidate_id: str,
+        contact_id: str,
+        work_email: str,
+        evidence_source: str,
+        evidence_reference: Optional[str] = None,
+        verified_by: str = "local_operator",
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record an explicit, auditable verification action for a candidate contact with provenance."""
+        import uuid
+        from datetime import datetime, timezone
+
+        verif_id = f"verif_{uuid.uuid4().hex[:16]}"
+        now = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO pilot_search_attempts (
-                    attempt_id, provider, query, country, city,
-                    requested_at, results_count, status, error_message,
-                    estimated_cost_usd, operator_approved
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO candidate_contact_verifications (
+                    verification_id, candidate_id, contact_id, work_email,
+                    evidence_source, evidence_reference, verified_by, verified_at, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    attempt_id, provider, query, country, city,
-                    now_iso, results_count, status, error_message,
-                    estimated_cost_usd,
+                    verif_id,
+                    candidate_id,
+                    contact_id,
+                    work_email.strip().lower(),
+                    evidence_source,
+                    evidence_reference,
+                    verified_by,
+                    now,
+                    notes,
                 ),
             )
+            # Update the contact's email_status to verified
+            conn.execute(
+                """
+                UPDATE candidate_contacts
+                SET email_status = 'verified', email_confidence = 100, provider = COALESCE(provider, 'manual_verification')
+                WHERE contact_id = ? AND candidate_id = ?
+                """,
+                (contact_id, candidate_id),
+            )
+        return {
+            "verification_id": verif_id,
+            "candidate_id": candidate_id,
+            "contact_id": contact_id,
+            "work_email": work_email,
+            "evidence_source": evidence_source,
+            "evidence_reference": evidence_reference,
+            "verified_by": verified_by,
+            "verified_at": now,
+            "notes": notes,
+        }
+
+    def get_contact_verifications(self, candidate_id: str, contact_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieve auditable verification trail for contacts of a candidate."""
+        with self._get_connection() as conn:
+            if contact_id:
+                rows = conn.execute(
+                    "SELECT * FROM candidate_contact_verifications WHERE candidate_id = ? AND contact_id = ? ORDER BY verified_at DESC",
+                    (candidate_id, contact_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM candidate_contact_verifications WHERE candidate_id = ? ORDER BY verified_at DESC",
+                    (candidate_id,),
+                ).fetchall()
+            return [dict(r) for r in rows]
 
     def reserve_pilot_search_attempt(
         self,

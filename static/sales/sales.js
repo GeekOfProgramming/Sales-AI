@@ -63,3 +63,22 @@ document.addEventListener("DOMContentLoaded", function () {
     return div.innerHTML;
   }
 });
+
+
+// Global Operator Console Clipboard & Feedback Helper
+window.copyToClipboard = function (text, btnElement) {
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(function () {
+    if (btnElement) {
+      const origText = btnElement.innerHTML;
+      btnElement.innerHTML = "✓ Copied!";
+      btnElement.style.color = "#10b981";
+      setTimeout(function () {
+        btnElement.innerHTML = origText;
+        btnElement.style.color = "";
+      }, 1500);
+    }
+  }).catch(function (err) {
+    console.error("Clipboard copy failed: ", err);
+  });
+};

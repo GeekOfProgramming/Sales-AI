@@ -11,11 +11,11 @@
   --bg-hover: #273549;
   --border-color: #334155;
   --border-focus: #38bdf8;
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  
+
+  --text-primary: #ffffff;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --success: #10b981;
@@ -26,7 +26,7 @@
   --danger-bg: #7f1d1d;
   --info: #0284c7;
   --info-bg: #0c4a6e;
-  
+
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -50,27 +50,46 @@ body {
   flex-direction: column;
 }
 
-/* Layout */
-.app-header {
+/* ==========================================================================
+   Unified Sticky Application Header (UX-01.3)
+   ========================================================================== */
+.app-header-unified {
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  padding: 0.75rem 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 1.25rem;
+  height: 52px;
+  gap: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+.header-brand-row {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   text-decoration: none;
   color: var(--text-primary);
   font-weight: 700;
   font-size: 1.15rem;
+}
+
+.brand-name {
+  color: #38bdf8;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.2px;
 }
 
 .brand-badge {
@@ -85,59 +104,74 @@ body {
 }
 
 .header-search {
-  flex: 0 1 360px;
-}
-
-.header-search form {
-  display: flex;
-  position: relative;
-}
-
-.header-search input {
-  width: 100%;
-  background: var(--bg-input);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0.45rem 0.75rem;
-  color: var(--text-primary);
-  font-size: 0.875rem;
-}
-
-.header-search input:focus {
-  outline: none;
-  border-color: var(--border-focus);
+  display: none;
 }
 
 .header-meta {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  display: none;
 }
 
-/* Navigation bar */
+/* Unified Navigation Bar (Inside Header) */
+.nav-bar-unified {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  overflow-x: auto;
+  white-space: nowrap;
+  flex: 1;
+  height: 100%;
+}
+
 .nav-bar {
   background-color: #172033;
   border-bottom: 1px solid var(--border-color);
-  padding: 0 1.5rem;
+  padding: 0 1rem;
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.2rem;
   overflow-x: auto;
   white-space: nowrap;
+}
+
+.nav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-group-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding: 0 0.4rem;
+  user-select: none;
+}
+
+.nav-divider {
+  display: inline-block;
+  height: 18px;
+  width: 1px;
+  background-color: var(--border-color);
+  margin: 0 0.4rem;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .nav-link {
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   font-weight: 500;
-  padding: 0.75rem 0.9rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 4px;
   border-bottom: 2px solid transparent;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .nav-link:hover {
@@ -146,18 +180,26 @@ body {
 }
 
 .nav-link.active {
-  color: var(--border-focus);
-  border-bottom-color: var(--border-focus);
-  background: rgba(56, 189, 248, 0.08);
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border-bottom: 2px solid #38bdf8;
+  font-weight: 700;
 }
 
-/* App Main Container */
+/* App Main Container - Modern Responsive CRM Desktop-First Layout */
 .main-content {
   flex: 1;
-  padding: 1.5rem;
-  max-width: 1440px;
+  padding: 1.25rem 2rem;
+  max-width: 1820px;
   margin: 0 auto;
   width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1366px) {
+  .main-content {
+    padding: 1rem 1.25rem;
+  }
 }
 
 /* Page Header */
@@ -240,19 +282,20 @@ body {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-secondary);
+  color: #cbd5e1;
+  font-weight: 600;
   margin-bottom: 0.5rem;
 }
 
 .metric-value {
   font-size: 1.85rem;
   font-weight: 800;
-  color: var(--text-primary);
+  color: #ffffff;
 }
 
 .metric-subtext {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: #94a3b8;
   margin-top: 0.35rem;
 }
 
@@ -639,4 +682,348 @@ textarea.form-control {
 .pagination-controls {
   display: flex;
   gap: 0.5rem;
+}
+
+
+/* ==========================================================================
+   Operator Console UX: Light Theme & Workflow Design Enhancements
+   ========================================================================== */
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-input: #ffffff;
+    --bg-hover: #f1f5f9;
+    --border-color: #cbd5e1;
+    --border-focus: #2563eb;
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+
+    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  .nav-bar, .app-header {
+    background-color: #ffffff;
+    border-bottom: 1px solid #cbd5e1;
+  }
+
+  .nav-group-title {
+    color: #64748b;
+  }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+  }
+
+  .metric-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+  }
+
+  .data-table th, .table th {
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
+    border-bottom: 2px solid #cbd5e1;
+  }
+
+  .data-table td, .table td {
+    background-color: #ffffff;
+    color: #0f172a;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .form-control, input[type="text"], input[type="search"], input[type="url"], input[type="email"], select, textarea {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #94a3b8 !important;
+  }
+
+  .form-control:focus, input:focus, select:focus, textarea:focus {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) !important;
+  }
+
+  .badge-secondary, .badge-muted {
+    background-color: #e2e8f0;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+  }
+
+  .draft-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+  }
+
+  .draft-body-preview {
+    background: #f8fafc;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+  }
+}
+
+/* Operational Workflow Grouped Nav Bar */
+.nav-group-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding: 0.35rem 0.5rem 0.15rem 0.5rem;
+}
+
+.nav-divider {
+  display: inline-block;
+  height: 20px;
+  width: 1px;
+  background-color: var(--border-color);
+  margin: 0 0.4rem;
+  vertical-align: middle;
+}
+
+/* Copy to clipboard buttons and feedback */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.copy-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.copy-btn:active {
+  transform: scale(0.96);
+}
+
+/* Evidence and Verification Badges */
+.badge-verified-fact {
+  background: #065f46;
+  color: #a7f3d0;
+  border: 1px solid #059669;
+  font-weight: 700;
+}
+.badge-commercial-hypothesis {
+  background: #78350f;
+  color: #fde68a;
+  border: 1px solid #d97706;
+  font-weight: 700;
+}
+.badge-unverified {
+  background: #334155;
+  color: #94a3b8;
+  border: 1px solid #475569;
+}
+
+/* ==========================================================================
+   UX-01 Modernization: Company-Centric Navigation, Flow & Viewports
+   ========================================================================== */
+
+/* Company Context Header Banner */
+.company-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.company-context-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.company-context-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-right: 0.5rem;
+}
+
+/* Company Cycle Navigation Tabs */
+.company-flow-tabs {
+  display: flex;
+  gap: 0.35rem;
+  background: var(--bg-input);
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.company-flow-tab {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.company-flow-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.company-flow-tab.active {
+  color: #ffffff;
+  background: var(--primary);
+}
+
+/* Table Presentation Toggle Buttons (Lead Register Summary vs Full) */
+.view-mode-toggle {
+  display: inline-flex;
+  background: var(--bg-input);
+  padding: 0.2rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  gap: 0.25rem;
+}
+
+.view-mode-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+}
+
+.view-mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.view-mode-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+/* Candidates & Register Dense CRM Row Sizing */
+.crm-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+
+.crm-table th {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.crm-table td {
+  padding: 0.8rem 0.85rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.crm-table tr:hover td {
+  background-color: var(--bg-hover);
+}
+
+/* Next Action Buttons in Table Rows */
+.action-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+/* Responsive Table Wrapper */
+.table-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+/* Compact preview & expand controls for long table cells */
+.cell-compact-preview {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+.cell-expandable {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.cell-expandable summary {
+  cursor: pointer;
+  color: var(--border-focus);
+  font-weight: 600;
+  font-size: 0.72rem;
+  margin-top: 0.2rem;
+  user-select: none;
+}
+
+.cell-expandable summary:hover {
+  text-decoration: underline;
+}
+
+.cell-expandable[open] summary {
+  margin-bottom: 0.25rem;
+}
+
+.cell-full-text {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-hover);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
 }

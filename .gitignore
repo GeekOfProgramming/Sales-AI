@@ -57,3 +57,6 @@ data/staging/
 *.xlsx
 *.xlsm
 *.xls
+
+data/benchmark_results/
+benchmark_results/

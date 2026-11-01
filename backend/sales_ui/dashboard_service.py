@@ -42,11 +42,12 @@ class DashboardService:
                 if row:
                     summary.watchlist = row[0]
 
-                # qualified_leads
+                # qualified_leads: unified definition with router.is_candidate_qualified_lead
                 row = conn.execute(
                     """SELECT COUNT(*) FROM candidate_companies 
-                       WHERE qualification_outcome IN ('qualified', 'qualified_for_enrichment') 
-                          OR discovery_status = 'qualified_for_enrichment'"""
+                       WHERE (qualification_outcome IN ('qualified', 'qualified_for_enrichment') 
+                              OR discovery_status IN ('qualified', 'qualified_for_enrichment'))
+                         AND (qualification_outcome IS NULL OR qualification_outcome NOT IN ('reject', 'suppressed', 'watchlist'))"""
                 ).fetchone()
                 if row:
                     summary.qualified_leads = row[0]

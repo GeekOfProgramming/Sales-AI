@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Lead Register (13-Field pyBIM Core) | SalesAI Console{% endblock %}
+{% block title %}Lead Register (13-Field pyBIM Core) | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
@@ -15,18 +15,35 @@
   </div>
 </div>
 
-<!-- Operator Controls Bar: Search & New Research Submission -->
+<!-- Operator Controls Bar: Search & View Mode Toggle & New Research Submission -->
 <div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
-    <div>
-      <span style="font-weight: 600; font-size: 1rem;">Total Records in Register:</span>
-      <span class="badge badge-primary" style="font-size: 0.9rem; margin-left: 0.5rem;">{{ total_count }}</span>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+      <div>
+        <span style="font-weight: 600; font-size: 1rem;">Total Records in Register:</span>
+        <span class="badge badge-primary" style="font-size: 0.9rem; margin-left: 0.5rem;">{{ total_count }}</span>
+      </div>
+      <div class="view-mode-toggle">
+        <a href="/sales/register?view=summary{% if query %}&q={{ query }}{% endif %}{% if priority %}&priority={{ priority }}{% endif %}" class="view-mode-btn {% if view_mode != 'full' %}active{% endif %}">
+          📋 Summary View
+        </a>
+        <a href="/sales/register?view=full{% if query %}&q={{ query }}{% endif %}{% if priority %}&priority={{ priority }}{% endif %}" class="view-mode-btn {% if view_mode == 'full' %}active{% endif %}">
+          📑 Full 13-Field Workbook
+        </a>
+      </div>
     </div>
-    <form method="GET" action="/sales/register" style="display: flex; gap: 0.5rem; margin: 0;">
-      <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company, phone, email, notes..." class="form-control" style="width: 280px;">
-      <button type="submit" class="btn btn-secondary">Search</button>
-      {% if query %}
-        <a href="/sales/register" class="btn btn-outline-secondary">Reset</a>
+    <form method="GET" action="/sales/register" style="display: flex; gap: 0.5rem; margin: 0; align-items: center; flex-wrap: wrap;">
+      <input type="hidden" name="view" value="{{ view_mode }}">
+      <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company, phone, email, notes..." class="form-control" style="width: 260px;">
+      <select name="priority" class="form-control" style="width: 140px;">
+        <option value="">All Priorities</option>
+        <option value="A" {% if priority == 'A' %}selected{% endif %}>Priority A</option>
+        <option value="B" {% if priority == 'B' %}selected{% endif %}>Priority B</option>
+        <option value="C" {% if priority == 'C' %}selected{% endif %}>Priority C</option>
+      </select>
+      <button type="submit" class="btn btn-secondary">Filter</button>
+      {% if query or priority %}
+        <a href="/sales/register?view={{ view_mode }}" class="btn btn-outline-secondary" style="font-size: 0.85rem; padding: 0.45rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset</a>
       {% endif %}
     </form>
   </div>
@@ -72,8 +89,9 @@
   </details>
 </div>
 
+{% if view_mode == 'full' %}
 <!-- 13-Field Lead Register Table (Horizontal Scroll / Full Visibility) -->
-<div class="card" style="padding: 0; overflow-x: auto;">
+<div class="card" style="padding: 0;">
   <div style="padding: 0.75rem 1rem; background: var(--bg-hover); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
     <span style="font-size: 0.85rem; color: var(--text-secondary);">
       💡 Showing exact 13 pyBIM workbook columns. Click <strong>Edit</strong> or company name to modify details.
@@ -81,141 +99,291 @@
     <span style="font-size: 0.8rem; color: var(--text-muted);">Scroll horizontally → to see all 13 columns</span>
   </div>
 
-  <table class="table" style="width: 100%; min-width: 1700px; border-collapse: collapse; text-align: left; font-size: 0.825rem;">
-    <thead>
-      <tr style="background: var(--bg-hover); border-bottom: 2px solid var(--border-color);">
-        <th style="padding: 0.6rem 0.75rem; width: 60px;">#1 Row</th>
-        <th style="padding: 0.6rem 0.75rem; width: 70px;">#2 Tier</th>
-        <th style="padding: 0.6rem 0.75rem; width: 160px;">#3 Priority Rationale</th>
-        <th style="padding: 0.6rem 0.75rem; width: 220px;">#4 Company &amp; Legal Identity</th>
-        <th style="padding: 0.6rem 0.75rem; width: 160px;">#5 Geographic Location</th>
-        <th style="padding: 0.6rem 0.75rem; width: 140px;">#6 Phone Numbers</th>
-        <th style="padding: 0.6rem 0.75rem; width: 180px;">#7 Activities / Services</th>
-        <th style="padding: 0.6rem 0.75rem; width: 160px;">#8 Official Website</th>
-        <th style="padding: 0.6rem 0.75rem; width: 160px;">#9 Responsible Person</th>
-        <th style="padding: 0.6rem 0.75rem; width: 200px;">#10 Descriptions &amp; Notes</th>
-        <th style="padding: 0.6rem 0.75rem; width: 140px;">#11 Job Links</th>
-        <th style="padding: 0.6rem 0.75rem; width: 140px;">#12 Other Links</th>
-        <th style="padding: 0.6rem 0.75rem; width: 180px;">#13 Contact Emails</th>
-        <th style="padding: 0.6rem 0.75rem; width: 80px; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for rec in records %}
-      <tr style="border-bottom: 1px solid var(--border-color); vertical-align: top;">
-        <!-- 1. Row Number -->
-        <td style="padding: 0.6rem 0.75rem; font-weight: 600;">
-          {{ rec.record_number or loop.index }}
-        </td>
+  <div class="table-scroll-container">
+    <table class="table" style="width: 100%; min-width: 1700px; border-collapse: collapse; text-align: left; font-size: 0.825rem;">
+      <thead>
+        <tr style="background: var(--bg-hover); border-bottom: 2px solid var(--border-color);">
+          <th style="padding: 0.6rem 0.75rem; width: 60px;">#1 Row</th>
+          <th style="padding: 0.6rem 0.75rem; width: 70px;">#2 Tier</th>
+          <th style="padding: 0.6rem 0.75rem; width: 160px;">#3 Priority Rationale</th>
+          <th style="padding: 0.6rem 0.75rem; width: 220px;">#4 Company &amp; Legal Identity</th>
+          <th style="padding: 0.6rem 0.75rem; width: 160px;">#5 Geographic Location</th>
+          <th style="padding: 0.6rem 0.75rem; width: 140px;">#6 Phone Numbers</th>
+          <th style="padding: 0.6rem 0.75rem; width: 180px;">#7 Activities / Services</th>
+          <th style="padding: 0.6rem 0.75rem; width: 160px;">#8 Official Website</th>
+          <th style="padding: 0.6rem 0.75rem; width: 160px;">#9 Responsible Person</th>
+          <th style="padding: 0.6rem 0.75rem; width: 200px;">#10 Descriptions &amp; Notes</th>
+          <th style="padding: 0.6rem 0.75rem; width: 140px;">#11 Job Links</th>
+          <th style="padding: 0.6rem 0.75rem; width: 140px;">#12 Other Links</th>
+          <th style="padding: 0.6rem 0.75rem; width: 180px;">#13 Contact Emails</th>
+          <th style="padding: 0.6rem 0.75rem; width: 80px; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rec in records %}
+        <tr style="border-bottom: 1px solid var(--border-color); vertical-align: top;">
+          <!-- 1. Row Number -->
+          <td style="padding: 0.6rem 0.75rem; font-weight: 600;">
+            {{ rec.record_number or loop.index }}
+          </td>
 
-        <!-- 2. Priority -->
-        <td style="padding: 0.6rem 0.75rem;">
-          <span class="badge {% if rec.priority_level == 'A' %}badge-success{% elif rec.priority_level == 'B' %}badge-primary{% else %}badge-warning{% endif %}">
-            Priority {{ rec.priority_level or 'B' }}
-          </span>
-        </td>
+          <!-- 2. Priority -->
+          <td style="padding: 0.6rem 0.75rem;">
+            <span class="badge {% if rec.priority_level == 'A' %}badge-success{% elif rec.priority_level == 'B' %}badge-primary{% else %}badge-warning{% endif %}">
+              Priority {{ rec.priority_level or 'B' }}
+            </span>
+          </td>
 
-        <!-- 3. Rationale -->
-        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 160px; word-break: break-word;">
-          {{ rec.priority_rationale or 'Not Found' }}
-        </td>
+          <!-- 3. Rationale -->
+          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 160px; word-break: break-word;">
+            {{ rec.priority_rationale or 'Not Found' }}
+          </td>
 
-        <!-- 4. Company & Legal Identity -->
-        <td style="padding: 0.6rem 0.75rem;">
-          <a href="/sales/register/{{ rec.candidate_id }}" style="font-weight: 700; color: #3b82f6; text-decoration: none;">
-            {{ rec.company_name }}
-          </a>
-          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
-            {{ rec.legal_identity or 'Not Found' }}
-          </div>
-        </td>
-
-        <!-- 5. Location -->
-        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
-          {{ rec.geographic_location or 'Not Found' }}
-        </td>
-
-        <!-- 6. Phone Numbers -->
-        <td style="padding: 0.6rem 0.75rem;">
-          {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
-            <code>{{ rec.telephone_numbers }}</code>
-          {% else %}
-            <span style="color: var(--text-muted);">Not Found</span>
-          {% endif %}
-        </td>
-
-        <!-- 7. Activities / Services -->
-        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 180px; word-break: break-word;">
-          {{ rec.business_activities or 'Not Found' }}
-        </td>
-
-        <!-- 8. Official Website -->
-        <td style="padding: 0.6rem 0.75rem; max-width: 160px; word-break: break-all;">
-          {% if rec.official_website and rec.official_website != 'Not Found' %}
-            <a href="{{ rec.official_website }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
-              {{ rec.official_website }}
+          <!-- 4. Company & Legal Identity -->
+          <td style="padding: 0.6rem 0.75rem;">
+            <a href="/sales/register/{{ rec.candidate_id }}" style="font-weight: 700; color: #3b82f6; text-decoration: none;">
+              {{ rec.company_name }}
             </a>
-          {% else %}
-            <span style="color: var(--text-muted);">Not Found</span>
-          {% endif %}
-        </td>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">
+              {{ rec.legal_identity or 'Not Found' }}
+            </div>
+          </td>
 
-        <!-- 9. Responsible Person -->
-        <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
-          {{ rec.responsible_person or 'Not Found' }}
-        </td>
+          <!-- 5. Location -->
+          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
+            {{ rec.geographic_location or 'Not Found' }}
+          </td>
 
-        <!-- 10. Descriptions & Notes -->
-        <td style="padding: 0.6rem 0.75rem; max-width: 200px; color: var(--text-secondary); word-break: break-word; white-space: pre-wrap;">
-          {{ rec.descriptions_and_notes or 'Not Found' }}
-        </td>
+          <!-- 6. Phone Numbers -->
+          <td style="padding: 0.6rem 0.75rem;">
+            {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
+              <code>{{ rec.telephone_numbers }}</code>
+            {% else %}
+              <span style="color: var(--text-muted);">Not Found</span>
+            {% endif %}
+          </td>
 
-        <!-- 11. Job Links -->
-        <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
-          {% if rec.job_advertisement_links and rec.job_advertisement_links != 'Not Found' %}
-            {% if rec.job_advertisement_links.startswith('http://') or rec.job_advertisement_links.startswith('https://') %}
-              <a href="{{ rec.job_advertisement_links }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
-                {{ rec.job_advertisement_links }}
+          <!-- 7. Activities / Services -->
+          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary); max-width: 180px; word-break: break-word;">
+            {{ rec.business_activities or 'Not Found' }}
+          </td>
+
+          <!-- 8. Official Website -->
+          <td style="padding: 0.6rem 0.75rem; max-width: 160px; word-break: break-all;">
+            {% if rec.official_website and rec.official_website != 'Not Found' %}
+              <a href="{{ rec.official_website }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+                {{ rec.official_website }}
               </a>
             {% else %}
-              <span style="color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">
-                {{ rec.job_advertisement_links }}
-              </span>
+              <span style="color: var(--text-muted);">Not Found</span>
             {% endif %}
-          {% else %}
-            <span style="color: var(--text-muted);">Not Found</span>
-          {% endif %}
-        </td>
+          </td>
 
-        <!-- 12. Other Links -->
-        <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
-          {% if rec.other_links_and_references and rec.other_links_and_references != 'Not Found' %}
-            {{ rec.other_links_and_references }}
-          {% else %}
-            <span style="color: var(--text-muted);">Not Found</span>
-          {% endif %}
-        </td>
+          <!-- 9. Responsible Person -->
+          <td style="padding: 0.6rem 0.75rem; color: var(--text-secondary);">
+            {{ rec.responsible_person or 'Not Found' }}
+          </td>
 
-        <!-- 13. Contact Emails -->
-        <td style="padding: 0.6rem 0.75rem;">
-          {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
-            <a href="mailto:{{ rec.contact_email_addresses }}" style="color: #3b82f6;">
-              {{ rec.contact_email_addresses }}
-            </a>
-          {% else %}
-            <span style="color: var(--text-muted);">Not Found</span>
-          {% endif %}
-        </td>
+          <!-- 10. Descriptions & Notes -->
+          <td style="padding: 0.6rem 0.75rem; max-width: 260px; color: var(--text-secondary); word-break: break-word;">
+            {% if rec.descriptions_and_notes and rec.descriptions_and_notes != 'Not Found' %}
+              {% if rec.descriptions_and_notes|length > 100 %}
+                <details class="cell-expandable">
+                  <summary>{{ rec.descriptions_and_notes[:90] }}...</summary>
+                  <div class="cell-full-text">{{ rec.descriptions_and_notes }}</div>
+                </details>
+              {% else %}
+                <div style="font-size: 0.8rem; white-space: pre-wrap;">
+                  {{ rec.descriptions_and_notes }}
+                </div>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--text-muted);">Not Found</span>
+            {% endif %}
+          </td>
 
-        <!-- Actions Sticky Column -->
-        <td style="padding: 0.6rem 0.75rem; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">
-          <a href="/sales/register/{{ rec.candidate_id }}" class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
-            Edit 13 Fields
-          </a>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          <!-- 11. Job Links -->
+          <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
+            {% if rec.job_advertisement_links and rec.job_advertisement_links != 'Not Found' %}
+              {% if rec.job_advertisement_links.startswith('http://') or rec.job_advertisement_links.startswith('https://') %}
+                <a href="{{ rec.job_advertisement_links }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6;">
+                  {{ rec.job_advertisement_links }}
+                </a>
+              {% else %}
+                <span style="color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">
+                  {{ rec.job_advertisement_links }}
+                </span>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--text-muted);">Not Found</span>
+            {% endif %}
+          </td>
+
+          <!-- 12. Other Links -->
+          <td style="padding: 0.6rem 0.75rem; max-width: 140px; word-break: break-all;">
+            {% if rec.other_links_and_references and rec.other_links_and_references != 'Not Found' %}
+              {{ rec.other_links_and_references }}
+            {% else %}
+              <span style="color: var(--text-muted);">Not Found</span>
+            {% endif %}
+          </td>
+
+          <!-- 13. Contact Emails -->
+          <td style="padding: 0.6rem 0.75rem;">
+            {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
+              {% for single_email in rec.contact_email_addresses.replace(';', ',').split(',') %}
+                {% set em = single_email.strip() %}
+                {% if em %}
+                  <div>
+                    <a href="mailto:{{ em }}" style="color: #3b82f6; word-break: break-all;">
+                      {{ em }}
+                    </a>
+                  </div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <span style="color: var(--text-muted);">Not Found</span>
+            {% endif %}
+          </td>
+
+          <!-- Actions Sticky Column -->
+          <td style="padding: 0.6rem 0.75rem; position: sticky; right: 0; background: var(--bg-card); border-left: 1px solid var(--border-color);">
+            <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+              <a href="/sales/register/{{ rec.candidate_id }}" class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
+                ✏️ Edit 13 Fields
+              </a>
+              <a href="/sales/candidates/{{ rec.candidate_id }}/research" class="btn btn-sm btn-secondary" style="font-size: 0.72rem; padding: 0.15rem 0.4rem; color: var(--border-focus);">
+                🔬 Snapshot Review
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+{% else %}
+<!-- Default Company Summary Mode (Clean, High-Readability Operational View) -->
+<div class="card" style="padding: 0;">
+  <div class="table-responsive">
+    <table class="data-table crm-table">
+      <thead>
+        <tr>
+          <th style="width: 50px;">#</th>
+          <th>Company &amp; Legal Identity</th>
+          <th>Geographic Location</th>
+          <th>Priority &amp; Tier</th>
+          <th>Contact Channels</th>
+          <th>Descriptions &amp; Notes</th>
+          <th>Research &amp; Provenance</th>
+          <th style="text-align: right; min-width: 170px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rec in records %}
+        <tr>
+          <td style="font-weight: 600; color: var(--text-muted);">{{ rec.record_number or loop.index }}</td>
+          <td>
+            <a href="/sales/register/{{ rec.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none; font-size: 0.95rem;">
+              {{ rec.company_name }}
+            </a>
+            {% if rec.legal_identity and rec.legal_identity != 'Not Found' %}
+              <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.15rem;">
+                {{ rec.legal_identity }}
+              </div>
+            {% endif %}
+            {% if rec.official_website and rec.official_website != 'Not Found' %}
+              <div style="font-size: 0.75rem; margin-top: 0.2rem;">
+                <a href="{{ rec.official_website }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); word-break: break-all;">
+                  🌐 {{ rec.official_website }}
+                </a>
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-size: 0.85rem;">{{ rec.geographic_location or 'Not Found' }}</span>
+          </td>
+          <td>
+            <span class="badge {% if rec.priority_level == 'A' %}badge-success{% elif rec.priority_level == 'B' %}badge-primary{% else %}badge-warning{% endif %}">
+              Priority {{ rec.priority_level or 'B' }}
+            </span>
+            {% if rec.priority_rationale and rec.priority_rationale != 'Not Found' %}
+              {% if rec.priority_rationale|length > 70 %}
+                <details class="cell-expandable" style="margin-top: 0.25rem;">
+                  <summary>{{ rec.priority_rationale[:65] }}...</summary>
+                  <div class="cell-full-text">{{ rec.priority_rationale }}</div>
+                </details>
+              {% else %}
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; max-width: 180px;">
+                  {{ rec.priority_rationale }}
+                </div>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td>
+            {% if rec.contact_email_addresses and rec.contact_email_addresses != 'Not Found' %}
+              <div>
+                {% for single_email in rec.contact_email_addresses.replace(';', ',').split(',') %}
+                  {% set em = single_email.strip() %}
+                  {% if em %}
+                    <div style="margin-bottom: 0.15rem;">
+                      <a href="mailto:{{ em }}" style="color: var(--border-focus); font-weight: 600; font-size: 0.82rem; word-break: break-all;">
+                        ✉️ {{ em }}
+                      </a>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 0.78rem;">No email</span>
+            {% endif %}
+            {% if rec.telephone_numbers and rec.telephone_numbers != 'Not Found' %}
+              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">
+                📞 <code>{{ rec.telephone_numbers }}</code>
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            {% if rec.descriptions_and_notes and rec.descriptions_and_notes != 'Not Found' %}
+              {% if rec.descriptions_and_notes|length > 80 %}
+                <details class="cell-expandable">
+                  <summary>{{ rec.descriptions_and_notes[:75] }}...</summary>
+                  <div class="cell-full-text">{{ rec.descriptions_and_notes }}</div>
+                </details>
+              {% else %}
+                <div class="cell-compact-preview">
+                  {{ rec.descriptions_and_notes }}
+                </div>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 0.78rem;">Not Found</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-info" style="font-size: 0.72rem;">{{ rec.provenance_source }}</span>
+            <span class="badge {% if rec.verification_status == 'OPERATOR_REVIEWED' %}badge-success{% else %}badge-muted{% endif %}" style="font-size: 0.68rem; margin-top: 0.2rem; display: inline-block;">
+              {{ rec.verification_status }}
+            </span>
+            {% if rec.responsible_person and rec.responsible_person != 'Not Found' %}
+              <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.2rem;">
+                👤 {{ rec.responsible_person }}
+              </div>
+            {% endif %}
+          </td>
+          <td style="text-align: right; white-space: nowrap;">
+            <a href="/sales/register/{{ rec.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+              ✏️ Edit 13 Fields
+            </a>
+            <a href="/sales/candidates/{{ rec.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="Review Research Snapshot">
+              🔬 Snapshot
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

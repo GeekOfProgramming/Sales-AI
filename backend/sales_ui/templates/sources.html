@@ -1,18 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Source Management | SalesAI Console{% endblock %}
+{% block title %}Source Management | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
   <div>
-    <h1 class="page-title">Discovery Sources &amp; Provenance</h1>
-    <p class="page-subtitle">Discovery Sources Management: Configure, test, monitor, and prioritize discovery sources, adapters, and search streams.</p>
-  </div>
-  <div style="display: flex; gap: 0.5rem;">
-    <a href="#add-source-section" class="btn btn-primary" onclick="document.getElementById('add-source-section').scrollIntoView({behavior: 'smooth'});">+ Add Source</a>
+    <h1 class="page-title">Discovery Sources &amp; Intake Registry</h1>
+    <p class="page-subtitle">Manage registered intelligence sources, manually seed new target companies, or import verified historical spreadsheets.</p>
   </div>
 </div>
 
+<!-- Workflow Section Switcher Tabs -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.75rem;">
+  <button type="button" id="tab-btn-sources" class="btn btn-primary" onclick="switchSourcesTab('sources')">
+    📡 Manage Sources ({{ sources|length }})
+  </button>
+  <button type="button" id="tab-btn-manual" class="btn btn-secondary" onclick="switchSourcesTab('manual')">
+    🏢 Add Company Manually
+  </button>
+  <button type="button" id="tab-btn-import" class="btn btn-secondary" onclick="switchSourcesTab('import')">
+    📊 Import Historical Data
+  </button>
+</div>
+
+<div id="section-sources">
 <!-- Quick Stat Badges -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
   <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
@@ -242,7 +253,12 @@
 </div>
 
 <!-- Add New Source Card -->
-<div class="card" id="add-source-section" style="margin-bottom: 2rem;">
+<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+  ℹ️ <em>Source Status Explanations:</em> <strong>AVAILABLE</strong>: Local adapter implementation exists; <strong>Configured</strong>: Required environment credentials present; <strong>Healthy</strong>: Operating normally; <strong>Degraded</strong>: Recent errors logged; <strong>Disabled</strong>: Inactive. Note: Adapter availability does not constitute proof of active external endpoint responses.
+</div>
+<details class="card" id="add-source-section" style="margin-bottom: 2rem;">
+  <summary style="cursor: pointer; font-weight: 700; color: var(--border-focus); padding: 0.5rem 0;">➕ Advanced Source Administration: Add New Discovery Source</summary>
+  <div style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem 0;">Note: Registering a new source entry configures discovery metadata and rules. It does not automatically generate a web crawler or external API adapter.</div>
   <div class="card-title">
     <span>Add Discovery Source</span>
     <span class="badge badge-info">Safe Config Only</span>
@@ -332,16 +348,18 @@
       </div>
     </div>
   </form>
-</div>
+</details>
+</div><!-- /#section-sources -->
 
+<div id="section-manual" style="display: none;">
 <!-- Manual Candidate Seed Input -->
-<div class="card" style="margin-bottom: 2rem;">
+<div class="card" style="margin-bottom: 2rem; border-left: 4px solid #3b82f6;">
   <div class="card-title">
-    <span>Manual Candidate Seed Input</span>
+    <span>🏢 Add Company Manually (Candidate Seed)</span>
     <span class="badge badge-info">Standard Research Flow</span>
   </div>
   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-    Manually entered companies enter the normal Phase 10 research, deduplication, and qualification pipeline. They are never automatically qualified or contacted.
+    Manually entered companies enter the normal research, deduplication, and qualification pipeline. A known official domain can enter the candidate workflow without using Brave Search.
   </p>
   <form method="POST" action="/sales/sources/manual-seed" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -359,7 +377,15 @@
     </div>
     <button type="submit" class="btn btn-primary">Add Candidate Seed</button>
   </form>
+  <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem; margin-bottom: 0; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+    🔒 <strong>Safety Guard:</strong> Manually entered companies enter with pending triage status. Saving a company manually will never automatically crawl its website, call an LLM, qualify the company, create an email draft, or send an email. Existing duplicates are safely detected and preserved.
+  </p>
 </div>
+</div><!-- /#section-manual -->
+
+<div id="section-import" style="display: none;">
+{% if preview %}<div id="preview-staged-flag" style="display:none;"></div>{% endif %}
+
 
 <!-- Historical Spreadsheet Import (Preview -> Confirm Workflow) -->
 <div class="card">
@@ -819,7 +845,51 @@
 </div>
 {% endif %}
 
+</div><!-- /#section-import -->
+
 <script>
+
+function switchSourcesTab(tab) {
+  const secSources = document.getElementById('section-sources');
+  const secManual = document.getElementById('section-manual');
+  const secImport = document.getElementById('section-import');
+
+  const btnSources = document.getElementById('tab-btn-sources');
+  const btnManual = document.getElementById('tab-btn-manual');
+  const btnImport = document.getElementById('tab-btn-import');
+
+  if (tab === 'sources') {
+    secSources.style.display = 'block';
+    secManual.style.display = 'none';
+    secImport.style.display = 'none';
+    btnSources.className = 'btn btn-primary';
+    btnManual.className = 'btn btn-secondary';
+    btnImport.className = 'btn btn-secondary';
+  } else if (tab === 'manual') {
+    secSources.style.display = 'none';
+    secManual.style.display = 'block';
+    secImport.style.display = 'none';
+    btnSources.className = 'btn btn-secondary';
+    btnManual.className = 'btn btn-primary';
+    btnImport.className = 'btn btn-secondary';
+  } else if (tab === 'import') {
+    secSources.style.display = 'none';
+    secManual.style.display = 'none';
+    secImport.style.display = 'block';
+    btnSources.className = 'btn btn-secondary';
+    btnManual.className = 'btn btn-secondary';
+    btnImport.className = 'btn btn-primary';
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  if (window.location.search.includes('preview') || document.getElementById('preview-staged-flag') || window.location.hash === '#import') {
+    switchSourcesTab('import');
+  } else if (window.location.hash === '#manual') {
+    switchSourcesTab('manual');
+  }
+});
+
 function toggleEditRow(rowId) {
   var row = document.getElementById(rowId);
   if (row) {

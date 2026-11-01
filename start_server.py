@@ -131,6 +131,32 @@ def main():
     print("-" * 70 + "\n", flush=True)
 
     try:
+        # Enforce SO_EXCLUSIVEADDRUSE on Windows to prevent silent socket hijacking
+        # and ensure conflicting processes fail immediately instead of running concurrently
+        if sys.platform == "win32":
+            orig_bind_socket = uvicorn.config.Config.bind_socket
+
+            def safe_bind_socket(config_self):
+                if config_self.uds is None and config_self.fd is None:
+                    family = socket.AF_INET if ":" not in (config_self.host or "") else socket.AF_INET6
+                    sock = socket.socket(family=family)
+                    if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                    else:
+                        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    try:
+                        sock.bind((config_self.host, config_self.port))
+                    except OSError as exc:
+                        import logging
+                        logger = logging.getLogger("uvicorn.error")
+                        logger.error(f"[ERROR] Port {config_self.port} is already in use by another process. Startup aborted.")
+                        sys.exit(1)
+                    sock.set_inheritable(True)
+                    return sock
+                return orig_bind_socket(config_self)
+
+            uvicorn.config.Config.bind_socket = safe_bind_socket
+
         uvicorn.run(
             "backend.main:app",
             host=bind_host,

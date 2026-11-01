@@ -1,53 +1,113 @@
 {% extends "base.html" %}
 
-{% block title %}Qualified Leads | SalesAI Console{% endblock %}
+{% block title %}Qualified Leads | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Qualified Leads</h1>
-    <p class="page-subtitle">Candidates that have passed automated ICP qualification and are ready for outreach or draft review.</p>
+    <p class="page-subtitle">Candidates that have met automated ICP qualification criteria (Qualified for Enrichment). Human review &amp; verification required before outreach.</p>
   </div>
 </div>
 
 <div class="card">
-  <div class="card-title">
-    <span>Qualified Leads ({{ leads|length }})</span>
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <span>Qualified Leads ({{ leads|length }})</span>
+      <span class="badge badge-success" style="margin-left: 0.5rem;">Enrichment Qualified</span>
+    </div>
+    <form method="GET" action="/sales/leads" style="display: flex; gap: 0.5rem; margin: 0;">
+      <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company or domain..." class="form-control" style="width: 220px; font-size: 0.85rem; padding: 0.35rem 0.6rem;">
+      <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+      {% if query %}
+        <a href="/sales/leads" class="btn btn-outline-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.6rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset</a>
+      {% endif %}
+    </form>
   </div>
   {% if leads %}
   <div class="table-responsive">
-    <table class="data-table">
+    <table class="data-table crm-table">
       <thead>
         <tr>
           <th>Company</th>
-          <th>Domain</th>
+          <th>Official Domain</th>
           <th>Country</th>
-          <th>Tier</th>
+          <th>Company Tier</th>
           <th>Fit</th>
           <th>Intent</th>
           <th>BIM Maturity</th>
           <th>Primary Opportunity</th>
-          <th>Action</th>
+          <th>Outreach Readiness</th>
+          <th style="text-align: right;">Action</th>
         </tr>
       </thead>
       <tbody>
         {% for l in leads %}
         <tr>
           <td>
-            <strong>{{ l.company_name }}</strong>
+            <a href="/sales/candidates/{{ l.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;">
+              {{ l.company_name }}
+            </a>
             {% if l.is_previously_contacted %}
-            <span class="badge badge-previously-contacted">Previously Contacted</span>
+            <span class="badge badge-previously-contacted" style="font-size: 0.68rem; margin-left: 0.25rem;">Previously Contacted</span>
+            {% endif %}
+            {% if l.is_suppressed %}
+            <span class="badge badge-danger" style="font-size: 0.68rem; margin-left: 0.25rem;">Suppressed</span>
             {% endif %}
           </td>
-          <td><code>{{ l.domain or 'N/A' }}</code></td>
-          <td>{{ l.country or 'Not Verified' }}</td>
-          <td><span class="badge badge-primary">{{ l.tier or 'Unassigned' }}</span></td>
-          <td><span class="badge badge-success">{{ l.fit or 'high' }}</span></td>
-          <td><span class="badge badge-success">{{ l.intent or 'medium' }}</span></td>
-          <td><span class="badge badge-muted">{{ l.bim_maturity }}</span></td>
-          <td><span class="badge badge-info">{{ l.outsourcing_potential or 'BIM Delivery' }}</span></td>
           <td>
-            <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm">Inspect</a>
+            {% if l.domain %}
+              <code>{{ l.domain }}</code>
+            {% else %}
+              <span style="color: var(--text-muted);">N/A</span>
+            {% endif %}
+          </td>
+          <td>{{ l.country }}</td>
+          <td>
+            <span class="badge {% if l.tier == 'tier_1' %}badge-primary{% elif l.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}">
+              {{ l.tier }}
+            </span>
+          </td>
+          <td>
+            {% if l.fit == 'high' %}
+              <span class="badge badge-success">High</span>
+            {% elif l.fit == 'medium' %}
+              <span class="badge badge-warning">Medium</span>
+            {% elif l.fit == 'low' %}
+              <span class="badge badge-danger">Low</span>
+            {% else %}
+              <span class="badge badge-muted">Unknown</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if l.intent == 'high' %}
+              <span class="badge badge-success">High</span>
+            {% elif l.intent == 'medium' %}
+              <span class="badge badge-warning">Medium</span>
+            {% elif l.intent == 'low' %}
+              <span class="badge badge-danger">Low</span>
+            {% else %}
+              <span class="badge badge-muted">Unknown</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-muted">{{ l.bim_maturity }}</span>
+          </td>
+          <td>
+            {% if l.outsourcing_potential != 'Not Evaluated' and l.outsourcing_potential != 'unknown' %}
+              <span class="badge badge-info">{{ l.outsourcing_potential }}</span>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 0.8rem;">Not Evaluated</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {{ l.readiness_badge }}" title="{{ l.readiness_title }}">
+              {{ l.readiness_label }}
+            </span>
+          </td>
+          <td style="text-align: right; white-space: nowrap;">
+            <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
+            <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);">Research</a>
           </td>
         </tr>
         {% endfor %}
@@ -56,7 +116,7 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <p class="empty-state-text">No companies currently qualified for outreach.</p>
+    <p class="empty-state-text">No companies currently meet ICP qualification criteria.</p>
   </div>
   {% endif %}
 </div>

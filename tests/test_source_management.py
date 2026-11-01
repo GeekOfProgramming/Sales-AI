@@ -360,6 +360,7 @@ def test_prd_source_012_source_health_persists_after_restart(tmp_path, temp_stor
 def test_prd_source_013_disabled_source_history_remains_visible(temp_registry, temp_store):
     # Create candidate with source tag
     cand = CandidateCompany(
+        candidate_id=temp_store._generate_candidate_id("visible-bim.it", "Visible BIM Studio", None),
         company_name="Visible BIM Studio",
         company_domain="visible-bim.it",
         source_refs=["italy_engineering_directory"],
@@ -471,7 +472,7 @@ def test_prd_source_019_source_management_ui_renders_without_llm_calls():
          patch("urllib.request.urlopen") as mock_url:
         response = client.get("/sales/sources")
         assert response.status_code == 200
-        assert "Discovery Sources Management" in response.text
+        assert "Discovery Sources" in response.text
         assert not mock_classify.called
         assert not mock_url.called
 

@@ -165,7 +165,7 @@ class LeadRegisterStore:
 
         return record
 
-    def list_records(self, limit: int = 1000, offset: int = 0, query: Optional[str] = None) -> List[LeadRegisterRecord]:
+    def list_records(self, limit: int = 1000, offset: int = 0, query: Optional[str] = None, priority_filter: Optional[str] = None) -> List[LeadRegisterRecord]:
         """Lists records across all candidates, prioritizing explicitly stored register records and synthesizing remaining."""
         with self._get_connection() as conn:
             if not self._table_exists(conn, "candidate_companies"):
@@ -204,6 +204,11 @@ class LeadRegisterStore:
                     ql = query.lower()
                     haystack = f"{rec.company_name} {rec.official_website} {rec.geographic_location} {rec.descriptions_and_notes} {rec.contact_email_addresses} {rec.telephone_numbers} {rec.responsible_person}".lower()
                     if ql not in haystack:
+                        continue
+
+                if priority_filter and priority_filter.strip():
+                    pf = priority_filter.strip().upper()
+                    if rec.priority_level != pf:
                         continue
 
                 records.append(rec)

@@ -59,6 +59,10 @@ class CandidateListItem(BaseModel):
     status: str
     is_previously_contacted: bool = False
     is_suppressed: bool = False
+    has_research_snapshot: bool = False
+    snapshot_id: Optional[str] = None
+    contact_count: int = 0
+    verified_contact_count: int = 0
 
 
 class CandidateDetailView(BaseModel):

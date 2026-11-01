@@ -409,6 +409,57 @@ def format_clean_italian_address(raw_str: str) -> str:
     return clean
 
 
+def sanitize_link_label(text: str) -> str:
+    """Strip unresolved template variables and collapse excessive whitespace."""
+    cleaned = re.sub(r"\{[a-zA-Z0-9_]+\}", "", text)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def normalize_and_validate_evidence_url(
+    base_url: str,
+    raw_href: str,
+    page_soup: Optional[Any] = None,
+) -> Optional[str]:
+    """
+    Validates and normalizes an evidence URL against the originating page base URL.
+    - Rejects bare '#', empty, '/', and unsupported URI schemes (javascript:, mailto:, tel:, data:).
+    - Resolves relative URLs strictly against base_url (originating crawled page, never localhost).
+    - Requires valid http or https scheme and a non-empty network location (netloc).
+    - Validates fragment identifiers: preserves fragment only if it matches a valid element in page_soup.
+      If fragment is an unevidenced or placeholder element, it is stripped.
+    """
+    if not raw_href:
+        return None
+    href = raw_href.strip()
+    if href in ("#", "", "/") or href.startswith(("javascript:", "mailto:", "tel:", "data:", "urn:", "callto:")):
+        return None
+
+    resolved = urllib.parse.urljoin(base_url, href)
+    try:
+        parsed = urllib.parse.urlparse(resolved)
+    except Exception:
+        return None
+
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return None
+
+    # Validate fragment identifier against the originating HTML document if available
+    if parsed.fragment:
+        frag = parsed.fragment
+        if frag.lower() in ("content", "main", "top", "wrapper", "header", "footer", "0", ""):
+            resolved = urllib.parse.urljoin(resolved, parsed.path)
+        elif page_soup:
+            target_el = (
+                page_soup.find(id=frag)
+                or page_soup.find(id=re.compile(rf"^{re.escape(frag)}$", re.IGNORECASE))
+                or page_soup.find("a", attrs={"name": frag})
+            )
+            if not target_el:
+                resolved = urllib.parse.urljoin(resolved, parsed.path)
+
+    return resolved
+
+
 def extract_deterministic_facts(
     pages: List[PageFetchResult],
     candidate_id: str,
@@ -631,26 +682,45 @@ def extract_deterministic_facts(
         # -------------------------------------------------------------
         # 6. Actual URL & Embedded Section Extraction for Fornitori & Careers
         # -------------------------------------------------------------
-        if html:
-            soup = BeautifulSoup(html, "html.parser")
-            # Anchor links
+        soup = BeautifulSoup(html, "html.parser") if html else None
+
+        # Helper: extract anchor links cleanly from HTML or structured links
+        anchor_candidates = []
+        if soup:
             for a in soup.find_all("a", href=True):
-                href = a["href"].strip()
-                link_text = a.get_text().strip()
-                if not href or href.startswith("#") or href.startswith("mailto:") or href.startswith("tel:") or href.startswith("javascript:"):
-                    continue
-                full_url = urllib.parse.urljoin(p.url, href)
-                combined_anchor = (link_text + " " + href).lower()
+                anchor_candidates.append((a["href"].strip(), a.get_text().strip()))
+        elif getattr(p, "links", None):
+            for lk in p.links:
+                if isinstance(lk, dict):
+                    anchor_candidates.append((lk.get("href", "").strip(), lk.get("text", "").strip()))
+                elif isinstance(lk, str):
+                    anchor_candidates.append((lk.strip(), ""))
 
-                # Separate supplier intake from recruitment and generic links
-                if any(k in combined_anchor for k in ["fornitor", "vendor", "albo-fornitori"]):
-                    supplier_links_map[full_url] = f"Supplier Portal ({link_text or 'Fornitori'}): {full_url}"
-                elif any(k in combined_anchor for k in ["career", "lavora-con-noi", "posizioni-aperte", "unisciti", "jobs"]):
-                    career_links_map[full_url] = f"Careers ({link_text or 'Lavora con noi'}): {full_url}"
-                elif "collabora" in combined_anchor:
-                    collaboration_links_map[full_url] = f"External Teaming: {full_url}"
+        for raw_href, raw_text in anchor_candidates:
+            clean_text = sanitize_link_label(raw_text)
+            # Exclude cookie consent and tracking labels
+            if any(bad in clean_text.lower() for bad in ["cookie", "gestisci opzioni", "gestisci servizi", "gestisci fornitori", "preferenze", "torna in cima"]):
+                continue
 
-            # Embedded Supplier Intake forms & sections (e.g. inside /contatti/)
+            valid_url = normalize_and_validate_evidence_url(p.url, raw_href, page_soup=soup)
+            if not valid_url:
+                continue
+
+            combined_anchor = (clean_text + " " + raw_href).lower()
+
+            # Separate supplier intake from recruitment and generic links
+            if any(k in combined_anchor for k in ["fornitor", "vendor", "albo-fornitori", "albo fornitori"]):
+                if valid_url not in supplier_links_map:
+                    supplier_links_map[valid_url] = f"Supplier Portal ({clean_text or 'Fornitori'}): {valid_url}"
+            elif any(k in combined_anchor for k in ["career", "lavora-con-noi", "posizioni-aperte", "unisciti", "jobs"]):
+                if valid_url not in career_links_map:
+                    career_links_map[valid_url] = f"Careers ({clean_text or 'Lavora con noi'}): {valid_url}"
+            elif "collabora" in combined_anchor:
+                if valid_url not in collaboration_links_map:
+                    collaboration_links_map[valid_url] = f"External Teaming: {valid_url}"
+
+        # Embedded Supplier Intake forms & sections (e.g. inside /contatti/)
+        if soup:
             for form in soup.find_all("form"):
                 form_text = form.get_text()
                 form_action = form.get("action") or ""
@@ -667,14 +737,12 @@ def extract_deterministic_facts(
                             frag = parent.get("id")
                             break
                     target_form_url = f"{p.url}#{frag}" if frag else p.url
-                    # Extract concise context excerpt
-                    parent_container = form.find_parent("div", class_=re.compile(r"fusion-panel|panel|accordion|container", re.I)) or form
-                    excerpt_raw = parent_container.get_text() if parent_container else form_text
-                    clean_excerpt = " ".join(excerpt_raw.split()[:25])
-                    supplier_links_map[target_form_url] = f"Supplier Intake Form (Fornitori): {target_form_url}"
+                    target_valid = normalize_and_validate_evidence_url(p.url, target_form_url, page_soup=soup)
+                    if target_valid:
+                        supplier_links_map[target_valid] = f"Supplier Intake Form (Fornitori): {target_valid}"
 
-        # Also check structured forms and links (preserves detection even when raw HTML is not decompressed)
-        if getattr(p, "forms", None):
+        # Also check structured forms (preserves detection when raw HTML was parsed during fetch)
+        if getattr(p, "forms", None) and not soup:
             for form in p.forms:
                 action = form.get("action") or ""
                 fields = " ".join(form.get("fields", []))
@@ -682,34 +750,15 @@ def extract_deterministic_facts(
                 combined_form = f"{action} {fields} {f_id}".lower()
                 if any(k in combined_form for k in ["fornitor", "vendor", "supplier", "albo"]):
                     target_url = f"{p.url}#{f_id}" if f_id else p.url
-                    supplier_links_map[target_url] = f"Supplier Intake Form (Fornitori): {target_url}"
-
-        if getattr(p, "links", None):
-            for lk in p.links:
-                if isinstance(lk, dict):
-                    lk_url = lk.get("href") or ""
-                    lk_text = lk.get("text") or ""
-                elif isinstance(lk, str):
-                    lk_url = lk
-                    lk_text = ""
-                else:
-                    continue
-
-                if not lk_url:
-                    continue
-
-                combined_lk = f"{lk_text} {lk_url}".lower()
-                if any(k in combined_lk for k in ["fornitor", "vendor", "albo-fornitori", "albo fornitori"]):
-                    if lk_url not in supplier_links_map:
-                        supplier_links_map[lk_url] = f"Supplier Portal ({lk_text or 'Fornitori'}): {lk_url}"
-                elif any(k in combined_lk for k in ["career", "lavora-con-noi", "posizioni-aperte", "jobs", "lavora con noi"]):
-                    if lk_url not in career_links_map:
-                        career_links_map[lk_url] = f"Careers ({lk_text or 'Lavora con noi'}): {lk_url}"
+                    target_valid = normalize_and_validate_evidence_url(p.url, target_url, page_soup=None)
+                    if target_valid:
+                        supplier_links_map[target_valid] = f"Supplier Intake Form (Fornitori): {target_valid}"
 
         # If page_type is 'careers' or URL has career keywords but no specific <a> tags were present, record the page itself
         if p.page_type == "careers" or any(k in p.url.lower() for k in ["career", "lavora-con-noi", "posizioni-aperte", "jobs"]):
-            if p.url not in career_links_map:
-                career_links_map[p.url] = f"Careers ({page_title}): {p.url}"
+            valid_career_page = normalize_and_validate_evidence_url(p.url, p.url, page_soup=soup)
+            if valid_career_page and valid_career_page not in career_links_map:
+                career_links_map[valid_career_page] = f"Careers ({page_title}): {valid_career_page}"
 
         # -------------------------------------------------------------
         # 7. Leadership, BIM Capabilities, Projects
