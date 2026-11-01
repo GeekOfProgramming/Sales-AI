@@ -433,9 +433,10 @@ def test_05_ai_handoff_copy_restrictions_and_safety(workspace_setup):
     Suppressed leads and previously contacted leads must have AI Brief blocked.
     """
     cand_store = workspace_setup["cand_store"]
+    reg_store = workspace_setup["reg_store"]
     supp_store = workspace_setup["supp_store"]
 
-    # Valid candidate
+    # Valid candidate with reviewed 13-field record and verified contact
     cand_store.save_candidate(CandidateCompany(
         candidate_id="cand:handoff:valid",
         company_name="Valid AEC BIM Solutions",
@@ -444,7 +445,26 @@ def test_05_ai_handoff_copy_restrictions_and_safety(workspace_setup):
         company_tier=CompanyTier.tier_1,
         discovery_status="qualified",
         qualification_outcome="qualified_for_enrichment",
+        cold_outreach_allowed=True,
     ))
+    reg_store.save_record(LeadRegisterRecord(
+        candidate_id="cand:handoff:valid",
+        record_number=501,
+        company_name="Valid AEC BIM Solutions",
+        official_website="https://valid-aec.com",
+        business_activities="BIM Architecture and Structural Design",
+        verification_status="OPERATOR_REVIEWED",
+        priority_level="A",
+    ))
+    cand_store.save_contact(ContactCandidate(
+        contact_id="cnt_valid_01",
+        candidate_id="cand:handoff:valid",
+        first_name="Alessandro",
+        last_name="Rossi",
+        full_name="Alessandro Rossi",
+        work_email="alessandro@valid-aec.com",
+        email_status="verified",
+    ), candidate_id="cand:handoff:valid")
 
     # Suppressed candidate
     cand_store.save_candidate(CandidateCompany(

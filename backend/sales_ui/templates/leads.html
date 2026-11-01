@@ -148,6 +148,7 @@
           <option value="A" {% if selected_priority == 'A' %}selected{% endif %}>Priority A</option>
           <option value="B" {% if selected_priority == 'B' %}selected{% endif %}>Priority B</option>
           <option value="C" {% if selected_priority == 'C' %}selected{% endif %}>Priority C</option>
+          <option value="UNKNOWN" {% if selected_priority == 'UNKNOWN' %}selected{% endif %}>Unknown</option>
         </select>
       </div>
 
@@ -296,7 +297,7 @@
             {% elif l.priority == 'C' %}
               <span class="badge badge-muted" style="font-weight: 700;">Priority C</span>
             {% else %}
-              <span class="badge badge-secondary">{{ l.priority }}</span>
+              <span class="badge badge-secondary" style="font-weight: 600; opacity: 0.85;">Unknown</span>
             {% endif %}
           </td>
 
@@ -348,15 +349,21 @@
                 <!-- One-Click AI Handoff Actions -->
                 <button type="button" class="btn btn-secondary btn-sm" onclick="copyFromEl('copy-intel-{{ loop.index }}', 'Copied Company Intelligence!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Copy unembellished company intelligence to clipboard">📋 Intel</button>
                 
-                <button type="button" class="btn btn-secondary btn-sm" onclick="copyFromEl('copy-13fields-{{ loop.index }}', 'Copied Reviewed 13 Fields!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Copy authoritative reviewed 13 fields to clipboard">📋 13 Fields</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="copyFromEl('copy-13fields-{{ loop.index }}', '{{ l.copy_13_fields_label }}!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="{{ l.copy_13_fields_label }} to clipboard">📋 13 Fields</button>
 
-                <!-- AI Brief Copy Control (Restricted for Suppressed or Previously Contacted) -->
-                {% if l.is_suppressed %}
+                <!-- AI Brief Copy Control (Restricted for Suppressed, Previously Contacted, Unresearched, or Unverified) -->
+                {% if l.can_generate_cold_brief %}
+                  <button type="button" class="btn btn-primary btn-sm" onclick="copyFromEl('copy-brief-{{ loop.index }}', 'Copied AI Brief for External LLM!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #6366f1; color: white; border: none;" title="Copy complete prompt &amp; context brief for external AI">📋 AI Brief</button>
+                {% elif l.is_suppressed %}
                   <button type="button" class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.5; cursor: not-allowed;" title="AI Brief generation blocked: Company is on the Suppression / DNC list" disabled>🚫 Brief Blocked</button>
                 {% elif l.is_previously_contacted %}
                   <button type="button" class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.5; cursor: not-allowed;" title="Cold outreach brief blocked: Candidate has prior outreach history" disabled>⚠️ Cold Brief Blocked</button>
+                {% elif l.research_status != 'research_ready' %}
+                  <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f97316; text-decoration: none;" title="AI Brief blocked: {{ l.ai_brief_blocked_reason }}. Click to review research.">📋 Review Research</a>
+                {% elif not l.has_verified_recipient or l.effective_readiness == 'verification_required' %}
+                  <a href="/sales/candidates/{{ l.candidate_id }}#contacts" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f59e0b; text-decoration: none;" title="AI Brief blocked: {{ l.ai_brief_blocked_reason }}. Click to verify contact evidence.">📋 Verify Contact</a>
                 {% else %}
-                  <button type="button" class="btn btn-primary btn-sm" onclick="copyFromEl('copy-brief-{{ loop.index }}', 'Copied AI Brief for External LLM!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #6366f1; color: white; border: none;" title="Copy complete prompt &amp; context brief for external AI">📋 AI Brief</button>
+                  <span class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.5; cursor: not-allowed;" title="AI Brief blocked: {{ l.ai_brief_blocked_reason or 'Not outreach eligible' }}">🚫 Brief Blocked</span>
                 {% endif %}
 
                 <!-- Standard Workspace & Pipeline Navigation -->

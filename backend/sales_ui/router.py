@@ -390,6 +390,9 @@ def evaluate_research_readiness(
     cand: Any,
     reg_store: Optional[Any] = None,
     snap_store: Optional[Any] = None,
+    prefetched_reg_record: Optional[Any] = None,
+    prefetched_snapshot: Optional[Any] = None,
+    has_prefetched: bool = False,
 ) -> Dict[str, Any]:
     """
     UX-LP-03a Authoritative Research Readiness evaluator:
@@ -407,14 +410,18 @@ def evaluate_research_readiness(
     """
     cid = getattr(cand, "candidate_id", None) or ""
     reg_record = None
-    if reg_store and cid.strip():
+    if has_prefetched:
+        reg_record = prefetched_reg_record
+    elif reg_store and cid.strip():
         try:
             reg_record = reg_store.get_explicit_record(cid.strip())
         except Exception:
             pass
 
     latest_snapshot = None
-    if snap_store and cid.strip():
+    if has_prefetched:
+        latest_snapshot = prefetched_snapshot
+    elif snap_store and cid.strip():
         try:
             latest_snapshot = snap_store.get_latest_snapshot(cid.strip())
         except Exception:
@@ -617,7 +624,8 @@ def generate_reviewed_13_fields_text(reg_record: Optional[Any], candidate: Any) 
     lines.append(f"Editorial State: {'Operator Approved' if is_reviewed else 'Unapproved / Raw Data'}")
     lines.append("-" * 50)
     lines.append(f"1. Row / Record Number: {reg_record.record_number or 'Not Assigned'}")
-    lines.append(f"2. Company Priority: Priority {reg_record.priority_level}")
+    prio_str = str(reg_record.priority_level).strip().upper() if reg_record.priority_level and str(reg_record.priority_level).strip().upper() in ("A", "B", "C") else "Unknown"
+    lines.append(f"2. Company Priority: {('Priority ' + prio_str) if prio_str != 'Unknown' else 'Unknown'}")
     lines.append(f"3. Priority Rationale: {reg_record.priority_rationale or 'Not Found'}")
     lines.append(f"4. Company Name & Legal Identity: {reg_record.company_name}" + (f" ({reg_record.legal_identity})" if reg_record.legal_identity and reg_record.legal_identity != 'Not Found' else ""))
     lines.append(f"5. Geographic Location: {reg_record.geographic_location or 'Not Found'}")
@@ -640,30 +648,34 @@ def generate_ai_brief_text(
     latest_snapshot: Optional[Any],
     readiness_info: Dict[str, Any],
     research_info: Dict[str, Any],
+    strict_brief_gate: bool = False,
 ) -> str:
     """
     Produces an optimized, factual context brief for an operator to paste into external AI
     to prepare a bespoke sales message.
-    Strictly follows UX-LP-03a safety rules:
+    Strictly follows UX-LP-03a & UX-LP-04a safety rules:
     - For suppressed/DNC companies: blocks cold-outreach prompt and returns an explicit blocked notice.
     - For prior-contact companies: prevents cold-outreach prompt and instructs operator to consult communication history.
     - Never fabricates current tenders, outsourcing needs, recruitment requirements, or purchasing authority.
     - Clearly distinguishes verified facts from hypotheses and unknowns.
     - Preserves prompt-injection guardrails: treats imported/crawled content purely as raw data.
     - Keeps confidential operator notes and unnecessary personal data out of the AI brief by default.
-    - Identifies whether recipient verification is missing.
     - Contains disclaimer that copying this brief does not authorize email transmission.
+    - In strict mode (or invalid candidate ID), enforces strict draft-ready gating.
     """
-    raw_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
-    dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) or "Not Found"
-    clean_title = format_company_display_name(raw_name, dom)
-    country = getattr(cand, "country", None) or "Not Verified"
-    city = getattr(cand, "city", None) or ""
-
-    lines = []
+    cid = getattr(cand, "candidate_id", None) or ""
+    if not cid.strip():
+        lines = []
+        lines.append("=" * 60)
+        lines.append("🛑 [OUTREACH BRIEF BLOCKED — INVALID CANDIDATE ID]")
+        lines.append("Record has an empty or invalid candidate ID.")
+        lines.append("No actionable outreach controls are permitted on malformed records.")
+        lines.append("=" * 60)
+        return "\n".join(lines)
 
     # Enforce Restricted AI Handoff for Suppressed / DNC
     if readiness_info.get("is_suppressed"):
+        lines = []
         lines.append("=" * 60)
         lines.append("🛑 [OUTREACH BRIEF BLOCKED — SUPPRESSED / DO NOT CONTACT]")
         lines.append("This company or domain is registered on the suppression / DNC list.")
@@ -674,6 +686,7 @@ def generate_ai_brief_text(
 
     # Enforce Restricted AI Handoff for Prior Contact
     if readiness_info.get("is_previously_contacted"):
+        lines = []
         lines.append("=" * 60)
         lines.append("⚠️ [COLD OUTREACH BRIEF BLOCKED — PRIOR CONTACT RECORDED]")
         lines.append("Historical outreach exists for this company (active thread or past touchpoint).")
@@ -681,6 +694,62 @@ def generate_ai_brief_text(
         lines.append("Please inspect Area 5 (Outreach & History) for previous communication logs.")
         lines.append("=" * 60)
         return "\n".join(lines)
+
+    # Enforce Restricted AI Handoff for Policy Ineligible (strict)
+    if strict_brief_gate:
+        if not readiness_info.get("base_eligible", True) or readiness_info.get("effective_readiness") == "not_eligible":
+            lines = []
+            lines.append("=" * 60)
+            lines.append("🛑 [COLD OUTREACH BRIEF BLOCKED — INELIGIBLE CANDIDATE]")
+            lines.append("Candidate does not meet policy qualification or cold outreach is disallowed.")
+            lines.append("Generation of sales outreach writing prompts is prohibited.")
+            lines.append("Use Company Intelligence for internal reference only.")
+            lines.append("=" * 60)
+            return "\n".join(lines)
+
+        res_status = research_info.get("research_status")
+        if res_status != "research_ready":
+            lines = []
+            lines.append("=" * 60)
+            if res_status == "unresearched":
+                lines.append("🛑 [COLD OUTREACH BRIEF BLOCKED — PENDING RESEARCH]")
+                lines.append("Company research has not yet been performed or recorded.")
+                lines.append("Please run research and establish a 13-Field Lead Register record first.")
+            elif res_status == "missing_evidence":
+                lines.append("🛑 [COLD OUTREACH BRIEF BLOCKED — MISSING RESEARCH EVIDENCE]")
+                lines.append("Research record is missing core business activities, domain, or source evidence.")
+                lines.append("Please complete and verify research evidence before preparing outreach.")
+            else:
+                lines.append("🛑 [COLD OUTREACH BRIEF BLOCKED — REVIEW REQUIRED]")
+                lines.append("13-Field Lead Register record or snapshot exists but has not been approved by an operator.")
+                lines.append("Human operator review and approval is required before outreach brief generation.")
+            lines.append("=" * 60)
+            return "\n".join(lines)
+
+        if readiness_info.get("effective_readiness") == "verification_required" or not readiness_info.get("has_verified_recipient"):
+            lines = []
+            lines.append("=" * 60)
+            lines.append("⚠️ [COLD OUTREACH BRIEF BLOCKED — CONTACT VERIFICATION REQUIRED]")
+            lines.append("Research is approved, but no verified recipient contact is on file.")
+            lines.append("Documented or unverified contacts require explicit operator verification.")
+            lines.append("Verify a contact with audit evidence in the Company Workspace before generating an AI brief.")
+            lines.append("=" * 60)
+            return "\n".join(lines)
+
+        if readiness_info.get("effective_readiness") != "draft_ready":
+            lines = []
+            lines.append("=" * 60)
+            lines.append("🛑 [COLD OUTREACH BRIEF BLOCKED — NOT DRAFT READY]")
+            lines.append("Candidate is not currently ready for manual outreach preparation.")
+            lines.append("=" * 60)
+            return "\n".join(lines)
+    raw_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
+    dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) or "Not Found"
+    clean_title = format_company_display_name(raw_name, dom)
+    country = getattr(cand, "country", None) or "Not Verified"
+    city = getattr(cand, "city", None) or ""
+
+    lines = []
 
     lines.append(f"# AI Operator Brief: {clean_title}")
     lines.append("Purpose: Factual company context for human operator to compose personalized outreach.")
@@ -752,6 +821,12 @@ def evaluate_candidate_readiness(
     cand_store: Any,
     suppression_svc: Any,
     reg_store: Optional[Any] = None,
+    prefetched_contacts: Optional[List[Any]] = None,
+    prefetched_reg_record: Optional[Any] = None,
+    prefetched_has_history: Optional[bool] = None,
+    prefetched_suppressed_domains: Optional[Set[str]] = None,
+    prefetched_suppressed_emails: Optional[Set[str]] = None,
+    has_prefetched: bool = False,
 ) -> Dict[str, Any]:
     """
     Authoritative shared readiness evaluator across Qualified Leads, Candidate Workspace, and Draft flows.
@@ -775,9 +850,13 @@ def evaluate_candidate_readiness(
     cid = getattr(cand, "candidate_id", None) or ""
     c_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
     c_dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    clean_dom = c_dom.strip().lower() if c_dom else None
 
     # 1. Authoritative domain / candidate suppression
-    auth_supp = check_authoritative_suppression(suppression_svc, domain=c_dom)
+    if has_prefetched and prefetched_suppressed_domains is not None:
+        auth_supp = clean_dom in prefetched_suppressed_domains if clean_dom else False
+    else:
+        auth_supp = check_authoritative_suppression(suppression_svc, domain=c_dom)
     cand_flag_supp = bool(getattr(cand, "suppressed", False))
     is_supp = bool(auth_supp or cand_flag_supp)
 
@@ -789,12 +868,16 @@ def evaluate_candidate_readiness(
         or getattr(cand, "active_conversation", False)
     )
     if cid and not is_contacted:
-        try:
-            hist_events = cand_store.get_historical_outreach_for_candidate(cid)
-            if hist_events:
+        if has_prefetched and prefetched_has_history is not None:
+            if prefetched_has_history:
                 is_contacted = True
-        except Exception:
-            pass
+        elif cand_store:
+            try:
+                hist_events = cand_store.get_historical_outreach_for_candidate(cid)
+                if hist_events:
+                    is_contacted = True
+            except Exception:
+                pass
 
     # 3. Base qualification & policy outreach eligibility
     base_eligible = is_candidate_outreach_eligible(cand)
@@ -812,18 +895,24 @@ def evaluate_candidate_readiness(
     # inspection/verification reference, but DO NOT automatically satisfy draft readiness without verification.
     # Contacts with status 'likely', 'unverified', 'unknown', or missing contacts require contact verification.
     reg_emails = []
-    if reg_store and cid.strip():
+    company_lead_record = None
+    if has_prefetched:
+        company_lead_record = prefetched_reg_record
+    elif reg_store and cid.strip():
         try:
             company_lead_record = reg_store.get_explicit_record(cid)
-            if company_lead_record and company_lead_record.contact_email_addresses and company_lead_record.contact_email_addresses.strip() != "Not Found":
-                reg_emails = [e.strip().lower() for e in company_lead_record.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
         except Exception:
             pass
+
+    if company_lead_record and company_lead_record.contact_email_addresses and company_lead_record.contact_email_addresses.strip() != "Not Found":
+        reg_emails = [e.strip().lower() for e in company_lead_record.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
 
     usable_recipients = []
     all_workspace_recipients = []
     raw_contacts = []
-    if cid.strip():
+    if has_prefetched and prefetched_contacts is not None:
+        raw_contacts = prefetched_contacts
+    elif cand_store and cid.strip():
         try:
             raw_contacts = cand_store.get_contacts_for_candidate(cid)
         except Exception:
@@ -839,7 +928,13 @@ def evaluate_candidate_readiness(
         if not w_email or not EMAIL_REGEX.match(w_email):
             continue
 
-        is_supp_recipient = check_authoritative_suppression(suppression_svc, email=w_email)
+        if has_prefetched and prefetched_suppressed_emails is not None:
+            is_supp_recipient = (w_email in prefetched_suppressed_emails)
+            if not is_supp_recipient and clean_dom and prefetched_suppressed_domains:
+                is_supp_recipient = (clean_dom in prefetched_suppressed_domains)
+        else:
+            is_supp_recipient = check_authoritative_suppression(suppression_svc, email=w_email)
+
         is_verified = (st == "verified")
         is_doc = (w_email in reg_emails)
 
@@ -864,7 +959,13 @@ def evaluate_candidate_readiness(
     # Documented Lead Register emails that are not yet in candidate_contacts
     for doc_email in reg_emails:
         if doc_email not in existing_emails and EMAIL_REGEX.match(doc_email):
-            is_supp_doc = check_authoritative_suppression(suppression_svc, email=doc_email)
+            if has_prefetched and prefetched_suppressed_emails is not None:
+                is_supp_doc = (doc_email in prefetched_suppressed_emails)
+                if not is_supp_doc and clean_dom and prefetched_suppressed_domains:
+                    is_supp_doc = (clean_dom in prefetched_suppressed_domains)
+            else:
+                is_supp_doc = check_authoritative_suppression(suppression_svc, email=doc_email)
+
             doc_item = {
                 "contact_id": f"contact:{doc_email}",
                 "full_name": "Lead Register Contact",
@@ -4509,6 +4610,81 @@ async def leads_view(
 
     cands = store.list_candidates()
 
+    # Performance optimization: prefetch related data in batch to avoid N individual SQLite queries
+    prefetched_contacts_by_cid = {}
+    prefetched_reg_records_by_cid = {}
+    prefetched_snapshots_by_cid = {}
+    prefetched_history_cids = set()
+    prefetched_supp_domains = set()
+    prefetched_supp_emails = set()
+
+    def _chk_table(conn, tbl: str) -> bool:
+        r = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (tbl,)).fetchone()
+        return bool(r)
+
+    try:
+        with store._get_connection() as conn:
+            # 1. Contacts batch
+            if _chk_table(conn, "candidate_contacts"):
+                c_rows = conn.execute("SELECT * FROM candidate_contacts ORDER BY contact_score DESC, created_at ASC").fetchall()
+                for r in c_rows:
+                    cid_val = r["candidate_id"]
+                    prefetched_contacts_by_cid.setdefault(cid_val, []).append(
+                        ContactCandidate(
+                            contact_id=r["contact_id"],
+                            first_name=r["first_name"],
+                            last_name=r["last_name"],
+                            full_name=r["full_name"],
+                            job_title=r["job_title"],
+                            work_email=r["work_email"],
+                            email_status=r["email_status"],
+                            email_confidence=r["email_confidence"],
+                            seniority=r["seniority"],
+                            department=r["department"],
+                            linkedin_url=r["linkedin_url"],
+                            provider=r["provider"],
+                            provider_person_id=r["provider_person_id"],
+                            buyer_role_match=r["buyer_role_match"],
+                            contact_score=r["contact_score"],
+                        )
+                    )
+            # 2. Historical outreach candidate IDs
+            if _chk_table(conn, "historical_outreach_events"):
+                h_rows = conn.execute("SELECT DISTINCT candidate_id FROM historical_outreach_events").fetchall()
+                for hr in h_rows:
+                    if hr[0]:
+                        prefetched_history_cids.add(str(hr[0]))
+            # 3. Suppressions batch
+            if _chk_table(conn, "suppression_list"):
+                s_rows = conn.execute("SELECT email, company_domain FROM suppression_list").fetchall()
+                for sr in s_rows:
+                    em = (sr["email"] or "").strip().lower()
+                    cd = (sr["company_domain"] or "").strip().lower()
+                    if em:
+                        prefetched_supp_emails.add(em)
+                    if cd:
+                        prefetched_supp_domains.add(cd)
+            # 4. Lead register records batch
+            if _chk_table(conn, "lead_register_records"):
+                reg_rows = conn.execute("SELECT * FROM lead_register_records").fetchall()
+                for rr in reg_rows:
+                    rec = reg_store._row_to_record(rr)
+                    if rec and rec.candidate_id:
+                        prefetched_reg_records_by_cid[rec.candidate_id] = rec
+    except Exception:
+        pass
+
+    try:
+        with snap_store._get_connection() as sconn:
+            if _chk_table(sconn, "research_snapshots"):
+                snap_rows = sconn.execute("SELECT * FROM research_snapshots ORDER BY created_at DESC").fetchall()
+                for sn_r in snap_rows:
+                    cid_v = sn_r["candidate_id"]
+                    if cid_v not in prefetched_snapshots_by_cid:
+                        prefetched_snapshots_by_cid[cid_v] = snap_store._build_snapshot_from_row(sconn, sn_r, load_raw_html=False)
+    except Exception:
+        pass
+
     # Pre-collect all qualified leads & evaluate authoritative readiness
     evaluated_leads = []
     available_countries = set()
@@ -4521,17 +4697,32 @@ async def leads_view(
         if not is_candidate_qualified_lead(c):
             continue
 
+        cid = getattr(c, "candidate_id", None) or ""
+        p_contacts = prefetched_contacts_by_cid.get(cid, [])
+        p_reg = prefetched_reg_records_by_cid.get(cid)
+        p_snap = prefetched_snapshots_by_cid.get(cid)
+        p_has_hist = cid in prefetched_history_cids
+
         readiness_info = evaluate_candidate_readiness(
             c,
             cand_store=store,
             suppression_svc=svcs["suppression_svc"],
             reg_store=reg_store,
+            prefetched_contacts=p_contacts,
+            prefetched_reg_record=p_reg,
+            prefetched_has_history=p_has_hist,
+            prefetched_suppressed_domains=prefetched_supp_domains,
+            prefetched_suppressed_emails=prefetched_supp_emails,
+            has_prefetched=True,
         )
 
         research_info = evaluate_research_readiness(
             c,
             reg_store=reg_store,
             snap_store=snap_store,
+            prefetched_reg_record=p_reg,
+            prefetched_snapshot=p_snap,
+            has_prefetched=True,
         )
 
         outcome = getattr(c, "qualification_outcome", None)
@@ -4548,7 +4739,9 @@ async def leads_view(
 
         # Retrieve linked Lead Register record if present for priority & research date
         reg_record = research_info.get("reg_record")
-        priority_val = getattr(reg_record, "priority_level", None) or "B"
+        raw_prio = getattr(reg_record, "priority_level", None) if reg_record else None
+        prio_upper = str(raw_prio).strip().upper() if raw_prio else ""
+        priority_val = prio_upper if prio_upper in ("A", "B", "C") else "Unknown"
         research_date = getattr(reg_record, "research_date", None) or getattr(c, "last_researched_at", None) or ""
 
         if c_country and c_country != "Not Verified":
@@ -4557,7 +4750,7 @@ async def leads_view(
             available_cities.add(c_city)
         if c_tier:
             available_tiers.add(c_tier)
-        if priority_val:
+        if priority_val in ("A", "B", "C"):
             available_priorities.add(priority_val)
 
         # Raw values without false positive defaults
@@ -4570,18 +4763,36 @@ async def leads_view(
         cid = getattr(c, "candidate_id", None) or ""
         is_invalid_id = not bool(cid.strip())
 
-        # Pre-generate copy texts using existing UX-LP-03a generators
-        lead_copy_intel = generate_company_intelligence_text(
-            c, reg_record, research_info.get("latest_snapshot"), readiness_info, research_info
-        ) if not is_invalid_id else ""
+        # Determine cold AI brief block reason
+        ai_brief_blocked_reason = None
+        if is_invalid_id:
+            ai_brief_blocked_reason = "Invalid candidate ID"
+        elif readiness_info.get("is_suppressed"):
+            ai_brief_blocked_reason = "Company is suppressed (DNC)"
+        elif readiness_info.get("is_previously_contacted"):
+            ai_brief_blocked_reason = "Candidate has prior outreach history"
+        elif not readiness_info.get("base_eligible", True) or readiness_info.get("effective_readiness") == "not_eligible":
+            ai_brief_blocked_reason = "Candidate is not outreach eligible"
+        elif research_info.get("research_status") != "research_ready":
+            if research_info.get("research_status") == "unresearched":
+                ai_brief_blocked_reason = "Research pending (13 fields required)"
+            elif research_info.get("research_status") == "missing_evidence":
+                ai_brief_blocked_reason = "Research missing required evidence"
+            else:
+                ai_brief_blocked_reason = "Research review required by operator"
+        elif readiness_info.get("effective_readiness") != "draft_ready" or not readiness_info.get("has_verified_recipient"):
+            ai_brief_blocked_reason = "Contact verification required"
 
-        lead_copy_13_fields = generate_reviewed_13_fields_text(
-            reg_record, c
-        ) if not is_invalid_id else ""
+        can_generate_cold_brief = bool(ai_brief_blocked_reason is None)
 
-        lead_copy_ai_brief = generate_ai_brief_text(
-            c, reg_record, research_info.get("latest_snapshot"), readiness_info, research_info
-        ) if not is_invalid_id else ""
+        # 13 fields copy label info
+        v_status = research_info.get("verification_status") or "Unverified"
+        if not reg_record:
+            copy_13_fields_label = "Copy Available Company Information"
+        elif v_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+            copy_13_fields_label = "Copy Reviewed 13 Fields"
+        else:
+            copy_13_fields_label = "Copy 13 Fields (Unreviewed)"
 
         evaluated_leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
@@ -4617,9 +4828,17 @@ async def leads_view(
             "has_verified_recipient": readiness_info["has_verified_recipient"],
             "is_invalid_id": is_invalid_id,
             "candidate_id": c.candidate_id or "",
-            "copy_intel_text": lead_copy_intel,
-            "copy_13_fields_text": lead_copy_13_fields,
-            "copy_ai_brief_text": lead_copy_ai_brief,
+            "can_generate_cold_brief": can_generate_cold_brief,
+            "ai_brief_blocked_reason": ai_brief_blocked_reason,
+            "copy_13_fields_label": copy_13_fields_label,
+            "_raw_cand": c,
+            "_reg_record": reg_record,
+            "_latest_snapshot": research_info.get("latest_snapshot"),
+            "_readiness_info": readiness_info,
+            "_research_info": research_info,
+            "copy_intel_text": "",
+            "copy_13_fields_text": "",
+            "copy_ai_brief_text": "",
         })
 
     # Summary Queue Counts (8 clearly separated queues)
@@ -4767,6 +4986,25 @@ async def leads_view(
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     paged_leads = filtered_leads[start_idx:end_idx]
+
+    # Phase 4 Pagination Performance: Generate full copy payloads ONLY for leads on the current page
+    for item in paged_leads:
+        if not item.get("is_invalid_id"):
+            raw_c = item.get("_raw_cand")
+            reg_rec = item.get("_reg_record")
+            snap = item.get("_latest_snapshot")
+            r_info = item.get("_readiness_info")
+            res_info = item.get("_research_info")
+
+            item["copy_intel_text"] = generate_company_intelligence_text(
+                raw_c, reg_rec, snap, r_info, res_info
+            )
+            item["copy_13_fields_text"] = generate_reviewed_13_fields_text(
+                reg_rec, raw_c
+            )
+            item["copy_ai_brief_text"] = generate_ai_brief_text(
+                raw_c, reg_rec, snap, r_info, res_info, strict_brief_gate=True
+            )
 
     return render_console_template(
         request=request,
