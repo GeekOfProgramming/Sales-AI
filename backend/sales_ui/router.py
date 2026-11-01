@@ -352,6 +352,346 @@ def check_authoritative_suppression(
     return supp_store.is_suppressed(email=clean_email, company_domain=clean_domain)
 
 
+def format_company_display_name(raw_name: Optional[str], canonical_domain: Optional[str] = None) -> str:
+    """
+    Cleans company presentation title without modifying authoritative stored data:
+    - Strips long mixed-language descriptions, historical notes, or raw multi-column cells.
+    - Preserves genuine Italian and international company names, legal entity suffix (S.r.l., SpA, GmbH).
+    - If empty or purely delimiter, falls back to canonical domain or 'Unnamed Company'.
+    """
+    if not raw_name or not str(raw_name).strip():
+        if canonical_domain and canonical_domain.strip():
+            return canonical_domain.strip().lower()
+        return "Unnamed Company"
+
+    text = str(raw_name).strip()
+
+    # Split on explicit multi-line returns or multiple consecutive spaces/tabs
+    first_line = text.split("\n")[0].split("\r")[0].strip()
+
+    # If the first line is excessively long (> 80 chars) and contains description delimiters like ' - ', ' | ', ';', ':',
+    # take the leading company title portion
+    if len(first_line) > 70:
+        for sep in [" - ", " – ", " — ", " | ", "; ", " / "]:
+            if sep in first_line:
+                cand = first_line.split(sep)[0].strip()
+                if len(cand) >= 3:
+                    first_line = cand
+                    break
+
+    # If still exceedingly long (> 80 chars), truncate gracefully with ellipsis for display
+    if len(first_line) > 80:
+        first_line = first_line[:77].strip() + "..."
+
+    return first_line or (canonical_domain.strip().lower() if canonical_domain else "Unnamed Company")
+
+
+def evaluate_research_readiness(
+    cand: Any,
+    reg_store: Optional[Any] = None,
+    snap_store: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Phase 2 explicit Research Readiness evaluator:
+    Determines whether a company has sufficient source-grounded information
+    and required research fields reviewed by an operator.
+
+    States:
+      - 'research_ready': Reviewed by operator ('OPERATOR_REVIEWED' or 'VERIFIED') with required 13-field data on file.
+      - 'review_required': 13-field record or snapshot exists ('EXTRACTED', 'Unverified', 'Needs Review') requiring operator review.
+      - 'unresearched': No explicit 13-field record and no snapshot on file.
+    """
+    cid = getattr(cand, "candidate_id", None) or ""
+    reg_record = None
+    if reg_store and cid.strip():
+        try:
+            reg_record = reg_store.get_explicit_record(cid.strip())
+        except Exception:
+            pass
+
+    latest_snapshot = None
+    if snap_store and cid.strip():
+        try:
+            latest_snapshot = snap_store.get_latest_snapshot(cid.strip())
+        except Exception:
+            pass
+
+    has_explicit_record = bool(reg_record is not None)
+    v_status = (getattr(reg_record, "verification_status", None) or "Unverified").strip() if reg_record else "Unlinked"
+
+    # Check completeness of core research fields
+    has_website = bool(reg_record and reg_record.official_website and reg_record.official_website.strip() != "Not Found")
+    has_activities = bool(reg_record and reg_record.business_activities and reg_record.business_activities.strip() != "Not Found")
+    has_person = bool(reg_record and reg_record.responsible_person and reg_record.responsible_person.strip() != "Not Found")
+    has_contacts = bool(reg_record and reg_record.contact_email_addresses and reg_record.contact_email_addresses.strip() != "Not Found")
+
+    is_reviewed = (v_status in ("OPERATOR_REVIEWED", "VERIFIED"))
+    has_snapshot = bool(latest_snapshot is not None and getattr(latest_snapshot, "pages_succeeded", 0) > 0)
+
+    if has_explicit_record and is_reviewed:
+        research_status = "research_ready"
+        research_label = "Research Ready"
+        research_badge = "badge-success"
+        research_title = f"13-Field Register verified and reviewed by operator (#{reg_record.record_number})"
+    elif has_explicit_record or has_snapshot:
+        research_status = "review_required"
+        research_label = "Review Required"
+        research_badge = "badge-warning"
+        if has_explicit_record:
+            research_title = f"13-Field Register record exists (#{reg_record.record_number}) but status is {v_status}; operator review required"
+        else:
+            research_title = f"Research snapshot exists ({latest_snapshot.pages_succeeded} pages crawled) but 13-Field Register record not yet synthesized/reviewed"
+    else:
+        research_status = "unresearched"
+        research_label = "Pending Research"
+        research_badge = "badge-secondary"
+        research_title = "No explicit 13-Field Register record or research snapshot recorded yet"
+
+    return {
+        "research_status": research_status,
+        "research_label": research_label,
+        "research_badge": research_badge,
+        "research_title": research_title,
+        "is_reviewed": is_reviewed,
+        "has_explicit_record": has_explicit_record,
+        "record_number": getattr(reg_record, "record_number", None) if reg_record else None,
+        "verification_status": v_status,
+        "has_snapshot": has_snapshot,
+        "snapshot_pages": getattr(latest_snapshot, "pages_succeeded", 0) if latest_snapshot else 0,
+        "reg_record": reg_record,
+        "latest_snapshot": latest_snapshot,
+    }
+
+
+def generate_company_intelligence_text(
+    cand: Any,
+    reg_record: Optional[Any],
+    latest_snapshot: Optional[Any],
+    readiness_info: Dict[str, Any],
+    research_info: Dict[str, Any],
+) -> str:
+    """
+    Builds factual, unembellished Company Intelligence summary in readable Markdown.
+    Contains clean structured identity, locations, activities, BIM signals, contacts, and verification status.
+    """
+    raw_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
+    dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) or "Not Found"
+    clean_title = format_company_display_name(raw_name, dom)
+    country = getattr(cand, "country", None) or "Not Verified"
+    city = getattr(cand, "city", None) or ""
+
+    lines = []
+    lines.append(f"# Company Intelligence: {clean_title}")
+    lines.append("")
+    lines.append("## 1. Company Identity & Registration")
+    lines.append(f"- Display Name: {clean_title}")
+    if raw_name and raw_name != clean_title:
+        lines.append(f"- Authoritative Stored Name: {raw_name}")
+    if reg_record and reg_record.legal_identity and reg_record.legal_identity != "Not Found":
+        lines.append(f"- Legal Identity (P.IVA / CF): {reg_record.legal_identity}")
+    lines.append(f"- Official Domain: {dom}")
+    website = reg_record.official_website if (reg_record and reg_record.official_website and reg_record.official_website != 'Not Found') else f"https://{dom}" if dom != 'Not Found' else "Not Found"
+    lines.append(f"- Official Website: {website}")
+    lines.append(f"- Geographic Location: {reg_record.geographic_location if (reg_record and reg_record.geographic_location and reg_record.geographic_location != 'Not Found') else (f'{city}, {country}'.strip(', ') if city or country else 'Not Found')}")
+
+    lines.append("")
+    lines.append("## 2. Business Activities & Specializations")
+    activities = reg_record.business_activities if (reg_record and reg_record.business_activities and reg_record.business_activities != 'Not Found') else getattr(cand, "business_activities", None) or "Not Found"
+    lines.append(f"- Activities: {activities}")
+    if reg_record and reg_record.descriptions_and_notes and reg_record.descriptions_and_notes != "Not Found":
+        lines.append(f"- Descriptions / Operator Notes: {reg_record.descriptions_and_notes}")
+
+    lines.append("")
+    lines.append("## 3. BIM Capabilities & Engineering Evidence")
+    bim_mat = getattr(cand, "bim_maturity", None) or "Not Evaluated"
+    lines.append(f"- Observed BIM Maturity: {bim_mat}")
+    opp_pot = getattr(cand, "outsourcing_potential", None) or "Not Evaluated"
+    lines.append(f"- Outsourcing Potential: {opp_pot}")
+    fit_val = getattr(cand, "fit_assessment", None) or "Unknown"
+    intent_val = getattr(cand, "intent_assessment", None) or "Unknown"
+    lines.append(f"- Qualification Signals: Fit={fit_val}, Intent={intent_val}")
+
+    lines.append("")
+    lines.append("## 4. Key People & Contacts")
+    resp_person = reg_record.responsible_person if (reg_record and reg_record.responsible_person and reg_record.responsible_person != 'Not Found') else "Not Documented"
+    lines.append(f"- Documented Key Person: {resp_person}")
+    emails = reg_record.contact_email_addresses if (reg_record and reg_record.contact_email_addresses and reg_record.contact_email_addresses != 'Not Found') else "Not Documented"
+    lines.append(f"- Lead Register Email(s): {emails}")
+    phones = reg_record.telephone_numbers if (reg_record and reg_record.telephone_numbers and reg_record.telephone_numbers != 'Not Found') else "Not Documented"
+    lines.append(f"- Telephone: {phones}")
+
+    recipients = readiness_info.get("all_workspace_recipients", [])
+    if recipients:
+        lines.append("- Candidate Contacts On File:")
+        for r in recipients:
+            status_tag = "[VERIFIED]" if r.get("is_verified") else ("[DOCUMENTED IN REGISTER]" if r.get("is_documented") else f"[{r.get('email_status', 'unverified').upper()}]")
+            lines.append(f"  * {r.get('full_name')} <{r.get('work_email')}> {status_tag} (Role: {r.get('job_title', 'Key Contact')})")
+    else:
+        lines.append("- Candidate Contacts On File: None")
+
+    lines.append("")
+    lines.append("## 5. Research Provenance & Verification Audit")
+    lines.append(f"- Research Readiness: {research_info['research_label']} (Status: {research_info['verification_status']})")
+    if reg_record and reg_record.record_number:
+        lines.append(f"- 13-Field Register Record: #{reg_record.record_number}")
+    if reg_record and reg_record.research_date:
+        lines.append(f"- Research Date: {reg_record.research_date}")
+    if latest_snapshot:
+        lines.append(f"- Latest Crawl Snapshot: {latest_snapshot.snapshot_id} (Crawled: {latest_snapshot.pages_succeeded}/{latest_snapshot.pages_attempted} pages, Status: {latest_snapshot.research_status})")
+    if reg_record and reg_record.evidence_urls:
+        lines.append(f"- Source Evidence URLs: {', '.join(reg_record.evidence_urls)}")
+
+    lines.append("")
+    lines.append("## 6. Outreach Policy & Safety Safeguards")
+    lines.append(f"- Outreach Readiness: {readiness_info['readiness_label']}")
+    lines.append(f"- Base Policy Outreach Eligible: {readiness_info['base_eligible']}")
+    lines.append(f"- Suppression / DNC Flag: {'SUPPRESSED' if readiness_info['is_suppressed'] else 'Clear'}")
+    lines.append(f"- Prior Outreach Detected: {'YES (Cold Outreach Blocked)' if readiness_info['is_previously_contacted'] else 'No (First Contact Safe)'}")
+    lines.append(f"- Verified Recipient Available: {'YES' if readiness_info['has_verified_recipient'] else 'NO (Verification Required)'}")
+
+    return "\n".join(lines)
+
+
+def generate_reviewed_13_fields_text(reg_record: Optional[Any], candidate: Any) -> str:
+    """
+    Renders clean, structured copy of the 13-Field Lead Register record matching pyBIM standard.
+    """
+    if not reg_record:
+        dom = getattr(candidate, "company_domain", None) or getattr(candidate, "domain", "N/A")
+        name = getattr(candidate, "company_name", None) or getattr(candidate, "name", "Company")
+        return (
+            f"13-Field Lead Register Record: Unlinked\n"
+            f"Company: {name}\n"
+            f"Domain: {dom}\n"
+            f"Note: No explicit 13-field Lead Register record has been linked or approved yet for this candidate."
+        )
+
+    lines = []
+    lines.append(f"13-Field Lead Register (Record #{reg_record.record_number or 'N/A'})")
+    lines.append(f"Verification Status: {reg_record.verification_status}")
+    lines.append("-" * 50)
+    lines.append(f"1. Row / Record Number: {reg_record.record_number or 'Not Assigned'}")
+    lines.append(f"2. Company Priority: Priority {reg_record.priority_level}")
+    lines.append(f"3. Priority Rationale: {reg_record.priority_rationale or 'Not Found'}")
+    lines.append(f"4. Company Name & Legal Identity: {reg_record.company_name}" + (f" ({reg_record.legal_identity})" if reg_record.legal_identity and reg_record.legal_identity != 'Not Found' else ""))
+    lines.append(f"5. Geographic Location: {reg_record.geographic_location or 'Not Found'}")
+    lines.append(f"6. Telephone Numbers: {reg_record.telephone_numbers or 'Not Found'}")
+    lines.append(f"7. Business Activities / Services: {reg_record.business_activities or 'Not Found'}")
+    lines.append(f"8. Official Website: {reg_record.official_website or 'Not Found'}")
+    lines.append(f"9. Responsible Person / Contact: {reg_record.responsible_person or 'Not Found'}")
+    lines.append(f"10. Descriptions & Operator Notes: {reg_record.descriptions_and_notes or 'Not Found'}")
+    lines.append(f"11. Job Advertisement Links: {reg_record.job_advertisement_links or 'Not Found'}")
+    lines.append(f"12. Other Links / Projects / References: {reg_record.other_links_and_references or 'Not Found'}")
+    lines.append(f"13. Contact Email Addresses: {reg_record.contact_email_addresses or 'Not Found'}")
+    if reg_record.evidence_urls:
+        lines.append(f"Evidence Source URLs: {', '.join(reg_record.evidence_urls)}")
+    return "\n".join(lines)
+
+
+def generate_ai_brief_text(
+    cand: Any,
+    reg_record: Optional[Any],
+    latest_snapshot: Optional[Any],
+    readiness_info: Dict[str, Any],
+    research_info: Dict[str, Any],
+) -> str:
+    """
+    Produces an optimized, factual context brief for an operator to paste into external AI
+    to prepare a bespoke sales message.
+    Strictly follows Phase 4 safety rules:
+    - Never fabricates current tenders, outsourcing needs, recruitment requirements, or purchasing authority.
+    - Clearly distinguishes verified facts from hypotheses and unknowns.
+    - For suppressed/DNC companies: blocks drafting prompt and presents strictly internal factual inspection with DO NOT CONTACT banner.
+    - For prior-contact companies: warns that cold outreach is blocked.
+    - Identifies whether recipient verification is missing.
+    - Contains disclaimer that copying this brief does not authorize email transmission.
+    """
+    raw_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
+    dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) or "Not Found"
+    clean_title = format_company_display_name(raw_name, dom)
+    country = getattr(cand, "country", None) or "Not Verified"
+    city = getattr(cand, "city", None) or ""
+
+    lines = []
+
+    # Safety Banners for Restricted States
+    if readiness_info["is_suppressed"]:
+        lines.append("=" * 60)
+        lines.append("🛑 [SAFETY RESTRICTION: COMPANY / DOMAIN IS SUPPRESSED (DNC)]")
+        lines.append("DO NOT SEND OUTREACH. This profile is for internal inspection only.")
+        lines.append("Any contact initiation is strictly prohibited under suppression rules.")
+        lines.append("=" * 60)
+        lines.append("")
+    elif readiness_info["is_previously_contacted"]:
+        lines.append("=" * 60)
+        lines.append("⚠️ [SAFETY WARNING: PRIOR OUTREACH DETECTED / ACTIVE CONVERSATION]")
+        lines.append("Cold outreach drafting is blocked. Check historical logs before composing.")
+        lines.append("=" * 60)
+        lines.append("")
+
+    lines.append(f"# AI Operator Brief: {clean_title}")
+    lines.append("Purpose: Factual company context for human operator to compose personalized outreach.")
+    lines.append("Disclaimer: This brief provides factual reference data only. Copying does NOT authorize email transmission without completing human review and compliance checks.")
+    lines.append("")
+
+    lines.append("## Target Company Overview")
+    lines.append(f"- Company: {clean_title}")
+    if reg_record and reg_record.legal_identity and reg_record.legal_identity != "Not Found":
+        lines.append(f"- Legal Registration: {reg_record.legal_identity}")
+    lines.append(f"- Domain / Website: {reg_record.official_website if (reg_record and reg_record.official_website and reg_record.official_website != 'Not Found') else dom}")
+    lines.append(f"- Location: {reg_record.geographic_location if (reg_record and reg_record.geographic_location and reg_record.geographic_location != 'Not Found') else (f'{city}, {country}'.strip(', ') if city or country else 'Not Found')}")
+    lines.append(f"- Priority Tier: {format_company_tier_label(getattr(cand, 'company_tier', None))}")
+    if reg_record and reg_record.priority_rationale and reg_record.priority_rationale != "Not Found":
+        lines.append(f"- Strategic Fit Rationale: {reg_record.priority_rationale}")
+
+    lines.append("")
+    lines.append("## Verified Business Activities & Specializations (Source Grounded)")
+    activities = reg_record.business_activities if (reg_record and reg_record.business_activities and reg_record.business_activities != 'Not Found') else getattr(cand, "business_activities", None) or "Not Found"
+    lines.append(f"- Documented Services: {activities}")
+    if reg_record and reg_record.descriptions_and_notes and reg_record.descriptions_and_notes != "Not Found":
+        lines.append(f"- Context Notes: {reg_record.descriptions_and_notes}")
+    if reg_record and reg_record.other_links_and_references and reg_record.other_links_and_references != "Not Found":
+        lines.append(f"- Key Projects / Portfolio References: {reg_record.other_links_and_references}")
+
+    lines.append("")
+    lines.append("## Commercial Hypotheses vs. Verified Facts")
+    lines.append(f"- BIM Maturity (Observed Signal): {getattr(cand, 'bim_maturity', 'Not Evaluated')}")
+    lines.append(f"- Outsourcing Potential (Analytical Hypothesis): {getattr(cand, 'outsourcing_potential', 'Not Evaluated')}")
+    lines.append("- Note: Potential outsourcing need is an analytical hypothesis based on engineering profile, NOT an active published tender unless confirmed in notes.")
+
+    lines.append("")
+    lines.append("## Contact & Recipient Readiness")
+    recipients = readiness_info.get("all_workspace_recipients", [])
+    verified_recs = [r for r in recipients if r.get("is_verified")]
+    if verified_recs:
+        lines.append("✓ Verified Recipient(s) Available:")
+        for vr in verified_recs:
+            lines.append(f"  * {vr.get('full_name')} <{vr.get('work_email')}> [Status: VERIFIED] (Title: {vr.get('job_title', 'Key Contact')})")
+    else:
+        lines.append("⚠️ NO VERIFIED RECIPIENT ON FILE.")
+        lines.append("  Documented or unverified contacts require human operator verification before message dispatch:")
+        for r in recipients:
+            lines.append(f"  * {r.get('full_name')} <{r.get('work_email')}> [Status: {r.get('email_status', 'unverified')}] (Provenance: {r.get('provenance')})")
+
+    lines.append("")
+    lines.append("## Source Evidence & Traceability")
+    lines.append(f"- 13-Field Register Status: {research_info['verification_status']} (#{research_info.get('record_number') or 'Unlinked'})")
+    if reg_record and reg_record.evidence_urls:
+        lines.append(f"- Evidence URLs: {', '.join(reg_record.evidence_urls)}")
+    if latest_snapshot:
+        lines.append(f"- Research Snapshot: {latest_snapshot.snapshot_id} ({latest_snapshot.pages_succeeded} pages crawled)")
+
+    lines.append("")
+    lines.append("## Operator Writing Instructions for External AI")
+    lines.append("1. Adopt a consultative, professional Italian or international tone appropriate for architectural and engineering directors.")
+    lines.append("2. Reference specific verified activities (e.g. structural engineering, MEP coordination, infrastructural BIM) rather than generic sales pitches.")
+    lines.append("3. Do NOT claim the company published a tender or outsourcing RFP unless documented in the portfolio references above.")
+    lines.append("4. Position pyBIM as a specialized production and modeling partner for peak capacity and BIM compliance.")
+    lines.append("5. Strictly verify the recipient before dispatching any message.")
+
+    return "\n".join(lines)
+
+
 def evaluate_candidate_readiness(
     cand: Any,
     cand_store: Any,
@@ -3174,12 +3514,30 @@ async def candidate_detail_view(
     latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
     historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
 
+    # Evaluate Research Readiness
+    research_info = evaluate_research_readiness(
+        cand,
+        reg_store=reg_store,
+        snap_store=snap_store,
+    )
+
     company_drafts, _ = svcs["rev_store"].list_drafts(filters={"candidate_id": candidate_id}, limit=50)
 
     # Verification state summaries
     verified_contacts = [c for c in contacts_view if c.get("email_status") == "verified"]
     likely_contacts = [c for c in contacts_view if c.get("email_status") == "likely"]
     unverified_contacts = [c for c in contacts_view if c.get("email_status") not in ("verified", "likely")]
+
+    # Pre-generate structured intelligence, 13 fields, and AI brief copyable texts
+    company_intel_text = generate_company_intelligence_text(
+        cand, company_lead_record, latest_snapshot, readiness_info, research_info
+    )
+    reviewed_13_fields_text = generate_reviewed_13_fields_text(company_lead_record, cand)
+    ai_brief_text = generate_ai_brief_text(
+        cand, company_lead_record, latest_snapshot, readiness_info, research_info
+    )
+
+    clean_display_title = format_company_display_name(cand.company_name, cand.company_domain)
 
     return render_console_template(
         request=request,
@@ -3188,6 +3546,7 @@ async def candidate_detail_view(
             "request": request,
             "active_tab": "candidates",
             "detail": view,
+            "clean_display_title": clean_display_title,
             "contacts": contacts_view,
             "verified_contacts": verified_contacts,
             "likely_contacts": likely_contacts,
@@ -3203,6 +3562,10 @@ async def candidate_detail_view(
             "has_verified_recipient": has_verified_recipient,
             "can_generate_draft": can_generate_draft,
             "readiness_info": readiness_info,
+            "research_info": research_info,
+            "company_intel_text": company_intel_text,
+            "reviewed_13_fields_text": reviewed_13_fields_text,
+            "ai_brief_text": ai_brief_text,
             "is_suppressed": is_supp,
             "is_previously_contacted": is_contacted,
             "message": message,
@@ -4072,13 +4435,17 @@ async def leads_view(
     country: Optional[str] = Query(None),
     tier: Optional[str] = Query(None),
     readiness: Optional[str] = Query(None),
+    research_status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1),
 ):
     svcs = get_console_services()
     store = svcs["cand_store"]
     from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.research.research_store import ResearchSnapshotStore
+
     reg_store = LeadRegisterStore(db_path=store.db_path)
+    snap_store = ResearchSnapshotStore()
 
     cands = store.list_candidates()
 
@@ -4099,13 +4466,20 @@ async def leads_view(
             reg_store=reg_store,
         )
 
+        research_info = evaluate_research_readiness(
+            c,
+            reg_store=reg_store,
+            snap_store=snap_store,
+        )
+
         outcome = getattr(c, "qualification_outcome", None)
         if hasattr(outcome, "value"):
             outcome = outcome.value
         outcome_str = str(outcome) if outcome else ""
 
-        name = getattr(c, "company_name", None) or getattr(c, "name", "Company")
+        raw_company_name = getattr(c, "company_name", None) or getattr(c, "name", "Company")
         dom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
+        clean_company_name = format_company_display_name(raw_company_name, dom)
         c_country = c.country or "Not Verified"
         c_tier = format_company_tier_label(c.company_tier)
 
@@ -4122,7 +4496,8 @@ async def leads_view(
 
         evaluated_leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
-            "company_name": name,
+            "company_name": clean_company_name,
+            "raw_company_name": raw_company_name,
             "domain": dom,
             "country": c_country,
             "tier": c_tier,
@@ -4136,6 +4511,13 @@ async def leads_view(
             "readiness_label": readiness_info["readiness_label"],
             "readiness_badge": readiness_info["readiness_badge"],
             "readiness_title": readiness_info["readiness_title"],
+            "research_status": research_info["research_status"],
+            "research_label": research_info["research_label"],
+            "research_badge": research_info["research_badge"],
+            "research_title": research_info["research_title"],
+            "record_number": research_info["record_number"],
+            "is_reviewed": research_info["is_reviewed"],
+            "verification_status": research_info["verification_status"],
             "is_previously_contacted": readiness_info["is_previously_contacted"],
             "is_suppressed": readiness_info["is_suppressed"],
             "can_generate_draft": readiness_info["can_generate_draft"],
@@ -4145,6 +4527,8 @@ async def leads_view(
 
     # Summary KPI counts (calculated across all qualified leads prior to page/filter slicing)
     total_qualified = len(evaluated_leads)
+    count_research_ready = sum(1 for l in evaluated_leads if l["research_status"] == "research_ready")
+    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] == "review_required")
     count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready")
     count_verification_required = sum(1 for l in evaluated_leads if l["effective_readiness"] == "verification_required")
     count_prior_contact = sum(1 for l in evaluated_leads if l["effective_readiness"] == "prior_contact")
@@ -4158,7 +4542,7 @@ async def leads_view(
         ql = q.strip().lower()
         filtered_leads = [
             l for l in filtered_leads
-            if ql in l["company_name"].lower() or (l["domain"] and ql in l["domain"].lower())
+            if ql in l["company_name"].lower() or (l["raw_company_name"] and ql in l["raw_company_name"].lower()) or (l["domain"] and ql in l["domain"].lower())
         ]
 
     # 2. Country Filter
@@ -4190,6 +4574,14 @@ async def leads_view(
                 l for l in filtered_leads
                 if l["effective_readiness"] == target_readiness
             ]
+
+    # 5. Research Readiness Filter
+    if research_status and research_status.strip() and research_status.strip() != "all":
+        target_res = research_status.strip().lower()
+        filtered_leads = [
+            l for l in filtered_leads
+            if l["research_status"] == target_res
+        ]
 
     # Deterministic Sorting: Draft Ready first, then Verification Required, then Prior Contact, then Ineligible/Suppressed, then alphabetical by Company Name
     readiness_sort_order = {
@@ -4229,6 +4621,8 @@ async def leads_view(
             "active_tab": "leads",
             "leads": paged_leads,
             "total_qualified": total_qualified,
+            "count_research_ready": count_research_ready,
+            "count_review_required": count_review_required,
             "count_draft_ready": count_draft_ready,
             "count_verification_required": count_verification_required,
             "count_prior_contact": count_prior_contact,
@@ -4246,6 +4640,7 @@ async def leads_view(
             "selected_country": country or "",
             "selected_tier": tier or "",
             "selected_readiness": readiness or "",
+            "selected_research": research_status or "",
             "query": q or "",
             "email_send_enabled": is_email_send_enabled(),
         },

@@ -11,7 +11,7 @@
 <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
   <div>
     <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-      <h1 class="page-title" style="margin-bottom: 0;">{{ detail.candidate.company_name }}</h1>
+      <h1 class="page-title" style="margin-bottom: 0;">{{ clean_display_title }}</h1>
       {% if is_suppressed %}
         <span class="badge badge-danger">🚫 Suppressed / DNC</span>
       {% elif is_previously_contacted %}
@@ -24,6 +24,9 @@
         <span class="badge badge-secondary">{{ detail.candidate.status|upper }}</span>
       {% endif %}
       <span class="badge badge-info">{{ detail.candidate.tier }}</span>
+      <span class="badge {{ research_info.research_badge if research_info else 'badge-secondary' }}" title="{{ research_info.research_title if research_info else '' }}">
+        {{ research_info.research_label if research_info else 'Research' }}
+      </span>
       {% if lead_record %}
         <span class="badge badge-success" title="Associated with Lead Register Record #{{ lead_record.record_number }}">13-Field Linked (#{{ lead_record.record_number }})</span>
       {% else %}
@@ -34,6 +37,9 @@
       Candidate ID: <code>{{ detail.candidate.candidate_id }}</code> |
       Domain: <code>{{ detail.candidate.domain or 'None' }}</code> |
       Location: <strong>{{ detail.candidate.city or 'Not Specified' }}{% if detail.candidate.city and detail.candidate.country %}, {% endif %}{{ detail.candidate.country or '' }}</strong>
+      {% if detail.candidate.company_name != clean_display_title %}
+        <br><span style="font-size: 0.78rem; color: var(--text-muted);">Authoritative Registered Name: <strong>{{ detail.candidate.company_name }}</strong></span>
+      {% endif %}
     </p>
   </div>
   <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -157,13 +163,16 @@
   </form>
 </div>
 
-<!-- 5-Area Workspace Navigation Tabs -->
+<!-- 6-Area Workspace Navigation Tabs -->
 <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem; overflow-x: auto;">
   <button type="button" id="tab-btn-overview" class="btn btn-primary" onclick="switchWorkspaceTab('overview')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
     🏢 1. Overview
   </button>
   <button type="button" id="tab-btn-research" class="btn btn-secondary" onclick="switchWorkspaceTab('research')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
     🔬 2. Research &amp; Evidence {% if latest_snapshot %}<span class="badge badge-info" style="margin-left: 4px;">{{ historical_snapshots|length }}</span>{% endif %}
+  </button>
+  <button type="button" id="tab-btn-ai-handoff" class="btn btn-secondary" onclick="switchWorkspaceTab('ai-handoff')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem; background-color: rgba(99, 102, 241, 0.1); border-color: #6366f1; color: #6366f1; font-weight: 600;">
+    🤖 AI Handoff &amp; Brief 📋
   </button>
   <button type="button" id="tab-btn-register" class="btn btn-secondary" onclick="switchWorkspaceTab('register')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
     📋 3. 13-Field Lead Register {% if lead_record %}<span class="badge badge-success" style="margin-left: 4px;">#{{ lead_record.record_number }}</span>{% else %}<span class="badge badge-secondary" style="margin-left: 4px;">Unlinked</span>{% endif %}
@@ -275,8 +284,110 @@
 </div>
 
 <!-- ========================================================================= -->
-<!-- AREA 2: RESEARCH & EVIDENCE -->
+<!-- AREA 2: AI HANDOFF & BRIEF (READ-ONLY INTELLIGENCE & COPY CONTROLS) -->
 <!-- ========================================================================= -->
+<div id="section-ai-handoff" class="workspace-section" style="display: none;">
+  <!-- Safety Warnings for AI Handoff -->
+  {% if is_suppressed %}
+  <div class="card" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #ef4444; font-size: 1rem; margin-bottom: 0.25rem;">
+      🛑 INTERNAL INSPECTION ONLY — DO NOT CONTACT (SUPPRESSED)
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      This company domain or email is in the suppression registry. Autonomous drafting or sales outreach is strictly blocked.
+      The AI Brief below is presented strictly for internal factual review and forbids generating cold outreach.
+    </div>
+  </div>
+  {% elif is_previously_contacted %}
+  <div class="card" style="border-left: 4px solid #8b5cf6; background: rgba(139, 92, 246, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #8b5cf6; font-size: 1rem; margin-bottom: 0.25rem;">
+      ⏱️ PRIOR OUTREACH DETECTED — COLD OUTREACH RESTRICTED
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      Historical communications exist for this company. Duplicate protection is actively enforced.
+      Do not compose or send generic first-contact emails. Inspect prior communication history before taking manual action.
+    </div>
+  </div>
+  {% elif not can_generate_draft %}
+  <div class="card" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #f59e0b; font-size: 1rem; margin-bottom: 0.25rem;">
+      ⚠️ CONTACT VERIFICATION REQUIRED PRIOR TO MESSAGE DISPATCH
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      Company is qualified for research, but no verified recipient is on file. Lead Register documented emails require operator evidence verification before messages are dispatched.
+      Copying this brief facilitates drafting in external AI, but does <strong>NOT</strong> authorize sending without verified recipient evidence.
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #10b981; font-size: 1rem; margin-bottom: 0.25rem;">
+      ✅ READY FOR PERSONALIZED MANUAL OUTREACH PREPARATION
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      Company is ICP qualified, clear of suppression and prior contact, with a verified recipient available.
+      Use the structured briefs below in your external AI tool to draft a consultative, personalized message.
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Action Copy Toolbar -->
+  <div class="card" style="margin-bottom: 1.25rem; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Clipboard Copy Controls</h3>
+        <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">
+          Fast one-click copy to clipboard with instant confirmation. Zero LLM API calls, completely read-only.
+        </p>
+      </div>
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('raw-company-intel-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem;">
+          📋 Copy Company Intelligence
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('raw-13-fields-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem;">
+          📋 Copy Reviewed 13 Fields
+        </button>
+        <button type="button" class="btn btn-primary" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; background-color: #6366f1; border-color: #6366f1;">
+          📋 Copy AI Brief
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden textareas holding exact unembellished text for clipboard copy -->
+  <textarea id="raw-company-intel-text" style="display:none;" readonly>{{ company_intel_text }}</textarea>
+  <textarea id="raw-13-fields-text" style="display:none;" readonly>{{ reviewed_13_fields_text }}</textarea>
+  <textarea id="raw-ai-brief-text" style="display:none;" readonly>{{ ai_brief_text }}</textarea>
+
+  <!-- Visual Panels for Human Review & Fact-Checking -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
+    <!-- Panel 1: AI Prompt Brief Preview -->
+    <div class="card" style="margin-bottom: 0;">
+      <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>AI Brief Preview (External Sales Prompt)</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)">Copy Brief</button>
+      </div>
+      <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ ai_brief_text }}</pre>
+    </div>
+
+    <!-- Panel 2: Factual Company Intelligence Preview -->
+    <div class="card" style="margin-bottom: 0;">
+      <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Factual Company Intelligence</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-company-intel-text').value, this)">Copy Intel</button>
+      </div>
+      <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ company_intel_text }}</pre>
+    </div>
+  </div>
+
+  <!-- Panel 3: Structured 13-Field Register Record -->
+  <div class="card">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Authoritative Reviewed 13-Field Workbook Record</span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-13-fields-text').value, this)">Copy 13 Fields</button>
+    </div>
+    <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 350px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ reviewed_13_fields_text }}</pre>
+  </div>
+</div>
 <div id="section-research" class="workspace-section" style="display: none;">
   {% if latest_snapshot %}
   <div class="card" style="border-left: 4px solid var(--border-focus); margin-bottom: 1.25rem;">
@@ -958,7 +1069,7 @@
 
 <script>
 function switchWorkspaceTab(tabName) {
-  var sections = ['overview', 'research', 'register', 'contacts', 'outreach'];
+  var sections = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
   for (var i = 0; i < sections.length; i++) {
     var sec = document.getElementById('section-' + sections[i]);
     var btn = document.getElementById('tab-btn-' + sections[i]);
@@ -1009,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (draftEl) draftEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    var validTabs = ['overview', 'research', 'register', 'contacts', 'outreach'];
+    var validTabs = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
     if (validTabs.indexOf(rawHash) !== -1) {
       switchWorkspaceTab(rawHash);
     }

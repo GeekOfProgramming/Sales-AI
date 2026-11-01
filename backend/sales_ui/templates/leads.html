@@ -11,35 +11,41 @@
 </div>
 
 <!-- Phase D: Summary KPI Bar -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
   <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid var(--border-focus);">
     <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Total Enrichment-Qualified</div>
     <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: var(--text-primary);">{{ total_qualified }}</div>
     <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Automated ICP qualified candidates</div>
   </div>
 
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #06b6d4;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Research Ready</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #06b6d4;">{{ count_research_ready }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">13 fields reviewed by operator</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #f97316;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Review Required</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #f97316;">{{ count_review_required }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Unreviewed snapshots / records</div>
+  </div>
+
   <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #10b981;">
     <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Ready for Manual Draft</div>
     <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #10b981;">{{ count_draft_ready }}</div>
-    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Policy-eligible &amp; verified/documented</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Eligible with verified recipient</div>
   </div>
 
   <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #f59e0b;">
-    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Contact Verification Required</div>
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Verification Required</div>
     <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #f59e0b;">{{ count_verification_required }}</div>
-    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Qualified, but missing verified recipient</div>
-  </div>
-
-  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #8b5cf6;">
-    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Prior Contact / Active Conv.</div>
-    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #8b5cf6;">{{ count_prior_contact }}</div>
-    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Prior outreach history or live dialogue</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Missing verified contact evidence</div>
   </div>
 
   <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #ef4444;">
-    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Suppressed / Ineligible</div>
-    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #ef4444;">{{ count_suppressed_or_ineligible }}</div>
-    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Authoritative DNC or policy restricted</div>
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Restricted / DNC</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #ef4444;">{{ count_suppressed_or_ineligible + count_prior_contact }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">DNC, prior contact, or policy</div>
   </div>
 </div>
 
@@ -75,11 +81,22 @@
         </select>
       </div>
 
+      <!-- Research Readiness Filter -->
+      <div style="flex: 0 1 180px; min-width: 150px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Research Readiness</label>
+        <select name="research_status" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Research States</option>
+          <option value="research_ready" {% if selected_research == 'research_ready' %}selected{% endif %}>Research Ready (Reviewed)</option>
+          <option value="review_required" {% if selected_research == 'review_required' %}selected{% endif %}>Review Required</option>
+          <option value="unresearched" {% if selected_research == 'unresearched' %}selected{% endif %}>Pending Research</option>
+        </select>
+      </div>
+
       <!-- Outreach Readiness Filter -->
-      <div style="flex: 0 1 210px; min-width: 180px;">
+      <div style="flex: 0 1 200px; min-width: 170px;">
         <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Outreach Readiness</label>
         <select name="readiness" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
-          <option value="">All Readiness States</option>
+          <option value="">All Outreach States</option>
           <option value="draft_ready" {% if selected_readiness == 'draft_ready' %}selected{% endif %}>Ready for Manual Draft</option>
           <option value="verification_required" {% if selected_readiness == 'verification_required' %}selected{% endif %}>Contact Verification Required</option>
           <option value="prior_contact" {% if selected_readiness == 'prior_contact' %}selected{% endif %}>Prior Contact / Active Conv.</option>
@@ -101,7 +118,7 @@
       <!-- Buttons -->
       <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
         <button type="submit" class="btn btn-secondary btn-sm" style="height: 34px; padding: 0 1rem; font-weight: 600;">Apply Filters</button>
-        {% if query or selected_country or selected_tier or selected_readiness or page_size != 25 %}
+        {% if query or selected_country or selected_tier or selected_readiness or selected_research or page_size != 25 %}
           <a href="/sales/leads" class="btn btn-outline-secondary btn-sm" style="height: 34px; line-height: 22px; padding: 0.35rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset</a>
         {% endif %}
       </div>
@@ -129,8 +146,9 @@
           <th>Intent</th>
           <th>BIM Maturity</th>
           <th>Primary Opportunity</th>
+          <th>Research Readiness</th>
           <th>Outreach Readiness</th>
-          <th style="text-align: right; min-width: 220px;">Actions</th>
+          <th style="text-align: right; min-width: 250px;">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -138,7 +156,7 @@
         <tr>
           <td>
             {% if l.candidate_id %}
-            <a href="/sales/candidates/{{ l.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;">
+            <a href="/sales/candidates/{{ l.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;" title="{{ l.raw_company_name }}">
               {{ l.company_name }}
             </a>
             {% else %}
@@ -198,13 +216,24 @@
             {% endif %}
           </td>
           <td>
+            <span class="badge {{ l.research_badge }}" title="{{ l.research_title }}">
+              {{ l.research_label }}
+            </span>
+            {% if l.record_number %}
+              <span style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-top: 2px;">
+                #{{ l.record_number }} ({{ l.verification_status }})
+              </span>
+            {% endif %}
+          </td>
+          <td>
             <span class="badge {{ l.readiness_badge }}" title="{{ l.readiness_title }}">
               {{ l.readiness_label }}
             </span>
           </td>
-          <!-- Phase E: Action Buttons -->
+          <!-- Actions -->
           <td style="text-align: right; white-space: nowrap;">
             {% if l.candidate_id %}
+              <a href="/sales/candidates/{{ l.candidate_id }}#ai-handoff" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background-color: #6366f1; color: white; border: none;" title="Open AI Handoff &amp; Copy Intel">AI Brief 📋</a>
               <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Open Company Workspace">Inspect</a>
               <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="View or Run Research Snapshot">Research</a>
               {% if l.effective_readiness == 'draft_ready' %}
@@ -232,13 +261,13 @@
     </div>
     <div style="display: flex; gap: 0.5rem;">
       {% if has_prev %}
-        <a href="/sales/leads?page={{ prev_page }}&page_size={{ page_size }}&q={{ query or '' }}&country={{ selected_country or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}" class="btn btn-secondary btn-sm">← Previous</a>
+        <a href="/sales/leads?page={{ prev_page }}&page_size={{ page_size }}&q={{ query or '' }}&country={{ selected_country or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}&research_status={{ selected_research or '' }}" class="btn btn-secondary btn-sm">← Previous</a>
       {% else %}
         <span class="btn btn-secondary btn-sm disabled" style="opacity: 0.5; cursor: not-allowed;">← Previous</span>
       {% endif %}
 
       {% if has_next %}
-        <a href="/sales/leads?page={{ next_page }}&page_size={{ page_size }}&q={{ query or '' }}&country={{ selected_country or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}" class="btn btn-secondary btn-sm">Next →</a>
+        <a href="/sales/leads?page={{ next_page }}&page_size={{ page_size }}&q={{ query or '' }}&country={{ selected_country or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}&research_status={{ selected_research or '' }}" class="btn btn-secondary btn-sm">Next →</a>
       {% else %}
         <span class="btn btn-secondary btn-sm disabled" style="opacity: 0.5; cursor: not-allowed;">Next →</span>
       {% endif %}
