@@ -2302,10 +2302,11 @@ async def lead_register_view(
 
     filter_options = reg_store.get_filter_options()
 
-    def build_page_url(target_page: int) -> str:
+    def build_page_url(target_page: int, target_view: Optional[str] = None) -> str:
         qp = dict(request.query_params)
         qp["page"] = str(target_page)
-        qp["view"] = view if view in ("summary", "full") else "summary"
+        v = target_view if target_view in ("summary", "full") else (view if view in ("summary", "full") else "summary")
+        qp["view"] = v
         qp["page_size"] = str(page_size)
         if q:
             qp["q"] = q

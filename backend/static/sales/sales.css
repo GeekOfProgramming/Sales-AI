@@ -687,6 +687,7 @@ textarea.form-control {
 
 /* ==========================================================================
    Operator Console UX: Light Theme & Workflow Design Enhancements
+   Supports both @media (prefers-color-scheme: light) and [data-theme="light"]
    ========================================================================== */
 
 @media (prefers-color-scheme: light) {
@@ -711,7 +712,7 @@ textarea.form-control {
     color: var(--text-primary);
   }
 
-  .nav-bar, .app-header {
+  .nav-bar, .app-header, .app-header-unified {
     background-color: #ffffff;
     border-bottom: 1px solid #cbd5e1;
   }
@@ -769,6 +770,100 @@ textarea.form-control {
     color: #1e293b;
     border: 1px solid #e2e8f0;
   }
+}
+
+:root[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #f1f5f9;
+  --border-color: #cbd5e1;
+  --border-focus: #2563eb;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .nav-bar, 
+[data-theme="light"] .app-header, 
+[data-theme="light"] .app-header-unified {
+  background-color: #ffffff;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .nav-group-title {
+  color: #64748b;
+}
+
+[data-theme="light"] .card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .metric-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .data-table th, 
+[data-theme="light"] .table th {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-bottom: 2px solid #cbd5e1;
+}
+
+[data-theme="light"] .data-table td, 
+[data-theme="light"] .table td {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .form-control, 
+[data-theme="light"] input[type="text"], 
+[data-theme="light"] input[type="search"], 
+[data-theme="light"] input[type="url"], 
+[data-theme="light"] input[type="email"], 
+[data-theme="light"] select, 
+[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #94a3b8 !important;
+}
+
+[data-theme="light"] .form-control:focus, 
+[data-theme="light"] input:focus, 
+[data-theme="light"] select:focus, 
+[data-theme="light"] textarea:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) !important;
+}
+
+[data-theme="light"] .badge-secondary, 
+[data-theme="light"] .badge-muted {
+  background-color: #e2e8f0;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .draft-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .draft-body-preview {
+  background: #f8fafc;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
 }
 
 /* Operational Workflow Grouped Nav Bar */

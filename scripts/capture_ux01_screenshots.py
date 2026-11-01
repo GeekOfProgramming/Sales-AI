@@ -37,6 +37,7 @@ PAGES_TO_CAPTURE = [
     ("lead_register_full", "http://127.0.0.1:8899/sales/register?view=full"),
     ("candidate_detail", "http://127.0.0.1:8899/sales/candidates/cand:domain:bs-eng.net"),
     ("company_research_review", "http://127.0.0.1:8899/sales/candidates/cand:domain:bs-eng.net/research"),
+    ("lead_register_edit", "http://127.0.0.1:8899/sales/register/cand:domain:bs-eng.net"),
 ]
 
 

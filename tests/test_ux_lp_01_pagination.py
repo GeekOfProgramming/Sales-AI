@@ -178,13 +178,14 @@ def test_summary_and_workbook_views(test_client):
     assert "Company &amp; Website" in resp_summary.text or "Company & Website" in resp_summary.text
     assert "Status / Provenance" in resp_summary.text
 
-    # Full Workbook View
+    # Full Workbook View (Canonical 13 fields)
     resp_full = test_client.get("/sales/register?view=full")
     assert resp_full.status_code == 200
     assert "Lead Register 13-Field Workbook" in resp_full.text
-    assert "1. Company" in resp_full.text
-    assert "10. BIM Tools" in resp_full.text
-    assert "13. Status" in resp_full.text
+    assert "1. Row #" in resp_full.text
+    assert "4. Company &amp; Legal Identity" in resp_full.text or "4. Company & Legal Identity" in resp_full.text
+    assert "10. Descriptions &amp; Operator Notes" in resp_full.text or "10. Descriptions & Operator Notes" in resp_full.text
+    assert "13. Contact Email Addresses" in resp_full.text
     assert "sticky-col-right" in resp_full.text
 
 
