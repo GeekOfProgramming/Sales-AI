@@ -68,6 +68,7 @@ class ReviewStore:
                     approval_status TEXT NOT NULL,
                     send_status TEXT NOT NULL,
                     outreach_status TEXT NOT NULL,
+                    candidate_id TEXT,
                     content_hash TEXT NOT NULL,
                     approved_content_hash TEXT,
                     reviewer TEXT,
@@ -156,6 +157,10 @@ class ReviewStore:
             if "sender_name" not in col_names:
                 conn.execute("ALTER TABLE drafts ADD COLUMN sender_name TEXT")
 
+            if "candidate_id" not in col_names:
+                conn.execute("ALTER TABLE drafts ADD COLUMN candidate_id TEXT")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_drafts_candidate ON drafts(candidate_id)")
+
 
             # Additive migration: check if unique indexes for manual_outreach_log can be created safely
             try:
@@ -206,10 +211,10 @@ class ReviewStore:
                     subject, body, service_used, personalization_notes,
                     evidence_refs, source_job_urls, language, tone,
                     prompt_version, generation_model,
-                    approval_status, send_status, outreach_status,
+                    approval_status, send_status, outreach_status, candidate_id,
                     content_hash, approved_content_hash, reviewer, review_note,
                     created_at, updated_at, approved_at, sent_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.draft_id,
@@ -234,6 +239,7 @@ class ReviewStore:
                     draft.approval_status,
                     draft.send_status,
                     draft.outreach_status,
+                    getattr(draft, "candidate_id", None),
                     draft.content_hash,
                     draft.approved_content_hash,
                     draft.reviewer,
@@ -288,6 +294,15 @@ class ReviewStore:
         if "recipient_email" in filters and filters["recipient_email"]:
             clauses.append("recipient_email = ?")
             params.append(filters["recipient_email"].strip().lower())
+        if "candidate_id" in filters and filters["candidate_id"]:
+            cid = filters["candidate_id"]
+            lead_ids = filters.get("lead_ids") or []
+            # Candidate matching: check candidate_id column or lead_id matching candidate_id or valid lead_ids
+            all_match_ids = list(dict.fromkeys([cid] + lead_ids))
+            placeholders = ", ".join("?" for _ in all_match_ids)
+            clauses.append(f"(candidate_id = ? OR lead_id IN ({placeholders}))")
+            params.append(cid)
+            params.extend(all_match_ids)
 
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
@@ -583,6 +598,7 @@ class ReviewStore:
             approval_status=row["approval_status"],
             send_status=row["send_status"],
             outreach_status=row["outreach_status"],
+            candidate_id=row["candidate_id"] if "candidate_id" in row.keys() else None,
             content_hash=row["content_hash"],
             approved_content_hash=row["approved_content_hash"],
             reviewer=row["reviewer"],

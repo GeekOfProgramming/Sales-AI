@@ -172,12 +172,19 @@ class TimelineService:
                     )
                 )
 
-        # 8. Draft review events & sends from Phase 9 (match by candidate_id or company_name)
+        # 8. Draft review events & sends from Phase 9 (strictly isolated by candidate_id and candidate domain)
         try:
+            cand_domain = getattr(candidate, "company_domain", None) or getattr(candidate, "domain", None)
+            valid_lead_ids = [candidate_id]
+            if cand_domain:
+                valid_lead_ids.append(f"domain:{cand_domain.lower()}")
+            placeholders = ", ".join("?" for _ in valid_lead_ids)
+
             with self.review_store._get_connection() as conn:
+                query_params = [candidate_id] + valid_lead_ids
                 drafts = conn.execute(
-                    "SELECT draft_id, revision, subject, approval_status, send_status, reviewer, created_at, approved_at, sent_at FROM drafts WHERE lead_id = ? OR lead_id = ?",
-                    (candidate_id, company_name),
+                    f"SELECT draft_id, revision, subject, approval_status, send_status, reviewer, created_at, approved_at, sent_at FROM drafts WHERE candidate_id = ? OR lead_id IN ({placeholders})",
+                    query_params,
                 ).fetchall()
 
                 for d in drafts:
@@ -233,11 +240,11 @@ class TimelineService:
 
                 # Send attempts (e.g. dry_run)
                 attempts = conn.execute(
-                    """SELECT sa.attempt_id, sa.draft_id, sa.revision, sa.status, sa.attempted_at, sa.provider 
+                    f"""SELECT sa.attempt_id, sa.draft_id, sa.revision, sa.status, sa.attempted_at, sa.provider 
                        FROM send_attempts sa 
                        JOIN drafts d ON sa.draft_id = d.draft_id AND sa.revision = d.revision 
-                       WHERE d.lead_id = ? OR d.lead_id = ?""",
-                    (candidate_id, company_name),
+                       WHERE d.candidate_id = ? OR d.lead_id IN ({placeholders})""",
+                    query_params,
                 ).fetchall()
                 for a in attempts:
                     if a["status"] == "dry_run_success":

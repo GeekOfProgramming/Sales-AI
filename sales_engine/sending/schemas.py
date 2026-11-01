@@ -45,6 +45,8 @@ class StoredDraft(BaseModel):
     send_status: SendStatus = Field(default="not_sent", description="Send delivery status.")
     outreach_status: OutreachStatus = Field(default="draft_ready", description="Workflow outreach status.")
 
+    candidate_id: Optional[str] = Field(default=None, description='Authoritative candidate identifier.')
+
     content_hash: str = Field(..., description="Deterministic SHA-256 fingerprint of current content.")
     approved_content_hash: Optional[str] = Field(default=None, description="Fingerprint stored at approval.")
 

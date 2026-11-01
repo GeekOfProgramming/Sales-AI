@@ -3677,7 +3677,14 @@ async def candidate_detail_view(
         snap_store=snap_store,
     )
 
-    company_drafts, _ = svcs["rev_store"].list_drafts(filters={"candidate_id": candidate_id}, limit=50)
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    valid_lead_ids = [candidate_id]
+    if cand_domain:
+        valid_lead_ids.append(f"domain:{cand_domain.lower()}")
+    company_drafts, _ = svcs["rev_store"].list_drafts(
+        filters={"candidate_id": candidate_id, "lead_ids": valid_lead_ids},
+        limit=50
+    )
 
     # Verification state summaries
     verified_contacts = [c for c in contacts_view if c.get("email_status") == "verified"]
@@ -4557,6 +4564,7 @@ async def create_manual_draft_action(
     draft_dict = {
         "draft_id": draft_id,
         "revision": 1,
+        "candidate_id": candidate_id,
         "lead_id": lead_id,
         "contact_id": resolved_contact_id or f"contact:{clean_email}",
         "recipient_name": resolved_contact_name or "Contact",
