@@ -14,6 +14,7 @@ Targeted regression tests for UX-02.1 & UX-02.2:
   - Renders all 4 pipeline stages (Research, Lead Register, Contact Status, Outreach State).
   - Safe navigation, zero crawling on load, zero email sending.
 """
+import sqlite3
 import pytest
 from starlette.testclient import TestClient
 
@@ -286,3 +287,219 @@ def test_c_workflow_pipeline_rendering(dual_db_env):
     assert "Not Started" in html
     assert "Not Linked" in html
     assert "Missing" in html
+
+
+# ============================================================================
+# UX-02.2a Defect Closure Tests (1. DB Safety, 2. Documented UI, 3. Approved Draft, 4. Separate Eligibility)
+# ============================================================================
+
+def test_ux02_2a_crm_db_never_initializes_research_tables(dual_db_env):
+    """
+    Requirement 1: Research Snapshot Storage Safety.
+    Visiting Candidate Detail MUST NOT initialize research_snapshots or page_evidences
+    tables in the CRM / Candidate database.
+    """
+    client, c_store, reg_store, rev_store, snap_store, crm_db_path, research_db_path, csrf_token, headers = dual_db_env
+
+    cid = "cand:domain:db-safety-check.it"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="DB Safety Architecture",
+        company_domain="db-safety-check.it",
+        country="Italy",
+        discovery_status="qualified",
+    )
+    c_store.save_candidate(cand)
+
+    # Confirm CRM database currently does NOT have research_snapshots table
+    with sqlite3.connect(crm_db_path) as conn:
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        assert "research_snapshots" not in tables
+        assert "page_evidences" not in tables
+
+    # Execute GET request to candidate detail view
+    resp = client.get(f"/sales/candidates/{cid}")
+    assert resp.status_code == 200
+
+    # Verify CRM database STILL has zero research tables initialized
+    with sqlite3.connect(crm_db_path) as conn:
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        assert "research_snapshots" not in tables
+        assert "page_evidences" not in tables
+
+
+def test_ux02_2a_documented_contact_in_ui_and_draft_creation(dual_db_env):
+    """
+    Requirement 2: Documented Contact UI Eligibility.
+    A company with an explicit Lead Register email (and no pre-existing candidate_contact)
+    displays that recipient as selectable & documented, and drafting completes successfully.
+    """
+    client, c_store, reg_store, rev_store, snap_store, _, _, csrf_token, headers = dual_db_env
+
+    cid = "cand:domain:doc-ui-test.it"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="Documented UI Studio",
+        company_domain="doc-ui-test.it",
+        country="Italy",
+        discovery_status="qualified",
+    )
+    c_store.save_candidate(cand)
+
+    # Document in 13-Field Register
+    reg_rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number=789,
+        company_name="Documented UI Studio",
+        responsible_person="Arch. Matteo Bianchi",
+        contact_email_addresses="matteo.bianchi@doc-ui-test.it",
+        verification_status="OPERATOR_REVIEWED",
+    )
+    reg_store.save_record(reg_rec)
+
+    # GET workspace view
+    resp = client.get(f"/sales/candidates/{cid}")
+    assert resp.status_code == 200
+    html = resp.text
+
+    # Check recipient select dropdown contains documented recipient
+    assert "matteo.bianchi@doc-ui-test.it" in html
+    assert "[Documented in Lead Register / Not Independently Verified]" in html
+    assert "Arch. Matteo Bianchi" in html
+
+    # Submit manual draft creation using this documented recipient without pre-existing contact
+    post_resp = client.post(f"/sales/candidates/{cid}/create-manual-draft", data={
+        "contact_id": "contact:matteo.bianchi@doc-ui-test.it",
+        "recipient_email": "matteo.bianchi@doc-ui-test.it",
+        "recipient_name": "Arch. Matteo Bianchi",
+        "subject": "BIM Implementation",
+        "body": "Gentile Arch. Bianchi, vorremmo presentare pyBIM.",
+        "csrf_token": csrf_token,
+    }, headers=headers, follow_redirects=False)
+
+    assert post_resp.status_code == 303
+    assert "/sales/drafts/draft:manual:" in post_resp.headers["location"]
+
+    # Verify contact was saved with documented evidence provenance without fabricating verified status
+    saved_c = c_store.get_contact_by_id("matteo.bianchi@doc-ui-test.it", candidate_id=cid)
+    assert saved_c is not None
+    assert saved_c.email_status != "verified"
+    assert saved_c.provider == "lead_register_evidence"
+
+
+def test_ux02_2a_approved_draft_and_pending_draft_pipeline_states(dual_db_env):
+    """
+    Requirement 3: Outreach Stage Pipeline correctly detects Draft Pending and Approved Draft
+    using Jinja namespace and checks precedence (restricted > dispatch > approved > pending > eligible).
+    """
+    client, c_store, reg_store, rev_store, snap_store, _, _, csrf_token, headers = dual_db_env
+
+    cid = "cand:domain:pipeline-status.it"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="Status Check Studio",
+        company_domain="pipeline-status.it",
+        country="Italy",
+        discovery_status="qualified",
+    )
+    c_store.save_candidate(cand)
+
+    # Add a verified contact so company is draft eligible
+    cont = ContactCandidate(
+        contact_id="cont:stat:01",
+        candidate_id=cid,
+        full_name="Elena Neri",
+        work_email="elena@pipeline-status.it",
+        email_status="verified",
+        email_confidence=100,
+    )
+    c_store.save_contact(cont, candidate_id=cid)
+
+    # 1. State: Draft Eligible (no drafts yet)
+    resp = client.get(f"/sales/candidates/{cid}")
+    assert resp.status_code == 200
+    assert "Draft Eligible" in resp.text
+
+    # 2. Add pending review draft -> State: Draft Pending
+    pending_draft = StoredDraft(
+        draft_id="draft:pending:01",
+        candidate_id=cid,
+        lead_id=cid,
+        contact_id=cont.contact_id,
+        recipient_email=cont.work_email,
+        recipient_name=cont.full_name,
+        subject="Intro",
+        body="Body",
+        content_hash="hash1",
+        approval_status="pending_review",
+        outreach_status="draft_ready",
+    )
+    rev_store.save_draft(pending_draft)
+
+    resp2 = client.get(f"/sales/candidates/{cid}")
+    assert resp2.status_code == 200
+    assert "Draft Pending" in resp2.text
+
+    # 3. Add approved draft alongside pending -> State: Approved Draft (approved takes precedence)
+    approved_draft = StoredDraft(
+        draft_id="draft:approved:02",
+        candidate_id=cid,
+        lead_id=cid,
+        contact_id=cont.contact_id,
+        recipient_email=cont.work_email,
+        recipient_name=cont.full_name,
+        subject="Intro 2",
+        body="Body 2",
+        content_hash="hash2",
+        approval_status="approved",
+        outreach_status="approved",
+    )
+    rev_store.save_draft(approved_draft)
+
+    resp3 = client.get(f"/sales/candidates/{cid}")
+    assert resp3.status_code == 200
+    assert "Approved Draft" in resp3.text
+
+
+def test_ux02_2a_separate_company_eligibility_from_recipient_readiness(dual_db_env):
+    """
+    Requirement 4: Accurate Draft Readiness.
+    A company that is qualified but has NO verified contact and NO documented email
+    must NOT show 'ELIGIBLE FOR DRAFT' or 'Draft Eligible'.
+    It must display 'CONTACT VERIFICATION REQUIRED' / 'Verification Required'.
+    """
+    client, c_store, reg_store, rev_store, snap_store, _, _, csrf_token, headers = dual_db_env
+
+    cid = "cand:domain:no-recipient.it"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="No Recipient Studio",
+        company_domain="no-recipient.it",
+        country="Italy",
+        discovery_status="qualified",
+    )
+    c_store.save_candidate(cand)
+
+    # Add only an UNVERIFIED contact
+    cont = ContactCandidate(
+        contact_id="cont:unverif:01",
+        candidate_id=cid,
+        full_name="Lorenzo Gialli",
+        work_email="lorenzo@no-recipient.it",
+        email_status="unverified",
+        email_confidence=10,
+    )
+    c_store.save_contact(cont, candidate_id=cid)
+
+    resp = client.get(f"/sales/candidates/{cid}")
+    assert resp.status_code == 200
+    html = resp.text
+
+    # Pipeline Step 4 must NOT be Draft Eligible
+    assert "Verification Required" in html
+    # Safeguard card in Outreach tab must show CONTACT VERIFICATION REQUIRED
+    assert "CONTACT VERIFICATION REQUIRED" in html
+    assert "Recipient verification required:" in html
+    # Composer box must NOT be rendered when can_generate_draft is False
+    assert "Stage Manual Draft to Review Queue" not in html
+

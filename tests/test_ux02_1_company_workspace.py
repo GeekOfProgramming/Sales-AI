@@ -23,14 +23,16 @@ from backend.sales_ui.router import get_console_services
 def isolated_app_client(tmp_path, monkeypatch):
     """Provides a TestClient connected to isolated databases in tmp_path."""
     db_file = str(tmp_path / "test_workspace.db")
+    research_db = str(tmp_path / "test_research.db")
     monkeypatch.setenv("SALES_OUTREACH_DB", db_file)
     monkeypatch.setenv("SALESAI_DB_PATH", db_file)
     monkeypatch.setenv("SALESAI_CANDIDATES_DB", db_file)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", research_db)
     
     # Initialize isolated stores
     cand_store = CandidateStore(db_path=db_file)
     reg_store = LeadRegisterStore(db_path=db_file)
-    snap_store = ResearchSnapshotStore(db_path=db_file)
+    snap_store = ResearchSnapshotStore(db_path=research_db)
     rev_store = ReviewStore(db_path=db_file)
 
     from backend.main import app

@@ -2847,49 +2847,86 @@ async def candidate_detail_view(
         timeline=timeline_events,
     )
 
-    # Determine draft generation eligibility (P10_5-FINAL-005 / 006)
-    can_generate_draft = is_candidate_outreach_eligible(cand) and not is_supp and not is_contacted
+    # Determine company-level outreach qualification and policy eligibility
+    company_outreach_eligible = is_candidate_outreach_eligible(cand) and not is_supp and not is_contacted
 
     raw_contacts = svcs["cand_store"].get_contacts_for_candidate(candidate_id)
-    contacts_view = []
-    for c in raw_contacts:
-        st = (getattr(c, "email_status", None) or "unknown").strip().lower()
-        w_email = (getattr(c, "work_email", None) or "").strip().lower()
-        is_usable = bool(w_email and EMAIL_REGEX.match(w_email) and st == "verified")
-        contacts_view.append({
-            "contact_id": getattr(c, "contact_id", None) or f"email:{w_email}",
-            "full_name": getattr(c, "full_name", None) or f"{c.first_name or ''} {c.last_name or ''}".strip() or "Unnamed Contact",
-            "job_title": getattr(c, "job_title", None) or "Unknown Title",
-            "work_email": w_email,
-            "email_status": st,
-            "is_eligible": is_usable,
-        })
 
-    # Also query confirmed manual outreach dispatches for this candidate
-    candidate_manual_logs = svcs["rev_store"].list_manual_outreach_logs(candidate_id=candidate_id, limit=50)
-
-    # UX-02.1 Unified Company Workspace: Authoritative Lead Register, Research Snapshot, and Draft integrations
+    # UX-02.1 / UX-02.2 Unified Company Workspace: Authoritative Lead Register, Research Snapshot, and Draft integrations
     from sales_engine.leads.register_store import LeadRegisterStore
     from sales_engine.research.research_store import ResearchSnapshotStore
 
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
     company_lead_record = reg_store.get_explicit_record(candidate_id)
 
+    # Parse authoritative documented emails from explicit 13-field Lead Register record
+    reg_emails = []
+    if company_lead_record and company_lead_record.contact_email_addresses and company_lead_record.contact_email_addresses.strip() != "Not Found":
+        reg_emails = [e.strip().lower() for e in company_lead_record.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
+
+    # Determine recipient-level draft readiness (verified contacts OR documented in Lead Register)
+    contacts_view = []
+    existing_emails = set()
+    has_verified_or_documented_recipient = False
+
+    for c in raw_contacts:
+        st = (getattr(c, "email_status", None) or "unknown").strip().lower()
+        w_email = (getattr(c, "work_email", None) or "").strip().lower()
+        if w_email:
+            existing_emails.add(w_email)
+
+        # A contact is eligible for outreach if it is explicitly verified OR matches documented register evidence
+        is_verified = (st == "verified")
+        is_doc = (w_email in reg_emails)
+        is_usable = bool(w_email and EMAIL_REGEX.match(w_email) and (is_verified or is_doc))
+        if is_usable:
+            has_verified_or_documented_recipient = True
+
+        status_display = "verified" if is_verified else ("documented" if is_doc else st)
+
+        contacts_view.append({
+            "contact_id": getattr(c, "contact_id", None) or f"email:{w_email}",
+            "full_name": getattr(c, "full_name", None) or f"{c.first_name or ''} {c.last_name or ''}".strip() or "Unnamed Contact",
+            "job_title": getattr(c, "job_title", None) or "Unknown Title",
+            "work_email": w_email,
+            "email_status": st,
+            "status_display": status_display,
+            "is_verified": is_verified,
+            "is_documented": is_doc,
+            "is_eligible": is_usable,
+        })
+
+    # If the 13-Field Lead Register contains documented emails that aren't yet in candidate_contacts,
+    # include them as selectable documented recipients
+    for doc_email in reg_emails:
+        if doc_email not in existing_emails and EMAIL_REGEX.match(doc_email):
+            has_verified_or_documented_recipient = True
+            doc_name = company_lead_record.responsible_person or "Lead Register Contact"
+            if doc_name == "Not Found":
+                doc_name = "Lead Register Contact"
+            contacts_view.append({
+                "contact_id": f"contact:{doc_email}",
+                "full_name": doc_name,
+                "job_title": "Documented Contact",
+                "work_email": doc_email,
+                "email_status": "unverified",
+                "status_display": "documented",
+                "is_verified": False,
+                "is_documented": True,
+                "is_eligible": True,
+            })
+
+    # Separate company-level outreach eligibility from recipient-level draft readiness (Defect 4)
+    # can_generate_draft requires BOTH company policy eligibility AND an available verified/documented recipient
+    can_generate_draft = company_outreach_eligible and has_verified_or_documented_recipient
+
+    # Also query confirmed manual outreach dispatches for this candidate
+    candidate_manual_logs = svcs["rev_store"].list_manual_outreach_logs(candidate_id=candidate_id, limit=50)
+
     # Use authoritative ResearchSnapshotStore configuration respecting SALESAI_RESEARCH_CACHE_DB
-    # If not explicitly configured, fallback to svcs snapshot store if available or default
     snap_store = ResearchSnapshotStore()
     latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
     historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
-    if not latest_snapshot and getattr(svcs["cand_store"], "db_path", None) != snap_store.db_path:
-        # Fallback check if candidate store DB also holds snapshots (e.g. unified test DBs)
-        try:
-            cand_snap_store = ResearchSnapshotStore(svcs["cand_store"].db_path)
-            cand_snap = cand_snap_store.get_latest_snapshot(candidate_id)
-            if cand_snap:
-                latest_snapshot = cand_snap
-                historical_snapshots = cand_snap_store.list_snapshots_for_candidate(candidate_id)
-        except Exception:
-            pass
 
     company_drafts, _ = svcs["rev_store"].list_drafts(filters={"candidate_id": candidate_id}, limit=50)
 
@@ -2915,6 +2952,8 @@ async def candidate_detail_view(
             "company_drafts": company_drafts,
             "manual_logs": candidate_manual_logs,
             "email_send_enabled": is_email_send_enabled(),
+            "company_outreach_eligible": company_outreach_eligible,
+            "has_verified_or_documented_recipient": has_verified_or_documented_recipient,
             "can_generate_draft": can_generate_draft,
             "is_suppressed": is_supp,
             "is_previously_contacted": is_contacted,
@@ -3634,24 +3673,36 @@ async def create_manual_draft_action(
         # Check contact exists strictly for THIS candidate (no cross-candidate assignment)
         contact_by_cid = svcs["cand_store"].get_contact_by_id(target_cid, candidate_id=candidate_id)
         if not contact_by_cid:
-            # Check if contact belongs to a different candidate
-            any_c = svcs["cand_store"].get_contact_by_id(target_cid)
-            if any_c:
+            # Check if this contact ID represents a documented recipient from the 13-field register
+            from sales_engine.leads.register_store import LeadRegisterStore
+            reg_store_pre = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+            reg_rec_pre = reg_store_pre.get_explicit_record(candidate_id)
+            reg_emails_pre = []
+            if reg_rec_pre and reg_rec_pre.contact_email_addresses and reg_rec_pre.contact_email_addresses.strip() != "Not Found":
+                reg_emails_pre = [e.strip().lower() for e in reg_rec_pre.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
+
+            if clean_email in reg_emails_pre and target_cid in (f"contact:{clean_email}", f"doc:{clean_email}", clean_email):
+                matched_contact = None
+            else:
+                # Check if contact belongs to a different candidate
+                any_c = svcs["cand_store"].get_contact_by_id(target_cid)
+                if any_c:
+                    return RedirectResponse(
+                        f"/sales/candidates/{candidate_id}?error=Cross-candidate contact reassignment is rejected.",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
                 return RedirectResponse(
-                    f"/sales/candidates/{candidate_id}?error=Cross-candidate contact reassignment is rejected.",
+                    f"/sales/candidates/{candidate_id}?error=Specified contact ID was not found for this candidate.",
                     status_code=status.HTTP_303_SEE_OTHER,
                 )
-            return RedirectResponse(
-                f"/sales/candidates/{candidate_id}?error=Specified contact ID was not found for this candidate.",
-                status_code=status.HTTP_303_SEE_OTHER,
-            )
-        # Check email matches the contact
-        if contact_by_cid.work_email and contact_by_cid.work_email.strip().lower() != clean_email:
-            return RedirectResponse(
-                f"/sales/candidates/{candidate_id}?error=Recipient email does not match specified contact record.",
-                status_code=status.HTTP_303_SEE_OTHER,
-            )
-        matched_contact = contact_by_cid
+        else:
+            # Check email matches the contact
+            if contact_by_cid.work_email and contact_by_cid.work_email.strip().lower() != clean_email:
+                return RedirectResponse(
+                    f"/sales/candidates/{candidate_id}?error=Recipient email does not match specified contact record.",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            matched_contact = contact_by_cid
     else:
         # Look up existing contact by email for this candidate
         contact_by_email = svcs["cand_store"].get_contact_by_id(clean_email, candidate_id=candidate_id)
@@ -5038,8 +5089,7 @@ async def settings_view(request: Request):
     research_storage_available = False
     try:
         from sales_engine.research.research_store import ResearchSnapshotStore
-        store_path = svcs.get("cand_store").db_path if "cand_store" in svcs else "candidates.db"
-        snap_store = ResearchSnapshotStore(store_path)
+        snap_store = ResearchSnapshotStore()
         research_storage_available = True
     except Exception:
         research_storage_available = False
