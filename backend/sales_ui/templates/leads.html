@@ -6,24 +6,116 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Qualified Leads</h1>
-    <p class="page-subtitle">Candidates that have met automated ICP qualification criteria (Qualified for Enrichment). Human review &amp; verification required before outreach.</p>
+    <p class="page-subtitle">Companies meeting automated ICP qualification criteria (Qualified for Enrichment). Human review and contact verification required before outreach drafting.</p>
   </div>
 </div>
 
+<!-- Phase D: Summary KPI Bar -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid var(--border-focus);">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Total Enrichment-Qualified</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: var(--text-primary);">{{ total_qualified }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Automated ICP qualified candidates</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #10b981;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Ready for Manual Draft</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #10b981;">{{ count_draft_ready }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Policy-eligible &amp; verified/documented</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #f59e0b;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Contact Verification Required</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #f59e0b;">{{ count_verification_required }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Qualified, but missing verified recipient</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #8b5cf6;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Prior Contact / Active Conv.</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #8b5cf6;">{{ count_prior_contact }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Prior outreach history or live dialogue</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #ef4444;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Suppressed / Ineligible</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #ef4444;">{{ count_suppressed_or_ineligible }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Authoritative DNC or policy restricted</div>
+  </div>
+</div>
+
+<!-- Phase D: Compact Filter Toolbar & Table Card -->
 <div class="card">
-  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-    <div>
-      <span>Qualified Leads ({{ leads|length }})</span>
-      <span class="badge badge-success" style="margin-left: 0.5rem;">Enrichment Qualified</span>
-    </div>
-    <form method="GET" action="/sales/leads" style="display: flex; gap: 0.5rem; margin: 0;">
-      <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company or domain..." class="form-control" style="width: 220px; font-size: 0.85rem; padding: 0.35rem 0.6rem;">
-      <button type="submit" class="btn btn-secondary btn-sm">Search</button>
-      {% if query %}
-        <a href="/sales/leads" class="btn btn-outline-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.6rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset</a>
-      {% endif %}
+  <div style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
+    <form method="GET" action="/sales/leads" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 0;">
+      <!-- Search Input -->
+      <div style="flex: 1 1 200px; min-width: 180px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Search Company / Domain</label>
+        <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company or domain..." class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+      </div>
+
+      <!-- Country Filter -->
+      <div style="flex: 0 1 150px; min-width: 130px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Country</label>
+        <select name="country" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Countries</option>
+          {% for c_name in available_countries %}
+            <option value="{{ c_name }}" {% if selected_country == c_name %}selected{% endif %}>{{ c_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Tier Filter -->
+      <div style="flex: 0 1 140px; min-width: 120px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Company Tier</label>
+        <select name="tier" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Tiers</option>
+          {% for t_name in available_tiers %}
+            <option value="{{ t_name }}" {% if selected_tier == t_name %}selected{% endif %}>{{ t_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Outreach Readiness Filter -->
+      <div style="flex: 0 1 210px; min-width: 180px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Outreach Readiness</label>
+        <select name="readiness" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Readiness States</option>
+          <option value="draft_ready" {% if selected_readiness == 'draft_ready' %}selected{% endif %}>Ready for Manual Draft</option>
+          <option value="verification_required" {% if selected_readiness == 'verification_required' %}selected{% endif %}>Contact Verification Required</option>
+          <option value="prior_contact" {% if selected_readiness == 'prior_contact' %}selected{% endif %}>Prior Contact / Active Conv.</option>
+          <option value="suppressed_or_ineligible" {% if selected_readiness == 'suppressed_or_ineligible' %}selected{% endif %}>Suppressed / Ineligible</option>
+        </select>
+      </div>
+
+      <!-- Page Size -->
+      <div style="flex: 0 1 110px; min-width: 90px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Page Size</label>
+        <select name="page_size" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="10" {% if page_size == 10 %}selected{% endif %}>10 / page</option>
+          <option value="25" {% if page_size == 25 %}selected{% endif %}>25 / page</option>
+          <option value="50" {% if page_size == 50 %}selected{% endif %}>50 / page</option>
+          <option value="100" {% if page_size == 100 %}selected{% endif %}>100 / page</option>
+        </select>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+        <button type="submit" class="btn btn-secondary btn-sm" style="height: 34px; padding: 0 1rem; font-weight: 600;">Apply Filters</button>
+        {% if query or selected_country or selected_tier or selected_readiness or page_size != 25 %}
+          <a href="/sales/leads" class="btn btn-outline-secondary btn-sm" style="height: 34px; line-height: 22px; padding: 0.35rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset</a>
+        {% endif %}
+      </div>
     </form>
   </div>
+
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+    <div>
+      <span>Qualified Leads ({{ total_qualified }})</span>
+      <span class="badge badge-success" style="margin-left: 0.5rem;">Enrichment Qualified</span>
+      <span class="badge badge-secondary" style="margin-left: 0.25rem;">Showing {{ leads|length }} of {{ total_filtered }} matching</span>
+    </div>
+  </div>
+
   {% if leads %}
   <div class="table-responsive">
     <table class="data-table crm-table">
@@ -38,16 +130,21 @@
           <th>BIM Maturity</th>
           <th>Primary Opportunity</th>
           <th>Outreach Readiness</th>
-          <th style="text-align: right;">Action</th>
+          <th style="text-align: right; min-width: 220px;">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for l in leads %}
         <tr>
           <td>
+            {% if l.candidate_id %}
             <a href="/sales/candidates/{{ l.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;">
               {{ l.company_name }}
             </a>
+            {% else %}
+            <span style="font-weight: 700; color: var(--text-primary);">{{ l.company_name }}</span>
+            <span class="badge badge-danger" style="font-size: 0.68rem; margin-left: 0.25rem;">Invalid ID</span>
+            {% endif %}
             {% if l.is_previously_contacted %}
             <span class="badge badge-previously-contacted" style="font-size: 0.68rem; margin-left: 0.25rem;">Previously Contacted</span>
             {% endif %}
@@ -64,7 +161,7 @@
           </td>
           <td>{{ l.country }}</td>
           <td>
-            <span class="badge {% if l.tier == 'tier_1' %}badge-primary{% elif l.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}">
+            <span class="badge {% if l.tier == 'Tier 1' %}badge-primary{% elif l.tier == 'Tier 2' %}badge-info{% else %}badge-muted{% endif %}">
               {{ l.tier }}
             </span>
           </td>
@@ -105,18 +202,53 @@
               {{ l.readiness_label }}
             </span>
           </td>
+          <!-- Phase E: Action Buttons -->
           <td style="text-align: right; white-space: nowrap;">
-            <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
-            <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);">Research</a>
+            {% if l.candidate_id %}
+              <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Open Company Workspace">Inspect</a>
+              <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="View or Run Research Snapshot">Research</a>
+              {% if l.effective_readiness == 'draft_ready' %}
+                <a href="/sales/candidates/{{ l.candidate_id }}#manual-draft" class="btn btn-success btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background-color: #10b981; color: white; border: none;" title="Prepare Offline Manual Draft">Prepare Draft</a>
+              {% elif l.effective_readiness == 'verification_required' %}
+                <a href="/sales/candidates/{{ l.candidate_id }}#contacts" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: #f59e0b;" title="Verify Contact Evidence">Verify Contact</a>
+              {% else %}
+                <span class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.6; cursor: not-allowed;" title="{{ l.readiness_title }}">Restrictions</span>
+              {% endif %}
+            {% else %}
+              <span class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.6; cursor: not-allowed;" title="Record has invalid or empty candidate ID">Invalid Record</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  <!-- Pagination Controls -->
+  {% if total_pages > 1 %}
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.85rem;">
+    <div style="color: var(--text-secondary);">
+      Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong> ({{ total_filtered }} total leads)
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      {% if has_prev %}
+        <a href="/sales/leads?page={{ prev_page }}&page_size={{ page_size }}&q={{ query or '' }}&country={{ selected_country or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}" class="btn btn-secondary btn-sm">← Previous</a>
+      {% else %}
+        <span class="btn btn-secondary btn-sm disabled" style="opacity: 0.5; cursor: not-allowed;">← Previous</span>
+      {% endif %}
+
+      {% if has_next %}
+        <a href="/sales/leads?page={{ next_page }}&page_size={{ page_size }}&q={{ query or '' }}&country={{ selected_country or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}" class="btn btn-secondary btn-sm">Next →</a>
+      {% else %}
+        <span class="btn btn-secondary btn-sm disabled" style="opacity: 0.5; cursor: not-allowed;">Next →</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   {% else %}
   <div class="empty-state">
-    <p class="empty-state-text">No companies currently meet ICP qualification criteria.</p>
+    <p class="empty-state-text">No companies currently match the selected qualification or filter criteria.</p>
   </div>
   {% endif %}
 </div>

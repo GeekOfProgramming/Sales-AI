@@ -214,8 +214,8 @@
           <tr><td style="width: 38%; font-weight: 600;">Fit Assessment:</td><td><span class="badge badge-{% if detail.candidate.fit == 'high' %}success{% elif detail.candidate.fit == 'medium' %}info{% else %}secondary{% endif %}">{{ detail.candidate.fit|upper }}</span></td></tr>
           <tr><td style="font-weight: 600;">Intent Assessment:</td><td><span class="badge badge-{% if detail.candidate.intent == 'high' %}warning{% elif detail.candidate.intent == 'medium' %}info{% else %}secondary{% endif %}">{{ detail.candidate.intent|upper }}</span></td></tr>
           <tr><td style="font-weight: 600;">BIM Maturity:</td><td>{{ detail.candidate.bim_maturity or 'Unknown' }}</td></tr>
-          <tr><td style="font-weight: 600;">Outreach Allowed:</td><td>{% if is_suppressed %}<span class="badge badge-danger">BLOCKED (Suppressed)</span>{% elif is_previously_contacted %}<span class="badge badge-historical">RESTRICTED (Prior Contact)</span>{% elif can_generate_draft %}<span class="badge badge-success">ELIGIBLE FOR DRAFT</span>{% else %}<span class="badge badge-secondary">NOT ELIGIBLE</span>{% endif %}</td></tr>
-          <tr><td style="font-weight: 600;">Contact Availability:</td><td>{% if verified_contacts %}<span class="badge badge-success">{{ verified_contacts|length }} Verified</span>{% elif likely_contacts %}<span class="badge badge-warning">{{ likely_contacts|length }} Likely</span>{% else %}<span class="badge badge-secondary">Verification Required</span>{% endif %}</td></tr>
+          <tr><td style="font-weight: 600;">Outreach Allowed:</td><td>{% if is_suppressed %}<span class="badge badge-danger">BLOCKED (Suppressed)</span>{% elif is_previously_contacted %}<span class="badge badge-historical">RESTRICTED (Prior Contact)</span>{% elif can_generate_draft %}<span class="badge badge-success">READY FOR DRAFT</span>{% else %}<span class="badge badge-secondary">NOT ELIGIBLE</span>{% endif %}</td></tr>
+          <tr><td style="font-weight: 600;">Contact Availability:</td><td>{% if verified_contacts %}<span class="badge badge-success">{{ verified_contacts|length }} Verified</span>{% elif likely_contacts %}<span class="badge badge-warning">{{ likely_contacts|length }} Likely (Verification Required)</span>{% else %}<span class="badge badge-secondary">Verification Required</span>{% endif %}</td></tr>
           <tr><td style="font-weight: 600;">Discovery Provenance:</td><td>{{ ', '.join(detail.candidate.discovery_sources) or 'Ad-hoc Discovery' }}</td></tr>
         </tbody>
       </table>
@@ -807,7 +807,7 @@
 
   <!-- Manual Draft Staging Box (Safe & Offline) -->
   {% if can_generate_draft %}
-  <div class="card" style="border: 1px dashed var(--border-color);">
+  <div id="manual-draft" class="card" style="border: 1px dashed var(--border-color);">
     <div class="card-title">
       <span>Stage Manual Draft to Review Queue</span>
       <span class="badge badge-secondary">Safe Offline Composer</span>
@@ -967,10 +967,16 @@ function populateVerifyModal(contactId, fullName, email) {
   }
 }
 
-// Support direct hash navigation, e.g. #research, #register, #contacts, #outreach
+// Support direct hash navigation, e.g. #research, #register, #contacts, #outreach, #manual-draft
 document.addEventListener('DOMContentLoaded', function() {
   if (window.location.hash) {
     var rawHash = window.location.hash.substring(1).toLowerCase();
+    if (rawHash === 'manual-draft') {
+      switchWorkspaceTab('outreach');
+      var draftEl = document.getElementById('manual-draft');
+      if (draftEl) draftEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     var validTabs = ['overview', 'research', 'register', 'contacts', 'outreach'];
     if (validTabs.indexOf(rawHash) !== -1) {
       switchWorkspaceTab(rawHash);

@@ -352,6 +352,177 @@ def check_authoritative_suppression(
     return supp_store.is_suppressed(email=clean_email, company_domain=clean_domain)
 
 
+def evaluate_candidate_readiness(
+    cand: Any,
+    cand_store: Any,
+    suppression_svc: Any,
+    reg_store: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Authoritative shared readiness evaluator across Qualified Leads, Candidate Workspace, and Draft flows.
+    Evaluates:
+      1. Candidate ID validity
+      2. Authoritative domain/candidate suppression
+      3. Historical contact / active conversation
+      4. Candidate policy qualification & cold outreach permission
+      5. Available recipient verification / Lead Register documentation
+    Returns a unified dictionary with:
+      - effective_readiness: 'suppressed' | 'prior_contact' | 'not_eligible' | 'verification_required' | 'draft_ready'
+      - readiness_label: Human-readable display label
+      - readiness_badge: Badge class
+      - readiness_title: Detailed tooltip
+      - is_suppressed: bool
+      - is_previously_contacted: bool
+      - has_verified_recipient: bool (verified or documented in Lead Register)
+      - can_generate_draft: bool (ready for manual draft)
+      - usable_recipients: List[Dict[str, Any]] (eligible recipients with verified or documented evidence)
+    """
+    cid = getattr(cand, "candidate_id", None) or ""
+    c_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
+    c_dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+
+    # 1. Authoritative domain / candidate suppression
+    auth_supp = check_authoritative_suppression(suppression_svc, domain=c_dom)
+    cand_flag_supp = bool(getattr(cand, "suppressed", False))
+    is_supp = bool(auth_supp or cand_flag_supp)
+
+    # 2. Historical contact status and active conversation
+    hist_status = getattr(cand, "historical_contact_status", None)
+    is_contacted = bool(
+        hist_status in ("contacted", "replied", "converted", "dnc")
+        or getattr(cand, "previous_outreach_detected", False)
+        or getattr(cand, "active_conversation", False)
+    )
+    if cid and not is_contacted:
+        try:
+            hist_events = cand_store.get_historical_outreach_for_candidate(cid)
+            if hist_events:
+                is_contacted = True
+        except Exception:
+            pass
+
+    # 3. Base qualification & policy outreach eligibility
+    base_eligible = is_candidate_outreach_eligible(cand)
+
+    # Fail closed for empty or invalid candidate_id (prevents draft creation on malformed records)
+    if not cid.strip():
+        base_eligible = False
+
+    # 4. Check recipient evidence:
+    # A recipient is eligible ONLY if:
+    #   - Valid email syntax
+    #   - Not individually suppressed
+    #   - email_status == 'verified' OR documented in authoritative Lead Register
+    # NOTE: 'likely', 'unverified', 'unknown', or missing contacts require contact verification.
+    reg_emails = []
+    if reg_store and cid.strip():
+        try:
+            company_lead_record = reg_store.get_explicit_record(cid)
+            if company_lead_record and company_lead_record.contact_email_addresses and company_lead_record.contact_email_addresses.strip() != "Not Found":
+                reg_emails = [e.strip().lower() for e in company_lead_record.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
+        except Exception:
+            pass
+
+    usable_recipients = []
+    raw_contacts = []
+    if cid.strip():
+        try:
+            raw_contacts = cand_store.get_contacts_for_candidate(cid)
+        except Exception:
+            pass
+
+    existing_emails = set()
+    for cnt in raw_contacts:
+        w_email = (getattr(cnt, "work_email", None) or "").strip().lower()
+        st = (getattr(cnt, "email_status", None) or "unknown").strip().lower()
+        if w_email:
+            existing_emails.add(w_email)
+
+        if not w_email or not EMAIL_REGEX.match(w_email):
+            continue
+
+        # Check suppression
+        if check_authoritative_suppression(suppression_svc, email=w_email):
+            continue
+
+        # Must be explicitly verified or documented in register
+        is_verified = (st == "verified")
+        is_doc = (w_email in reg_emails)
+        if is_verified or is_doc:
+            usable_recipients.append({
+                "contact_id": getattr(cnt, "contact_id", None) or f"email:{w_email}",
+                "full_name": getattr(cnt, "full_name", None) or f"{cnt.first_name or ''} {cnt.last_name or ''}".strip() or "Unnamed Contact",
+                "work_email": w_email,
+                "email_status": st,
+                "is_verified": is_verified,
+                "is_documented": is_doc,
+                "provenance": "verified_contact" if is_verified else "lead_register_documented",
+            })
+
+    # Add documented emails not yet in contacts
+    for doc_email in reg_emails:
+        if doc_email not in existing_emails and EMAIL_REGEX.match(doc_email):
+            if not check_authoritative_suppression(suppression_svc, email=doc_email):
+                usable_recipients.append({
+                    "contact_id": f"contact:{doc_email}",
+                    "full_name": "Lead Register Contact",
+                    "work_email": doc_email,
+                    "email_status": "unverified",
+                    "is_verified": False,
+                    "is_documented": True,
+                    "provenance": "lead_register_documented",
+                })
+
+    has_usable_recipient = (len(usable_recipients) > 0)
+
+    # 5. Determine effective readiness with strict priority:
+    # 1. Suppressed / DNC (authoritative suppression overrides all positive states)
+    # 2. Prior Contact / Active Conversation
+    # 3. Ineligible (policy, cold_outreach_allowed=False, or empty candidate_id)
+    # 4. Contact Verification Required (qualified, clear, but missing verified/documented recipient)
+    # 5. Eligible for Manual Draft / Ready for Manual Draft (qualified, clear, verified/documented recipient available)
+    if is_supp:
+        effective_readiness = "suppressed"
+        readiness_label = "Suppressed"
+        readiness_badge = "badge-danger"
+        readiness_title = "Domain or candidate is suppressed (Do Not Contact)"
+    elif is_contacted:
+        effective_readiness = "prior_contact"
+        readiness_label = "Prior Contact"
+        readiness_badge = "badge-warning"
+        readiness_title = "Previous outreach history or active conversation detected"
+    elif not base_eligible:
+        effective_readiness = "not_eligible"
+        readiness_label = "Ineligible"
+        readiness_badge = "badge-muted"
+        readiness_title = "Candidate does not meet outreach eligibility criteria or has invalid ID"
+    elif not has_usable_recipient:
+        effective_readiness = "verification_required"
+        readiness_label = "Contact Verification Required"
+        readiness_badge = "badge-warning"
+        readiness_title = "Company is qualified, but no verified contact or Lead Register documented email is on file"
+    else:
+        effective_readiness = "draft_ready"
+        readiness_label = "Eligible for Manual Draft"
+        readiness_badge = "badge-success"
+        readiness_title = "Qualified and verified/documented recipient available for manual draft preparation"
+
+    can_generate_draft = (effective_readiness == "draft_ready")
+
+    return {
+        "effective_readiness": effective_readiness,
+        "readiness_label": readiness_label,
+        "readiness_badge": readiness_badge,
+        "readiness_title": readiness_title,
+        "is_suppressed": is_supp,
+        "is_previously_contacted": is_contacted,
+        "base_eligible": base_eligible,
+        "has_verified_recipient": has_usable_recipient,
+        "can_generate_draft": can_generate_draft,
+        "usable_recipients": usable_recipients,
+    }
+
+
 def is_candidate_outreach_eligible(cand: Any) -> bool:
     """
     Authoritative eligibility for outreach draft generation:
@@ -3922,16 +4093,38 @@ async def create_manual_draft_action(
 # 5. LEADS (Qualified Leads Only - Authoritative ICP/Enrichment Qualification)
 # ---------------------------------------------------------------------------
 @router.get("/leads", response_class=HTMLResponse)
-async def leads_view(request: Request, q: Optional[str] = Query(None)):
+async def leads_view(
+    request: Request,
+    q: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    tier: Optional[str] = Query(None),
+    readiness: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1),
+):
     svcs = get_console_services()
     store = svcs["cand_store"]
+    from sales_engine.leads.register_store import LeadRegisterStore
+    reg_store = LeadRegisterStore(db_path=store.db_path)
+
     cands = store.list_candidates()
 
-    leads = []
+    # Pre-collect all qualified leads & evaluate authoritative readiness
+    evaluated_leads = []
+    available_countries = set()
+    available_tiers = set()
+
     for c in cands:
         # P0 Qualification filter: enforce unified authoritative qualification logic
         if not is_candidate_qualified_lead(c):
             continue
+
+        readiness_info = evaluate_candidate_readiness(
+            c,
+            cand_store=store,
+            suppression_svc=svcs["suppression_svc"],
+            reg_store=reg_store,
+        )
 
         outcome = getattr(c, "qualification_outcome", None)
         if hasattr(outcome, "value"):
@@ -3940,74 +4133,13 @@ async def leads_view(request: Request, q: Optional[str] = Query(None)):
 
         name = getattr(c, "company_name", None) or getattr(c, "name", "Company")
         dom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
-        
-        # Authoritative domain suppression check from SuppressionStore
-        auth_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
-        cand_flag_supp = bool(getattr(c, "suppressed", False))
-        is_supp = auth_supp or cand_flag_supp
+        c_country = c.country or "Not Verified"
+        c_tier = format_company_tier_label(c.company_tier)
 
-        if q:
-            ql = q.lower()
-            if ql not in name.lower() and (not dom or ql not in dom.lower()):
-                continue
-
-        # Check historical contact status and active conversation
-        hist_status = getattr(c, "historical_contact_status", None)
-        is_contacted = (
-            hist_status in ("contacted", "replied", "converted", "dnc")
-            or bool(getattr(c, "previous_outreach_detected", False))
-            or bool(getattr(c, "active_conversation", False))
-        )
-
-        # Candidate-level qualification & policy eligibility
-        base_eligible = is_candidate_outreach_eligible(c)
-
-        # Check if an eligible, verified recipient is available for this candidate
-        has_verified_recipient = False
-        try:
-            cand_contacts = store.get_contacts_for_candidate(c.candidate_id)
-            for cnt in cand_contacts:
-                w_email = (getattr(cnt, "work_email", None) or "").strip().lower()
-                st = (getattr(cnt, "email_status", None) or "unknown").strip().lower()
-                if w_email and EMAIL_REGEX.match(w_email) and st in ("verified", "likely"):
-                    # Recipient must not be individually suppressed
-                    if not check_authoritative_suppression(svcs["suppression_svc"], email=w_email):
-                        has_verified_recipient = True
-                        break
-        except Exception:
-            pass
-
-        # Effective Outreach Readiness status with strict precedence (no contradictory states):
-        # 1. Suppressed / DNC (authoritative suppression overrides all positive states)
-        # 2. Prior Contact / Active Conversation
-        # 3. Not Qualified
-        # 4. Contact Verification Required (qualified, clear, but missing verified recipient)
-        # 5. Eligible for Manual Draft (qualified, clear, verified recipient available)
-        if is_supp:
-            effective_readiness = "suppressed"
-            readiness_label = "Suppressed"
-            readiness_badge = "badge-danger"
-            readiness_title = "Domain or candidate is suppressed (Do Not Contact)"
-        elif is_contacted:
-            effective_readiness = "prior_contact"
-            readiness_label = "Prior Contact"
-            readiness_badge = "badge-warning"
-            readiness_title = "Previous outreach history or active conversation detected"
-        elif not base_eligible:
-            effective_readiness = "not_eligible"
-            readiness_label = "Ineligible"
-            readiness_badge = "badge-muted"
-            readiness_title = "Candidate does not meet outreach eligibility criteria"
-        elif not has_verified_recipient:
-            effective_readiness = "verification_required"
-            readiness_label = "Contact Verification Required"
-            readiness_badge = "badge-warning"
-            readiness_title = "Company is qualified, but no verified or likely recipient email is on file"
-        else:
-            effective_readiness = "draft_ready"
-            readiness_label = "Eligible for Manual Draft"
-            readiness_badge = "badge-success"
-            readiness_title = "Qualified and verified recipient available for offline draft preparation"
+        if c_country and c_country != "Not Verified":
+            available_countries.add(c_country)
+        if c_tier:
+            available_tiers.add(c_tier)
 
         # Raw values without false positive defaults
         fit_val = getattr(c, "fit_assessment", None)
@@ -4015,26 +4147,106 @@ async def leads_view(request: Request, q: Optional[str] = Query(None)):
         bim_val = getattr(c, "bim_maturity", None)
         opp_val = getattr(c, "outsourcing_potential", None)
 
-        leads.append({
+        evaluated_leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
             "company_name": name,
             "domain": dom,
-            "country": c.country or "Not Verified",
-            "tier": format_company_tier_label(c.company_tier),
+            "country": c_country,
+            "tier": c_tier,
             "fit": fit_val if fit_val and fit_val.lower() != "unknown" else "Unknown",
             "intent": intent_val if intent_val and intent_val.lower() != "unknown" else "Unknown",
             "bim_maturity": bim_val if bim_val and bim_val.lower() != "unknown" else "Unknown",
             "outsourcing_potential": opp_val if opp_val and opp_val.lower() != "unknown" else "Not Evaluated",
             "discovery_status": c.discovery_status,
             "qualification_outcome": outcome_str or "qualified",
-            "effective_readiness": effective_readiness,
-            "readiness_label": readiness_label,
-            "readiness_badge": readiness_badge,
-            "readiness_title": readiness_title,
-            "is_previously_contacted": is_contacted,
-            "is_suppressed": is_supp,
-            "candidate_id": c.candidate_id,
+            "effective_readiness": readiness_info["effective_readiness"],
+            "readiness_label": readiness_info["readiness_label"],
+            "readiness_badge": readiness_info["readiness_badge"],
+            "readiness_title": readiness_info["readiness_title"],
+            "is_previously_contacted": readiness_info["is_previously_contacted"],
+            "is_suppressed": readiness_info["is_suppressed"],
+            "can_generate_draft": readiness_info["can_generate_draft"],
+            "has_verified_recipient": readiness_info["has_verified_recipient"],
+            "candidate_id": c.candidate_id or "",
         })
+
+    # Summary KPI counts (calculated across all qualified leads prior to page/filter slicing)
+    total_qualified = len(evaluated_leads)
+    count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready")
+    count_verification_required = sum(1 for l in evaluated_leads if l["effective_readiness"] == "verification_required")
+    count_prior_contact = sum(1 for l in evaluated_leads if l["effective_readiness"] == "prior_contact")
+    count_suppressed_or_ineligible = sum(1 for l in evaluated_leads if l["effective_readiness"] in ("suppressed", "not_eligible"))
+
+    # Apply Filters
+    filtered_leads = evaluated_leads
+
+    # 1. Search Query
+    if q and q.strip():
+        ql = q.strip().lower()
+        filtered_leads = [
+            l for l in filtered_leads
+            if ql in l["company_name"].lower() or (l["domain"] and ql in l["domain"].lower())
+        ]
+
+    # 2. Country Filter
+    if country and country.strip() and country.strip() != "all":
+        target_country = country.strip().lower()
+        filtered_leads = [
+            l for l in filtered_leads
+            if l["country"].strip().lower() == target_country
+        ]
+
+    # 3. Tier Filter
+    if tier and tier.strip() and tier.strip() != "all":
+        target_tier = tier.strip().lower()
+        filtered_leads = [
+            l for l in filtered_leads
+            if l["tier"].strip().lower() == target_tier
+        ]
+
+    # 4. Outreach Readiness Filter
+    if readiness and readiness.strip() and readiness.strip() != "all":
+        target_readiness = readiness.strip().lower()
+        if target_readiness == "suppressed_or_ineligible":
+            filtered_leads = [
+                l for l in filtered_leads
+                if l["effective_readiness"] in ("suppressed", "not_eligible")
+            ]
+        else:
+            filtered_leads = [
+                l for l in filtered_leads
+                if l["effective_readiness"] == target_readiness
+            ]
+
+    # Deterministic Sorting: Draft Ready first, then Verification Required, then Prior Contact, then Ineligible/Suppressed, then alphabetical by Company Name
+    readiness_sort_order = {
+        "draft_ready": 0,
+        "verification_required": 1,
+        "prior_contact": 2,
+        "not_eligible": 3,
+        "suppressed": 4,
+    }
+    filtered_leads.sort(
+        key=lambda x: (
+            readiness_sort_order.get(x["effective_readiness"], 99),
+            (x["company_name"] or "").strip().lower(),
+            x["domain"] or "",
+        )
+    )
+
+    # Clamp page_size to valid values (10, 25, 50, 100)
+    allowed_page_sizes = [10, 25, 50, 100]
+    if page_size not in allowed_page_sizes:
+        page_size = 25
+
+    total_filtered = len(filtered_leads)
+    import math
+    total_pages = max(1, math.ceil(total_filtered / page_size)) if total_filtered > 0 else 1
+    if page > total_pages:
+        page = total_pages
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paged_leads = filtered_leads[start_idx:end_idx]
 
     return render_console_template(
         request=request,
@@ -4042,9 +4254,27 @@ async def leads_view(request: Request, q: Optional[str] = Query(None)):
         context={
             "request": request,
             "active_tab": "leads",
-            "leads": leads,
+            "leads": paged_leads,
+            "total_qualified": total_qualified,
+            "count_draft_ready": count_draft_ready,
+            "count_verification_required": count_verification_required,
+            "count_prior_contact": count_prior_contact,
+            "count_suppressed_or_ineligible": count_suppressed_or_ineligible,
+            "total_filtered": total_filtered,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+            "prev_page": page - 1,
+            "next_page": page + 1,
+            "available_countries": sorted(list(available_countries)),
+            "available_tiers": sorted(list(available_tiers)),
+            "selected_country": country or "",
+            "selected_tier": tier or "",
+            "selected_readiness": readiness or "",
+            "query": q or "",
             "email_send_enabled": is_email_send_enabled(),
-            "query": q,
         },
     )
 
