@@ -92,7 +92,7 @@
         {% if verified_contacts %}
           <span class="badge badge-success">{{ verified_contacts|length }} Verified</span>
         {% elif lead_record and lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
-          <span class="badge badge-info">Documented</span>
+          <span class="badge badge-info" title="Lead Register Documentation Alone Requires Human Verification">Documented (Unverified)</span>
         {% elif likely_contacts or unverified_contacts %}
           <span class="badge badge-warning">Unverified</span>
         {% else %}
@@ -644,8 +644,8 @@
   <div class="card" style="border-left: 4px solid {% if is_suppressed %}#ef4444{% elif is_previously_contacted %}#8b5cf6{% elif can_generate_draft %}#10b981{% elif company_outreach_eligible %}#f59e0b{% else %}#6b7280{% endif %}; margin-bottom: 1.25rem;">
     <div class="card-title">
       <span>Outreach Eligibility &amp; Safety Guards</span>
-      <span class="badge badge-{% if is_suppressed %}danger{% elif is_previously_contacted %}historical{% elif can_generate_draft %}success{% elif company_outreach_eligible %}warning{% else %}secondary{% endif %}">
-        {% if is_suppressed %}SUPPRESSED / DNC{% elif is_previously_contacted %}PRIOR OUTREACH DETECTED{% elif can_generate_draft %}ELIGIBLE FOR DRAFT{% elif company_outreach_eligible %}CONTACT VERIFICATION REQUIRED{% else %}OUTREACH RESTRICTED{% endif %}
+      <span class="badge {{ readiness_info.readiness_badge if readiness_info else ('badge-danger' if (is_suppressed or is_previously_contacted) else ('badge-success' if can_generate_draft else 'badge-warning')) }}">
+        {{ readiness_info.readiness_label|upper if readiness_info else ('SUPPRESSED / DNC' if is_suppressed else ('PRIOR OUTREACH DETECTED' if is_previously_contacted else ('ELIGIBLE FOR MANUAL DRAFT' if can_generate_draft else 'CONTACT VERIFICATION REQUIRED'))) }}
       </span>
     </div>
     <div style="font-size: 0.85rem; color: var(--text-secondary);">
@@ -654,9 +654,9 @@
       {% elif is_previously_contacted %}
         ⏱️ <strong>Cold outreach is restricted:</strong> Historical communications or previous outreach records exist for this company. Duplicate protection is actively enforced.
       {% elif can_generate_draft %}
-        ✅ <strong>Candidate is outreach eligible:</strong> Qualified company with no prior contact or suppression flags and an eligible verified or documented recipient. Operators may stage a manual draft for review.
+        ✅ <strong>Candidate is outreach eligible:</strong> Qualified company with no prior contact or suppression flags and an explicitly verified recipient. Operators may stage a manual draft for review.
       {% elif company_outreach_eligible %}
-        ⚠️ <strong>Recipient verification required:</strong> Company is qualified and eligible under policy, but no verified contact or documented 13-Field Lead Register email exists yet. Verify a contact or document an email before drafting.
+        ⚠️ <strong>Recipient verification required:</strong> Company is qualified and eligible under policy, but no explicitly verified contact exists on file. Documented 13-Field Lead Register emails require operator verification before drafting.
       {% else %}
         ⚠️ <strong>Policy restricted:</strong> Candidate must meet qualification criteria and policy rules before outreach.
       {% endif %}
@@ -815,24 +815,24 @@
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/create-manual-draft">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="margin-bottom: 0.75rem;">
-      <label class="form-label" style="font-size: 0.8rem;">Select Eligible Recipient (Verified or Documented) *</label>
+      <label class="form-label" style="font-size: 0.8rem;">Select Verified Recipient *</label>
       <select id="draft-recipient-select" name="contact_id" class="form-control" onchange="syncManualRecipient(this)" required>
-        <option value="" disabled selected>-- Select eligible recipient --</option>
+        <option value="" disabled selected>-- Select verified recipient --</option>
         {% for c in contacts %}
           <option value="{{ c.contact_id }}" data-email="{{ c.work_email }}" data-name="{{ c.full_name }}" {% if not c.is_eligible %}disabled{% endif %}>
             {{ c.full_name }} &lt;{{ c.work_email }}&gt;
             {% if c.is_verified %}
               [Verified]
             {% elif c.is_documented %}
-              [Documented in Lead Register / Not Independently Verified]
+              [Documented in Lead Register - Verification Required]
             {% else %}
-              [{{ c.email_status }} - Not Eligible]
+              [{{ c.email_status }} - Verification Required]
             {% endif %}
           </option>
         {% endfor %}
       </select>
       <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
-        🛡️ Only contacts with verified evidence or records documented in the 13-Field Lead Register are eligible for draft creation. Documented contacts are never automatically converted to verified.
+        🛡️ Only contacts with explicit verified evidence (email_status == 'verified') are eligible for draft creation. Documented contacts from the Lead Register require operator verification before drafting.
       </div>
     </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
@@ -862,6 +862,38 @@
         </button>
       </div>
     </form>
+  </div>
+  {% else %}
+  <div id="manual-draft-disabled" class="card" style="border: 1px dashed var(--border-color); opacity: 0.85;">
+    <div class="card-title">
+      <span>Manual Outreach Staging (Locked)</span>
+      <span class="badge badge-secondary">Disabled (Verification Required)</span>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+      Draft composer is locked until at least one candidate contact has verified evidence recorded.
+      Unverified contacts and Lead Register documented emails require verification before drafting.
+    </p>
+    <div style="margin-bottom: 0.75rem;">
+      <label class="form-label" style="font-size: 0.8rem;">Discovered / Documented Recipients</label>
+      <select class="form-control" disabled style="background: var(--bg-hover);">
+        {% if contacts %}
+          {% for c in contacts %}
+            <option disabled>
+              {{ c.full_name }} &lt;{{ c.work_email }}&gt;
+              {% if c.is_verified %}
+                [Verified]
+              {% elif c.is_documented %}
+                [Documented in Lead Register - Verification Required]
+              {% else %}
+                [{{ c.email_status }} - Verification Required]
+              {% endif %}
+            </option>
+          {% endfor %}
+        {% else %}
+          <option disabled>No contacts discovered or documented</option>
+        {% endif %}
+      </select>
+    </div>
   </div>
   {% endif %}
 </div>

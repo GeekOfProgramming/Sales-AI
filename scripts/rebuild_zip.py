@@ -130,6 +130,12 @@ def should_exclude(rel_path: Path) -> bool:
     if lower_fname.endswith((".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm")):
         return True
 
+    # 7. Temporary generated test reports, browser screenshots, recordings
+    if "tests/reports" in lower_rel_str or "test_reports" in lower_rel_str:
+        return True
+    if lower_fname.endswith((".png", ".jpg", ".jpeg", ".webp", ".webm", ".mp4")):
+        return True
+
     return False
 
 

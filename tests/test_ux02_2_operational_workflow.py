@@ -167,8 +167,9 @@ def test_b2_likely_contact_not_automatically_eligible(dual_db_env):
 
 def test_b2_lead_register_documented_email_eligible_without_fabricating_verified(dual_db_env):
     """
-    An email documented in Lead Register allows drafting via documented evidence path,
-    WITHOUT fabricating an upgraded email_status='verified'.
+    UX-LP-02a: An email documented in Lead Register without explicit verification
+    CANNOT create a draft (redirects with error that email is not verified).
+    Once explicitly verified via audit record, drafting succeeds.
     """
     client, c_store, reg_store, rev_store, snap_store, _, _, csrf_token, headers = dual_db_env
 
@@ -192,7 +193,7 @@ def test_b2_lead_register_documented_email_eligible_without_fabricating_verified
     )
     reg_store.save_record(reg_rec)
 
-    # Attempt draft creation with documented email
+    # Attempt draft creation with documented email prior to verification -> must be rejected
     resp = client.post(f"/sales/candidates/{cid}/create-manual-draft", data={
         "recipient_email": "info@doc-lead.it",
         "recipient_name": "Official Contact",
@@ -203,13 +204,33 @@ def test_b2_lead_register_documented_email_eligible_without_fabricating_verified
 
     assert resp.status_code == 303
     loc = resp.headers["location"]
-    assert "/sales/drafts/draft:manual:" in loc
+    assert "error=Recipient%20email%20is%20not%20verified" in loc
 
-    # Check contact record: must NOT have email_status='verified' fabricated
+    # Now explicitly verify the contact via verify-contact route
+    verify_resp = client.post(f"/sales/candidates/{cid}/verify-contact", data={
+        "contact_id": f"contact:info@doc-lead.it",
+        "evidence_source": "Official company impressum",
+        "evidence_reference": "https://doc-lead.it/impressum",
+        "notes": "Verified operator check",
+        "csrf_token": csrf_token,
+    }, headers=headers, follow_redirects=False)
+    assert verify_resp.status_code == 303
+
+    # Now attempt draft creation again -> must succeed
+    resp2 = client.post(f"/sales/candidates/{cid}/create-manual-draft", data={
+        "recipient_email": "info@doc-lead.it",
+        "recipient_name": "Official Contact",
+        "subject": "Engineering Partnership",
+        "body": "Salve, vorremmo proporre una collaborazione.",
+        "csrf_token": csrf_token,
+    }, headers=headers, follow_redirects=False)
+    assert resp2.status_code == 303
+    assert "/sales/drafts/draft:manual:" in resp2.headers["location"]
+
+    # Check contact record: must have email_status='verified'
     saved_c = c_store.get_contact_by_id("info@doc-lead.it", candidate_id=cid)
     assert saved_c is not None
-    assert saved_c.email_status != "verified"
-    assert saved_c.provider == "lead_register_evidence"
+    assert saved_c.email_status == "verified"
 
 
 def test_b2_explicitly_verified_contact_eligible(dual_db_env):
@@ -332,7 +353,8 @@ def test_ux02_2a_documented_contact_in_ui_and_draft_creation(dual_db_env):
     """
     Requirement 2: Documented Contact UI Eligibility.
     A company with an explicit Lead Register email (and no pre-existing candidate_contact)
-    displays that recipient as selectable & documented, and drafting completes successfully.
+    displays that recipient as documented in workspace contacts, but disabled/verification required in composer.
+    After operator verifies contact, drafting completes successfully.
     """
     client, c_store, reg_store, rev_store, snap_store, _, _, csrf_token, headers = dual_db_env
 
@@ -362,12 +384,34 @@ def test_ux02_2a_documented_contact_in_ui_and_draft_creation(dual_db_env):
     assert resp.status_code == 200
     html = resp.text
 
-    # Check recipient select dropdown contains documented recipient
+    # Check recipient select dropdown contains documented recipient marked verification required
     assert "matteo.bianchi@doc-ui-test.it" in html
-    assert "[Documented in Lead Register / Not Independently Verified]" in html
+    assert "[Documented in Lead Register - Verification Required]" in html
     assert "Arch. Matteo Bianchi" in html
 
-    # Submit manual draft creation using this documented recipient without pre-existing contact
+    # Submit manual draft creation before verification -> rejected
+    post_fail = client.post(f"/sales/candidates/{cid}/create-manual-draft", data={
+        "contact_id": "contact:matteo.bianchi@doc-ui-test.it",
+        "recipient_email": "matteo.bianchi@doc-ui-test.it",
+        "recipient_name": "Arch. Matteo Bianchi",
+        "subject": "BIM Implementation",
+        "body": "Gentile Arch. Bianchi, vorremmo presentare pyBIM.",
+        "csrf_token": csrf_token,
+    }, headers=headers, follow_redirects=False)
+    assert post_fail.status_code == 303
+    assert "error=Recipient%20email%20is%20not%20verified" in post_fail.headers["location"]
+
+    # Verify contact explicitly
+    verify_resp = client.post(f"/sales/candidates/{cid}/verify-contact", data={
+        "contact_id": "contact:matteo.bianchi@doc-ui-test.it",
+        "evidence_source": "Official company impressum",
+        "evidence_reference": "https://doc-ui-test.it/team",
+        "notes": "Verified operator check",
+        "csrf_token": csrf_token,
+    }, headers=headers, follow_redirects=False)
+    assert verify_resp.status_code == 303
+
+    # Submit manual draft creation using this verified recipient
     post_resp = client.post(f"/sales/candidates/{cid}/create-manual-draft", data={
         "contact_id": "contact:matteo.bianchi@doc-ui-test.it",
         "recipient_email": "matteo.bianchi@doc-ui-test.it",
@@ -380,11 +424,10 @@ def test_ux02_2a_documented_contact_in_ui_and_draft_creation(dual_db_env):
     assert post_resp.status_code == 303
     assert "/sales/drafts/draft:manual:" in post_resp.headers["location"]
 
-    # Verify contact was saved with documented evidence provenance without fabricating verified status
+    # Verify contact was saved with verified status
     saved_c = c_store.get_contact_by_id("matteo.bianchi@doc-ui-test.it", candidate_id=cid)
     assert saved_c is not None
-    assert saved_c.email_status != "verified"
-    assert saved_c.provider == "lead_register_evidence"
+    assert saved_c.email_status == "verified"
 
 
 def test_ux02_2a_approved_draft_and_pending_draft_pipeline_states(dual_db_env):

@@ -149,8 +149,10 @@ def test_02_likely_contact_strictly_requires_verification(test_setup_lp02, monke
 
 def test_03_documented_lead_register_recipient_enables_draft_readiness(test_setup_lp02, monkeypatch):
     """
-    A candidate documented in the 13-Field Lead Register with a valid email enables draft readiness
-    even if not independently verified, without fabricating a verified contact status.
+    UX-LP-02a strict readiness requirement:
+    A candidate documented in the 13-Field Lead Register with a valid email alone requires
+    explicit human verification before draft preparation is allowed (effective_readiness == 'verification_required').
+    It is recorded in all_workspace_recipients with is_documented=True and is_eligible=False.
     """
     monkeypatch.setenv("SALES_OUTREACH_DB", str(test_setup_lp02["db_path"]))
     cand_store = test_setup_lp02["cand_store"]
@@ -180,11 +182,12 @@ def test_03_documented_lead_register_recipient_enables_draft_readiness(test_setu
     ))
 
     readiness = evaluate_candidate_readiness(c, cand_store, supp_store, reg_store)
-    assert readiness["effective_readiness"] == "draft_ready"
-    assert readiness["can_generate_draft"] is True
-    assert readiness["has_verified_recipient"] is True
-    assert len(readiness["usable_recipients"]) == 1
-    assert readiness["usable_recipients"][0]["provenance"] == "lead_register_documented"
+    assert readiness["effective_readiness"] == "verification_required"
+    assert readiness["readiness_label"] == "Contact Verification Required"
+    assert readiness["can_generate_draft"] is False
+    assert readiness["has_verified_recipient"] is False
+    assert len(readiness["usable_recipients"]) == 0
+    assert any(r["work_email"] == "marco@documented-lead.it" and r["is_documented"] is True and r["is_eligible"] is False for r in readiness["all_workspace_recipients"])
 
 
 def test_04_synthetic_or_empty_candidate_id_fails_closed(test_setup_lp02, monkeypatch):
