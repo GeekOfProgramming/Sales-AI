@@ -3801,6 +3801,15 @@ async def candidate_research_view(
     # V2: Retrieve latest durable LLM analysis record for this candidate
     latest_analysis = snap_store.get_latest_analysis(candidate_id)
 
+    # Preflight estimation for next LLM analysis
+    analysis_preflight = None
+    if latest_snapshot and latest_snapshot.pages_succeeded > 0:
+        try:
+            from sales_engine.research.company_analysis_service import estimate_analysis_preflight
+            analysis_preflight = estimate_analysis_preflight(latest_snapshot, provider_id="gemini", model="gemini-3.5-flash-lite")
+        except Exception:
+            pass
+
     # If an analysis record exists and has valid proposed fields, overlay them onto proposed_rec
     llm_analysis_status_display = None
     if latest_analysis:
@@ -3866,6 +3875,7 @@ async def candidate_research_view(
             "current_record": current_reg,
             "proposed_record": proposed_rec,
             "latest_analysis": latest_analysis,
+            "analysis_preflight": analysis_preflight,
             "pipeline_status": pipeline_status,
             "message": message,
             "error": error,
@@ -3877,12 +3887,14 @@ async def candidate_research_view(
 async def crawl_candidate_website_action(
     candidate_id: str,
     max_pages: Optional[int] = Form(20),
+    resume: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf)
 ):
     """
     Stage 1: Crawl & Save Website.
     Executes configurable, budget-governed website crawler and stores immutable ResearchSnapshot.
     Zero LLM calls during crawling.
+    Supports resumable crawling if resume='1' and a prior snapshot exists.
     """
     from sales_engine.research.website_crawler import WebsiteCrawlerV2, CrawlBudget
     from sales_engine.research.research_store import ResearchSnapshotStore
@@ -3901,6 +3913,12 @@ async def crawl_candidate_website_action(
         )
 
     snap_store = ResearchSnapshotStore()
+    resume_snap_id = None
+    if resume == "1":
+        latest_snap = snap_store.get_latest_snapshot(candidate_id)
+        if latest_snap and latest_snap.pages_succeeded > 0:
+            resume_snap_id = latest_snap.snapshot_id
+
     budget = CrawlBudget(max_pages=max_pages or 20)
     crawler = WebsiteCrawlerV2(snapshot_store=snap_store, budget=budget)
 
@@ -3909,6 +3927,7 @@ async def crawl_candidate_website_action(
             candidate_id=candidate_id,
             canonical_domain=domain,
             company_name=cand.company_name or domain,
+            resume_snapshot_id=resume_snap_id,
         )
     except Exception as exc:
         diag_id = f"diag_{uuid.uuid4().hex[:10]}"

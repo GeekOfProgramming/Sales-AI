@@ -149,12 +149,25 @@
         </button>
       </form>
 
+      <!-- Resume / Continue Crawl Button (if partial crawl exists) -->
+      {% if snapshot and snapshot.pages_succeeded > 0 %}
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-block;" id="formResumeCrawl">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="max_pages" value="20">
+        <input type="hidden" name="resume" value="1">
+        <button type="submit" class="btn btn-secondary" id="btnResumeCrawl" style="padding: 0.55rem 1rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='⏳ Resuming Crawl...'; document.getElementById('formResumeCrawl').submit();">
+          🔄 Continue / Resume Crawl
+        </button>
+      </form>
+      {% endif %}
+
       <!-- Button B: Analyze Saved Snapshot with LLM -->
       {% if snapshot and snapshot.pages_succeeded > 0 %}
-      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM">
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm LLM Analysis with {{ analysis_preflight.provider|default("gemini")|upper }} ({{ analysis_preflight.model|default("gemini-3.5-flash-lite") }})?\n\nEstimated input: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} tokens\nEstimated cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }}\n\nProceed with offline analysis of snapshot {{ snapshot.snapshot_id }}?');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="provider" value="gemini">
-        <button type="submit" class="btn btn-success" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #0284c7; border-color: #0284c7;" onclick="this.disabled=true; this.innerText='🧠 Analyzing Snapshot with LLM...'; document.getElementById('formAnalyzeLLM').submit();">
+        <input type="hidden" name="model" value="gemini-3.5-flash-lite">
+        <button type="submit" class="btn btn-success" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #0284c7; border-color: #0284c7;">
           🧠 Analyze Saved Snapshot with LLM
         </button>
       </form>
@@ -165,7 +178,10 @@
   <!-- Operational Progress & Configuration Details -->
   <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-secondary);">
     <div>
-      Provider: <strong>Google Gemini (gemini-2.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong> | Budget: <strong>Max 20 Pages</strong>
+      Provider: <strong>Google Gemini (gemini-3.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong> | Budget: <strong>Max 20 Pages</strong>
+      {% if analysis_preflight %}
+      | Preflight Estimate: <strong>~{{ analysis_preflight.estimated_input_tokens }} tokens (~${{ analysis_preflight.estimated_cost_usd }})</strong>
+      {% endif %}
     </div>
     <div>
       {% if latest_analysis %}

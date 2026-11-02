@@ -4,7 +4,7 @@ Provider-agnostic LLM analysis service for Research Pipeline V2.
 Features:
 - Operates on a saved immutable ResearchSnapshot with zero network calls.
 - Uses existing SalesAI LLMProviderGateway and OpenAIProvider adapter.
-- Supports Google Gemini as first configured provider (gemini-2.5-flash-lite / gemini-3.5-flash-lite).
+- Supports Google Gemini as first configured provider (gemini-3.5-flash-lite / gemini-3.5-flash-lite).
 - Future compatible with OpenAI, Anthropic, Cohere, Groq, local models.
 - Fails closed: if provider API key is missing or disabled, returns NOT_CONFIGURED without fabrication.
 - Token-aware chunking and evidence aggregation.
@@ -233,7 +233,7 @@ def build_analysis_gateway(
     pid = provider_id.lower()
 
     if pid == "gemini":
-        target_model = model or "gemini-2.5-flash-lite"
+        target_model = model or "gemini-3.5-flash-lite"
         prov = OpenAIProvider(
             provider_id="gemini",
             api_key=api_key,
@@ -368,7 +368,7 @@ def execute_company_analysis(
         return rec
 
     # 2. Build Gateway and verify provider configuration
-    effective_model = model or ("gemini-2.5-flash-lite" if pid == "gemini" else "default")
+    effective_model = model or ("gemini-3.5-flash-lite" if pid == "gemini" else "default")
     if gateway_override:
         gw = gateway_override
     else:
@@ -512,7 +512,12 @@ def execute_company_analysis(
             analysis_status = "SCHEMA_INVALID"
             diag_info = f"Missing required schema fields: {missing_fields}"
         else:
-            proposed_fields = parsed
+            # Apply source evidence verification against the snapshot
+            try:
+                proposed_fields = verify_field_evidence_excerpts(snapshot, parsed)
+            except Exception as e:
+                logger.warning(f"Field evidence verification error: {e}")
+                proposed_fields = parsed
     except Exception as e:
         analysis_status = "SCHEMA_INVALID"
         diag_info = f"Failed to parse LLM response as JSON: {e}"
@@ -542,3 +547,81 @@ def execute_company_analysis(
     )
     store.save_analysis_record(rec)
     return rec
+
+
+def estimate_analysis_preflight(
+    snapshot: ResearchSnapshot,
+    provider_id: str = "gemini",
+    model: Optional[str] = None,
+    max_chars: int = 45_000,
+) -> Dict[str, Any]:
+    """
+    Calculates pre-inference estimates for input tokens and cost before invoking paid LLM inference.
+    """
+    context = prepare_token_aware_context(snapshot, max_chars=max_chars)
+    # Conservative token estimation: ~4 chars per token
+    estimated_input_tokens = len(context) // 4
+    estimated_output_tokens = 1200  # typical 13-field JSON size
+    
+    pid = (provider_id or "gemini").lower()
+    target_model = model or ("gemini-3.5-flash-lite" if pid == "gemini" else "default")
+    
+    # Pricing estimation based on model tiers ($ per 1M tokens)
+    # Gemini 3.5 Flash Lite / 2.5 Flash Lite: ~$0.075 input / $0.30 output
+    cost_estimate = ((estimated_input_tokens / 1_000_000) * 0.075) + ((estimated_output_tokens / 1_000_000) * 0.30)
+    
+    return {
+        "provider": pid,
+        "model": target_model,
+        "context_chars": len(context),
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "estimated_cost_usd": round(cost_estimate, 6),
+    }
+
+
+def verify_field_evidence_excerpts(
+    snapshot: ResearchSnapshot,
+    proposed_fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Verifies that source_url and evidence_excerpt in proposed fields
+    are actually present in the persisted snapshot's fetched pages.
+    Adds a 'verification_state' to each field.
+    """
+    snapshot_pages = {
+        p.resolved_url: (p.cleaned_text or "").lower()
+        for p in snapshot.pages
+        if p.retrieval_status == "FETCH_SUCCESS"
+    }
+    
+    verified_fields = {}
+    for key, field_obj in proposed_fields.items():
+        if not isinstance(field_obj, dict):
+            verified_fields[key] = field_obj
+            continue
+        
+        f_copy = dict(field_obj)
+        val = str(f_copy.get("value", "")).strip()
+        s_url = str(f_copy.get("source_url", "")).strip()
+        excerpt = str(f_copy.get("evidence_excerpt", "")).strip()
+        
+        if val in ("Not Found", "", "None"):
+            f_copy["grounded_in_snapshot"] = True
+            f_copy["excerpt_verified"] = True
+        else:
+            # Check source url
+            is_url_in_snapshot = any(s_url == url or s_url.rstrip("/") == url.rstrip("/") for url in snapshot_pages)
+            f_copy["grounded_in_snapshot"] = is_url_in_snapshot
+            
+            # Check excerpt presence if provided
+            if excerpt:
+                excerpt_lower = excerpt.lower()
+                is_excerpt_present = any(excerpt_lower in text for text in snapshot_pages.values())
+                f_copy["excerpt_verified"] = is_excerpt_present
+            else:
+                f_copy["excerpt_verified"] = False
+                
+        verified_fields[key] = f_copy
+        
+    return verified_fields

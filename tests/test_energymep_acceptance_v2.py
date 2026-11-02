@@ -384,7 +384,7 @@ def test_6_llm_gateway_invocation_with_stored_content(isolated_db_paths):
             "priority_rationale": {"value": "Solid MEP profile", "source_url": "https://energymep.it", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
         }),
         provider="gemini",
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.5-flash-lite",
         task_id="company_research_13_field_extraction",
         request_id="req-123",
         input_tokens=500,
@@ -432,7 +432,7 @@ def test_7_gemini_json_validation_valid_and_invalid(isolated_db_paths):
     mock_gw_invalid.generate.return_value = LLMResponse(
         content="I am an AI and here is the analysis: {company_name: invalid_json...",
         provider="gemini",
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.5-flash-lite",
         task_id="company_research_13_field_extraction",
         request_id="req-bad",
     )
@@ -497,7 +497,7 @@ def test_8_schema_fields_explicit_not_found(isolated_db_paths):
             "priority_rationale": {"value": "Provisional priority", "source_url": "https://energymep.it", "evidence_excerpt": "", "confidence": 0.5, "is_hypothesis": True},
         }),
         provider="gemini",
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.5-flash-lite",
         task_id="company_research_13_field_extraction",
         request_id="req-clean",
     )
@@ -569,7 +569,7 @@ def test_10_analysis_proposals_isolated_from_lead_register(isolated_db_paths):
         candidate_id="cand:domain:energymep.it",
         snapshot_id="snap_10",
         provider="gemini",
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.5-flash-lite",
         created_at="2026-11-02T12:00:00Z",
         status="SUCCESS",
         proposed_fields={
@@ -656,3 +656,167 @@ def test_12_outreach_safety_and_send_disabled_preserved(isolated_db_paths):
     # Confirm EMAIL_SEND_ENABLED remains false
     from backend.sales_ui.router import is_email_send_enabled
     assert is_email_send_enabled() is False, "CRITICAL: EMAIL_SEND_ENABLED must be False!"
+
+
+# ==============================================================================
+# 13. Resumable Crawling from prior partial snapshot
+# ==============================================================================
+def test_13_resumable_crawling_preserves_pages_and_continues(isolated_db_paths):
+    cand_db, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    # Initial crawl budget: 2 pages max
+    initial_budget = CrawlBudget(max_pages=2, per_page_timeout_seconds=5.0)
+    mock_browser = MagicMock()
+
+    crawler1 = WebsiteCrawlerV2(snapshot_store=snap_store, budget=initial_budget, browser_adapter=mock_browser)
+    crawler1._fetch_robots_txt = MagicMock(return_value=None)
+    crawler1._discover_sitemap_urls = MagicMock(return_value=[
+        "https://energymep.it/chi-siamo",
+        "https://energymep.it/servizi",
+        "https://energymep.it/contatti",
+    ])
+    crawler1._fetch_page = MagicMock(side_effect=lambda url, ptype: PageFetchResult(
+        url=url,
+        page_type=ptype,
+        status="FETCH_SUCCESS",
+        http_status=200,
+        text_content=f"Content for {url}",
+        title=f"Title {url}",
+        raw_html=f"<html><body>Content for {url}</body></html>",
+    ))
+
+    summary1 = crawler1.crawl_website("cand:domain:energymep.it", "energymep.it", "Energymep")
+    assert summary1.status == "partial"
+    assert summary1.pages_succeeded == 2
+    snap1_id = summary1.snapshot_id
+
+    # Resume crawl with budget of 4 pages
+    resume_budget = CrawlBudget(max_pages=4, per_page_timeout_seconds=5.0)
+    crawler2 = WebsiteCrawlerV2(snapshot_store=snap_store, budget=resume_budget, browser_adapter=mock_browser)
+    crawler2._fetch_robots_txt = MagicMock(return_value=None)
+    crawler2._discover_sitemap_urls = MagicMock(return_value=[
+        "https://energymep.it/chi-siamo",
+        "https://energymep.it/servizi",
+        "https://energymep.it/contatti",
+    ])
+    crawler2._fetch_page = MagicMock(side_effect=lambda url, ptype: PageFetchResult(
+        url=url,
+        page_type=ptype,
+        status="FETCH_SUCCESS",
+        http_status=200,
+        text_content=f"Content for {url}",
+        title=f"Title {url}",
+        raw_html=f"<html><body>Content for {url}</body></html>",
+    ))
+
+    summary2 = crawler2.crawl_website(
+        "cand:domain:energymep.it",
+        "energymep.it",
+        "Energymep",
+        resume_snapshot_id=snap1_id,
+    )
+    # The resumed crawl should preserve the 2 prior pages and add up to 4 total pages
+    assert summary2.pages_succeeded >= 3
+    # Check that the new snapshot in store contains the combined evidence
+    new_snap = snap_store.get_snapshot_by_id(summary2.snapshot_id)
+    assert len(new_snap.pages) >= 3
+
+
+# ==============================================================================
+# 14. Preflight token and cost estimation helper
+# ==============================================================================
+def test_14_analysis_preflight_estimation(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import estimate_analysis_preflight
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe = PageEvidence(
+        snapshot_id="",
+        evidence_id="EV_01",
+        requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/",
+        page_type="home",
+        http_status=200,
+        retrieval_status="FETCH_SUCCESS",
+        retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep Home",
+        meta_description=None,
+        content_sha256="hash1",
+        cleaned_text="Energymep MEP engineering BIM systems services " * 50,
+    )
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe])
+
+    preflight = estimate_analysis_preflight(snap, provider_id="gemini", model="gemini-3.5-flash-lite")
+    assert preflight["provider"] == "gemini"
+    assert preflight["model"] == "gemini-3.5-flash-lite"
+    assert preflight["estimated_input_tokens"] > 0
+    assert preflight["estimated_cost_usd"] >= 0.0
+
+
+# ==============================================================================
+# 15. Source evidence excerpt verification against snapshot content
+# ==============================================================================
+def test_15_source_evidence_excerpt_verification(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import verify_field_evidence_excerpts
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe = PageEvidence(
+        snapshot_id="",
+        evidence_id="EV_01",
+        requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/",
+        page_type="home",
+        http_status=200,
+        retrieval_status="FETCH_SUCCESS",
+        retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep Home",
+        meta_description=None,
+        content_sha256="hash1",
+        cleaned_text="Energymep S.r.l. Progettazione impianti MEP e BIM. Sede a Padova. Tel 049 123456.",
+    )
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe])
+
+    fields = {
+        "company_name": {
+            "value": "Energymep S.r.l.",
+            "source_url": "https://energymep.it/",
+            "evidence_excerpt": "Energymep S.r.l.",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+        },
+        "telephone_numbers": {
+            "value": "+39 049 123456",
+            "source_url": "https://energymep.it/",
+            "evidence_excerpt": "Tel 049 123456",
+            "confidence": 0.90,
+            "is_hypothesis": False,
+        },
+        "job_advertisement_links": {
+            "value": "Not Found",
+            "source_url": "https://energymep.it/",
+            "evidence_excerpt": "",
+            "confidence": 0.0,
+            "is_hypothesis": False,
+        },
+        "responsible_person": {
+            "value": "Mario Rossi",
+            "source_url": "https://unknown-domain.com/bogus",
+            "evidence_excerpt": "Fabricated text not on website",
+            "confidence": 0.5,
+            "is_hypothesis": False,
+        }
+    }
+
+    verified = verify_field_evidence_excerpts(snap, fields)
+    assert verified["company_name"]["grounded_in_snapshot"] is True
+    assert verified["company_name"]["excerpt_verified"] is True
+    assert verified["telephone_numbers"]["grounded_in_snapshot"] is True
+    assert verified["telephone_numbers"]["excerpt_verified"] is True
+    assert verified["job_advertisement_links"]["grounded_in_snapshot"] is True
+    # Fake URL and fabricated text must fail grounded check & excerpt check
+    assert verified["responsible_person"]["grounded_in_snapshot"] is False
+    assert verified["responsible_person"]["excerpt_verified"] is False

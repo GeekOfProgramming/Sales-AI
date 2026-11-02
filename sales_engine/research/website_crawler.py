@@ -244,6 +244,7 @@ class WebsiteCrawlerV2:
         candidate_id: str,
         canonical_domain: str,
         company_name: str,
+        resume_snapshot_id: Optional[str] = None,
     ) -> CrawlSummary:
         """
         Executes complete or bounded crawl of the company's verified domain.
@@ -285,25 +286,58 @@ class WebsiteCrawlerV2:
         visited_urls: Set[str] = set()
         queue: List[Tuple[int, int, str, str]] = []
 
-        # Add homepage
-        norm_home = normalize_url(home_url, clean_domain) or home_url
-        discovered_urls.add(norm_home)
-        queue.append((score_page_priority(norm_home, "home", 0), 0, norm_home, "home"))
-
-        # Add sitemap URLs
-        for sm_url in sitemap_urls:
-            norm_sm = normalize_url(sm_url, clean_domain)
-            if norm_sm and norm_sm not in discovered_urls:
-                ptype = classify_page_type(norm_sm)
-                discovered_urls.add(norm_sm)
-                queue.append((score_page_priority(norm_sm, ptype, 1), 1, norm_sm, ptype))
-
         pages_attempted = 0
         pages_succeeded = 0
         pages_failed = 0
         total_bytes = 0
         page_evidences: List[PageEvidence] = []
         skipped_urls: List[str] = []
+
+        # If resuming from an existing snapshot, hydrate visited URLs and existing evidence
+        if resume_snapshot_id and self.snapshot_store:
+            prior_snap = self.snapshot_store.get_snapshot_by_id(resume_snapshot_id)
+            if prior_snap and prior_snap.pages:
+                logger.info(f"Resuming crawl for {clean_domain} from prior snapshot {resume_snapshot_id} ({len(prior_snap.pages)} pages)")
+                for prev_p in prior_snap.pages:
+                    if prev_p.retrieval_status == "FETCH_SUCCESS":
+                        page_evidences.append(prev_p)
+                        visited_urls.add(prev_p.resolved_url)
+                        if prev_p.requested_url:
+                            visited_urls.add(prev_p.requested_url)
+                        discovered_urls.add(prev_p.resolved_url)
+                        pages_succeeded += 1
+                        # Re-enqueue any unvisited outgoing links from prior successful pages
+                        for lk in (prev_p.links or []):
+                            abs_url = urllib.parse.urljoin(prev_p.resolved_url, lk.get("href", ""))
+                            norm_l = normalize_url(abs_url, clean_domain)
+                            if norm_l and norm_l not in discovered_urls and norm_l not in visited_urls:
+                                discovered_urls.add(norm_l)
+                                l_ptype = classify_page_type(norm_l, lk.get("text"))
+                                queue.append((
+                                    score_page_priority(norm_l, l_ptype, 2),
+                                    2,
+                                    norm_l,
+                                    l_ptype
+                                ))
+                    elif prev_p.retrieval_status in ("BLOCKED_UNSAFE", "FETCH_FAILED"):
+                        pages_failed += 1
+                        visited_urls.add(prev_p.resolved_url)
+                        if prev_p.requested_url:
+                            visited_urls.add(prev_p.requested_url)
+
+        # Add homepage if not already visited
+        norm_home = normalize_url(home_url, clean_domain) or home_url
+        if norm_home not in visited_urls:
+            discovered_urls.add(norm_home)
+            queue.append((score_page_priority(norm_home, "home", 0), 0, norm_home, "home"))
+
+        # Add sitemap URLs
+        for sm_url in sitemap_urls:
+            norm_sm = normalize_url(sm_url, clean_domain)
+            if norm_sm and norm_sm not in visited_urls and norm_sm not in discovered_urls:
+                ptype = classify_page_type(norm_sm)
+                discovered_urls.add(norm_sm)
+                queue.append((score_page_priority(norm_sm, ptype, 1), 1, norm_sm, ptype))
 
         # 4. Crawl Loop
         while queue and len(page_evidences) < self.budget.max_pages:
