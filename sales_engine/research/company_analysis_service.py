@@ -615,7 +615,8 @@ def execute_company_analysis(
         store.save_analysis_record(rec)
         return rec
 
-    # 2. Server-side Operator Authorization Check (P1-B)
+    # 2. Server-side Operator Authorization Check (P1-B / V2.1c Authoritative Nonce Consumption)
+    effective_budget_cap: Optional[float] = max_approved_budget_usd
     if require_auth:
         is_auth, auth_budget, auth_err = verify_analysis_auth_token(
             auth_token=auth_token,
@@ -623,6 +624,7 @@ def execute_company_analysis(
             snapshot_id=snapshot.snapshot_id,
             provider=pid,
             model=effective_model,
+            mark_used=True,
         )
         if not is_auth:
             rec = CompanyAnalysisRecord(
@@ -638,6 +640,13 @@ def execute_company_analysis(
             )
             store.save_analysis_record(rec)
             return rec
+
+        # Authoritative budget extraction from token: caller budget can NEVER disable or override token ceiling
+        if auth_budget is not None:
+            if effective_budget_cap is not None:
+                effective_budget_cap = min(effective_budget_cap, auth_budget)
+            else:
+                effective_budget_cap = auth_budget
 
     # 3. Build Gateway and verify credentials
     if gateway_override:
@@ -759,14 +768,14 @@ def execute_company_analysis(
             provider=pid,
             model=effective_model,
         )
-        if max_approved_budget_usd is not None and projected_total_cost > max_approved_budget_usd:
+        if effective_budget_cap is not None and projected_total_cost > effective_budget_cap:
             logger.warning(
                 f"Aborting analysis before chunk {c['chunk_index']}: projected cost ${projected_total_cost:.4f} "
-                f"exceeds approved budget ${max_approved_budget_usd:.4f}."
+                f"exceeds approved budget ${effective_budget_cap:.4f}."
             )
             overall_status = "BUDGET_EXCEEDED"
             diag_msgs.append(
-                f"Pre-request budget check exceeded: projected ${projected_total_cost:.4f} > cap ${max_approved_budget_usd:.4f}."
+                f"Pre-request budget check exceeded: projected ${projected_total_cost:.4f} > cap ${effective_budget_cap:.4f}."
             )
             break
 

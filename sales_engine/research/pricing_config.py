@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Tuple, Set
@@ -32,6 +33,8 @@ def get_auth_secret() -> str:
     return _EPHEMERAL_SECRET
 
 # Nonce replay protection set: tracks used nonce tokens to prevent token reuse
+# Guarded by thread lock for concurrency-safe single-use nonce consumption
+_NONCE_LOCK = threading.Lock()
 _USED_AUTH_NONCES: Set[str] = set()
 
 
@@ -166,7 +169,9 @@ def verify_analysis_auth_token(
 ) -> Tuple[bool, Optional[float], Optional[str]]:
     """
     Validates the server-side operator authorization token.
-    Enforces expiration, replay nonce checks, and context binding.
+    Enforces signature, expiration, candidate ID, snapshot ID, provider, model,
+    and budget validity BEFORE any nonce is marked as consumed.
+    If mark_used=True, atomically consumes the nonce under lock to ensure single-use replay protection.
     Returns (is_valid, max_approved_budget_usd, error_message).
     """
     if not auth_token or not auth_token.strip():
@@ -190,12 +195,7 @@ def verify_analysis_auth_token(
         except ValueError:
             return False, None, "Invalid expiration timestamp in authorization token."
 
-        # Check nonce replay
-        if t_nonce in _USED_AUTH_NONCES:
-            return False, None, "Authorization token replay detected. Single-use token has already been consumed."
-
-        if mark_used:
-            _USED_AUTH_NONCES.add(t_nonce)
+        is_8part = True
 
     elif len(parts) == 6:
         t_cid, t_sid, t_prov, t_model, t_budget_str, t_sig = parts
@@ -203,10 +203,12 @@ def verify_analysis_auth_token(
         expected_sig = hmac.new(get_auth_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(t_sig, expected_sig):
             return False, None, "Invalid authorization signature. Token tampering detected."
+        is_8part = False
+        t_nonce = None
     else:
         return False, None, "Malformed authorization token structure."
 
-    # Validate matching context
+    # Validate matching context BEFORE consuming nonce
     if t_cid != candidate_id:
         return False, None, f"Authorization token candidate mismatch ('{t_cid}' != '{candidate_id}')."
     if t_sid != snapshot_id:
@@ -220,5 +222,13 @@ def verify_analysis_auth_token(
         max_budget = float(t_budget_str)
     except ValueError:
         return False, None, "Invalid budget number in authorization token."
+
+    # All checks passed! Now atomically check and consume nonce if 8-part token
+    if is_8part and t_nonce:
+        with _NONCE_LOCK:
+            if t_nonce in _USED_AUTH_NONCES:
+                return False, None, "Authorization token replay detected. Single-use token has already been consumed."
+            if mark_used:
+                _USED_AUTH_NONCES.add(t_nonce)
 
     return True, max_budget, None

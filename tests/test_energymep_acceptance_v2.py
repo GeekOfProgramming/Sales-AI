@@ -1219,6 +1219,75 @@ def test_24_spending_limit_and_budget_exceeded_termination(isolated_db_paths):
     assert mock_gw.generate.call_count == 0
 
 
+def test_29_successful_analysis_exposes_13_fields_in_review_ui(isolated_db_paths):
+    """
+    V2.1c: Successfully completed analysis persists a SUCCESS analysis record
+    and exposes proposed 13 fields in Research Review view.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+    from sales_engine.research.company_research_service import load_research_from_snapshot
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep S.r.l. operates in MEP engineering. P.IVA 01234567890.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    mock_resp_json = {
+        "company_name": {"value": "Energymep S.r.l.", "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep S.r.l.", "confidence": 0.95, "is_hypothesis": False},
+        "legal_identity": {"value": "P.IVA 01234567890", "source_url": "https://energymep.it/", "evidence_excerpt": "P.IVA 01234567890", "confidence": 0.95, "is_hypothesis": False},
+        "geographic_location": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "telephone_numbers": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "business_activities": {"value": "MEP engineering", "source_url": "https://energymep.it/", "evidence_excerpt": "operates in MEP engineering", "confidence": 0.90, "is_hypothesis": False},
+        "official_website": {"value": "https://energymep.it/", "source_url": "https://energymep.it/", "evidence_excerpt": "https://energymep.it/", "confidence": 0.95, "is_hypothesis": False},
+        "responsible_person": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "descriptions_and_notes": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "job_advertisement_links": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "other_links_and_references": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "contact_email_addresses": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "priority_level": {"value": "A", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+        "priority_rationale": {"value": "Strong BIM and MEP engineering profile", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+    }
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_test_02",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(mock_resp_json),
+        parsed_json=mock_resp_json,
+        input_tokens=200,
+        output_tokens=400,
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SUCCESS"
+
+    # Verify that get_latest_analysis retrieves this record
+    stored_an = snap_store.get_latest_analysis(cid, snapshot_id=snap.snapshot_id)
+    assert stored_an is not None
+    assert stored_an.status == "SUCCESS"
+    assert stored_an.proposed_fields["company_name"]["value"] == "Energymep S.r.l."
+    assert stored_an.proposed_fields["legal_identity"]["value"] == "P.IVA 01234567890"
+    assert stored_an.proposed_fields["business_activities"]["value"] == "MEP engineering"
+
+
 def test_25_oversized_page_subchunking_preserves_url():
     from sales_engine.research.company_analysis_service import partition_snapshot_into_chunks
 
@@ -1271,3 +1340,230 @@ def test_26_gemini_credential_diagnostics():
         assert "loaded" in diag_loaded["message"].lower()
         # Verify secret itself is never leaked in the message
         assert "dummy_secret" not in diag_loaded["message"]
+
+
+# ==============================================================================
+# 27. V2.1c Double Authorization Consumption Fix Tests
+# ==============================================================================
+
+def test_27_single_use_nonce_normal_router_service_flow(isolated_db_paths):
+    """
+    V2.1c: Router preliminary validation with mark_used=False does NOT consume nonce.
+    Service execution with require_auth=True consumes the nonce exactly once and succeeds.
+    Subsequent service execution with the same token fails with replay error.
+    """
+    from sales_engine.research.pricing_config import (
+        generate_analysis_auth_token,
+        verify_analysis_auth_token,
+    )
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep official website and services.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    token = generate_analysis_auth_token(
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        max_budget_usd=0.50,
+    )
+
+    # 1. Router preliminary check (mark_used=False)
+    router_valid, budget, err = verify_analysis_auth_token(
+        auth_token=token,
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        mark_used=False,
+    )
+    assert router_valid is True
+    assert budget == 0.50
+    assert err is None
+
+    # 2. Service execution (require_auth=True, consumes nonce)
+    mock_resp_json = {
+        "company_name": {"value": "Energymep", "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep official website", "confidence": 0.95, "is_hypothesis": False},
+        "legal_identity": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "geographic_location": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "telephone_numbers": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "business_activities": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "official_website": {"value": "https://energymep.it/", "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep official website", "confidence": 0.95, "is_hypothesis": False},
+        "responsible_person": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "descriptions_and_notes": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "job_advertisement_links": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "other_links_and_references": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "contact_email_addresses": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "priority_level": {"value": "B", "source_url": "", "evidence_excerpt": "", "confidence": 0.5, "is_hypothesis": True},
+        "priority_rationale": {"value": "Default B", "source_url": "", "evidence_excerpt": "", "confidence": 0.5, "is_hypothesis": True},
+    }
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_test_01",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(mock_resp_json),
+        parsed_json=mock_resp_json,
+        input_tokens=150,
+        output_tokens=300,
+        finish_reason="stop",
+    )
+
+    rec1 = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+        auth_token=token,
+        require_auth=True,
+    )
+    assert rec1.status == "SUCCESS", f"First execution failed: {rec1.diagnostic_info}"
+    assert rec1.proposed_fields["company_name"]["value"] == "Energymep"
+    assert mock_gw.generate.call_count == 1
+
+    # 3. Replay attack / Second execution with same token MUST fail closed before calling gateway
+    rec2 = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+        auth_token=token,
+        require_auth=True,
+    )
+    assert rec2.status == "UNAUTHORIZED"
+    assert "replay detected" in rec2.diagnostic_info.lower()
+    # Call count should still be 1 - no additional call made!
+    assert mock_gw.generate.call_count == 1
+
+
+def test_28_token_budget_enforced_in_direct_service_call(isolated_db_paths):
+    """
+    V2.1c: Token spending ceiling is extracted from token and strictly enforced inside
+    execute_company_analysis() even if caller did not pass max_approved_budget_usd.
+    """
+    from sales_engine.research.pricing_config import generate_analysis_auth_token
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Website text " * 1000,
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    # Token with tiny budget ceiling ($0.000001)
+    token = generate_analysis_auth_token(
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        max_budget_usd=0.000001,
+    )
+
+    mock_gw = MagicMock()
+    # Direct service call without passing max_approved_budget_usd
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+        auth_token=token,
+        require_auth=True,
+        max_approved_budget_usd=None,  # Missing caller budget must NOT disable token ceiling!
+    )
+    assert rec.status == "BUDGET_EXCEEDED"
+    assert mock_gw.generate.call_count == 0
+
+
+def test_29_successful_analysis_exposes_13_fields_in_review_ui(isolated_db_paths):
+    """
+    V2.1c: Successfully completed analysis persists a SUCCESS analysis record
+    and exposes proposed 13 fields in Research Review view.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+    from sales_engine.research.company_research_service import load_research_from_snapshot
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep S.r.l. operates in MEP engineering. P.IVA 01234567890.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    mock_resp_json = {
+        "company_name": {"value": "Energymep S.r.l.", "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep S.r.l.", "confidence": 0.95, "is_hypothesis": False},
+        "legal_identity": {"value": "P.IVA 01234567890", "source_url": "https://energymep.it/", "evidence_excerpt": "P.IVA 01234567890", "confidence": 0.95, "is_hypothesis": False},
+        "geographic_location": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "telephone_numbers": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "business_activities": {"value": "MEP engineering", "source_url": "https://energymep.it/", "evidence_excerpt": "operates in MEP engineering", "confidence": 0.90, "is_hypothesis": False},
+        "official_website": {"value": "https://energymep.it/", "source_url": "https://energymep.it/", "evidence_excerpt": "https://energymep.it/", "confidence": 0.95, "is_hypothesis": False},
+        "responsible_person": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "descriptions_and_notes": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "job_advertisement_links": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "other_links_and_references": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "contact_email_addresses": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "priority_level": {"value": "A", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+        "priority_rationale": {"value": "Strong BIM and MEP engineering profile", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+    }
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_test_02",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(mock_resp_json),
+        parsed_json=mock_resp_json,
+        input_tokens=200,
+        output_tokens=400,
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SUCCESS"
+
+    # Verify that get_latest_analysis retrieves this record
+    stored_an = snap_store.get_latest_analysis(cid, snapshot_id=snap.snapshot_id)
+    assert stored_an is not None
+    assert stored_an.status == "SUCCESS"
+    assert stored_an.proposed_fields["company_name"]["value"] == "Energymep S.r.l."
+    assert stored_an.proposed_fields["legal_identity"]["value"] == "P.IVA 01234567890"
+    assert stored_an.proposed_fields["business_activities"]["value"] == "MEP engineering"

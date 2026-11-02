@@ -4024,13 +4024,15 @@ async def analyze_candidate_snapshot_action(
     eff_provider = provider or "gemini"
     eff_model = model or "gemini-3.5-flash-lite"
 
-    # P1-B: Server-side Operator Authorization Check
+    # P1-B: Server-side Operator Authorization Preliminary Check (mark_used=False)
+    # The authoritative nonce consumption occurs inside execute_company_analysis() exactly once.
     is_valid, max_budget, auth_err = verify_analysis_auth_token(
         auth_token=auth_token,
         candidate_id=candidate_id,
         snapshot_id=target_snapshot.snapshot_id,
         provider=eff_provider,
         model=eff_model,
+        mark_used=False,
     )
     if not is_valid:
         err_msg = f"Inference execution rejected: {auth_err}"
