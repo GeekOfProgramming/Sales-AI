@@ -224,7 +224,31 @@ class OpenAIProvider(BaseLLMProvider):
                     provider=self._provider_id,
                     task_id=request.task_id,
                 )
-            payload["response_format"] = {"type": "json_object"}
+            # Structured output (type: "json_schema") is used when requested via capability flag
+            # or for providers/models configured with supports_structured_schema=True
+            use_structured_schema = cap.get("supports_structured_schema", False)
+            if not use_structured_schema and self._provider_id in ("gemini",):
+                use_structured_schema = True
+
+            has_detailed_schema = (
+                request.response_schema is not None
+                and isinstance(request.response_schema, dict)
+                and "properties" in request.response_schema
+            )
+
+            if use_structured_schema and has_detailed_schema:
+                schema_name = request.task_id or "structured_output_schema"
+                clean_name = re.sub(r"[^a-zA-Z0-9_]", "_", schema_name)
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": clean_name,
+                        "strict": True,
+                        "schema": request.response_schema,
+                    },
+                }
+            else:
+                payload["response_format"] = {"type": "json_object"}
 
         # OpenRouter-specific routing controls (Hardened S3.5.3B)
         # Explicitly disable OpenRouter provider fallback with provider.allow_fallbacks=false

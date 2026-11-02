@@ -284,6 +284,7 @@ def build_analysis_gateway(
             allowed_hosts={"generativelanguage.googleapis.com"},
             env_var="GEMINI_API_KEY",
             default_model=target_model,
+            model_capabilities={target_model: {"supports_structured_schema": True, "supports_json_mode": True}},
             client=client,
             transport=transport,
         )
@@ -297,6 +298,7 @@ def build_analysis_gateway(
             allowed_hosts={"api.openai.com"},
             env_var="OPENAI_API_KEY",
             default_model=target_model,
+            model_capabilities={target_model: {"supports_structured_schema": True, "supports_json_mode": True}},
             client=client,
             transport=transport,
         )
@@ -825,6 +827,11 @@ def execute_company_analysis(
         total_output_tokens += (resp.output_tokens or 0)
         raw_responses.append(resp.content or "")
 
+        # Check for model truncation / finish reason
+        if resp.finish_reason and resp.finish_reason.lower() in ("length", "max_tokens"):
+            overall_status = "SCHEMA_INVALID"
+            diag_msgs.append(f"Chunk {c['chunk_index']} truncated by provider (finish_reason: {resp.finish_reason}).")
+
         # Parse chunk JSON
         raw_text = resp.content or ""
         try:
@@ -840,17 +847,40 @@ def execute_company_analysis(
                     clean_json = clean_json[:-3]
                 chunk_parsed = json.loads(clean_json.strip())
 
+            # Handle potential top-level nesting wrappers: e.g. {"lead_register": {...}} or {"fields": {...}}
+            if isinstance(chunk_parsed, dict):
+                for wrapper_key in ("lead_register", "fields", "lead_register_fields", "data", "result"):
+                    if wrapper_key in chunk_parsed and isinstance(chunk_parsed[wrapper_key], dict):
+                        chunk_parsed = chunk_parsed[wrapper_key]
+                        break
+
             aggregated_proposals = merge_field_proposals(aggregated_proposals, chunk_parsed)
         except Exception as e:
             logger.warning(f"Failed to parse chunk {c['chunk_index']} JSON: {e}")
             diag_msgs.append(f"Chunk {c['chunk_index']} schema error: {e}")
 
-    # Validate final 13 fields presence
+    # Validate final 13 fields presence and nested structures
     required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
-    missing = [f for f in required_13 if f not in aggregated_proposals or not isinstance(aggregated_proposals[f], dict)]
-    if missing and overall_status == "SUCCESS":
+    missing = []
+    malformed = []
+
+    for f in required_13:
+        if f not in aggregated_proposals or not isinstance(aggregated_proposals[f], dict):
+            missing.append(f)
+        else:
+            f_dict = aggregated_proposals[f]
+            # Ensure required nested field keys exist: value, source_url, confidence, is_hypothesis
+            if "value" not in f_dict or "source_url" not in f_dict or "confidence" not in f_dict or "is_hypothesis" not in f_dict:
+                malformed.append(f)
+
+    if (missing or malformed) and overall_status == "SUCCESS":
         overall_status = "SCHEMA_INVALID"
-        diag_msgs.append(f"Missing required fields: {missing}")
+        err_parts = []
+        if missing:
+            err_parts.append(f"Missing required fields: {missing}")
+        if malformed:
+            err_parts.append(f"Malformed nested field schemas: {malformed}")
+        diag_msgs.append("; ".join(err_parts))
 
     # Apply strict source evidence verification (P0-C)
     final_fields = verify_field_evidence_excerpts(snapshot, aggregated_proposals)

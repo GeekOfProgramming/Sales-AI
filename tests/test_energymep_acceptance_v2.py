@@ -1288,6 +1288,202 @@ def test_29_successful_analysis_exposes_13_fields_in_review_ui(isolated_db_paths
     assert stored_an.proposed_fields["business_activities"]["value"] == "MEP engineering"
 
 
+# ==============================================================================
+# 30. V2.1d Gemini Structured Output Regression Tests
+# ==============================================================================
+
+def test_30_actual_failed_response_structure_reproduced_and_handled(isolated_db_paths):
+    """
+    Reproduces the actual failed Gemini response structure that caused
+    'SCHEMA_INVALID — Missing 11 required fields' (non-standard keys returned by unconstrained json_object mode).
+    Validates that the failure is safely caught as SCHEMA_INVALID without crashing or corrupting Lead Register.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep official website and services.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    # Non-standard keys returned during the unconstrained json_object failure
+    failed_gemini_json = {
+        "company_name": {"value": "Energymep", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep", "is_hypothesis": False},
+        "website": {"value": "https://energymep.it/", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "energymep.it", "is_hypothesis": False},
+        "vat_number": {"value": "Not Found", "confidence": 0.0, "source_url": "", "evidence_excerpt": "", "is_hypothesis": False},
+        "hq_address": {"value": "Via Taggia 38 B", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "Via Taggia 38 B", "is_hypothesis": False},
+        "phone": {"value": "+39 347 455 9751", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "+39 347 455 9751", "is_hypothesis": False},
+        "email": {"value": "info@energymep.it", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "info@energymep.it", "is_hypothesis": False},
+    }
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_fail_reproduce",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(failed_gemini_json),
+        parsed_json=failed_gemini_json,
+        input_tokens=8700,
+        output_tokens=1350,
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SCHEMA_INVALID"
+    assert "Missing required fields" in rec.diagnostic_info
+    assert "legal_identity" in rec.diagnostic_info
+    assert "official_website" in rec.diagnostic_info
+
+
+def test_31_openai_provider_structured_output_payload_construction():
+    """
+    Verifies that OpenAIProvider properly formats response_format with type='json_schema'
+    and passes strict=True with the schema when configured for Gemini or models with supports_structured_schema.
+    """
+    prov = OpenAIProvider(
+        provider_id="gemini",
+        api_key="sk-mock",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        default_model="gemini-3.5-flash-lite",
+        model_capabilities={"gemini-3.5-flash-lite": {"supports_structured_schema": True, "supports_json_mode": True}},
+    )
+
+    req = LLMRequest(
+        task_id="company_research_13_field_extraction",
+        prompt="Analyze website",
+        response_schema=LEAD_REGISTER_13_FIELDS_SCHEMA,
+    )
+
+    payload = prov._build_payload(req, "gemini-3.5-flash-lite")
+    rf = payload.get("response_format")
+    assert rf is not None
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["strict"] is True
+    assert rf["json_schema"]["schema"] == LEAD_REGISTER_13_FIELDS_SCHEMA
+
+
+def test_32_truncated_model_output_detected_as_schema_invalid(isolated_db_paths):
+    """
+    Verifies that model responses marked with finish_reason='length' or 'max_tokens'
+    are classified as SCHEMA_INVALID with diagnostic notice.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Website content",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_trunc",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content='{"company_name": {"value": "Energymep"',
+        parsed_json=None,
+        input_tokens=100,
+        output_tokens=2500,
+        finish_reason="length",  # Truncated!
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SCHEMA_INVALID"
+    assert "truncated" in rec.diagnostic_info.lower()
+
+
+def test_33_wrapped_json_top_level_unwrapped_successfully(isolated_db_paths):
+    """
+    Verifies that if an LLM wraps the 13 fields under a top-level key like 'lead_register'
+    or 'fields', the extractor safely unwraps it without failing.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep S.r.l. operates in MEP engineering.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    inner_fields = {
+        "company_name": {"value": "Energymep S.r.l.", "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep S.r.l.", "confidence": 0.95, "is_hypothesis": False},
+        "legal_identity": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "geographic_location": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "telephone_numbers": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "business_activities": {"value": "MEP engineering", "source_url": "https://energymep.it/", "evidence_excerpt": "operates in MEP engineering", "confidence": 0.90, "is_hypothesis": False},
+        "official_website": {"value": "https://energymep.it/", "source_url": "https://energymep.it/", "evidence_excerpt": "https://energymep.it/", "confidence": 0.95, "is_hypothesis": False},
+        "responsible_person": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "descriptions_and_notes": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "job_advertisement_links": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "other_links_and_references": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "contact_email_addresses": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "priority_level": {"value": "A", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+        "priority_rationale": {"value": "Strong BIM and MEP engineering profile", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+    }
+    wrapped_json = {"lead_register": inner_fields}
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_wrapped",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(wrapped_json),
+        parsed_json=wrapped_json,
+        input_tokens=200,
+        output_tokens=400,
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SUCCESS"
+    assert rec.proposed_fields["company_name"]["value"] == "Energymep S.r.l."
+
+
 def test_25_oversized_page_subchunking_preserves_url():
     from sales_engine.research.company_analysis_service import partition_snapshot_into_chunks
 
@@ -1567,3 +1763,199 @@ def test_29_successful_analysis_exposes_13_fields_in_review_ui(isolated_db_paths
     assert stored_an.proposed_fields["company_name"]["value"] == "Energymep S.r.l."
     assert stored_an.proposed_fields["legal_identity"]["value"] == "P.IVA 01234567890"
     assert stored_an.proposed_fields["business_activities"]["value"] == "MEP engineering"
+
+
+# ==============================================================================
+# 30. V2.1d Gemini Structured Output Regression Tests
+# ==============================================================================
+
+def test_30_actual_failed_response_structure_reproduced_and_handled(isolated_db_paths):
+    """
+    Reproduces the actual failed Gemini response structure that caused
+    'SCHEMA_INVALID — Missing 11 required fields' (non-standard keys returned by unconstrained json_object mode).
+    Validates that the failure is safely caught as SCHEMA_INVALID without crashing or corrupting Lead Register.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep official website and services.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    # Non-standard keys returned during the unconstrained json_object failure
+    failed_gemini_json = {
+        "company_name": {"value": "Energymep", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep", "is_hypothesis": False},
+        "website": {"value": "https://energymep.it/", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "energymep.it", "is_hypothesis": False},
+        "vat_number": {"value": "Not Found", "confidence": 0.0, "source_url": "", "evidence_excerpt": "", "is_hypothesis": False},
+        "hq_address": {"value": "Via Taggia 38 B", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "Via Taggia 38 B", "is_hypothesis": False},
+        "phone": {"value": "+39 347 455 9751", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "+39 347 455 9751", "is_hypothesis": False},
+        "email": {"value": "info@energymep.it", "confidence": 1.0, "source_url": "https://energymep.it/", "evidence_excerpt": "info@energymep.it", "is_hypothesis": False},
+    }
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_fail_reproduce",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(failed_gemini_json),
+        parsed_json=failed_gemini_json,
+        input_tokens=8700,
+        output_tokens=1350,
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SCHEMA_INVALID"
+    assert "Missing required fields" in rec.diagnostic_info
+    assert "legal_identity" in rec.diagnostic_info
+    assert "official_website" in rec.diagnostic_info
+
+
+def test_31_openai_provider_structured_output_payload_construction():
+    """
+    Verifies that OpenAIProvider properly formats response_format with type='json_schema'
+    and passes strict=True with the schema when configured for Gemini or models with supports_structured_schema.
+    """
+    prov = OpenAIProvider(
+        provider_id="gemini",
+        api_key="sk-mock",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+        default_model="gemini-3.5-flash-lite",
+        model_capabilities={"gemini-3.5-flash-lite": {"supports_structured_schema": True, "supports_json_mode": True}},
+    )
+
+    req = LLMRequest(
+        task_id="company_research_13_field_extraction",
+        prompt="Analyze website",
+        response_schema=LEAD_REGISTER_13_FIELDS_SCHEMA,
+    )
+
+    payload = prov._build_payload(req, "gemini-3.5-flash-lite")
+    rf = payload.get("response_format")
+    assert rf is not None
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["strict"] is True
+    assert rf["json_schema"]["schema"] == LEAD_REGISTER_13_FIELDS_SCHEMA
+
+
+def test_32_truncated_model_output_detected_as_schema_invalid(isolated_db_paths):
+    """
+    Verifies that model responses marked with finish_reason='length' or 'max_tokens'
+    are classified as SCHEMA_INVALID with diagnostic notice.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Website content",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_trunc",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content='{"company_name": {"value": "Energymep"',
+        parsed_json=None,
+        input_tokens=100,
+        output_tokens=2500,
+        finish_reason="length",  # Truncated!
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SCHEMA_INVALID"
+    assert "truncated" in rec.diagnostic_info.lower()
+
+
+def test_33_wrapped_json_top_level_unwrapped_successfully(isolated_db_paths):
+    """
+    Verifies that if an LLM wraps the 13 fields under a top-level key like 'lead_register'
+    or 'fields', the extractor safely unwraps it without failing.
+    """
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep S.r.l. operates in MEP engineering.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    inner_fields = {
+        "company_name": {"value": "Energymep S.r.l.", "source_url": "https://energymep.it/", "evidence_excerpt": "Energymep S.r.l.", "confidence": 0.95, "is_hypothesis": False},
+        "legal_identity": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "geographic_location": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "telephone_numbers": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "business_activities": {"value": "MEP engineering", "source_url": "https://energymep.it/", "evidence_excerpt": "operates in MEP engineering", "confidence": 0.90, "is_hypothesis": False},
+        "official_website": {"value": "https://energymep.it/", "source_url": "https://energymep.it/", "evidence_excerpt": "https://energymep.it/", "confidence": 0.95, "is_hypothesis": False},
+        "responsible_person": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "descriptions_and_notes": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "job_advertisement_links": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "other_links_and_references": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "contact_email_addresses": {"value": "Not Found", "source_url": "", "evidence_excerpt": "", "confidence": 0.0, "is_hypothesis": False},
+        "priority_level": {"value": "A", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+        "priority_rationale": {"value": "Strong BIM and MEP engineering profile", "source_url": "", "evidence_excerpt": "", "confidence": 0.8, "is_hypothesis": True},
+    }
+    wrapped_json = {"lead_register": inner_fields}
+
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        request_id="req_wrapped",
+        task_id="company_research_13_field_extraction",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        content=json.dumps(wrapped_json),
+        parsed_json=wrapped_json,
+        input_tokens=200,
+        output_tokens=400,
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id=cid,
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+    )
+    assert rec.status == "SUCCESS"
+    assert rec.proposed_fields["company_name"]["value"] == "Energymep S.r.l."
