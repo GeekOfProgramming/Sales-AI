@@ -204,33 +204,68 @@
 {% if research %}
 <!-- Top Stats Banner -->
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <!-- Card 1: Proposed Priority Recommendation -->
   <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
-    <div class="stat-card-title">Proposed Priority</div>
+    <div class="stat-card-title">Priority Recommendation</div>
     <div style="font-size: 1.3rem; font-weight: 700; color: {% if 'A' in proposed_record.priority_level %}#15803d{% else %}#b45309{% endif %}; margin-top: 0.25rem;">
       Priority {{ proposed_record.priority_level }}
     </div>
-    <div class="stat-card-sub">(Hypothesis pending validation)</div>
+    <div class="stat-card-sub" style="color: #b45309; font-weight: 600;">(AI Hypothesis &mdash; Pending Operator Verification)</div>
   </div>
+
+  <!-- Card 2: Website Crawl Snapshot -->
   <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
-    <div class="stat-card-title">Italian P.IVA</div>
+    <div class="stat-card-title">Public Website Crawl</div>
     <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">
-      <code>{{ research.p_iva or 'Not Found' }}</code>
+      {% if snapshot %}
+        {{ snapshot.pages_succeeded }} / {{ snapshot.pages_attempted }} Pages
+      {% else %}
+        {{ research.fetched_pages|length if research else 0 }} Pages
+      {% endif %}
     </div>
-    <div class="stat-card-sub">Format: {% if research.p_iva %}VALID MOD-10 CHECKSUM{% else %}N/A{% endif %}</div>
+    <div class="stat-card-sub">
+      {% if snapshot %}
+        Snapshot: <code>{{ snapshot.snapshot_id[:16] }}...</code>
+      {% else %}
+        Bounded same-domain fetch
+      {% endif %}
+    </div>
   </div>
+
+  <!-- Card 3: Provider LLM Analysis Status -->
   <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
-    <div class="stat-card-title">Pages Inspected</div>
-    <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">
-      {{ research.fetched_pages|length }} Public Pages
+    <div class="stat-card-title">LLM Analysis Status</div>
+    <div style="font-size: 1rem; font-weight: 700; color: {% if latest_analysis and latest_analysis.status == 'SUCCESS' %}#15803d{% elif latest_analysis %}#b45309{% else %}#64748b{% endif %}; margin-top: 0.25rem;">
+      {% if latest_analysis %}
+        {{ latest_analysis.provider|upper }}: {{ latest_analysis.status }}
+      {% else %}
+        Awaiting Trigger
+      {% endif %}
     </div>
-    <div class="stat-card-sub">Bounded same-domain fetch</div>
+    <div class="stat-card-sub">
+      {% if latest_analysis and latest_analysis.status == 'SUCCESS' %}
+        {{ latest_analysis.analyzed_pages_count }} pages &bull; {{ (latest_analysis.input_tokens or 0) + (latest_analysis.output_tokens or 0) }} tokens &bull; ${{ latest_analysis.cost_estimate }}
+      {% elif latest_analysis %}
+        Status: {{ latest_analysis.status }}
+      {% else %}
+        Local schema validation only
+      {% endif %}
+    </div>
   </div>
+
+  <!-- Card 4: Operator Field Review Status -->
   <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
-    <div class="stat-card-title">Local AI Analysis</div>
-    <div style="font-size: 1rem; font-weight: 700; color: {% if research.llm_analysis_status == 'SUCCESS' %}#15803d{% else %}#334155{% endif %}; margin-top: 0.25rem;">
-      {{ research.llm_analysis_status }}
+    <div class="stat-card-title">Operator Review Status</div>
+    <div style="font-size: 1.1rem; font-weight: 700; color: {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}#15803d{% else %}#0369a1{% endif %}; margin-top: 0.25rem;">
+      {{ current_record.verification_status if current_record else 'Unverified' }}
     </div>
-    <div class="stat-card-sub">Local schema validation only</div>
+    <div class="stat-card-sub">
+      {% if current_record and current_record.provenance_source == 'operator_edited' %}
+        Operator provenance recorded
+      {% else %}
+        Field approval required
+      {% endif %}
+    </div>
   </div>
 </div>
 
@@ -259,23 +294,52 @@
           </thead>
           <tbody>
             <!-- 1. Company Name -->
-            <tr>
-              <td><strong>1. Company Name</strong></td>
+            {% set f_meta = analysis_fields.get('company_name') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>1. Company Name</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td><code>{{ current_record.company_name if current_record else candidate.company_name }}</code></td>
               <td>
                 <input type="text" name="company_name" class="form-control" value="{{ proposed_record.company_name }}">
-                {% if research.evidence_items.get('company_name') %}
-                <div class="citation-tag">Source: {{ research.evidence_items['company_name'].source_url }} ({{ research.evidence_items['company_name'].validation_status }})</div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('company_name') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['company_name'].source_url }} ({{ research.evidence_items['company_name'].validation_status }})</div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_company_name" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_company_name" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 2. Priority Level & Rationale -->
+            {% set p_meta = analysis_fields.get('priority_level') if analysis_fields else None %}
+            {% set pr_meta = analysis_fields.get('priority_rationale') if analysis_fields else None %}
             <tr>
-              <td><strong>2. Priority Level &amp; Rationale</strong></td>
+              <td>
+                <strong>2. Priority Level &amp; Rationale</strong>
+                <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+              </td>
               <td>
                 <span class="badge badge-secondary">{{ current_record.priority_level if current_record else 'Unassigned' }}</span>
                 <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.25rem;">{{ current_record.priority_rationale if current_record else 'None' }}</div>
@@ -289,7 +353,12 @@
                   </select>
                 </div>
                 <textarea name="priority_rationale" class="form-control" rows="2">{{ proposed_record.priority_rationale }}</textarea>
-                <div class="citation-tag">Evidence: Capacity/Teaming Hypothesis (Pending verification)</div>
+                <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                  {% if pr_meta and pr_meta.source_url and pr_meta.source_url != 'Not Found' %}
+                    <div><strong>Source:</strong> <a href="{{ pr_meta.source_url }}" target="_blank" rel="noopener">{{ pr_meta.source_url }}</a> | <strong>Confidence:</strong> {{ (pr_meta.confidence * 100)|round|int }}%</div>
+                  {% endif %}
+                  <div><em>(AI Commercial Hypothesis &mdash; Subject to operator validation)</em></div>
+                </div>
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 <input type="checkbox" name="apply_priority" value="1">
@@ -297,146 +366,390 @@
             </tr>
 
             <!-- 3. Legal Identity / P.IVA -->
-            <tr>
-              <td><strong>3. Legal Identity (P.IVA)</strong></td>
+            {% set f_meta = analysis_fields.get('legal_identity') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>3. Legal Identity (P.IVA)</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td><code>{{ current_record.legal_identity if current_record else 'Not Found' }}</code></td>
               <td>
                 <input type="text" name="legal_identity" class="form-control" value="{{ proposed_record.legal_identity }}">
-                {% if research.evidence_items.get('p_iva') %}
-                <div class="citation-tag">Source: {{ research.evidence_items['p_iva'].source_url }} (Checksum Validated)</div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('p_iva') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['p_iva'].source_url }} (Checksum Validated)</div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_legal_identity" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_legal_identity" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 4. Geographic Location -->
-            <tr>
-              <td><strong>4. Geographic Location</strong></td>
+            {% set f_meta = analysis_fields.get('geographic_location') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>4. Geographic Location</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td>{{ current_record.geographic_location if current_record else (candidate.city or 'Not Verified') }}</td>
               <td>
                 <input type="text" name="geographic_location" class="form-control" value="{{ proposed_record.geographic_location }}">
-                {% if research.evidence_items.get('geographic_location') %}
-                <div class="citation-tag">
-                  <strong>Source:</strong> <a href="{{ research.evidence_items['geographic_location'].source_url }}" target="_blank" rel="noopener">{{ research.evidence_items['geographic_location'].source_url }}</a><br>
-                  <strong>Status:</strong> {{ research.evidence_items['geographic_location'].validation_status }}<br>
-                  {% if research.evidence_items['geographic_location'].notes %}
-                  <strong>Excerpt/Note:</strong> {{ research.evidence_items['geographic_location'].notes }}
-                  {% endif %}
-                </div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('geographic_location') %}
+                  <div class="citation-tag">
+                    <strong>Source:</strong> <a href="{{ research.evidence_items['geographic_location'].source_url }}" target="_blank" rel="noopener">{{ research.evidence_items['geographic_location'].source_url }}</a><br>
+                    <strong>Status:</strong> {{ research.evidence_items['geographic_location'].validation_status }}<br>
+                    {% if research.evidence_items['geographic_location'].notes %}
+                    <strong>Excerpt/Note:</strong> {{ research.evidence_items['geographic_location'].notes }}
+                    {% endif %}
+                  </div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_geographic_location" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_geographic_location" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 5. Telephone Numbers -->
-            <tr>
-              <td><strong>5. Telephone</strong></td>
+            {% set f_meta = analysis_fields.get('telephone_numbers') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>5. Telephone</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td><code>{{ current_record.telephone_numbers if current_record else 'Not Found' }}</code></td>
               <td>
                 <input type="text" name="telephone_numbers" class="form-control" value="{{ proposed_record.telephone_numbers }}">
-                {% if research.evidence_items.get('telephone') %}
-                <div class="citation-tag">Source: {{ research.evidence_items['telephone'].source_url }} (Normalized)</div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('telephone') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['telephone'].source_url }} (Normalized)</div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_telephone_numbers" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_telephone_numbers" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 6. Contact Emails -->
-            <tr>
-              <td><strong>6. Email Addresses</strong></td>
+            {% set f_meta = analysis_fields.get('contact_email_addresses') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>6. Email Addresses</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td><code>{{ current_record.contact_email_addresses if current_record else 'Not Found' }}</code></td>
               <td>
                 <input type="text" name="contact_email_addresses" class="form-control" value="{{ proposed_record.contact_email_addresses }}">
-                {% if research.evidence_items.get('email') %}
-                <div class="citation-tag">Source: {{ research.evidence_items['email'].source_url }}</div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('email') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['email'].source_url }}</div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_contact_email_addresses" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_contact_email_addresses" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 7. Responsible Person / Key Contact -->
-            <tr>
-              <td><strong>7. Responsible Person</strong></td>
+            {% set f_meta = analysis_fields.get('responsible_person') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>7. Responsible Person</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td>{{ current_record.responsible_person if current_record else 'Not Found' }}</td>
               <td>
                 <input type="text" name="responsible_person" class="form-control" value="{{ proposed_record.responsible_person }}">
-                {% if research.evidence_items.get('responsible_person') %}
-                <div class="citation-tag">Source: {{ research.evidence_items['responsible_person'].source_url }}</div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('responsible_person') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['responsible_person'].source_url }}</div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_responsible_person" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_responsible_person" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 8. Business Activities & BIM -->
-            <tr>
-              <td><strong>8. Business Activities</strong></td>
+            {% set f_meta = analysis_fields.get('business_activities') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>8. Business Activities</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td style="font-size: 0.85rem;">{{ current_record.business_activities if current_record else 'Not Found' }}</td>
               <td>
                 <textarea name="business_activities" class="form-control" rows="2">{{ proposed_record.business_activities }}</textarea>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_business_activities" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_business_activities" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 9. Official Website -->
-            <tr>
-              <td><strong>9. Official Website</strong></td>
+            {% set f_meta = analysis_fields.get('official_website') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>9. Official Website</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td><a href="{{ current_record.official_website if current_record else proposed_record.official_website }}" target="_blank" rel="noopener">{{ current_record.official_website if current_record else proposed_record.official_website }}</a></td>
               <td>
                 <input type="text" name="official_website" class="form-control" value="{{ proposed_record.official_website }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_official_website" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_official_website" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 10. Descriptions & Notes -->
-            <tr>
-              <td><strong>10. Notes &amp; Projects</strong></td>
+            {% set f_meta = analysis_fields.get('descriptions_and_notes') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>10. Notes &amp; Projects</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td style="font-size: 0.82rem; white-space: pre-wrap;">{{ current_record.descriptions_and_notes if current_record else 'None' }}</td>
               <td>
                 <textarea name="descriptions_and_notes" class="form-control" rows="4">{{ proposed_record.descriptions_and_notes }}</textarea>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_descriptions_and_notes" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_descriptions_and_notes" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 11. Careers & Opportunities -->
-            <tr>
-              <td><strong>11. Job / Supplier Links</strong></td>
+            {% set f_meta = analysis_fields.get('job_advertisement_links') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>11. Job / Supplier Links</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td style="font-size: 0.82rem;">{{ current_record.job_advertisement_links if current_record else 'Not Found' }}</td>
               <td>
                 <input type="text" name="job_advertisement_links" class="form-control" value="{{ proposed_record.job_advertisement_links }}">
-                {% if research.opportunity_urls %}
-                <div class="citation-tag">Extracted {{ research.opportunity_urls|length }} verified URL(s) from anchors</div>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.opportunity_urls %}
+                  <div class="citation-tag">Extracted {{ research.opportunity_urls|length }} verified URL(s) from anchors</div>
                 {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_job_advertisement_links" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_job_advertisement_links" value="1">
+                {% endif %}
               </td>
             </tr>
 
             <!-- 12. References & Evidence URLs -->
-            <tr>
-              <td><strong>12. Reference URLs</strong></td>
+            {% set f_meta = analysis_fields.get('other_links_and_references') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>12. Reference URLs</strong>
+                {% if f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                  {% endif %}
+                {% endif %}
+              </td>
               <td style="font-size: 0.82rem;">{{ current_record.other_links_and_references if current_record else 'Not Found' }}</td>
               <td>
                 <input type="text" name="other_links_and_references" class="form-control" value="{{ proposed_record.other_links_and_references }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
               </td>
               <td style="text-align: center; vertical-align: middle;">
-                <input type="checkbox" name="apply_other_links_and_references" value="1">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_other_links_and_references" value="1">
+                {% endif %}
               </td>
             </tr>
 
@@ -448,7 +761,13 @@
                 <span class="badge badge-secondary">{{ current_record.verification_status if current_record else 'Unverified' }}</span>
               </td>
               <td>
-                <span class="badge badge-primary">local_research_mvp</span>
+                <span class="badge badge-primary">
+                  {% if latest_analysis and latest_analysis.status == 'SUCCESS' %}
+                    {{ latest_analysis.provider }}:{{ latest_analysis.model }}
+                  {% else %}
+                    local_research_mvp
+                  {% endif %}
+                </span>
                 <span class="badge badge-info">EXTRACTED (Checksum/HQ Validated)</span>
                 <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Research Date: {{ proposed_record.research_date }}</div>
               </td>

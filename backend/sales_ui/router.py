@@ -3874,6 +3874,8 @@ async def candidate_research_view(
     if current_reg and current_reg.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
         pipeline_status = "Operator Reviewed"
 
+    analysis_fields = latest_analysis.proposed_fields if (latest_analysis and latest_analysis.status == "SUCCESS" and latest_analysis.proposed_fields) else {}
+
     return render_console_template(
         request=request,
         name="company_research_review.html",
@@ -3887,6 +3889,7 @@ async def candidate_research_view(
             "current_record": current_reg,
             "proposed_record": proposed_rec,
             "latest_analysis": latest_analysis,
+            "analysis_fields": analysis_fields,
             "analysis_preflight": analysis_preflight,
             "analysis_auth_token": analysis_auth_token,
             "pipeline_status": pipeline_status,
@@ -4223,19 +4226,29 @@ async def save_candidate_research_action(
 
     # Determine field values based on explicit operator checkboxes:
     # If a field is NOT checked, preserve existing value completely!
-    final_company_name = company_name if apply_company_name else (existing.company_name if existing else cand.company_name)
+    # Furthermore, do not let an operator mistakenly overwrite an existing valid value with "Not Found" or empty string.
+    def resolve_field_val(form_val: str, is_applied: bool, existing_val: Optional[str], default_val: str) -> str:
+        if not is_applied:
+            return existing_val if existing_val else default_val
+        val = (form_val or "").strip()
+        # Safety guard: If form submitted "Not Found" or blank, but existing has an authoritative value, preserve existing
+        if val in ("Not Found", "") and existing_val and existing_val.strip() not in ("Not Found", ""):
+            return existing_val
+        return val if val else default_val
+
+    final_company_name = resolve_field_val(company_name, bool(apply_company_name), existing.company_name if existing else None, cand.company_name)
     final_priority_level = priority_level if apply_priority else (existing.priority_level if existing else "B")
-    final_priority_rationale = priority_rationale if apply_priority else (existing.priority_rationale if existing else "Not Found")
-    final_legal_identity = legal_identity if apply_legal_identity else (existing.legal_identity if existing else "Not Found")
-    final_geographic_location = geographic_location if apply_geographic_location else (existing.geographic_location if existing else "Not Found")
-    final_telephone_numbers = telephone_numbers if apply_telephone_numbers else (existing.telephone_numbers if existing else "Not Found")
-    final_contact_email_addresses = contact_email_addresses if apply_contact_email_addresses else (existing.contact_email_addresses if existing else "Not Found")
-    final_responsible_person = responsible_person if apply_responsible_person else (existing.responsible_person if existing else "Not Found")
-    final_business_activities = business_activities if apply_business_activities else (existing.business_activities if existing else "Not Found")
-    final_official_website = official_website if apply_official_website else (existing.official_website if existing else "Not Found")
-    final_descriptions_and_notes = descriptions_and_notes if apply_descriptions_and_notes else (existing.descriptions_and_notes if existing else "Not Found")
-    final_job_advertisement_links = job_advertisement_links if apply_job_advertisement_links else (existing.job_advertisement_links if existing else "Not Found")
-    final_other_links_and_references = other_links_and_references if apply_other_links_and_references else (existing.other_links_and_references if existing else "Not Found")
+    final_priority_rationale = resolve_field_val(priority_rationale, bool(apply_priority), existing.priority_rationale if existing else None, "Not Found")
+    final_legal_identity = resolve_field_val(legal_identity, bool(apply_legal_identity), existing.legal_identity if existing else None, "Not Found")
+    final_geographic_location = resolve_field_val(geographic_location, bool(apply_geographic_location), existing.geographic_location if existing else None, "Not Found")
+    final_telephone_numbers = resolve_field_val(telephone_numbers, bool(apply_telephone_numbers), existing.telephone_numbers if existing else None, "Not Found")
+    final_contact_email_addresses = resolve_field_val(contact_email_addresses, bool(apply_contact_email_addresses), existing.contact_email_addresses if existing else None, "Not Found")
+    final_responsible_person = resolve_field_val(responsible_person, bool(apply_responsible_person), existing.responsible_person if existing else None, "Not Found")
+    final_business_activities = resolve_field_val(business_activities, bool(apply_business_activities), existing.business_activities if existing else None, "Not Found")
+    final_official_website = resolve_field_val(official_website, bool(apply_official_website), existing.official_website if existing else None, "Not Found")
+    final_descriptions_and_notes = resolve_field_val(descriptions_and_notes, bool(apply_descriptions_and_notes), existing.descriptions_and_notes if existing else None, "Not Found")
+    final_job_advertisement_links = resolve_field_val(job_advertisement_links, bool(apply_job_advertisement_links), existing.job_advertisement_links if existing else None, "Not Found")
+    final_other_links_and_references = resolve_field_val(other_links_and_references, bool(apply_other_links_and_references), existing.other_links_and_references if existing else None, "Not Found")
 
     now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -4259,6 +4272,18 @@ async def save_candidate_research_action(
     else:
         evidence_urls = []
 
+    # P0 DEFECT FIX: Preserve authoritative review status!
+    # If record is already OPERATOR_REVIEWED or VERIFIED, never silently downgrade to EXTRACTED.
+    # When an operator explicitly approves fields on this form, it represents an operator review action.
+    if existing and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        final_verification_status = existing.verification_status
+    elif approved_any:
+        final_verification_status = "OPERATOR_REVIEWED"
+    else:
+        final_verification_status = existing.verification_status if existing else "Unverified"
+
+    final_confidence = 0.90 if final_verification_status in ("OPERATOR_REVIEWED", "VERIFIED") else (0.75 if approved_any else (existing.confidence_score if existing else 0.0))
+
     rec = LeadRegisterRecord(
         candidate_id=candidate_id,
         record_number=orig_record_number,
@@ -4277,8 +4302,8 @@ async def save_candidate_research_action(
         contact_email_addresses=final_contact_email_addresses,
         provenance_source=final_provenance,
         research_date=now_date,
-        verification_status="EXTRACTED" if approved_any else (existing.verification_status if existing else "Unverified"),
-        confidence_score=0.75 if approved_any else (existing.confidence_score if existing else 0.0),
+        verification_status=final_verification_status,
+        confidence_score=final_confidence,
         evidence_urls=evidence_urls,
         created_at=orig_created_at,
         updated_at=datetime.now(timezone.utc).isoformat(),

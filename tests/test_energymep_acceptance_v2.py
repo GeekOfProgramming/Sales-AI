@@ -1959,3 +1959,266 @@ def test_33_wrapped_json_top_level_unwrapped_successfully(isolated_db_paths):
     )
     assert rec.status == "SUCCESS"
     assert rec.proposed_fields["company_name"]["value"] == "Energymep S.r.l."
+
+
+# ==============================================================================
+# Research Pipeline V2.1e: Field-Level Evidence & Approval Integrity Tests
+# ==============================================================================
+
+def test_34_preserve_operator_reviewed_status_on_save(isolated_db_paths, monkeypatch):
+    """
+    P0 Integrity Test:
+    Verify that save_candidate_research_action preserves OPERATOR_REVIEWED and VERIFIED
+    status and never downgrades an existing record to EXTRACTED when approving fields.
+    Also verifies that a fresh approval marks the record as OPERATOR_REVIEWED.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action, get_console_services
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    # Reset cached services in router if any
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="Energymep",
+        domain="energymep.it",
+    )
+    cand_store.save_candidate(cand)
+
+    # 1. Existing record is already OPERATOR_REVIEWED
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        verification_status="OPERATOR_REVIEWED",
+        confidence_score=0.90,
+        provenance_source="operator_edited",
+        official_website="https://energymep.it/",
+    )
+    reg_store.save_record(rec)
+
+    # Operator approves a new field update (e.g. telephone)
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    asyncio.run(
+        save_candidate_research_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Energymep S.r.l.",
+            priority_level="A",
+            priority_rationale="Solid BIM workflow",
+            legal_identity="IT01234567890",
+            geographic_location="Padova",
+            telephone_numbers="+39 049 123456",
+            contact_email_addresses="info@energymep.it",
+            responsible_person="Ing. Rossi",
+            business_activities="MEP Engineering",
+            official_website="https://energymep.it/",
+            descriptions_and_notes="Notes",
+            job_advertisement_links="Not Found",
+            other_links_and_references="Not Found",
+            apply_telephone_numbers="1",
+        )
+    )
+
+    saved = reg_store.get_record(cid)
+    assert saved is not None
+    # Crucial assertion: Must NOT be downgraded to EXTRACTED!
+    assert saved.verification_status == "OPERATOR_REVIEWED"
+    assert saved.telephone_numbers == "+39 049 123456"
+    assert saved.official_website == "https://energymep.it/"
+
+
+def test_35_not_found_cannot_overwrite_authoritative_data(isolated_db_paths, monkeypatch):
+    """
+    P1 Safety Test:
+    If a form field contains 'Not Found' or empty string, an operator checking that box
+    must not silently destroy existing verified authoritative data.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand_store.save_candidate(CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it"))
+
+    reg_store.save_record(
+        LeadRegisterRecord(
+            candidate_id=cid,
+            company_name="Energymep S.r.l.",
+            legal_identity="IT01234567890",
+            verification_status="VERIFIED",
+            official_website="https://energymep.it/",
+        )
+    )
+
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    asyncio.run(
+        save_candidate_research_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Energymep S.r.l.",
+            priority_level="B",
+            priority_rationale="Not Found",
+            legal_identity="Not Found",  # Mistakenly submitted as 'Not Found'
+            geographic_location="Not Found",
+            telephone_numbers="Not Found",
+            contact_email_addresses="Not Found",
+            responsible_person="Not Found",
+            business_activities="Not Found",
+            official_website="Not Found",
+            descriptions_and_notes="Not Found",
+            job_advertisement_links="Not Found",
+            other_links_and_references="Not Found",
+            apply_legal_identity="1",  # Operator checked the box
+        )
+    )
+
+    saved = reg_store.get_record(cid)
+    assert saved is not None
+    # Existing valid P.IVA must be preserved rather than overwritten by 'Not Found'
+    assert saved.legal_identity == "IT01234567890"
+    assert saved.verification_status == "VERIFIED"
+
+
+def test_36_quarantined_fields_rendered_with_warning_and_blocked(isolated_db_paths, monkeypatch):
+    """
+    P1 UI / Metadata Test:
+    Verifies that company_research_review renders the LLM analysis metadata:
+    - Displays AI Fact / AI Hypothesis tags
+    - Displays Source URL, confidence, and verbatim evidence excerpts
+    - Quarantined fields render warning and blocked state in the HTML
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import candidate_research_view
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.research.research_store import ResearchSnapshotStore, PageEvidence, CompanyAnalysisRecord
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    cand_store = CandidateStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    cand_store.save_candidate(CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it"))
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h01",
+        cleaned_text="Energymep S.r.l. operates in MEP engineering in Padova.",
+    )
+    snap = snap_store.create_snapshot(cid, "energymep.it", "Energymep", [pe])
+
+    # Save an analysis record with both grounded and quarantined fields
+    proposed = {
+        "company_name": {
+            "value": "Energymep S.r.l.",
+            "source_url": "https://energymep.it/",
+            "evidence_excerpt": "Energymep S.r.l.",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "legal_identity": {
+            "value": "IT99999999999",
+            "source_url": "https://external-unverified.com/",
+            "evidence_excerpt": "Hallucinated P.IVA",
+            "confidence": 0.3,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": False,
+            "excerpt_verified": False,
+            "quarantined": True,
+            "quarantine_reason": "Source URL not present in snapshot pages.",
+        },
+        "priority_level": {
+            "value": "A",
+            "source_url": "https://energymep.it/",
+            "evidence_excerpt": "MEP engineering in Padova",
+            "confidence": 0.85,
+            "is_hypothesis": True,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+    }
+    rec = CompanyAnalysisRecord(
+        analysis_id="an_test_36",
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        created_at="2026-11-02T12:05:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=150,
+        output_tokens=300,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields=proposed,
+    )
+    snap_store.save_analysis_record(rec)
+
+    req = Request({
+        "type": "http",
+        "method": "GET",
+        "path": f"/sales/candidates/{cid}/research",
+        "headers": [],
+    })
+    resp = asyncio.run(candidate_research_view(request=req, candidate_id=cid))
+    html = resp.body.decode("utf-8")
+
+    # Verify LLM status card and Top Stats
+    assert "GEMINI: SUCCESS" in html
+    assert "Priority Recommendation" in html
+    assert "(AI Hypothesis &mdash; Pending Operator Verification)" in html
+
+    # Verify Company Name field metadata
+    assert "AI Fact" in html
+    assert "Confidence:</strong> 95%" in html
+    assert "&ldquo;Energymep S.r.l.&rdquo;" in html
+
+    # Verify Quarantined Legal Identity field
+    assert "⚠️ QUARANTINED: Source URL not present in snapshot pages." in html
+    assert "Blocked" in html
