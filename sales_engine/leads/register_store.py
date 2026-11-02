@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
 import os
 
-from sales_engine.leads.register_models import LeadRegisterRecord
+from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
 from sales_engine.candidates.candidate_store import normalize_company_name, canonicalize_domain
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,24 @@ class LeadRegisterStore:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_lead_register_rec_num ON lead_register_records(record_number);
-                CREATE INDEX IF NOT EXISTS idx_lead_register_priority ON lead_register_records(priority_level);
+                                CREATE INDEX IF NOT EXISTS idx_lead_register_priority ON lead_register_records(priority_level);
+
+                CREATE TABLE IF NOT EXISTS lead_register_field_reviews (
+                    candidate_id TEXT NOT NULL,
+                    field_name TEXT NOT NULL,
+                    approved_value TEXT NOT NULL,
+                    value_checksum TEXT NOT NULL,
+                    review_state TEXT DEFAULT 'OPERATOR_APPROVED',
+                    reviewed_at TEXT NOT NULL,
+                    source_type TEXT DEFAULT 'llm_analysis',
+                    snapshot_id TEXT,
+                    analysis_id TEXT,
+                    evidence_url TEXT,
+                    evidence_excerpt TEXT,
+                    operator_note TEXT,
+                    PRIMARY KEY (candidate_id, field_name)
+                );
+                CREATE INDEX IF NOT EXISTS idx_field_reviews_cid ON lead_register_field_reviews(candidate_id);
             """)
 
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
@@ -618,3 +635,79 @@ class LeadRegisterStore:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    def save_field_review(self, review: FieldReviewRecord) -> FieldReviewRecord:
+        """Persists or updates an individual field review record."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO lead_register_field_reviews (
+                    candidate_id, field_name, approved_value, value_checksum,
+                    review_state, reviewed_at, source_type, snapshot_id,
+                    analysis_id, evidence_url, evidence_excerpt, operator_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(candidate_id, field_name) DO UPDATE SET
+                    approved_value = excluded.approved_value,
+                    value_checksum = excluded.value_checksum,
+                    review_state = excluded.review_state,
+                    reviewed_at = excluded.reviewed_at,
+                    source_type = excluded.source_type,
+                    snapshot_id = excluded.snapshot_id,
+                    analysis_id = excluded.analysis_id,
+                    evidence_url = excluded.evidence_url,
+                    evidence_excerpt = excluded.evidence_excerpt,
+                    operator_note = excluded.operator_note
+            """, (
+                review.candidate_id,
+                review.field_name,
+                review.approved_value,
+                review.value_checksum,
+                review.review_state,
+                review.reviewed_at,
+                review.source_type,
+                review.snapshot_id,
+                review.analysis_id,
+                review.evidence_url,
+                review.evidence_excerpt,
+                review.operator_note,
+            ))
+            conn.commit()
+        return review
+
+    def get_field_reviews(self, candidate_id: str) -> Dict[str, FieldReviewRecord]:
+        """Fetches all persisted field reviews for a candidate, keyed by field_name."""
+        with self._get_connection() as conn:
+            if not self._table_exists(conn, "lead_register_field_reviews"):
+                return {}
+            rows = conn.execute(
+                "SELECT * FROM lead_register_field_reviews WHERE candidate_id = ?",
+                (candidate_id,)
+            ).fetchall()
+            reviews = {}
+            for r in rows:
+                reviews[r["field_name"]] = FieldReviewRecord(
+                    candidate_id=r["candidate_id"],
+                    field_name=r["field_name"],
+                    approved_value=r["approved_value"],
+                    value_checksum=r["value_checksum"],
+                    review_state=r["review_state"],
+                    reviewed_at=r["reviewed_at"],
+                    source_type=r["source_type"],
+                    snapshot_id=r["snapshot_id"],
+                    analysis_id=r["analysis_id"],
+                    evidence_url=r["evidence_url"],
+                    evidence_excerpt=r["evidence_excerpt"],
+                    operator_note=r["operator_note"],
+                )
+            return reviews
+
+    def delete_field_review(self, candidate_id: str, field_name: str) -> bool:
+        """Deletes a field review when a field value is modified or revoked."""
+        with self._get_connection() as conn:
+            if not self._table_exists(conn, "lead_register_field_reviews"):
+                return False
+            cur = conn.execute(
+                "DELETE FROM lead_register_field_reviews WHERE candidate_id = ? AND field_name = ?",
+                (candidate_id, field_name)
+            )
+            conn.commit()
+            return cur.rowcount > 0

@@ -256,16 +256,81 @@
   <!-- Card 4: Operator Field Review Status -->
   <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
     <div class="stat-card-title">Operator Review Status</div>
-    <div style="font-size: 1.1rem; font-weight: 700; color: {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}#15803d{% else %}#0369a1{% endif %}; margin-top: 0.25rem;">
-      {{ current_record.verification_status if current_record else 'Unverified' }}
+    <div style="font-size: 1.1rem; font-weight: 700; color: {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}#15803d{% elif field_reviews and field_reviews|length > 0 %}#0284c7{% else %}#b45309{% endif %}; margin-top: 0.25rem;">
+      {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}
+        {{ current_record.verification_status }}
+      {% elif field_reviews and field_reviews|length > 0 %}
+        PARTIALLY REVIEWED ({{ field_reviews|length }} approved)
+      {% else %}
+        {{ current_record.verification_status if current_record else 'Unverified' }}
+      {% endif %}
     </div>
     <div class="stat-card-sub">
-      {% if current_record and current_record.provenance_source == 'operator_edited' %}
-        Operator provenance recorded
+      {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}
+        Review explicitly finalized
+      {% elif field_reviews and field_reviews|length > 0 %}
+        Partial save on file &bull; Finalization pending
       {% else %}
         Field approval required
       {% endif %}
     </div>
+  </div>
+</div>
+
+<!-- Finalization Readiness Feedback Panel -->
+<div class="card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); background-color: var(--bg-card);">
+  <div class="card-header" style="background-color: var(--bg-hover); border-bottom: 1px solid #cbd5e1; padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.05rem; color: var(--text-primary); font-weight: 700;">Research Review Finalization Criteria</h3>
+      <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
+        Explicit finalization promotes the record to <code>OPERATOR_REVIEWED</code> and marks company <strong>Research Ready</strong>.
+      </p>
+    </div>
+    <div>
+      {% if is_finalizable %}
+        <span class="badge" style="background-color: #15803d; color: white; padding: 0.4rem 0.8rem; font-size: 0.85rem;">Ready to Finalize</span>
+      {% else %}
+        <span class="badge" style="background-color: #b45309; color: white; padding: 0.4rem 0.8rem; font-size: 0.85rem;">Pending Requirements</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body" style="padding: 1rem 1.25rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.identity_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Company Identity:</strong> {% if finalization_checks.identity_valid %}Validated{% else %}Contradiction or Missing{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.website_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Official Website:</strong> {% if finalization_checks.website_valid %}Domain Matches{% else %}Missing or Mismatch{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.activities_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Business Activities:</strong> {% if finalization_checks.activities_valid %}Documented{% else %}Missing{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.evidence_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Source Evidence:</strong> {% if finalization_checks.evidence_valid %}Sufficient Traceable Sources{% else %}Insufficient{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.reviews_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Operator Review:</strong> {% if finalization_checks.reviews_valid %}Core Fields Approved{% else %}Pending Partial Review{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.quarantine_clean %}✅{% else %}❌{% endif %}
+        <span><strong>Quarantine Status:</strong> {% if finalization_checks.quarantine_clean %}No Blocked Claims{% else %}Required Field Quarantined{% endif %}</span>
+      </div>
+    </div>
+    {% if finalization_errors and finalization_errors|length > 0 %}
+    <div style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background-color: #fff1f2; border-left: 3px solid #b91c1c; border-radius: 4px; font-size: 0.82rem; color: #991b1b;">
+      <strong>Action Required to Finalize:</strong>
+      <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+        {% for err in finalization_errors %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -298,11 +363,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>1. Company Name</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'company_name' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -338,7 +407,11 @@
             <tr>
               <td>
                 <strong>2. Priority Level &amp; Rationale</strong>
-                <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                {% if field_reviews and ('priority_level' in field_reviews or 'priority_rationale' in field_reviews) %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% else %}
+                  <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                {% endif %}
               </td>
               <td>
                 <span class="badge badge-secondary">{{ current_record.priority_level if current_record else 'Unassigned' }}</span>
@@ -370,11 +443,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>3. Legal Identity (P.IVA)</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'legal_identity' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -409,11 +486,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>4. Geographic Location</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'geographic_location' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -454,11 +535,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>5. Telephone</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'telephone_numbers' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -493,11 +578,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>6. Email Addresses</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'contact_email_addresses' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -532,11 +621,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>7. Responsible Person</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'responsible_person' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -571,11 +664,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>8. Business Activities</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'business_activities' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -608,11 +705,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>9. Official Website</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'official_website' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -645,11 +746,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>10. Notes &amp; Projects</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'descriptions_and_notes' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -682,11 +787,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>11. Job / Supplier Links</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'job_advertisement_links' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -721,11 +830,15 @@
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>12. Reference URLs</strong>
-                {% if f_meta %}
+                {% if field_reviews and 'other_links_and_references' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
                   {% if f_meta.is_hypothesis %}
-                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis</span>
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
                   {% else %}
-                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact</span>
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
               </td>
@@ -831,17 +944,39 @@
   </div>
 
   <!-- Operator Action Buttons -->
-  <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0;">
+  <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-top: 1px solid var(--border-color); margin-top: 1rem;">
     <div>
       <a href="/sales/candidates/{{ candidate.candidate_id }}" class="btn btn-secondary">Cancel &amp; Discard</a>
     </div>
-    <div style="display: flex; gap: 0.75rem;">
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
       <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.5rem; font-weight: 600;">
-        &check; Approve Selected Fields &amp; Save to Lead Register
+        💾 Save Selected Fields (Partial Review)
       </button>
     </div>
   </div>
 </form>
+
+<!-- Independent Finalization Form -->
+<div class="card" style="margin-bottom: 2rem; border: 2px solid {% if is_finalizable %}#16a34a{% else %}#cbd5e1{% endif %}; background-color: var(--bg-card); padding: 1.25rem 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">
+        ✅ Finalize Research Review
+      </h3>
+      <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+        Explicitly signs off on this company's research profile. Promotes status to <code>OPERATOR_REVIEWED</code> and marks lead <strong>Research Ready</strong>.
+      </p>
+    </div>
+    <div>
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research/finalize" onsubmit="return confirm('Explicitly finalize research review for this company?\n\nThis will promote the record to OPERATOR_REVIEWED (Research Ready).');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-success" {% if not is_finalizable %}disabled{% endif %} style="padding: 0.65rem 1.5rem; font-weight: 700; background-color: {% if is_finalizable %}#16a34a{% else %}#94a3b8{% endif %}; border-color: {% if is_finalizable %}#16a34a{% else %}#94a3b8{% endif %};">
+          ✅ Finalize Research Review
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 {% if historical_snapshots and historical_snapshots|length > 0 %}

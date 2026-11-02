@@ -2222,3 +2222,348 @@ def test_36_quarantined_fields_rendered_with_warning_and_blocked(isolated_db_pat
     # Verify Quarantined Legal Identity field
     assert "⚠️ QUARANTINED: Source URL not present in snapshot pages." in html
     assert "Blocked" in html
+
+
+def test_37_partial_field_approval_does_not_promote_verification_status(isolated_db_paths, monkeypatch):
+    """
+    Phase 6 Acceptance Test 1 & 2:
+    - Approving a subset of fields creates FieldReviewRecords in SQLite.
+    - An unreviewed record remains EXTRACTED / Unverified and is NOT promoted to OPERATOR_REVIEWED.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action, evaluate_research_readiness
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="Energymep",
+        domain="energymep.it",
+    )
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep",
+        verification_status="EXTRACTED",
+        confidence_score=0.70,
+        official_website="https://energymep.it/",
+    )
+    reg_store.save_record(rec)
+
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        save_candidate_research_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Energymep S.r.l.",
+            priority_level="B",
+            priority_rationale="Not Found",
+            legal_identity="Not Found",
+            geographic_location="Not Found",
+            telephone_numbers="+39 049 123456",
+            contact_email_addresses="Not Found",
+            responsible_person="Not Found",
+            business_activities="Not Found",
+            official_website="https://energymep.it/",
+            descriptions_and_notes="Not Found",
+            job_advertisement_links="Not Found",
+            other_links_and_references="Not Found",
+            apply_telephone_numbers="1",
+        )
+    )
+
+    # 1. Verification status is preserved as EXTRACTED, not promoted
+    updated_rec = reg_store.get_record(cid)
+    assert updated_rec.verification_status == "EXTRACTED"
+    assert updated_rec.telephone_numbers == "+39 049 123456"
+
+    # 2. Durable FieldReviewRecord was created
+    reviews = reg_store.get_field_reviews(cid)
+    assert "telephone_numbers" in reviews
+    assert reviews["telephone_numbers"].approved_value == "+39 049 123456"
+    assert reviews["telephone_numbers"].review_state == "OPERATOR_APPROVED"
+
+    # 3. Authoritative research readiness status evaluates to 'partially_reviewed'
+    readiness = evaluate_research_readiness(cand, reg_store=reg_store)
+    assert readiness["research_status"] == "partially_reviewed"
+    assert readiness["is_reviewed"] is False
+
+
+def test_38_zero_approved_fields_produces_zero_sqlite_writes(isolated_db_paths, monkeypatch):
+    """
+    Phase 6 Acceptance Test 3:
+    Submitting the form with 0 checkboxes checked results in 0 SQLite writes.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Original Name",
+        verification_status="EXTRACTED",
+    )
+    reg_store.save_record(rec)
+    orig_updated_at = reg_store.get_record(cid).updated_at
+
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        save_candidate_research_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Different Name",
+            priority_level="A",
+            priority_rationale="Rationale",
+            legal_identity="IT123",
+            geographic_location="Rome",
+            telephone_numbers="123",
+            contact_email_addresses="test@test.com",
+            responsible_person="John",
+            business_activities="Activities",
+            official_website="https://test.com",
+            descriptions_and_notes="Notes",
+            job_advertisement_links="Links",
+            other_links_and_references="Refs",
+            # None applied!
+        )
+    )
+
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.company_name == "Original Name"
+    assert reloaded.updated_at == orig_updated_at
+    assert len(reg_store.get_field_reviews(cid)) == 0
+
+
+def test_39_finalize_action_blocks_incomplete_requirements(isolated_db_paths, monkeypatch):
+    """
+    Phase 6 Acceptance Test 6 & 7:
+    Finalize action rejects records missing core requirements (e.g. Missing business activities, or missing operator review).
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import finalize_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    # Incomplete record: missing business_activities
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="Not Found",
+        verification_status="EXTRACTED",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    # Check redirect location has error query param
+    assert "error=" in resp.headers["location"]
+
+    # Record was NOT promoted
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.verification_status == "EXTRACTED"
+
+
+def test_40_finalize_action_succeeds_when_all_requirements_met(isolated_db_paths, monkeypatch):
+    """
+    Phase 6 Acceptance Test 8 & 9:
+    Finalize action promotes record to OPERATOR_REVIEWED when minimum requirements are met,
+    achieving 'Research Ready'.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import finalize_candidate_research_action, evaluate_research_readiness
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering and Building Information Modeling services in Veneto.",
+        verification_status="EXTRACTED",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    # Operator reviews core fields
+    for fn, val in [("company_name", "Energymep S.r.l."), ("official_website", "https://energymep.it/"), ("business_activities", "MEP Engineering")]:
+        reg_store.save_field_review(
+            FieldReviewRecord(
+                candidate_id=cid,
+                field_name=fn,
+                approved_value=val,
+                value_checksum="chk",
+                reviewed_at="2026-11-02T12:00:00Z",
+            )
+        )
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    assert "message=" in resp.headers["location"]
+
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.verification_status == "OPERATOR_REVIEWED"
+    assert reloaded.provenance_source == "operator_edited"
+
+    readiness = evaluate_research_readiness(cand, reg_store=reg_store)
+    assert readiness["research_status"] == "research_ready"
+    assert readiness["is_reviewed"] is True
+
+
+def test_41_field_reviews_persist_across_restart(isolated_db_paths, monkeypatch):
+    """
+    Phase 6 Acceptance Test 11:
+    FieldReviewRecord entries persist across simulated app restart (reopening DB).
+    """
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import FieldReviewRecord
+
+    cand_db, _ = isolated_db_paths
+    reg_store1 = LeadRegisterStore(db_path=cand_db)
+    cid = "cand:domain:energymep.it"
+
+    f_rev = FieldReviewRecord(
+        candidate_id=cid,
+        field_name="responsible_person",
+        approved_value="Ing. Marco Rossi",
+        value_checksum="abc123chk",
+        reviewed_at="2026-11-02T14:30:00Z",
+        source_type="llm_analysis",
+        snapshot_id="snap_123",
+        analysis_id="an_456",
+        evidence_url="https://energymep.it/chi-siamo",
+        evidence_excerpt="Il nostro team è guidato dall'Ing. Marco Rossi",
+        operator_note="Verified from Chi Siamo page",
+    )
+    reg_store1.save_field_review(f_rev)
+
+    # Re-instantiate store (simulating clean process restart)
+    reg_store2 = LeadRegisterStore(db_path=cand_db)
+    reviews = reg_store2.get_field_reviews(cid)
+    assert "responsible_person" in reviews
+    r = reviews["responsible_person"]
+    assert r.approved_value == "Ing. Marco Rossi"
+    assert r.value_checksum == "abc123chk"
+    assert r.evidence_url == "https://energymep.it/chi-siamo"
+    assert r.operator_note == "Verified from Chi Siamo page"
+
+
+def test_42_research_ready_never_implies_outreach_permission(isolated_db_paths, monkeypatch):
+    """
+    Phase 6 Acceptance Test 13:
+    Promoting a company to 'Research Ready' NEVER implies cold outreach permission
+    or auto-generates drafts. EMAIL_SEND_ENABLED remains false.
+    """
+    from backend.sales_ui.router import evaluate_candidate_readiness, is_email_send_enabled
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.sending.review_store import ReviewStore
+    from sales_engine.sending.suppression_store import SuppressionStore
+
+    cand_db, _ = isolated_db_paths
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    rev_store = ReviewStore(db_path=cand_db)
+    supp_svc = SuppressionStore(review_store=rev_store)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand.cold_outreach_allowed = False
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    # Candidate has no verified contact recipient yet
+    readiness = evaluate_candidate_readiness(
+        cand,
+        cand_store=cand_store,
+        suppression_svc=supp_svc,
+        reg_store=reg_store,
+    )
+    # Outreach must be verification_required or blocked, NOT draft_ready
+    assert readiness["effective_readiness"] != "draft_ready"
+    assert is_email_send_enabled() is False

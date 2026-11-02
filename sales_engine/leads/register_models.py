@@ -23,6 +23,30 @@ from datetime import datetime, timezone
 
 
 @dataclass
+class FieldReviewRecord:
+    """
+    Durable, auditable tracking of individual field reviews (Phase 2).
+    Tracks exact field key, approved value, review state, timestamp, source,
+    associated snapshot/analysis ID, and evidence URL.
+    """
+    candidate_id: str
+    field_name: str
+    approved_value: str
+    value_checksum: str
+    review_state: str = "OPERATOR_APPROVED"  # OPERATOR_APPROVED, OPERATOR_CORRECTED, PENDING, REJECTED
+    reviewed_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    source_type: str = "llm_analysis"  # llm_analysis, operator_manual, local_mvp, historical
+    snapshot_id: Optional[str] = None
+    analysis_id: Optional[str] = None
+    evidence_url: Optional[str] = None
+    evidence_excerpt: Optional[str] = None
+    operator_note: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class LeadRegisterRecord:
     candidate_id: str
     record_number: Optional[int] = None

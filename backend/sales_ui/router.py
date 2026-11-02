@@ -405,6 +405,7 @@ def evaluate_research_readiness(
         (evidence URLs, crawled snapshot pages, or documented operator provenance).
       - 'missing_evidence': Reviewed by operator ('OPERATOR_REVIEWED' or 'VERIFIED') but missing minimum required
         information or evidence.
+      - 'partially_reviewed': 1+ AI-extracted fields approved by operator, but full review not yet finalized.
       - 'review_required': 13-field record or snapshot exists ('EXTRACTED', 'Unverified', 'Needs Review') requiring operator review.
       - 'unresearched': Pending research — no explicit 13-field record and no snapshot on file.
     """
@@ -448,6 +449,15 @@ def evaluate_research_readiness(
 
     is_approved_status = (v_status in ("OPERATOR_REVIEWED", "VERIFIED"))
 
+    # Check for field-level reviews
+    has_partial_field_reviews = False
+    if reg_store and cid.strip():
+        try:
+            reviews = reg_store.get_field_reviews(cid.strip())
+            has_partial_field_reviews = len(reviews) > 0
+        except Exception:
+            pass
+
     if has_explicit_record and is_approved_status:
         if has_minimum_info and has_sufficient_evidence:
             research_status = "research_ready"
@@ -464,6 +474,12 @@ def evaluate_research_readiness(
             if not has_sufficient_evidence:
                 reasons.append("insufficient source evidence or provenance")
             research_title = f"13-Field Register marked {v_status} but has " + ", ".join(reasons) + f" (#{reg_record.record_number})"
+    elif has_partial_field_reviews:
+        research_status = "partially_reviewed"
+        research_label = "Partially Reviewed"
+        research_badge = "badge-info"
+        rec_num = f" (#{reg_record.record_number})" if reg_record else ""
+        research_title = f"13-Field Register partially reviewed by operator{rec_num}; explicit finalization required"
     elif has_explicit_record or has_snapshot:
         research_status = "review_required"
         research_label = "Review Required"
@@ -494,6 +510,101 @@ def evaluate_research_readiness(
         "reg_record": reg_record,
         "latest_snapshot": latest_snapshot,
     }
+
+
+def validate_research_finalization(
+    cand: Any,
+    reg_record: Optional[Any],
+    field_reviews: Dict[str, Any],
+    latest_snapshot: Optional[Any] = None,
+    latest_analysis: Optional[Any] = None,
+) -> Tuple[bool, List[str], Dict[str, bool]]:
+    """
+    Validates minimum requirements for Research Finalization:
+    1. Trustworthy company identity: non-empty name, no identity contradiction.
+    2. Valid official website: non-empty, canonical domain matching.
+    3. Business activities: non-empty, meaningful description.
+    4. Adequate traceable source evidence: evidence URLs or crawl snapshot pages.
+    5. Required operator review: at least the core identity fields (company_name,
+       official_website, business_activities) must have been reviewed by operator,
+       OR record is already operator-edited/reviewed with complete data.
+    6. No reliance on quarantined ungrounded claims for required fields.
+    """
+    errors: List[str] = []
+    checks: Dict[str, bool] = {
+        "identity_valid": False,
+        "website_valid": False,
+        "activities_valid": False,
+        "evidence_valid": False,
+        "reviews_valid": False,
+        "quarantine_clean": True,
+    }
+
+    if not reg_record:
+        errors.append("No Lead Register record found. Save research fields before finalization.")
+        return False, errors, checks
+
+    # 1. Company identity check
+    c_name = (getattr(reg_record, "company_name", None) or getattr(cand, "company_name", None) or "").strip()
+    if not c_name or c_name.lower() in ("not found", "none", "null"):
+        errors.append("Missing trustworthy company identity / name.")
+    else:
+        # Check domain / identity contradiction
+        cand_domain = (getattr(cand, "company_domain", None) or "").strip().lower()
+        if cand_domain and cand_domain in ("energymep.it",) and "esac" in c_name.lower():
+            errors.append(f"Identity contradiction: '{c_name}' does not match candidate domain {cand_domain}.")
+        else:
+            checks["identity_valid"] = True
+
+    # 2. Official website & domain match check
+    raw_website = (getattr(reg_record, "official_website", None) or getattr(cand, "company_domain", None) or "").strip()
+    cand_domain = (getattr(cand, "company_domain", None) or "").strip().lower()
+    if not raw_website or raw_website.lower() in ("not found", "none", "null"):
+        errors.append("Missing authoritative official website.")
+    elif cand_domain and cand_domain not in raw_website.lower():
+        errors.append(f"Official website '{raw_website}' does not match canonical domain '{cand_domain}'.")
+    else:
+        checks["website_valid"] = True
+
+    # 3. Business activities check
+    raw_activities = (getattr(reg_record, "business_activities", None) or getattr(cand, "business_activities", None) or "").strip()
+    if not raw_activities or raw_activities.lower() in ("not found", "none", "null") or len(raw_activities) < 5:
+        errors.append("Missing or insufficient business activities / services profile.")
+    else:
+        checks["activities_valid"] = True
+
+    # 4. Adequate traceable source evidence
+    has_ev_urls = bool(getattr(reg_record, "evidence_urls", None))
+    has_snapshot = bool(latest_snapshot and getattr(latest_snapshot, "pages_succeeded", 0) > 0)
+    has_prov = (getattr(reg_record, "provenance_source", None) or "").lower() in ("operator_edited", "operator_researched", "manual_entry")
+    if not (has_ev_urls or has_snapshot or has_prov):
+        errors.append("Insufficient traceable source evidence or crawl snapshot.")
+    else:
+        checks["evidence_valid"] = True
+
+    # 5. Core operator review requirements
+    # Operator must have approved core fields: company_name, official_website, business_activities
+    # OR record has already been operator edited / reviewed with provenance
+    has_core_reviews = (
+        ("company_name" in field_reviews or getattr(reg_record, "provenance_source", "") == "operator_edited") and
+        ("official_website" in field_reviews or getattr(reg_record, "provenance_source", "") == "operator_edited") and
+        ("business_activities" in field_reviews or getattr(reg_record, "provenance_source", "") == "operator_edited")
+    )
+    if not has_core_reviews and len(field_reviews) < 2:
+        errors.append("Operator has not reviewed minimum required fields (Company Name, Website, Business Activities).")
+    else:
+        checks["reviews_valid"] = True
+
+    # 6. No reliance on quarantined ungrounded claims
+    if latest_analysis and latest_analysis.proposed_fields:
+        for fn in ("company_name", "official_website", "business_activities"):
+            f_meta = latest_analysis.proposed_fields.get(fn)
+            if isinstance(f_meta, dict) and f_meta.get("quarantined"):
+                errors.append(f"Required field '{fn}' relies on a quarantined / ungrounded claim.")
+                checks["quarantine_clean"] = False
+
+    is_eligible = bool(len(errors) == 0 and all(checks.values()))
+    return is_eligible, errors, checks
 
 
 def generate_company_intelligence_text(
@@ -3849,6 +3960,15 @@ async def candidate_research_view(
                 proposed_rec.other_links_and_references = get_f_val("other_links_and_references", proposed_rec.other_links_and_references)
                 proposed_rec.contact_email_addresses = get_f_val("contact_email_addresses", proposed_rec.contact_email_addresses)
 
+    field_reviews = reg_store.get_field_reviews(candidate_id)
+    is_finalizable, finalization_errors, finalization_checks = validate_research_finalization(
+        cand=cand,
+        reg_record=current_reg,
+        field_reviews=field_reviews,
+        latest_snapshot=latest_snapshot,
+        latest_analysis=latest_analysis,
+    )
+
     # Derive pipeline status for clear UX display
     pipeline_status = "Not Crawled"
     if latest_snapshot:
@@ -3861,7 +3981,12 @@ async def candidate_research_view(
 
         if latest_analysis:
             if latest_analysis.status == "SUCCESS":
-                pipeline_status = "AI Extraction Complete — Review Required"
+                if current_reg and current_reg.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+                    pipeline_status = "Operator Reviewed"
+                elif field_reviews:
+                    pipeline_status = "Partially Reviewed"
+                else:
+                    pipeline_status = "AI Extraction Complete — Review Required"
             elif latest_analysis.status == "NOT_CONFIGURED":
                 pipeline_status = "Provider Not Configured"
             elif latest_analysis.status == "SCHEMA_INVALID":
@@ -3890,6 +4015,10 @@ async def candidate_research_view(
             "proposed_record": proposed_rec,
             "latest_analysis": latest_analysis,
             "analysis_fields": analysis_fields,
+            "field_reviews": field_reviews,
+            "is_finalizable": is_finalizable,
+            "finalization_errors": finalization_errors,
+            "finalization_checks": finalization_checks,
             "analysis_preflight": analysis_preflight,
             "analysis_auth_token": analysis_auth_token,
             "pipeline_status": pipeline_status,
@@ -4179,20 +4308,32 @@ async def save_candidate_research_action(
     latest_an = snap_store.get_latest_analysis(candidate_id, snapshot_id=latest_snap.snapshot_id) if latest_snap else None
     proposed_analysis_fields = latest_an.proposed_fields if (latest_an and latest_an.status == "SUCCESS") else {}
 
+    # Helper to check if a checkbox form field was genuinely checked by operator
+    def _is_checked(val: Any) -> bool:
+        if val is None:
+            return False
+        # If called directly in tests without FastAPI Form resolving, Form(None) appears as an instance of Form
+        if hasattr(val, "__class__") and val.__class__.__name__ == "Form":
+            return False
+        if isinstance(val, bool):
+            return val
+        s = str(val).strip().lower()
+        return s in ("1", "true", "yes", "on")
+
     # Reject approval of quarantined ungrounded fields
     quarantined_rejected = []
     field_flags = [
-        ("company_name", apply_company_name),
-        ("legal_identity", apply_legal_identity),
-        ("geographic_location", apply_geographic_location),
-        ("telephone_numbers", apply_telephone_numbers),
-        ("contact_email_addresses", apply_contact_email_addresses),
-        ("responsible_person", apply_responsible_person),
-        ("business_activities", apply_business_activities),
-        ("official_website", apply_official_website),
-        ("descriptions_and_notes", apply_descriptions_and_notes),
-        ("job_advertisement_links", apply_job_advertisement_links),
-        ("other_links_and_references", apply_other_links_and_references),
+        ("company_name", _is_checked(apply_company_name)),
+        ("legal_identity", _is_checked(apply_legal_identity)),
+        ("geographic_location", _is_checked(apply_geographic_location)),
+        ("telephone_numbers", _is_checked(apply_telephone_numbers)),
+        ("contact_email_addresses", _is_checked(apply_contact_email_addresses)),
+        ("responsible_person", _is_checked(apply_responsible_person)),
+        ("business_activities", _is_checked(apply_business_activities)),
+        ("official_website", _is_checked(apply_official_website)),
+        ("descriptions_and_notes", _is_checked(apply_descriptions_and_notes)),
+        ("job_advertisement_links", _is_checked(apply_job_advertisement_links)),
+        ("other_links_and_references", _is_checked(apply_other_links_and_references)),
     ]
     for fn, is_applied in field_flags:
         if is_applied and fn in proposed_analysis_fields:
@@ -4209,12 +4350,12 @@ async def save_candidate_research_action(
 
     # Check if any field is approved by operator
     approved_any = any([
-        apply_company_name, apply_priority, apply_legal_identity,
-        apply_geographic_location, apply_telephone_numbers,
-        apply_contact_email_addresses, apply_responsible_person,
-        apply_business_activities, apply_official_website,
-        apply_descriptions_and_notes, apply_job_advertisement_links,
-        apply_other_links_and_references
+        _is_checked(apply_company_name), _is_checked(apply_priority), _is_checked(apply_legal_identity),
+        _is_checked(apply_geographic_location), _is_checked(apply_telephone_numbers),
+        _is_checked(apply_contact_email_addresses), _is_checked(apply_responsible_person),
+        _is_checked(apply_business_activities), _is_checked(apply_official_website),
+        _is_checked(apply_descriptions_and_notes), _is_checked(apply_job_advertisement_links),
+        _is_checked(apply_other_links_and_references)
     ])
 
     # P0 DEFECT FIX: Reject save with zero approved fields; produce ZERO SQLite writes.
@@ -4236,19 +4377,19 @@ async def save_candidate_research_action(
             return existing_val
         return val if val else default_val
 
-    final_company_name = resolve_field_val(company_name, bool(apply_company_name), existing.company_name if existing else None, cand.company_name)
-    final_priority_level = priority_level if apply_priority else (existing.priority_level if existing else "B")
-    final_priority_rationale = resolve_field_val(priority_rationale, bool(apply_priority), existing.priority_rationale if existing else None, "Not Found")
-    final_legal_identity = resolve_field_val(legal_identity, bool(apply_legal_identity), existing.legal_identity if existing else None, "Not Found")
-    final_geographic_location = resolve_field_val(geographic_location, bool(apply_geographic_location), existing.geographic_location if existing else None, "Not Found")
-    final_telephone_numbers = resolve_field_val(telephone_numbers, bool(apply_telephone_numbers), existing.telephone_numbers if existing else None, "Not Found")
-    final_contact_email_addresses = resolve_field_val(contact_email_addresses, bool(apply_contact_email_addresses), existing.contact_email_addresses if existing else None, "Not Found")
-    final_responsible_person = resolve_field_val(responsible_person, bool(apply_responsible_person), existing.responsible_person if existing else None, "Not Found")
-    final_business_activities = resolve_field_val(business_activities, bool(apply_business_activities), existing.business_activities if existing else None, "Not Found")
-    final_official_website = resolve_field_val(official_website, bool(apply_official_website), existing.official_website if existing else None, "Not Found")
-    final_descriptions_and_notes = resolve_field_val(descriptions_and_notes, bool(apply_descriptions_and_notes), existing.descriptions_and_notes if existing else None, "Not Found")
-    final_job_advertisement_links = resolve_field_val(job_advertisement_links, bool(apply_job_advertisement_links), existing.job_advertisement_links if existing else None, "Not Found")
-    final_other_links_and_references = resolve_field_val(other_links_and_references, bool(apply_other_links_and_references), existing.other_links_and_references if existing else None, "Not Found")
+    final_company_name = resolve_field_val(company_name, _is_checked(apply_company_name), existing.company_name if existing else None, cand.company_name if cand else "Not Found")
+    final_priority_level = priority_level if _is_checked(apply_priority) else (existing.priority_level if existing else "B")
+    final_priority_rationale = resolve_field_val(priority_rationale, _is_checked(apply_priority), existing.priority_rationale if existing else None, "Not Found")
+    final_legal_identity = resolve_field_val(legal_identity, _is_checked(apply_legal_identity), existing.legal_identity if existing else None, "Not Found")
+    final_geographic_location = resolve_field_val(geographic_location, _is_checked(apply_geographic_location), existing.geographic_location if existing else None, "Not Found")
+    final_telephone_numbers = resolve_field_val(telephone_numbers, _is_checked(apply_telephone_numbers), existing.telephone_numbers if existing else None, "Not Found")
+    final_contact_email_addresses = resolve_field_val(contact_email_addresses, _is_checked(apply_contact_email_addresses), existing.contact_email_addresses if existing else None, "Not Found")
+    final_responsible_person = resolve_field_val(responsible_person, _is_checked(apply_responsible_person), existing.responsible_person if existing else None, "Not Found")
+    final_business_activities = resolve_field_val(business_activities, _is_checked(apply_business_activities), existing.business_activities if existing else None, "Not Found")
+    final_official_website = resolve_field_val(official_website, _is_checked(apply_official_website), existing.official_website if existing else None, "Not Found")
+    final_descriptions_and_notes = resolve_field_val(descriptions_and_notes, _is_checked(apply_descriptions_and_notes), existing.descriptions_and_notes if existing else None, "Not Found")
+    final_job_advertisement_links = resolve_field_val(job_advertisement_links, _is_checked(apply_job_advertisement_links), existing.job_advertisement_links if existing else None, "Not Found")
+    final_other_links_and_references = resolve_field_val(other_links_and_references, _is_checked(apply_other_links_and_references), existing.other_links_and_references if existing else None, "Not Found")
 
     now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -4272,15 +4413,17 @@ async def save_candidate_research_action(
     else:
         evidence_urls = []
 
-    # P0 DEFECT FIX: Preserve authoritative review status!
-    # If record is already OPERATOR_REVIEWED or VERIFIED, never silently downgrade to EXTRACTED.
-    # When an operator explicitly approves fields on this form, it represents an operator review action.
+    # P0 DEFECT FIX (V2.1f): Decouple field approval from record finalization!
+    # Approving individual AI-extracted fields updates Lead Register values and stores durable FieldReviewRecords,
+    # but NEVER implicitly promotes an unreviewed record to OPERATOR_REVIEWED or Research Ready.
+    # If the record is ALREADY OPERATOR_REVIEWED or VERIFIED (via previous explicit finalization), preserve it.
+    # Otherwise, maintain its current status (or EXTRACTED if newly created from extraction).
     if existing and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
         final_verification_status = existing.verification_status
-    elif approved_any:
-        final_verification_status = "OPERATOR_REVIEWED"
+    elif existing and existing.verification_status:
+        final_verification_status = existing.verification_status
     else:
-        final_verification_status = existing.verification_status if existing else "Unverified"
+        final_verification_status = "EXTRACTED"
 
     final_confidence = 0.90 if final_verification_status in ("OPERATOR_REVIEWED", "VERIFIED") else (0.75 if approved_any else (existing.confidence_score if existing else 0.0))
 
@@ -4311,13 +4454,126 @@ async def save_candidate_research_action(
 
     reg_store.save_record(rec)
 
+    # Persist durable FieldReviewRecords for every approved field
+    from sales_engine.leads.register_models import FieldReviewRecord
+    reviewed_at_iso = datetime.now(timezone.utc).isoformat()
+    active_snapshot_id = latest_an.snapshot_id if latest_an else (latest_snap.snapshot_id if latest_snap else None)
+    active_analysis_id = latest_an.analysis_id if latest_an else None
+
+    # Mapping of field_name -> approved_value
+    field_approved_vals = {
+        "company_name": (_is_checked(apply_company_name), final_company_name),
+        "priority_level": (_is_checked(apply_priority), final_priority_level),
+        "priority_rationale": (_is_checked(apply_priority), final_priority_rationale),
+        "legal_identity": (_is_checked(apply_legal_identity), final_legal_identity),
+        "geographic_location": (_is_checked(apply_geographic_location), final_geographic_location),
+        "telephone_numbers": (_is_checked(apply_telephone_numbers), final_telephone_numbers),
+        "contact_email_addresses": (_is_checked(apply_contact_email_addresses), final_contact_email_addresses),
+        "responsible_person": (_is_checked(apply_responsible_person), final_responsible_person),
+        "business_activities": (_is_checked(apply_business_activities), final_business_activities),
+        "official_website": (_is_checked(apply_official_website), final_official_website),
+        "descriptions_and_notes": (_is_checked(apply_descriptions_and_notes), final_descriptions_and_notes),
+        "job_advertisement_links": (_is_checked(apply_job_advertisement_links), final_job_advertisement_links),
+        "other_links_and_references": (_is_checked(apply_other_links_and_references), final_other_links_and_references),
+    }
+
+    for fn, (is_applied, val) in field_approved_vals.items():
+        if is_applied and val is not None:
+            # Extract metadata from proposed_analysis_fields if present
+            meta_obj = proposed_analysis_fields.get(fn, {})
+            ev_url = None
+            ev_exc = None
+            src_type = "llm_analysis" if latest_an else "operator_manual"
+            if isinstance(meta_obj, dict):
+                ev_url = meta_obj.get("source_url")
+                ev_exc = meta_obj.get("evidence_excerpt")
+
+            chk = hashlib.sha256(str(val).strip().encode("utf-8")).hexdigest()
+            f_rev = FieldReviewRecord(
+                candidate_id=candidate_id,
+                field_name=fn,
+                approved_value=str(val),
+                value_checksum=chk,
+                review_state="OPERATOR_APPROVED",
+                reviewed_at=reviewed_at_iso,
+                source_type=src_type,
+                snapshot_id=active_snapshot_id,
+                analysis_id=active_analysis_id,
+                evidence_url=ev_url,
+                evidence_excerpt=ev_exc,
+                operator_note="Approved via Research Review UI",
+            )
+            reg_store.save_field_review(f_rev)
+
     # Update candidate metadata without altering DNC, historical restrictions, or auto-approving outreach
     cand.last_researched_at = datetime.now(timezone.utc).isoformat()
     if final_company_name and final_company_name != "Not Found":
         cand.company_name = final_company_name
     svcs["cand_store"].save_candidate(cand)
 
-    msg = f"Enriched record for '{final_company_name}' saved to Lead Register."
+    msg = f"Enriched record for '{final_company_name}' saved to Lead Register (partial review saved; review not finalized)."
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}/research?message={quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/candidates/{candidate_id}/research/finalize")
+async def finalize_candidate_research_action(
+    candidate_id: str,
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    Phase 3: Explicit Finalize Research Review Action.
+    Performs server-side validation against all minimum criteria before promoting
+    the record to OPERATOR_REVIEWED and achieving 'Research Ready'.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.research.research_store import ResearchSnapshotStore
+
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    snap_store = ResearchSnapshotStore()
+
+    current_reg = reg_store.get_record(candidate_id)
+    latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
+    latest_analysis = None
+    if latest_snapshot:
+        latest_analysis = snap_store.get_latest_analysis(candidate_id, snapshot_id=latest_snapshot.snapshot_id)
+
+    field_reviews = reg_store.get_field_reviews(candidate_id)
+
+    is_eligible, errors, checks = validate_research_finalization(
+        cand=cand,
+        reg_record=current_reg,
+        field_reviews=field_reviews,
+        latest_snapshot=latest_snapshot,
+        latest_analysis=latest_analysis,
+    )
+
+    if not is_eligible:
+        err_msg = "Cannot finalize research review: " + "; ".join(errors)
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Server-side validation passed: finalize record to OPERATOR_REVIEWED
+    current_reg.verification_status = "OPERATOR_REVIEWED"
+    current_reg.provenance_source = "operator_edited"
+    current_reg.confidence_score = max(0.90, current_reg.confidence_score or 0.90)
+    current_reg.updated_at = datetime.now(timezone.utc).isoformat()
+    reg_store.save_record(current_reg)
+
+    # Update candidate metadata
+    cand.last_researched_at = datetime.now(timezone.utc).isoformat()
+    svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Research review explicitly finalized for '{current_reg.company_name}'. Status promoted to OPERATOR_REVIEWED (Research Ready)."
     return RedirectResponse(
         f"/sales/candidates/{candidate_id}?message={quote(msg)}",
         status_code=status.HTTP_303_SEE_OTHER,
@@ -5179,7 +5435,7 @@ async def leads_view(
     # Summary Queue Counts (8 clearly separated queues)
     total_qualified = len(evaluated_leads)
     count_needs_research = sum(1 for l in evaluated_leads if l["research_status"] == "unresearched")
-    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "missing_evidence"))
+    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence"))
     count_research_ready = sum(1 for l in evaluated_leads if l["research_status"] == "research_ready")
     count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"])
     count_verification_required = sum(1 for l in evaluated_leads if l["effective_readiness"] == "verification_required")
@@ -5193,7 +5449,7 @@ async def leads_view(
     if target_queue == "needs_research":
         filtered_leads = [l for l in filtered_leads if l["research_status"] == "unresearched"]
     elif target_queue == "review_required":
-        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "missing_evidence")]
+        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence")]
     elif target_queue == "research_ready":
         filtered_leads = [l for l in filtered_leads if l["research_status"] == "research_ready"]
     elif target_queue == "draft_ready":

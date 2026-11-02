@@ -169,6 +169,7 @@
         <select name="research_status" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
           <option value="">All Research States</option>
           <option value="research_ready" {% if selected_research == 'research_ready' %}selected{% endif %}>Research Ready (Reviewed)</option>
+          <option value="partially_reviewed" {% if selected_research == 'partially_reviewed' %}selected{% endif %}>Partially Reviewed</option>
           <option value="review_required" {% if selected_research == 'review_required' %}selected{% endif %}>Review Required</option>
           <option value="missing_evidence" {% if selected_research == 'missing_evidence' %}selected{% endif %}>Missing Evidence</option>
           <option value="unresearched" {% if selected_research == 'unresearched' %}selected{% endif %}>Pending Research</option>
