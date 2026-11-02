@@ -183,7 +183,7 @@ class TimelineService:
             with self.review_store._get_connection() as conn:
                 query_params = [candidate_id] + valid_lead_ids
                 drafts = conn.execute(
-                    f"SELECT draft_id, revision, subject, approval_status, send_status, reviewer, created_at, approved_at, sent_at FROM drafts WHERE candidate_id = ? OR lead_id IN ({placeholders})",
+                    f"SELECT draft_id, revision, subject, approval_status, send_status, reviewer, created_at, approved_at, sent_at FROM drafts WHERE candidate_id = ? OR (candidate_id IS NULL AND lead_id IN ({placeholders}))",
                     query_params,
                 ).fetchall()
 
@@ -243,7 +243,7 @@ class TimelineService:
                     f"""SELECT sa.attempt_id, sa.draft_id, sa.revision, sa.status, sa.attempted_at, sa.provider 
                        FROM send_attempts sa 
                        JOIN drafts d ON sa.draft_id = d.draft_id AND sa.revision = d.revision 
-                       WHERE d.candidate_id = ? OR d.lead_id IN ({placeholders})""",
+                       WHERE d.candidate_id = ? OR (d.candidate_id IS NULL AND d.lead_id IN ({placeholders}))""",
                     query_params,
                 ).fetchall()
                 for a in attempts:

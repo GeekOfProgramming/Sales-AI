@@ -21,7 +21,7 @@ import tempfile
 import sqlite3
 import urllib.request
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Set
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urlencode, quote
 
@@ -3177,6 +3177,7 @@ async def lead_register_update_action(
     job_advertisement_links: Optional[str] = Form(None),
     other_links_and_references: Optional[str] = Form(None),
     contact_email_addresses: Optional[str] = Form(None),
+    verification_status: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
     from sales_engine.leads.register_store import LeadRegisterStore
@@ -3192,9 +3193,13 @@ async def lead_register_update_action(
 
     rec_num = int(record_number.strip()) if record_number and record_number.strip().isdigit() else existing.record_number
 
-    v_status = existing.verification_status
-    if v_status in ("Unverified", "EXTRACTED", "Needs Review"):
-        v_status = "OPERATOR_REVIEWED"
+    # P1 Lead Register Review Semantics:
+    # Saving or editing data must NOT implicitly mark an unreviewed record as OPERATOR_REVIEWED.
+    # An explicit operator review action/selection is required to establish a reviewed state.
+    if verification_status and verification_status.strip():
+        v_status = verification_status.strip()
+    else:
+        v_status = existing.verification_status
 
     # Mark record as operator_edited when edited through the actual HTTP editor,
     # preserving original research evidence URLs and created_at timestamps.

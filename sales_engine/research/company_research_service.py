@@ -341,6 +341,12 @@ GENERIC_TITLES_AND_TERMS = {
     "welcome", "chi siamo", "lavora con noi", "careers", "company", "privacy policy"
 }
 
+PARTNER_OR_RELATION_WORDS = (
+    "assieme a", "insieme a", "collaborazione con", "partner di", "partner con", "partnership",
+    "cliente di", "clienti", "fornitore di", "fornitori", "sviluppato da", "realizzato da",
+    "progetto con", "lavorato con", "consulenza per", "in associazione con", "in raggruppamento con"
+)
+
 DISALLOWED_NAME_STARTS = (
     "le cui ", "cui ", "dei ", "delle ", "degli ", "della ", "dello ", "del ",
     "alla ", "nella ", "con la ", "una ", "un ", "ogni ", "nostr", "loro ", "tutti "
@@ -532,7 +538,7 @@ def extract_deterministic_facts(
                         if isinstance(it, dict) and it.get("@type") in ("Organization", "LocalBusiness", "Corporation"):
                             org_name = it.get("name")
                             if org_name and len(org_name) > 2:
-                                candidate_legal_names.append((org_name.strip(), p.url, "JSON-LD Organization"))
+                                candidate_legal_names.append((org_name.strip(), p.url, "JSON-LD Organization", "jsonld_legal"))
                             org_addr = it.get("address")
                             if isinstance(org_addr, dict):
                                 street = org_addr.get("streetAddress", "")
@@ -546,41 +552,54 @@ def extract_deterministic_facts(
                     pass
 
         # -------------------------------------------------------------
-        # 2. Legal Company Name Extraction (Strict Word Boundary)
+        # 2. Legal Company Name Extraction (Strict Word Boundary & Context)
         # -------------------------------------------------------------
-        # Legal suffix must be a distinct entity suffix; require word boundaries around words like 'Spa'
-        # to prevent substring matches (e.g., matching 'Spa' in 'spaziano').
         legal_suffix_pat = (
             r"(?:s\.r\.l\.|S\.r\.l\.|srl|SRL|Srl|"
             r"S\.p\.A\.|s\.p\.a\.|SpA|\bSPA\b|\bSpa\b|"
-            r"S\.a\.s\.|s\.a\.s\.|SAS|Sas|"
-            r"Societ[aà]\s+di\s+Ingegneria)"
+            r"S\.a\.s\.|s\.a\.s\.|SAS|Sas)"
         )
-        name_pat = (
-            rf"(?:^|[\s\n\r,;:\(\)\[\]\"\'«»])"
-            rf"([A-Z0-9][A-Za-z0-9&.\s\'-]{{1,45}}?\s*(?:{legal_suffix_pat}))"
+        proper_name_pat = (
+            rf"([A-Z0-9][A-Za-z0-9&.'-]*(?:\s+[A-Z0-9][A-Za-z0-9&.'-]*){{0,3}}\s+(?:{legal_suffix_pat}))"
             rf"(?![A-Za-z0-9])"
         )
-        corp_matches = re.findall(name_pat, text, re.IGNORECASE)
-        for cm in corp_matches:
-            clean_cm = re.sub(r"\s+", " ", cm).strip()
+        for m in re.finditer(proper_name_pat, text):
+            clean_cm = re.sub(r"\s+", " ", m.group(1)).strip()
             lower_cm = clean_cm.lower()
             if 3 < len(clean_cm) < 60 and not any(lower_cm.startswith(b) for b in DISALLOWED_NAME_STARTS):
-                # Disallow words containing 'spaziano' or common address fragments like 'roma 130'
-                if "spaziano" not in lower_cm and not any(clean_cm.lower().startswith(r) for r in ["via ", "corso ", "piazza ", "tel", "fax"]):
-                    candidate_legal_names.append((clean_cm, p.url, page_title))
+                if "spaziano" not in lower_cm and not any(lower_cm.startswith(r) for r in ["via ", "corso ", "piazza ", "tel", "fax"]):
+                    # Context check: filter out partners, customers, suppliers
+                    start_pos = m.start(1)
+                    prec = text[max(0, start_pos - 45):start_pos].lower()
+                    if not any(pw in prec for pw in PARTNER_OR_RELATION_WORDS):
+                        candidate_legal_names.append((clean_cm, p.url, page_title, "prose_legal"))
 
-        # Check footer / copyright lines
-        copyright_matches = re.findall(
-            rf"(?:©|&copy;|Copyright)[\s\d-]*([A-Za-z0-9&.\s\'-]{{3,50}}?(?:{legal_suffix_pat}))(?![A-Za-z0-9])",
+        soc_pat = (
+            r"([A-Z0-9][A-Za-z0-9&.'-]*(?:\s+[A-Z0-9][A-Za-z0-9&.'-]*){0,3}\s+(?:Societ[aà]\s+di\s+Ingegneria))"
+            r"(?![A-Za-z0-9])"
+        )
+        for m in re.finditer(soc_pat, text):
+            clean_cm = re.sub(r"\s+", " ", m.group(1)).strip()
+            trimmed_cm = re.sub(r"\s+Societ[aà]\s+di\s+Ingegneria.*", "", clean_cm, flags=re.IGNORECASE).strip()
+            use_cm = trimmed_cm if any(s in trimmed_cm.lower() for s in ["s.r.l.", "srl", "s.p.a.", "spa", "s.a.s.", "sas"]) else clean_cm
+            use_lower = use_cm.lower()
+            if 3 < len(use_cm) < 60 and not any(use_lower.startswith(b) for b in DISALLOWED_NAME_STARTS):
+                start_pos = m.start(1)
+                prec = text[max(0, start_pos - 45):start_pos].lower()
+                if not any(pw in prec for pw in PARTNER_OR_RELATION_WORDS):
+                    candidate_legal_names.append((use_cm, p.url, page_title, "prose_legal"))
+
+                # Check footer / copyright lines
+        copyright_matches = re.finditer(
+            rf"(?:©|&copy;|Copyright)[\s\d-]*([A-Za-z0-9&.\s'-]{{3,50}}?(?:{legal_suffix_pat}))(?![A-Za-z0-9])",
             text,
             re.IGNORECASE
         )
-        for cpm in copyright_matches:
-            cpm_clean = re.sub(r"\s+", " ", cpm).strip()
+        for cpm_m in copyright_matches:
+            cpm_clean = re.sub(r"\s+", " ", cpm_m.group(1)).strip()
             if 3 < len(cpm_clean) < 60 and not any(cpm_clean.lower().startswith(b) for b in DISALLOWED_NAME_STARTS):
                 if "spaziano" not in cpm_clean.lower():
-                    candidate_legal_names.append((cpm_clean, p.url, f"{page_title} (Copyright)"))
+                    candidate_legal_names.append((cpm_clean, p.url, f"{page_title} (Copyright)", "footer_legal"))
 
         # -------------------------------------------------------------
         # 3. P.IVA Extraction & Strict Checksum Validation
@@ -801,38 +820,73 @@ def extract_deterministic_facts(
     )
 
     if candidate_legal_names:
-        # Prefer names matching canonical domain tokens
-        domain_tokens = [tok for tok in canonical_domain.replace(".it", "").replace(".com", "").replace(".net", "").split("-") if len(tok) > 1]
-        best_legal_name = None
-        for cand_n, u, src in candidate_legal_names:
-            if any(tok.lower() in cand_n.lower() for tok in domain_tokens):
-                best_legal_name = (cand_n, u, src)
-                break
-        if not best_legal_name:
-            best_legal_name = candidate_legal_names[0]
+        # Prioritize credible first-party sources:
+        # 1. JSON-LD Organization matching domain or candidate
+        # 2. Copyright/Footer legal name matching domain or candidate
+        # 3. Prose legal entity matching domain or candidate
+        # NEVER accept an unassociated prose entity that has zero match with domain or candidate name!
+        
+        domain_root = canonical_domain.split(".")[0].lower()
+        domain_tokens = [tok for tok in re.split(r"[-._]", canonical_domain) if len(tok) >= 2 and tok not in ("com", "it", "net", "org", "eu", "info", "www")]
+        cand_tokens = [tok for tok in re.split(r"[\s\-_.]", company_name) if len(tok) >= 2 and tok.lower() not in GENERIC_TITLES_AND_TERMS]
 
-        # Determine if candidate name lacks legal suffix or is generic
-        has_legal_suffix = any(
-            s in company_name.lower()
-            for s in ["s.r.l.", "srl", "s.p.a.", "spa", "s.a.s.", "sas", "società di ingegneria"]
-        )
+        def get_name_score(item):
+            name, url, src, kind = item
+            lower_name = name.lower()
+            name_words = re.findall(r"[a-z0-9]+", lower_name)
+            score = 0
+            # Source reliability
+            if kind == "jsonld_legal":
+                score += 50
+            elif kind == "footer_legal":
+                score += 40
+            else:
+                score += 10
+            
+            # Domain or candidate association (match exact tokens or roots)
+            has_domain_root = domain_root in lower_name
+            has_domain_token = any((tok in name_words or (len(tok) >= 4 and tok in lower_name)) for tok in domain_tokens)
+            has_cand_token = any((tok.lower() in name_words or (len(tok) >= 4 and tok.lower() in lower_name)) for tok in cand_tokens)
 
-        if is_name_generic or not has_legal_suffix:
-            result.company_name = best_legal_name[0]
-            result.legal_name = best_legal_name[0]
-            result.evidence_items["company_name"] = FieldEvidenceItem(
-                field_name="company_name",
-                extracted_value=best_legal_name[0],
-                source_url=best_legal_name[1],
-                source_page_title=best_legal_name[2],
-                retrieval_timestamp=now_iso,
-                evidence_category=EvidenceCategory.VERIFIED_FACT,
-                validation_status="VERIFIED_LEGAL_ENTITY",
-                confidence_score=0.90,
-                notes="Updated company name to verified corporate legal entity from site evidence."
+            if has_domain_root:
+                score += 100
+            elif has_domain_token:
+                score += 70
+            elif has_cand_token:
+                score += 50
+
+            return score
+
+        scored_candidates = sorted(candidate_legal_names, key=get_name_score, reverse=True)
+        top_cand = scored_candidates[0]
+        top_score = get_name_score(top_cand)
+
+        # Only adopt legal identity if it has strong credible first-party association (score >= 60)
+        if top_score >= 60:
+            best_legal_name = top_cand
+            has_legal_suffix = any(
+                s in company_name.lower()
+                for s in ["s.r.l.", "srl", "s.p.a.", "spa", "s.a.s.", "sas", "società di ingegneria"]
             )
+            if is_name_generic or not has_legal_suffix:
+                result.company_name = best_legal_name[0]
+                result.legal_name = best_legal_name[0]
+                result.evidence_items["company_name"] = FieldEvidenceItem(
+                    field_name="company_name",
+                    extracted_value=best_legal_name[0],
+                    source_url=best_legal_name[1],
+                    source_page_title=best_legal_name[2],
+                    retrieval_timestamp=now_iso,
+                    evidence_category=EvidenceCategory.VERIFIED_FACT,
+                    validation_status="VERIFIED_LEGAL_ENTITY",
+                    confidence_score=0.90,
+                    notes="Updated company name to verified corporate legal entity from site evidence."
+                )
+            else:
+                result.legal_name = best_legal_name[0]
         else:
-            result.legal_name = best_legal_name[0]
+            # Legal identity is ambiguous or unassociated; preserve existing candidate name and do not fabricate
+            result.legal_name = "Not Found" 
 
     # -------------------------------------------------------------
     # Consolidate P.IVA

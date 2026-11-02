@@ -297,10 +297,13 @@ class ReviewStore:
         if "candidate_id" in filters and filters["candidate_id"]:
             cid = filters["candidate_id"]
             lead_ids = filters.get("lead_ids") or []
-            # Candidate matching: check candidate_id column or lead_id matching candidate_id or valid lead_ids
+            # Strict candidate-draft isolation:
+            # If draft has explicit candidate_id, it MUST match cid.
+            # Legacy fallback: draft has candidate_id IS NULL and lead_id matches.
+            # Conflicting candidate_id is never overridden by a lead_id match.
             all_match_ids = list(dict.fromkeys([cid] + lead_ids))
             placeholders = ", ".join("?" for _ in all_match_ids)
-            clauses.append(f"(candidate_id = ? OR lead_id IN ({placeholders}))")
+            clauses.append(f"(candidate_id = ? OR (candidate_id IS NULL AND lead_id IN ({placeholders})))")
             params.append(cid)
             params.extend(all_match_ids)
 
