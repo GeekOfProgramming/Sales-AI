@@ -2460,13 +2460,14 @@ def test_40_finalize_action_succeeds_when_all_requirements_met(isolated_db_paths
     reg_store.save_record(rec)
 
     # Operator reviews core fields
-    for fn, val in [("company_name", "Energymep S.r.l."), ("official_website", "https://energymep.it/"), ("business_activities", "MEP Engineering")]:
+    from sales_engine.leads.register_store import compute_field_checksum
+    for fn, val in [("company_name", "Energymep S.r.l."), ("official_website", "https://energymep.it/"), ("business_activities", "MEP Engineering and Building Information Modeling services in Veneto.")]:
         reg_store.save_field_review(
             FieldReviewRecord(
                 candidate_id=cid,
                 field_name=fn,
                 approved_value=val,
-                value_checksum="chk",
+                value_checksum=compute_field_checksum(val),
                 reviewed_at="2026-11-02T12:00:00Z",
             )
         )
@@ -2567,3 +2568,543 @@ def test_42_research_ready_never_implies_outreach_permission(isolated_db_paths, 
     # Outreach must be verification_required or blocked, NOT draft_ready
     assert readiness["effective_readiness"] != "draft_ready"
     assert is_email_send_enabled() is False
+
+
+# ==============================================================================
+# Research Pipeline V2.1f.1 Finalization Integrity Hotfix Tests
+# ==============================================================================
+
+def test_43_zero_core_reviews_with_operator_edited_provenance_rejected_by_finalization(isolated_db_paths, monkeypatch):
+    """
+    Test 43: Finalization must reject a record that has zero core-field reviews,
+    even if provenance_source is 'operator_edited'.
+    """
+    import asyncio
+    from backend.sales_ui.router import finalize_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    # Lead record with provenance_source="operator_edited" but verification_status="EXTRACTED" and zero reviews
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering and Building Information Modeling services.",
+        verification_status="EXTRACTED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "missing%20approved%20reviews" in resp.headers["location"]
+
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.verification_status == "EXTRACTED"
+
+
+def test_44_two_unrelated_reviewed_fields_without_core_fields_rejected_by_finalization(isolated_db_paths, monkeypatch):
+    """
+    Test 44: Finalization must reject a record with 2 reviewed fields if the 3 core fields
+    (company_name, official_website, business_activities) are not all approved.
+    """
+    import asyncio
+    from backend.sales_ui.router import finalize_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering services.",
+        telephone_numbers="+39 049 123456",
+        geographic_location="Padova, Italy",
+        verification_status="EXTRACTED",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    # Review 2 unrelated fields: telephone_numbers and geographic_location
+    for fn, val in [("telephone_numbers", "+39 049 123456"), ("geographic_location", "Padova, Italy")]:
+        reg_store.save_field_review(
+            FieldReviewRecord(
+                candidate_id=cid,
+                field_name=fn,
+                approved_value=val,
+                value_checksum=compute_field_checksum(val),
+                reviewed_at="2026-11-02T12:00:00Z",
+            )
+        )
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "missing%20approved%20reviews" in resp.headers["location"]
+
+
+def test_45_stale_checksum_after_field_edit_rejected_and_suspends_readiness(isolated_db_paths, monkeypatch):
+    """
+    Test 45: Changing a required core field value makes its checksum stale, causing
+    finalization rejection and demoting research_ready status to missing_evidence or review_required.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import (
+        finalize_candidate_research_action,
+        evaluate_research_readiness,
+        lead_register_update_action,
+    )
+    from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering services.",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    # Reviews exist with checksums matching the original values
+    for fn, val in [("company_name", "Energymep S.r.l."), ("official_website", "https://energymep.it/"), ("business_activities", "MEP Engineering services.")]:
+        reg_store.save_field_review(
+            FieldReviewRecord(
+                candidate_id=cid,
+                field_name=fn,
+                approved_value=val,
+                value_checksum=compute_field_checksum(val),
+                reviewed_at="2026-11-02T12:00:00Z",
+            )
+        )
+
+    readiness = evaluate_research_readiness(cand, reg_store=reg_store)
+    assert readiness["research_status"] == "research_ready"
+
+    # User modifies business_activities via lead_register_update_action
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        lead_register_update_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Energymep S.r.l.",
+            official_website="https://energymep.it/",
+            business_activities="Modified activities without re-reviewing.",
+            verification_status="OPERATOR_REVIEWED",
+        )
+    )
+
+    # Review for business_activities was invalidated / removed
+    reviews = reg_store.get_field_reviews(cid)
+    assert "business_activities" not in reviews
+
+    # Record demoted from OPERATOR_REVIEWED to EXTRACTED, suspending readiness
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.verification_status == "EXTRACTED"
+    readiness_after = evaluate_research_readiness(cand, reg_store=reg_store)
+    assert readiness_after["research_status"] != "research_ready"
+
+    # Attempting to finalize fails because business_activities review is missing
+    resp_fin = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp_fin.status_code == 303
+    assert "error=" in resp_fin.headers["location"]
+
+
+def test_46_malicious_lookalike_website_rejected_by_finalization(isolated_db_paths, monkeypatch):
+    """
+    Test 46: A website host like energymep.it.evil.example or other lookalike must be rejected.
+    """
+    import asyncio
+    from backend.sales_ui.router import finalize_candidate_research_action, is_canonical_domain_match
+    from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    assert is_canonical_domain_match("https://energymep.it.evil.example", "energymep.it") is False
+    assert is_canonical_domain_match("https://www.energymep.it", "energymep.it") is True
+    assert is_canonical_domain_match("https://portal.energymep.it/login", "energymep.it") is True
+    assert is_canonical_domain_match("https://not-energymep.it", "energymep.it") is False
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    evil_url = "https://energymep.it.evil.example/"
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website=evil_url,
+        business_activities="MEP Engineering services.",
+        verification_status="EXTRACTED",
+        evidence_urls=[evil_url],
+    )
+    reg_store.save_record(rec)
+
+    for fn, val in [("company_name", "Energymep S.r.l."), ("official_website", evil_url), ("business_activities", "MEP Engineering services.")]:
+        reg_store.save_field_review(
+            FieldReviewRecord(
+                candidate_id=cid,
+                field_name=fn,
+                approved_value=val,
+                value_checksum=compute_field_checksum(val),
+                reviewed_at="2026-11-02T12:00:00Z",
+            )
+        )
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "does%20not%20match%20canonical%20domain" in resp.headers["location"]
+
+
+def test_47_unrelated_company_identity_rejected_by_finalization(isolated_db_paths, monkeypatch):
+    """
+    Test 47: Contradictory company identities (e.g. ESAC srl or unrelated legal entity)
+    must be rejected by finalization.
+    """
+    import asyncio
+    from backend.sales_ui.router import finalize_candidate_research_action, is_trustworthy_company_identity
+    from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    ok, reason = is_trustworthy_company_identity("ESAC srl", "Energymep", "energymep.it")
+    assert ok is False
+    assert "ESAC" in reason
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="ESAC srl",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering services.",
+        verification_status="EXTRACTED",
+        evidence_urls=["https://energymep.it/"],
+    )
+    reg_store.save_record(rec)
+
+    for fn, val in [("company_name", "ESAC srl"), ("official_website", "https://energymep.it/"), ("business_activities", "MEP Engineering services.")]:
+        reg_store.save_field_review(
+            FieldReviewRecord(
+                candidate_id=cid,
+                field_name=fn,
+                approved_value=val,
+                value_checksum=compute_field_checksum(val),
+                reviewed_at="2026-11-02T12:00:00Z",
+            )
+        )
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "Identity%20contradiction" in resp.headers["location"]
+
+
+def test_48_lead_register_update_cannot_unilaterally_promote_to_operator_reviewed(isolated_db_paths, monkeypatch):
+    """
+    Test 48: Submitting verification_status='OPERATOR_REVIEWED' to lead_register_update_action
+    for an unfinalized record must NOT promote the status.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import lead_register_update_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering",
+        verification_status="EXTRACTED",
+    )
+    reg_store.save_record(rec)
+
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        lead_register_update_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Energymep S.r.l.",
+            verification_status="OPERATOR_REVIEWED",
+        )
+    )
+    assert resp.status_code == 303
+
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.verification_status == "EXTRACTED"
+
+
+def test_49_operator_edited_field_differing_from_ai_proposal_does_not_inherit_ai_excerpt(isolated_db_paths, monkeypatch):
+    """
+    Test 49: If an operator manually corrects an AI-proposed value in save_candidate_research_action,
+    the FieldReviewRecord must record source_type='operator_manual', review_state='OPERATOR_CORRECTED',
+    and evidence_excerpt=None.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.research.research_store import ResearchSnapshotStore, CompanyAnalysisRecord
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep",
+        verification_status="EXTRACTED",
+        official_website="https://energymep.it/",
+    )
+    reg_store.save_record(rec)
+
+    # Create a snapshot first to satisfy foreign key constraint on snapshot_id
+    snap = snap_store.create_snapshot(
+        candidate_id=cid,
+        canonical_domain="energymep.it",
+        company_name="Energymep",
+        pages=[],
+        snapshot_id="snap:test:49",
+    )
+
+    # Save an analysis record with an AI proposal
+    an_rec = CompanyAnalysisRecord(
+        analysis_id="an:test:49",
+        candidate_id=cid,
+        snapshot_id="snap:test:49",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        created_at="2026-11-02T12:00:00Z",
+        status="SUCCESS",
+        proposed_fields={
+            "company_name": {
+                "value": "AI Suggested Name",
+                "source_url": "https://energymep.it/about",
+                "evidence_excerpt": "We are AI Suggested Name excerpt.",
+                "confidence": 0.85,
+            }
+        },
+    )
+    snap_store.save_analysis_record(an_rec)
+
+    # Operator approves company_name but submits a manual edit "Energymep S.r.l."
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        save_candidate_research_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Energymep S.r.l.",
+            official_website="https://energymep.it/",
+            apply_company_name="1",
+        )
+    )
+    assert resp.status_code == 303
+
+    reviews = reg_store.get_field_reviews(cid)
+    c_rev = reviews["company_name"]
+    assert c_rev.approved_value == "Energymep S.r.l."
+    assert c_rev.source_type == "operator_manual"
+    assert c_rev.review_state == "OPERATOR_CORRECTED"
+    assert c_rev.evidence_excerpt is None
+
+
+def test_50_synthetic_unpersisted_record_rejected_by_finalization(isolated_db_paths, monkeypatch):
+    """
+    Test 50: Finalization must reject a candidate that has only synthesized candidate fields
+    and no explicit Lead Register record.
+    """
+    import asyncio
+    from backend.sales_ui.router import finalize_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Energymep", domain="energymep.it")
+    cand_store.save_candidate(cand)
+
+    # No LeadRegisterRecord saved
+    assert reg_store.get_explicit_record(cid) is None
+
+    resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert resp.status_code == 303
+    assert "error=" in resp.headers["location"]
+    assert "No%20explicit%20Lead%20Register%20record" in resp.headers["location"]
+
+
+def test_51_transactional_failure_in_save_leaves_no_mismatched_metadata(isolated_db_paths, monkeypatch):
+    """
+    Test 51: Atomic transactional save in save_record_with_reviews must roll back entirely
+    if any field review fails, leaving no partial or mismatched state.
+    """
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+
+    cand_db, _ = isolated_db_paths
+    reg_store = LeadRegisterStore(db_path=cand_db)
+
+    cid = "cand:domain:energymep.it"
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Energymep S.r.l.",
+        official_website="https://energymep.it/",
+        business_activities="MEP Engineering",
+    )
+
+    # Valid review + bad review that causes a constraint violation or exception
+    good_rev = FieldReviewRecord(
+        candidate_id=cid,
+        field_name="company_name",
+        approved_value="Energymep S.r.l.",
+        value_checksum="abc",
+    )
+    # A review with None for candidate_id will violate NOT NULL / PRIMARY KEY constraint
+    bad_rev = FieldReviewRecord(
+        candidate_id=None,
+        field_name="official_website",
+        approved_value="https://energymep.it/",
+        value_checksum="def",
+    )
+
+    failed = False
+    try:
+        reg_store.save_record_with_reviews(rec, [good_rev, bad_rev])
+    except Exception:
+        failed = True
+
+    assert failed is True
+    # Verify rollback: record was not saved and good_rev was not committed
+    assert reg_store.get_explicit_record(cid) is None
+    reviews = reg_store.get_field_reviews(cid)
+    assert len(reviews) == 0
+

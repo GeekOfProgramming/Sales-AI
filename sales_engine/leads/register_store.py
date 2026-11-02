@@ -8,6 +8,7 @@ Safe on fresh databases, candidate-only databases, and historical databases.
 import sqlite3
 import json
 import logging
+import hashlib
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone
 import os
@@ -16,6 +17,16 @@ from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRe
 from sales_engine.candidates.candidate_store import normalize_company_name, canonicalize_domain
 
 logger = logging.getLogger(__name__)
+
+
+def compute_field_checksum(value: Any) -> str:
+    """Computes a deterministic canonical SHA-256 checksum for field values."""
+    if value is None:
+        raw = ""
+    else:
+        raw = str(value).strip()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 
 
 class LeadRegisterStore:
@@ -711,3 +722,119 @@ class LeadRegisterStore:
             )
             conn.commit()
             return cur.rowcount > 0
+
+    def save_record_with_reviews(
+        self,
+        record: LeadRegisterRecord,
+        reviews: List[FieldReviewRecord],
+    ) -> Tuple[LeadRegisterRecord, List[FieldReviewRecord]]:
+        """
+        Atomically persists or updates a lead register record and all associated field reviews
+        within a single database transaction. If any step fails, the entire transaction rolls back.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        record.updated_at = now
+        if not record.created_at:
+            record.created_at = now
+
+        if record.record_number is None:
+            record.record_number = self._get_next_record_number()
+
+        with self._get_connection() as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("""
+                    INSERT INTO lead_register_records (
+                        candidate_id, record_number, priority_level, priority_rationale,
+                        company_name, legal_identity, geographic_location, telephone_numbers,
+                        business_activities, official_website, responsible_person,
+                        descriptions_and_notes, job_advertisement_links, other_links_and_references,
+                        contact_email_addresses, provenance_source, research_date,
+                        verification_status, confidence_score, evidence_urls_json,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(candidate_id) DO UPDATE SET
+                        record_number = COALESCE(excluded.record_number, lead_register_records.record_number),
+                        priority_level = excluded.priority_level,
+                        priority_rationale = excluded.priority_rationale,
+                        company_name = excluded.company_name,
+                        legal_identity = excluded.legal_identity,
+                        geographic_location = excluded.geographic_location,
+                        telephone_numbers = excluded.telephone_numbers,
+                        business_activities = excluded.business_activities,
+                        official_website = excluded.official_website,
+                        responsible_person = excluded.responsible_person,
+                        descriptions_and_notes = excluded.descriptions_and_notes,
+                        job_advertisement_links = excluded.job_advertisement_links,
+                        other_links_and_references = excluded.other_links_and_references,
+                        contact_email_addresses = excluded.contact_email_addresses,
+                        provenance_source = excluded.provenance_source,
+                        research_date = COALESCE(excluded.research_date, lead_register_records.research_date),
+                        verification_status = excluded.verification_status,
+                        confidence_score = excluded.confidence_score,
+                        evidence_urls_json = excluded.evidence_urls_json,
+                        updated_at = excluded.updated_at
+                """, (
+                    record.candidate_id,
+                    record.record_number,
+                    record.priority_level,
+                    record.priority_rationale,
+                    record.company_name,
+                    record.legal_identity,
+                    record.geographic_location,
+                    record.telephone_numbers,
+                    record.business_activities,
+                    record.official_website,
+                    record.responsible_person,
+                    record.descriptions_and_notes,
+                    record.job_advertisement_links,
+                    record.other_links_and_references,
+                    record.contact_email_addresses,
+                    record.provenance_source,
+                    record.research_date,
+                    record.verification_status,
+                    record.confidence_score,
+                    json.dumps(record.evidence_urls),
+                    record.created_at,
+                    record.updated_at,
+                ))
+
+                for rev in reviews:
+                    conn.execute("""
+                        INSERT INTO lead_register_field_reviews (
+                            candidate_id, field_name, approved_value, value_checksum,
+                            review_state, reviewed_at, source_type, snapshot_id,
+                            analysis_id, evidence_url, evidence_excerpt, operator_note
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(candidate_id, field_name) DO UPDATE SET
+                            approved_value = excluded.approved_value,
+                            value_checksum = excluded.value_checksum,
+                            review_state = excluded.review_state,
+                            reviewed_at = excluded.reviewed_at,
+                            source_type = excluded.source_type,
+                            snapshot_id = excluded.snapshot_id,
+                            analysis_id = excluded.analysis_id,
+                            evidence_url = excluded.evidence_url,
+                            evidence_excerpt = excluded.evidence_excerpt,
+                            operator_note = excluded.operator_note
+                    """, (
+                        rev.candidate_id,
+                        rev.field_name,
+                        rev.approved_value,
+                        rev.value_checksum,
+                        rev.review_state,
+                        rev.reviewed_at,
+                        rev.source_type,
+                        rev.snapshot_id,
+                        rev.analysis_id,
+                        rev.evidence_url,
+                        rev.evidence_excerpt,
+                        rev.operator_note,
+                    ))
+
+                conn.commit()
+                return record, reviews
+            except Exception:
+                conn.rollback()
+                raise
+

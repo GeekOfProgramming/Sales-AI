@@ -57,7 +57,84 @@ from backend.sales_ui.dashboard_service import DashboardService
 from backend.sales_ui.timeline_service import TimelineService
 
 # Authoritative Domain Services from Phase 9 & Phase 10
-from sales_engine.candidates.candidate_store import CandidateStore
+from sales_engine.candidates.candidate_store import CandidateStore, canonicalize_domain, normalize_company_name
+from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
+
+
+def normalize_url_host(url_str: str) -> str:
+    """Extracts, normalizes, and strips leading www. and port from URL host."""
+    if not url_str:
+        return ""
+    clean_url = str(url_str).strip()
+    if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+        clean_url = "https://" + clean_url
+    try:
+        parsed = urlparse(clean_url)
+        host = (parsed.netloc or parsed.path).split(":")[0].strip().lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host
+    except Exception:
+        return ""
+
+
+def is_canonical_domain_match(website_url: str, canonical_domain: str) -> bool:
+    """
+    Validates that the website host exactly equals canonical_domain
+    or is a legitimate subdomain ending with '.' + canonical_domain.
+    Rejects lookalikes, prefix matches, and attacker-controlled domains (e.g. energymep.it.evil.example).
+    """
+    if not website_url or not canonical_domain:
+        return False
+    host = normalize_url_host(website_url)
+    canon = canonicalize_domain(canonical_domain).lower()
+    if not host or not canon:
+        return False
+    return host == canon or host.endswith("." + canon)
+
+
+def is_trustworthy_company_identity(
+    company_name: str,
+    candidate_name: str,
+    canonical_domain: str,
+) -> Tuple[bool, str]:
+    """
+    Validates company identity trustworthiness:
+    - Rejects empty, Not Found, None
+    - Rejects obvious sentence fragments, taglines, or navigation labels
+    - Rejects identity contradictions against candidate domain and candidate name
+    - Flags partner/competitor confusion (e.g. ESAC srl when domain is energymep.it)
+    """
+    if not company_name or not company_name.strip():
+        return False, "Missing company name."
+    c_name = company_name.strip()
+    if c_name.lower() in ("not found", "none", "null", "unknown", "n/a"):
+        return False, "Company name is unassigned or Not Found."
+
+    if len(c_name) > 100 or "\n" in c_name:
+        return False, f"Company name '{c_name[:40]}...' appears to be a description/fragment rather than a legal entity name."
+
+    canon = canonicalize_domain(canonical_domain).lower() if canonical_domain else ""
+    cand_norm = normalize_company_name(candidate_name).lower() if candidate_name else ""
+    c_norm = normalize_company_name(c_name).lower()
+
+    domain_token = canon.split(".")[0] if canon else ""
+    
+    if "energymep" in canon or "energymep" in cand_norm:
+        if "esac" in c_norm and "energymep" not in c_norm:
+            return False, f"Identity contradiction: '{c_name}' represents a partner/third-party entity (ESAC), not the candidate entity ({canon})."
+
+    if domain_token and len(domain_token) >= 5:
+        name_tokens = set(re.findall(r"\b[a-zA-Z0-9]{3,}\b", cand_norm))
+        c_tokens = set(re.findall(r"\b[a-zA-Z0-9]{3,}\b", c_norm))
+        has_domain_token = domain_token in c_norm.replace(" ", "")
+        has_token_overlap = bool(name_tokens & c_tokens)
+        if not (has_domain_token or has_token_overlap):
+            return False, f"Identity mismatch: '{c_name}' shares no common identity tokens with domain '{canon}' or candidate name '{candidate_name}'."
+
+    return True, ""
+
 from sales_engine.candidates.models import CandidateCompany
 from sales_engine.candidates.classifier import CompanyClassifier
 from sales_engine.discovery_v2.source_registry import SourceRegistry, sanitize_secret_text
@@ -451,15 +528,42 @@ def evaluate_research_readiness(
 
     # Check for field-level reviews
     has_partial_field_reviews = False
+    core_reviews_valid = False
     if reg_store and cid.strip():
         try:
             reviews = reg_store.get_field_reviews(cid.strip())
             has_partial_field_reviews = len(reviews) > 0
+            if reg_record and reviews:
+                req_fields = ("company_name", "official_website", "business_activities")
+                valid_cnt = 0
+                for fn in req_fields:
+                    rev = reviews.get(fn)
+                    if rev and rev.review_state in ("OPERATOR_APPROVED", "OPERATOR_CORRECTED"):
+                        curr_val = getattr(reg_record, fn, None)
+                        if rev.value_checksum == compute_field_checksum(curr_val):
+                            valid_cnt += 1
+                core_reviews_valid = (valid_cnt == len(req_fields))
         except Exception:
             pass
 
+    # A record is genuinely research_ready if it has an approved verification status,
+    # minimum info, sufficient evidence, AND either valid matching core field reviews
+    # or genuine legacy operator provenance (or existing record marked OPERATOR_REVIEWED/VERIFIED
+    # where no conflicting field reviews exist).
+    is_legacy_verified = (
+        is_approved_status and
+        (
+            provenance in ("historical_import", "operator_edited", "operator_researched", "pilot_research", "") or
+            has_operator_provenance or
+            has_evidence_urls or
+            has_snapshot
+        ) and
+        not has_partial_field_reviews
+    )
+
     if has_explicit_record and is_approved_status:
-        if has_minimum_info and has_sufficient_evidence:
+        # If field reviews exist, core field reviews MUST be current and valid (not stale/checksum mismatch)
+        if (core_reviews_valid or is_legacy_verified) and has_minimum_info and has_sufficient_evidence:
             research_status = "research_ready"
             research_label = "Research Ready"
             research_badge = "badge-success"
@@ -469,6 +573,8 @@ def evaluate_research_readiness(
             research_label = "Missing Evidence"
             research_badge = "badge-warning"
             reasons = []
+            if not (core_reviews_valid or is_legacy_verified):
+                reasons.append("stale or incomplete core field reviews")
             if not has_minimum_info:
                 reasons.append("incomplete required profile fields")
             if not has_sufficient_evidence:
@@ -521,13 +627,15 @@ def validate_research_finalization(
 ) -> Tuple[bool, List[str], Dict[str, bool]]:
     """
     Validates minimum requirements for Research Finalization:
-    1. Trustworthy company identity: non-empty name, no identity contradiction.
-    2. Valid official website: non-empty, canonical domain matching.
-    3. Business activities: non-empty, meaningful description.
+    1. Trustworthy company identity: non-empty name, no identity contradiction,
+       validated against domain and candidate identity using token overlap.
+    2. Valid official website: non-empty, canonical domain matching with proper host validation.
+    3. Business activities: non-empty, meaningful description (>= 5 chars).
     4. Adequate traceable source evidence: evidence URLs or crawl snapshot pages.
-    5. Required operator review: at least the core identity fields (company_name,
-       official_website, business_activities) must have been reviewed by operator,
-       OR record is already operator-edited/reviewed with complete data.
+    5. Required operator review: all three core identity fields (company_name,
+       official_website, business_activities) must have explicit, current, valid operator
+       reviews with matching SHA-256 checksums in OPERATOR_APPROVED or OPERATOR_CORRECTED state.
+       Separately documents and supports a strict legacy-verified fallback for historical records.
     6. No reliance on quarantined ungrounded claims for required fields.
     """
     errors: List[str] = []
@@ -544,24 +652,26 @@ def validate_research_finalization(
         errors.append("No Lead Register record found. Save research fields before finalization.")
         return False, errors, checks
 
+    cand_name = getattr(cand, "company_name", None) or ""
+    cand_domain = getattr(cand, "company_domain", None) or ""
+
     # 1. Company identity check
-    c_name = (getattr(reg_record, "company_name", None) or getattr(cand, "company_name", None) or "").strip()
-    if not c_name or c_name.lower() in ("not found", "none", "null"):
-        errors.append("Missing trustworthy company identity / name.")
+    c_name = (getattr(reg_record, "company_name", None) or cand_name or "").strip()
+    id_ok, id_err = is_trustworthy_company_identity(
+        company_name=c_name,
+        candidate_name=cand_name,
+        canonical_domain=cand_domain,
+    )
+    if not id_ok:
+        errors.append(id_err)
     else:
-        # Check domain / identity contradiction
-        cand_domain = (getattr(cand, "company_domain", None) or "").strip().lower()
-        if cand_domain and cand_domain in ("energymep.it",) and "esac" in c_name.lower():
-            errors.append(f"Identity contradiction: '{c_name}' does not match candidate domain {cand_domain}.")
-        else:
-            checks["identity_valid"] = True
+        checks["identity_valid"] = True
 
     # 2. Official website & domain match check
-    raw_website = (getattr(reg_record, "official_website", None) or getattr(cand, "company_domain", None) or "").strip()
-    cand_domain = (getattr(cand, "company_domain", None) or "").strip().lower()
+    raw_website = (getattr(reg_record, "official_website", None) or cand_domain or "").strip()
     if not raw_website or raw_website.lower() in ("not found", "none", "null"):
         errors.append("Missing authoritative official website.")
-    elif cand_domain and cand_domain not in raw_website.lower():
+    elif cand_domain and not is_canonical_domain_match(raw_website, cand_domain):
         errors.append(f"Official website '{raw_website}' does not match canonical domain '{cand_domain}'.")
     else:
         checks["website_valid"] = True
@@ -583,21 +693,51 @@ def validate_research_finalization(
         checks["evidence_valid"] = True
 
     # 5. Core operator review requirements
-    # Operator must have approved core fields: company_name, official_website, business_activities
-    # OR record has already been operator edited / reviewed with provenance
-    has_core_reviews = (
-        ("company_name" in field_reviews or getattr(reg_record, "provenance_source", "") == "operator_edited") and
-        ("official_website" in field_reviews or getattr(reg_record, "provenance_source", "") == "operator_edited") and
-        ("business_activities" in field_reviews or getattr(reg_record, "provenance_source", "") == "operator_edited")
+    # Core fields: company_name, official_website, business_activities
+    # Must have explicit FieldReviewRecords with matching value checksums,
+    # unless it is a genuinely legacy pre-finalized record with verified status and operator provenance.
+    core_fields = ("company_name", "official_website", "business_activities")
+    missing_reviews = []
+    stale_reviews = []
+
+    for fn in core_fields:
+        rev = field_reviews.get(fn)
+        if not rev:
+            missing_reviews.append(fn)
+            continue
+        # Check review state
+        if rev.review_state not in ("OPERATOR_APPROVED", "OPERATOR_CORRECTED"):
+            stale_reviews.append(f"{fn} (state is {rev.review_state})")
+            continue
+        # Check checksum
+        current_val = getattr(reg_record, fn, None)
+        curr_checksum = compute_field_checksum(current_val)
+        if rev.value_checksum != curr_checksum:
+            stale_reviews.append(f"{fn} (value changed after review; checksum mismatch)")
+
+    # Legacy compatibility path: ONLY for records already marked OPERATOR_REVIEWED or VERIFIED
+    # with zero field reviews and valid operator/historical provenance.
+    is_legacy_finalized = (
+        len(field_reviews) == 0 and
+        getattr(reg_record, "verification_status", "") in ("OPERATOR_REVIEWED", "VERIFIED") and
+        getattr(reg_record, "provenance_source", "") in ("historical_import", "operator_edited", "operator_researched")
     )
-    if not has_core_reviews and len(field_reviews) < 2:
-        errors.append("Operator has not reviewed minimum required fields (Company Name, Website, Business Activities).")
-    else:
+
+    if not missing_reviews and not stale_reviews:
         checks["reviews_valid"] = True
+    elif is_legacy_finalized:
+        checks["reviews_valid"] = True
+    else:
+        reasons = []
+        if missing_reviews:
+            reasons.append(f"missing approved reviews for: {', '.join(missing_reviews)}")
+        if stale_reviews:
+            reasons.append(f"stale or modified reviews for: {', '.join(stale_reviews)}")
+        errors.append("Operator has not approved current values for all required core fields (" + "; ".join(reasons) + ").")
 
     # 6. No reliance on quarantined ungrounded claims
     if latest_analysis and latest_analysis.proposed_fields:
-        for fn in ("company_name", "official_website", "business_activities"):
+        for fn in core_fields:
             f_meta = latest_analysis.proposed_fields.get(fn)
             if isinstance(f_meta, dict) and f_meta.get("quarantined"):
                 errors.append(f"Required field '{fn}' relies on a quarantined / ungrounded claim.")
@@ -3302,34 +3442,75 @@ async def lead_register_update_action(
     if not existing:
         raise HTTPException(status_code=404, detail="Lead record not found")
 
-    rec_num = int(record_number.strip()) if record_number and record_number.strip().isdigit() else existing.record_number
+    def _clean_str(val: Any) -> Optional[str]:
+        if val is None or not isinstance(val, str):
+            return None
+        s = val.strip()
+        return s if s else None
+
+    rec_num_str = _clean_str(record_number)
+    rec_num = int(rec_num_str) if (rec_num_str and rec_num_str.isdigit()) else existing.record_number
 
     # P1 Lead Register Review Semantics:
-    # Saving or editing data must NOT implicitly mark an unreviewed record as OPERATOR_REVIEWED.
-    # An explicit operator review action/selection is required to establish a reviewed state.
-    if verification_status and verification_status.strip():
-        v_status = verification_status.strip()
+    # Saving or editing data must NOT allow arbitrary unauthorized promotion to OPERATOR_REVIEWED or VERIFIED.
+    # An explicit research finalization action (/finalize) is required to establish an OPERATOR_REVIEWED state.
+    # Form edits can preserve existing status or demote, but cannot promote an unverified record.
+    raw_v = _clean_str(verification_status)
+    req_v_status = raw_v if raw_v else existing.verification_status
+    if req_v_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        if existing.verification_status not in ("OPERATOR_REVIEWED", "VERIFIED"):
+            # Block unauthorized promotion
+            v_status = "EXTRACTED"
+        else:
+            v_status = req_v_status
     else:
-        v_status = existing.verification_status
+        v_status = req_v_status
+
+    # Check for invalidation of field reviews when required core fields are edited
+    new_name = company_name.strip() if isinstance(company_name, str) else (existing.company_name or "")
+    new_website = _clean_str(official_website) or existing.official_website
+    new_activities = _clean_str(business_activities) or existing.business_activities
+
+    reviews = reg_store.get_field_reviews(candidate_id)
+    any_core_invalidated = False
+
+    if reviews:
+        field_updates = {
+            "company_name": new_name,
+            "official_website": new_website,
+            "business_activities": new_activities,
+        }
+        for fn, val in field_updates.items():
+            if fn in reviews:
+                chk = compute_field_checksum(val)
+                if reviews[fn].value_checksum != chk:
+                    # Invalidate stale review
+                    reg_store.delete_field_review(candidate_id, fn)
+                    any_core_invalidated = True
+
+    # If any required core review was invalidated and the record was OPERATOR_REVIEWED,
+    # suspend readiness and demote verification_status to EXTRACTED until re-finalized.
+    if any_core_invalidated and v_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        v_status = "EXTRACTED"
 
     # Mark record as operator_edited when edited through the actual HTTP editor,
     # preserving original research evidence URLs and created_at timestamps.
     updated_rec = LeadRegisterRecord(
         candidate_id=candidate_id,
         record_number=rec_num,
-        priority_level=priority_level.strip().upper(),
-        priority_rationale=priority_rationale.strip() if priority_rationale else None,
-        company_name=company_name.strip(),
-        legal_identity=legal_identity.strip() if legal_identity else None,
-        geographic_location=geographic_location.strip() if geographic_location else None,
-        telephone_numbers=telephone_numbers.strip() if telephone_numbers else None,
-        business_activities=business_activities.strip() if business_activities else None,
-        official_website=official_website.strip() if official_website else None,
-        responsible_person=responsible_person.strip() if responsible_person else None,
-        descriptions_and_notes=descriptions_and_notes,  # preserve multiline text exactly
-        job_advertisement_links=job_advertisement_links.strip() if job_advertisement_links else None,
-        other_links_and_references=other_links_and_references,  # preserve multiline text
-        contact_email_addresses=contact_email_addresses.strip() if contact_email_addresses else None,
+        priority_level=priority_level.strip().upper() if isinstance(priority_level, str) else "B",
+        priority_rationale=_clean_str(priority_rationale),
+        company_name=company_name.strip() if isinstance(company_name, str) else "",
+        legal_identity=_clean_str(legal_identity),
+        geographic_location=_clean_str(geographic_location),
+        telephone_numbers=_clean_str(telephone_numbers),
+        business_activities=_clean_str(business_activities),
+        official_website=_clean_str(official_website),
+        responsible_person=_clean_str(responsible_person),
+        descriptions_and_notes=descriptions_and_notes if isinstance(descriptions_and_notes, str) else None,  # preserve multiline text exactly
+        job_advertisement_links=_clean_str(job_advertisement_links),
+        other_links_and_references=other_links_and_references if isinstance(other_links_and_references, str) else None,  # preserve multiline text
+        contact_email_addresses=_clean_str(contact_email_addresses),
         provenance_source="operator_edited",
         research_date=existing.research_date,
         verification_status=v_status,
@@ -4452,8 +4633,6 @@ async def save_candidate_research_action(
         updated_at=datetime.now(timezone.utc).isoformat(),
     )
 
-    reg_store.save_record(rec)
-
     # Persist durable FieldReviewRecords for every approved field
     from sales_engine.leads.register_models import FieldReviewRecord
     reviewed_at_iso = datetime.now(timezone.utc).isoformat()
@@ -4477,33 +4656,47 @@ async def save_candidate_research_action(
         "other_links_and_references": (_is_checked(apply_other_links_and_references), final_other_links_and_references),
     }
 
+    reviews_to_save: List[FieldReviewRecord] = []
     for fn, (is_applied, val) in field_approved_vals.items():
         if is_applied and val is not None:
             # Extract metadata from proposed_analysis_fields if present
             meta_obj = proposed_analysis_fields.get(fn, {})
             ev_url = None
             ev_exc = None
-            src_type = "llm_analysis" if latest_an else "operator_manual"
+            raw_ai_val = ""
             if isinstance(meta_obj, dict):
+                raw_ai_val = str(meta_obj.get("value") or "").strip()
                 ev_url = meta_obj.get("source_url")
                 ev_exc = meta_obj.get("evidence_excerpt")
 
-            chk = hashlib.sha256(str(val).strip().encode("utf-8")).hexdigest()
+            val_str = str(val).strip()
+            # If operator edited or modified value away from AI proposal, do NOT inherit AI excerpt as fact
+            is_manual_edit = (latest_an is not None and val_str != raw_ai_val)
+            if is_manual_edit:
+                src_type = "operator_manual"
+                ev_exc = None  # Do not attach unverified AI excerpt to manual operator value
+            else:
+                src_type = "llm_analysis" if latest_an else "operator_manual"
+
+            chk = compute_field_checksum(val)
             f_rev = FieldReviewRecord(
                 candidate_id=candidate_id,
                 field_name=fn,
-                approved_value=str(val),
+                approved_value=val_str,
                 value_checksum=chk,
-                review_state="OPERATOR_APPROVED",
+                review_state="OPERATOR_CORRECTED" if is_manual_edit else "OPERATOR_APPROVED",
                 reviewed_at=reviewed_at_iso,
                 source_type=src_type,
                 snapshot_id=active_snapshot_id,
                 analysis_id=active_analysis_id,
                 evidence_url=ev_url,
                 evidence_excerpt=ev_exc,
-                operator_note="Approved via Research Review UI",
+                operator_note="Manually edited via Research Review UI" if is_manual_edit else "Approved via Research Review UI",
             )
-            reg_store.save_field_review(f_rev)
+            reviews_to_save.append(f_rev)
+
+    # Atomically save record and reviews in a single transaction
+    reg_store.save_record_with_reviews(rec, reviews_to_save)
 
     # Update candidate metadata without altering DNC, historical restrictions, or auto-approving outreach
     cand.last_researched_at = datetime.now(timezone.utc).isoformat()
@@ -4539,7 +4732,13 @@ async def finalize_candidate_research_action(
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
     snap_store = ResearchSnapshotStore()
 
-    current_reg = reg_store.get_record(candidate_id)
+    current_reg = reg_store.get_explicit_record(candidate_id)
+    if not current_reg:
+        err_msg = "Cannot finalize research review: No explicit Lead Register record exists for this candidate. Save research fields before finalization."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
     latest_analysis = None
     if latest_snapshot:
