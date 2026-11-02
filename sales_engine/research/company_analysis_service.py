@@ -221,6 +221,46 @@ LEAD_REGISTER_13_FIELDS_SCHEMA: Dict[str, Any] = {
 }
 
 
+def diagnose_gemini_credential_status() -> Dict[str, Any]:
+    """
+    Safely inspects DPAPI credential vault and environment status for Google Gemini.
+    NEVER logs, prints, or returns API secret values.
+    Returns:
+        {
+            "status": "CONFIGURED" | "NOT_LOADED_IN_PROCESS" | "MISSING_VAULT_KEY",
+            "message": str,
+            "vault_path_exists": bool,
+            "env_loaded": bool
+        }
+    """
+    secret_folder = os.path.expandvars(r"%APPDATA%\pyBIM\SalesAI\api-secrets")
+    dpapi_file = os.path.join(secret_folder, "GEMINI_API_KEY.dpapi")
+    vault_exists = os.path.exists(dpapi_file)
+    env_loaded = bool(os.environ.get("GEMINI_API_KEY", "").strip())
+
+    if env_loaded:
+        return {
+            "status": "CONFIGURED",
+            "message": "Gemini API credential is loaded into the current process environment.",
+            "vault_path_exists": vault_exists,
+            "env_loaded": True,
+        }
+    elif vault_exists:
+        return {
+            "status": "NOT_LOADED_IN_PROCESS",
+            "message": "Gemini key is saved in DPAPI vault but not loaded into the active process. Run scripts/SALESAI-SEVEN-PROVIDERS.ps1 -Mode LoadAll or restart launcher.",
+            "vault_path_exists": True,
+            "env_loaded": False,
+        }
+    else:
+        return {
+            "status": "MISSING_VAULT_KEY",
+            "message": "No DPAPI encrypted credential found in vault. Run scripts/SALESAI-SEVEN-PROVIDERS.ps1 -Mode SetupOne -Provider Gemini to securely configure.",
+            "vault_path_exists": False,
+            "env_loaded": False,
+        }
+
+
 def build_analysis_gateway(
     provider_id: str = "gemini",
     model: Optional[str] = None,
@@ -328,29 +368,46 @@ def partition_snapshot_into_chunks(
     current_chunk_chars = 0
 
     for idx, p in enumerate(eligible_pages, 1):
-        block = (
-            f"=== DOCUMENT #{idx} ===\n"
-            f"URL: {p.resolved_url}\n"
-            f"Section: {p.page_type}\n"
-            f"Title: {p.title or 'N/A'}\n"
-            f"Content:\n{p.cleaned_text.strip()}\n"
-        )
-        block_len = len(block)
-
-        # If block alone exceeds chunk_size_chars, split or create its own chunk
-        if current_chunk_blocks and (current_chunk_chars + block_len > chunk_size_chars):
-            chunks.append({
-                "chunk_index": len(chunks) + 1,
-                "text": "\n".join(current_chunk_blocks),
-                "urls": list(current_chunk_urls),
-            })
-            current_chunk_blocks = [block]
-            current_chunk_urls = [p.resolved_url]
-            current_chunk_chars = block_len
+        raw_text = (p.cleaned_text or "").strip()
+        # Oversized page handling: if page text alone exceeds chunk_size_chars,
+        # split it into sub-parts preserving URL and section metadata
+        page_blocks: List[str] = []
+        if len(raw_text) > chunk_size_chars:
+            part_size = max(10_000, chunk_size_chars - 2_000)
+            parts = [raw_text[i:i + part_size] for i in range(0, len(raw_text), part_size)]
+            for sub_idx, sub_text in enumerate(parts, 1):
+                page_blocks.append(
+                    f"=== DOCUMENT #{idx} (Part {sub_idx}/{len(parts)}) ===\n"
+                    f"URL: {p.resolved_url}\n"
+                    f"Section: {p.page_type}\n"
+                    f"Title: {p.title or 'N/A'}\n"
+                    f"Content:\n{sub_text.strip()}\n"
+                )
         else:
-            current_chunk_blocks.append(block)
-            current_chunk_urls.append(p.resolved_url)
-            current_chunk_chars += block_len
+            page_blocks.append(
+                f"=== DOCUMENT #{idx} ===\n"
+                f"URL: {p.resolved_url}\n"
+                f"Section: {p.page_type}\n"
+                f"Title: {p.title or 'N/A'}\n"
+                f"Content:\n{raw_text}\n"
+            )
+
+        for block in page_blocks:
+            block_len = len(block)
+            if current_chunk_blocks and (current_chunk_chars + block_len > chunk_size_chars):
+                chunks.append({
+                    "chunk_index": len(chunks) + 1,
+                    "text": "\n".join(current_chunk_blocks),
+                    "urls": list(current_chunk_urls),
+                })
+                current_chunk_blocks = [block]
+                current_chunk_urls = [p.resolved_url]
+                current_chunk_chars = block_len
+            else:
+                current_chunk_blocks.append(block)
+                if p.resolved_url not in current_chunk_urls:
+                    current_chunk_urls.append(p.resolved_url)
+                current_chunk_chars += block_len
 
     if current_chunk_blocks:
         chunks.append({
@@ -526,6 +583,22 @@ def execute_company_analysis(
     pid = provider_id.lower()
     effective_model = model or (DEFAULT_GEMINI_MODEL if pid == "gemini" else "default")
 
+    # 0. Validate Candidate and Snapshot Ownership (Fail-closed)
+    if snapshot.candidate_id != candidate_id:
+        rec = CompanyAnalysisRecord(
+            analysis_id=analysis_id,
+            candidate_id=candidate_id,
+            snapshot_id=snapshot.snapshot_id,
+            provider=pid,
+            model=effective_model,
+            created_at=now_iso,
+            status="SECURITY_VIOLATION",
+            proposed_fields={},
+            diagnostic_info=f"Cross-candidate snapshot reference prohibited. Snapshot belongs to '{snapshot.candidate_id}', not '{candidate_id}'.",
+        )
+        store.save_analysis_record(rec)
+        return rec
+
     # 1. Validate Snapshot Content
     if not snapshot.pages or snapshot.pages_succeeded == 0:
         rec = CompanyAnalysisRecord(
@@ -574,6 +647,11 @@ def execute_company_analysis(
         key_val = api_key or os.environ.get(env_var)
         if not key_val or not key_val.strip():
             logger.warning(f"LLM provider '{pid}' is not configured: missing {env_var}.")
+            diag_info = f"Provider '{pid}' is not configured. Missing environment variable {env_var}."
+            if pid == "gemini":
+                diag = diagnose_gemini_credential_status()
+                diag_info = f"Gemini status [{diag['status']}]: {diag['message']}"
+
             rec = CompanyAnalysisRecord(
                 analysis_id=analysis_id,
                 candidate_id=candidate_id,
@@ -583,7 +661,7 @@ def execute_company_analysis(
                 created_at=now_iso,
                 status="NOT_CONFIGURED",
                 proposed_fields={},
-                diagnostic_info=f"Provider '{pid}' is not configured. Missing environment variable {env_var}.",
+                diagnostic_info=diag_info,
             )
             store.save_analysis_record(rec)
             return rec
@@ -648,14 +726,50 @@ def execute_company_analysis(
         "5. Output valid JSON strictly conforming to the requested response schema."
     ).format(company_name=snapshot.company_name, canonical_domain=snapshot.canonical_domain)
 
+    # Hard architectural ceilings to prevent runaway execution
+    MAX_ALLOWED_CHUNKS = 5
+    MAX_TOTAL_OUTPUT_TOKENS = 12_500  # 5 calls * 2,500 max output tokens
+
     aggregated_proposals: Dict[str, Any] = {}
     total_input_tokens = 0
     total_output_tokens = 0
     raw_responses: List[str] = []
     overall_status = "SUCCESS"
     diag_msgs: List[str] = []
+    executed_chunks_count = 0
 
     for c in chunks:
+        # Enforce provider-call ceiling
+        if executed_chunks_count >= MAX_ALLOWED_CHUNKS:
+            logger.warning(f"Reached maximum allowed chunk calls ({MAX_ALLOWED_CHUNKS}). Terminating analysis loop safely.")
+            diag_msgs.append(f"Reached chunk call ceiling ({MAX_ALLOWED_CHUNKS}). Remaining chunks omitted.")
+            break
+
+        # Enforce output token ceiling
+        if total_output_tokens >= MAX_TOTAL_OUTPUT_TOKENS:
+            logger.warning(f"Reached maximum output token ceiling ({MAX_TOTAL_OUTPUT_TOKENS}). Terminating safely.")
+            diag_msgs.append(f"Reached output token ceiling ({MAX_TOTAL_OUTPUT_TOKENS}).")
+            break
+
+        # Pre-request Budget Check: estimate cost of this next chunk before invoking provider
+        est_chunk_inp = int(len(c["text"]) / 4.0) + 500
+        projected_total_cost = calculate_cost(
+            input_tokens=total_input_tokens + est_chunk_inp,
+            output_tokens=total_output_tokens + 1500,
+            provider=pid,
+            model=effective_model,
+        )
+        if max_approved_budget_usd is not None and projected_total_cost > max_approved_budget_usd:
+            logger.warning(
+                f"Aborting analysis before chunk {c['chunk_index']}: projected cost ${projected_total_cost:.4f} "
+                f"exceeds approved budget ${max_approved_budget_usd:.4f}."
+            )
+            overall_status = "BUDGET_EXCEEDED"
+            diag_msgs.append(
+                f"Pre-request budget check exceeded: projected ${projected_total_cost:.4f} > cap ${max_approved_budget_usd:.4f}."
+            )
+            break
+
         user_prompt = (
             f"Analyze the following official website documents for '{snapshot.company_name}' "
             f"(domain: {snapshot.canonical_domain}) [Chunk {c['chunk_index']}/{len(chunks)}] "
@@ -677,6 +791,7 @@ def execute_company_analysis(
 
         try:
             resp: LLMResponse = gw.generate(req)
+            executed_chunks_count += 1
         except LLMNotConfiguredError as e:
             rec = CompanyAnalysisRecord(
                 analysis_id=analysis_id,
@@ -763,7 +878,7 @@ def execute_company_analysis(
         analyzed_pages_count=len(eligible_pages),
         chunks_count=len(chunks),
         omitted_pages_count=len(omitted_reasons),
-        provider_calls_count=len(chunks),
+        provider_calls_count=executed_chunks_count,
         omitted_pages_reasons=omitted_reasons,
     )
     store.save_analysis_record(rec)

@@ -4006,6 +4006,21 @@ async def analyze_candidate_snapshot_action(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
+    # Candidate and Snapshot Ownership Validation: reject cross-candidate snapshot reference
+    if target_snapshot.candidate_id != candidate_id or (cand.company_domain and target_snapshot.canonical_domain != cand.company_domain):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Cross-candidate snapshot reference prohibited. Snapshot belongs to '{target_snapshot.candidate_id}'.",
+        )
+
+    # Explicit server-side operator confirmation check
+    if operator_confirmed != "1":
+        err_msg = "Inference execution rejected: Explicit operator confirmation is required."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
     eff_provider = provider or "gemini"
     eff_model = model or "gemini-3.5-flash-lite"
 
@@ -4075,13 +4090,13 @@ async def research_candidate_action(candidate_id: str, csrf: None = Depends(vali
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    # Explicit operator trigger: crawl website now, create snapshot, and update cache
+    # Explicit operator trigger: crawl website now, create snapshot, and update cache with ZERO implicit LLM inference
     try:
         research_res = perform_company_research(
             company_name=cand.company_name or domain,
             canonical_domain=domain,
             candidate_id=candidate_id,
-            use_llm=True,
+            use_llm=False,
         )
     except Exception as exc:
         diag_id = f"diag_{uuid.uuid4().hex[:10]}"
@@ -4304,18 +4319,19 @@ async def batch_research_candidates_action(
         if not cand or not cand.company_domain:
             continue
 
+        # Decoupled Stage 1: crawl with use_llm=False, preventing implicit paid LLM inference
         res = perform_company_research(
             company_name=cand.company_name or cand.company_domain,
             canonical_domain=cand.company_domain,
             candidate_id=cid,
-            use_llm=True,
+            use_llm=False,
         )
         batch_results.append({
             "candidate": cand,
             "research": res,
         })
 
-    msg = f"Completed batch research for {len(batch_results)} candidate(s)."
+    msg = f"Completed batch research crawl for {len(batch_results)} candidate(s). Snapshots saved."
     return render_console_template(
         request=request,
         name="company_research_batch.html",

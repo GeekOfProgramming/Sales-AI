@@ -15,14 +15,24 @@ import hashlib
 import json
 import logging
 import os
+import secrets
 import time
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Set
 
 logger = logging.getLogger(__name__)
 
-# Server-side authorization secret (isolated or from env)
-AUTH_SECRET = os.environ.get("SALESAI_ANALYSIS_AUTH_SECRET", "salesai_analysis_auth_sec_2026")
+# Server-side authorization secret: require explicit environment variable or generate
+# a secure process-lifetime ephemeral secret. NEVER fall back to a hardcoded shared string.
+_EPHEMERAL_SECRET = secrets.token_hex(32)
+def get_auth_secret() -> str:
+    sec = os.environ.get("SALESAI_ANALYSIS_AUTH_SECRET")
+    if sec and sec.strip():
+        return sec.strip()
+    return _EPHEMERAL_SECRET
+
+# Nonce replay protection set: tracks used nonce tokens to prevent token reuse
+_USED_AUTH_NONCES: Set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -130,16 +140,19 @@ def generate_analysis_auth_token(
     provider: str,
     model: str,
     max_budget_usd: float = 0.50,
+    validity_seconds: int = 1800,  # 30 minutes expiration
 ) -> str:
     """
     Generates a cryptographically signed authorization token for paid inference.
-    Token payload: candidate_id:snapshot_id:provider:model:max_budget:sig
+    Token payload: candidate_id|snapshot_id|provider|model|max_budget|exp|nonce|sig
     """
     p_norm = provider.lower()
     m_norm = model.lower()
     budget_str = f"{max_budget_usd:.4f}"
-    payload = f"{candidate_id}|{snapshot_id}|{p_norm}|{m_norm}|{budget_str}"
-    sig = hmac.new(AUTH_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    exp_ts = int(time.time()) + validity_seconds
+    nonce = secrets.token_hex(8)
+    payload = f"{candidate_id}|{snapshot_id}|{p_norm}|{m_norm}|{budget_str}|{exp_ts}|{nonce}"
+    sig = hmac.new(get_auth_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{payload}|{sig}"
 
 
@@ -149,24 +162,49 @@ def verify_analysis_auth_token(
     snapshot_id: str,
     provider: str,
     model: str,
+    mark_used: bool = True,
 ) -> Tuple[bool, Optional[float], Optional[str]]:
     """
     Validates the server-side operator authorization token.
+    Enforces expiration, replay nonce checks, and context binding.
     Returns (is_valid, max_approved_budget_usd, error_message).
     """
     if not auth_token or not auth_token.strip():
         return False, None, "Missing authorization token. Direct POST without explicit operator authorization is prohibited."
 
     parts = auth_token.strip().split("|")
-    if len(parts) != 6:
+    # Support both 8-part (exp + nonce + sig) and legacy 6-part for transitional compatibility
+    if len(parts) == 8:
+        t_cid, t_sid, t_prov, t_model, t_budget_str, t_exp_str, t_nonce, t_sig = parts
+        payload = f"{t_cid}|{t_sid}|{t_prov}|{t_model}|{t_budget_str}|{t_exp_str}|{t_nonce}"
+        expected_sig = hmac.new(get_auth_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+        if not hmac.compare_digest(t_sig, expected_sig):
+            return False, None, "Invalid authorization signature. Token tampering detected."
+
+        # Check expiration
+        try:
+            exp_ts = int(t_exp_str)
+            if time.time() > exp_ts:
+                return False, None, "Authorization token has expired. Please refresh the review page."
+        except ValueError:
+            return False, None, "Invalid expiration timestamp in authorization token."
+
+        # Check nonce replay
+        if t_nonce in _USED_AUTH_NONCES:
+            return False, None, "Authorization token replay detected. Single-use token has already been consumed."
+
+        if mark_used:
+            _USED_AUTH_NONCES.add(t_nonce)
+
+    elif len(parts) == 6:
+        t_cid, t_sid, t_prov, t_model, t_budget_str, t_sig = parts
+        payload = f"{t_cid}|{t_sid}|{t_prov}|{t_model}|{t_budget_str}"
+        expected_sig = hmac.new(get_auth_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(t_sig, expected_sig):
+            return False, None, "Invalid authorization signature. Token tampering detected."
+    else:
         return False, None, "Malformed authorization token structure."
-
-    t_cid, t_sid, t_prov, t_model, t_budget_str, t_sig = parts
-    payload = f"{t_cid}|{t_sid}|{t_prov}|{t_model}|{t_budget_str}"
-    expected_sig = hmac.new(AUTH_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-
-    if not hmac.compare_digest(t_sig, expected_sig):
-        return False, None, "Invalid authorization signature. Token tampering detected."
 
     # Validate matching context
     if t_cid != candidate_id:

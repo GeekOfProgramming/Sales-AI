@@ -20,10 +20,21 @@ Tests:
 
 import json
 import os
+import socket
 import sqlite3
 import tempfile
+import time
 import pytest
 from unittest.mock import patch, MagicMock
+
+# Global offline DNS safety patch: ensures all tests run 100% offline without network lookups
+_REAL_GETADDRINFO = socket.getaddrinfo
+def _offline_safe_getaddrinfo(host, port, *args, **kwargs):
+    if host in ("energymep.it", "www.energymep.it", "bsprogetti.it", "test-domain.com"):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port or 80))]
+    return _REAL_GETADDRINFO(host, port, *args, **kwargs)
+
+socket.getaddrinfo = _offline_safe_getaddrinfo
 
 from sales_engine.candidates.candidate_store import CandidateStore
 from sales_engine.candidates.models import CandidateCompany
@@ -1091,3 +1102,172 @@ def test_21_cross_domain_redirect_blocked():
             newurl="https://malicious-external-site.com/trap",
         )
     assert "leaves authorized scope" in str(exc_info.value)
+
+
+# ==============================================================================
+# 22. V2.1b Pre-Live Safety Tests
+# ==============================================================================
+
+def test_22_auth_token_expiration_and_nonce_replay(isolated_db_paths):
+    from sales_engine.research.pricing_config import (
+        generate_analysis_auth_token,
+        verify_analysis_auth_token,
+    )
+
+    cid = "cand:domain:energymep.it"
+    sid = "snap_test_01"
+
+    # Token expires immediately if validity_seconds=-1
+    expired_token = generate_analysis_auth_token(
+        candidate_id=cid,
+        snapshot_id=sid,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        max_budget_usd=0.50,
+        validity_seconds=-10,
+    )
+    is_valid, _, err = verify_analysis_auth_token(
+        auth_token=expired_token,
+        candidate_id=cid,
+        snapshot_id=sid,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+    )
+    assert not is_valid
+    assert "expired" in err.lower()
+
+    # Valid token succeeds on first use
+    fresh_token = generate_analysis_auth_token(
+        candidate_id=cid,
+        snapshot_id=sid,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        max_budget_usd=0.50,
+        validity_seconds=600,
+    )
+    is_valid, max_b, err = verify_analysis_auth_token(
+        auth_token=fresh_token,
+        candidate_id=cid,
+        snapshot_id=sid,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+    )
+    assert is_valid
+    assert max_b == 0.50
+
+    # Replay attack: reusing the same token must fail
+    replay_valid, _, replay_err = verify_analysis_auth_token(
+        auth_token=fresh_token,
+        candidate_id=cid,
+        snapshot_id=sid,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+    )
+    assert not replay_valid
+    assert "replay detected" in replay_err.lower()
+
+
+def test_23_candidate_and_snapshot_ownership_cross_reference_rejection(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h", cleaned_text="Energymep body",
+    )
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe])
+
+    # Mismatched candidate ID must be rejected as SECURITY_VIOLATION
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id="cand:domain:other-company.it",
+        provider_id="gemini",
+        snapshot_store=snap_store,
+    )
+    assert rec.status == "SECURITY_VIOLATION"
+    assert "Cross-candidate snapshot reference prohibited" in rec.diagnostic_info
+
+
+def test_24_spending_limit_and_budget_exceeded_termination(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep", meta_description=None, content_sha256="h",
+        cleaned_text="Very long website content " * 1000,
+    )
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe])
+
+    mock_gw = MagicMock()
+    # If approved budget is $0.000001, preflight budget check must abort before making any call
+    rec = execute_company_analysis(
+        snapshot=snap,
+        candidate_id="cand:domain:energymep.it",
+        provider_id="gemini",
+        snapshot_store=snap_store,
+        gateway_override=mock_gw,
+        max_approved_budget_usd=0.000001,
+    )
+    assert rec.status == "BUDGET_EXCEEDED"
+    assert mock_gw.generate.call_count == 0
+
+
+def test_25_oversized_page_subchunking_preserves_url():
+    from sales_engine.research.company_analysis_service import partition_snapshot_into_chunks
+
+    pe = PageEvidence(
+        snapshot_id="snap_big", evidence_id="EV_BIG", requested_url="https://energymep.it/huge",
+        resolved_url="https://energymep.it/huge", page_type="services", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Huge", meta_description=None, content_sha256="h_big",
+        cleaned_text="A" * 60_000,
+    )
+    snap = ResearchSnapshot(
+        snapshot_id="snap_big",
+        candidate_id="cand:test",
+        canonical_domain="energymep.it",
+        company_name="Energymep",
+        created_at="2026-11-02T12:00:00Z",
+        completed_at="2026-11-02T12:00:05Z",
+        crawler_version="2.0.0",
+        parser_version="2.0.0",
+        dataset_schema_version="1.0.0",
+        research_status="complete",
+        pages_attempted=1,
+        pages_succeeded=1,
+        content_checksum="chk_big",
+        pages=[pe],
+    )
+
+    chunks, eligible, omitted = partition_snapshot_into_chunks(snap, chunk_size_chars=25_000)
+    assert len(chunks) >= 2, "60k char page must be sliced into at least 2 chunks"
+    for c in chunks:
+        assert "https://energymep.it/huge" in c["urls"]
+        assert "URL: https://energymep.it/huge" in c["text"]
+
+
+def test_26_gemini_credential_diagnostics():
+    from sales_engine.research.company_analysis_service import diagnose_gemini_credential_status
+
+    with patch.dict(os.environ, {}, clear=True):
+        diag = diagnose_gemini_credential_status()
+        # On this Windows machine, the DPAPI file exists at %APPDATA%\pyBIM\SalesAI\api-secrets\GEMINI_API_KEY.dpapi
+        if diag["vault_path_exists"]:
+            assert diag["status"] == "NOT_LOADED_IN_PROCESS"
+            assert "DPAPI vault" in diag["message"]
+        else:
+            assert diag["status"] == "MISSING_VAULT_KEY"
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "dummy_secret_not_logged"}):
+        diag_loaded = diagnose_gemini_credential_status()
+        assert diag_loaded["status"] == "CONFIGURED"
+        assert "loaded" in diag_loaded["message"].lower()
+        # Verify secret itself is never leaked in the message
+        assert "dummy_secret" not in diag_loaded["message"]
