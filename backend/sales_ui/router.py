@@ -3798,6 +3798,61 @@ async def candidate_research_view(
 
     historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
 
+    # V2: Retrieve latest durable LLM analysis record for this candidate
+    latest_analysis = snap_store.get_latest_analysis(candidate_id)
+
+    # If an analysis record exists and has valid proposed fields, overlay them onto proposed_rec
+    llm_analysis_status_display = None
+    if latest_analysis:
+        llm_analysis_status_display = latest_analysis.status
+        if latest_analysis.status == "SUCCESS" and latest_analysis.proposed_fields:
+            pf = latest_analysis.proposed_fields
+            def get_f_val(field_key: str, default_val: Any) -> Any:
+                item = pf.get(field_key)
+                if isinstance(item, dict) and "value" in item and item["value"] and item["value"] != "Not Found":
+                    return item["value"]
+                return default_val
+
+            if proposed_rec:
+                proposed_rec.company_name = get_f_val("company_name", proposed_rec.company_name)
+                proposed_rec.priority_level = get_f_val("priority_level", proposed_rec.priority_level)
+                proposed_rec.priority_rationale = get_f_val("priority_rationale", proposed_rec.priority_rationale)
+                proposed_rec.legal_identity = get_f_val("legal_identity", proposed_rec.legal_identity)
+                proposed_rec.geographic_location = get_f_val("geographic_location", proposed_rec.geographic_location)
+                proposed_rec.telephone_numbers = get_f_val("telephone_numbers", proposed_rec.telephone_numbers)
+                proposed_rec.business_activities = get_f_val("business_activities", proposed_rec.business_activities)
+                proposed_rec.official_website = get_f_val("official_website", proposed_rec.official_website)
+                proposed_rec.responsible_person = get_f_val("responsible_person", proposed_rec.responsible_person)
+                proposed_rec.descriptions_and_notes = get_f_val("descriptions_and_notes", proposed_rec.descriptions_and_notes)
+                proposed_rec.job_advertisement_links = get_f_val("job_advertisement_links", proposed_rec.job_advertisement_links)
+                proposed_rec.other_links_and_references = get_f_val("other_links_and_references", proposed_rec.other_links_and_references)
+                proposed_rec.contact_email_addresses = get_f_val("contact_email_addresses", proposed_rec.contact_email_addresses)
+
+    # Derive pipeline status for clear UX display
+    pipeline_status = "Not Crawled"
+    if latest_snapshot:
+        if latest_snapshot.pages_succeeded == 0:
+            pipeline_status = "Crawl Failed"
+        elif latest_snapshot.research_status == "partial":
+            pipeline_status = "Partial Crawl"
+        else:
+            pipeline_status = "Crawl Complete"
+
+        if latest_analysis:
+            if latest_analysis.status == "SUCCESS":
+                pipeline_status = "AI Extraction Complete — Review Required"
+            elif latest_analysis.status == "NOT_CONFIGURED":
+                pipeline_status = "Provider Not Configured"
+            elif latest_analysis.status == "SCHEMA_INVALID":
+                pipeline_status = "Analysis Failed (Schema Invalid)"
+            elif latest_analysis.status == "FAILED":
+                pipeline_status = "Analysis Failed"
+        else:
+            pipeline_status = "Awaiting LLM Analysis"
+
+    if current_reg and current_reg.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        pipeline_status = "Operator Reviewed"
+
     return render_console_template(
         request=request,
         name="company_research_review.html",
@@ -3810,9 +3865,134 @@ async def candidate_research_view(
             "historical_snapshots": historical_snapshots,
             "current_record": current_reg,
             "proposed_record": proposed_rec,
+            "latest_analysis": latest_analysis,
+            "pipeline_status": pipeline_status,
             "message": message,
             "error": error,
         },
+    )
+
+
+@router.post("/candidates/{candidate_id}/crawl")
+async def crawl_candidate_website_action(
+    candidate_id: str,
+    max_pages: Optional[int] = Form(20),
+    csrf: None = Depends(validate_csrf)
+):
+    """
+    Stage 1: Crawl & Save Website.
+    Executes configurable, budget-governed website crawler and stores immutable ResearchSnapshot.
+    Zero LLM calls during crawling.
+    """
+    from sales_engine.research.website_crawler import WebsiteCrawlerV2, CrawlBudget
+    from sales_engine.research.research_store import ResearchSnapshotStore
+    from sales_engine.research.company_research_service import load_research_from_snapshot
+
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    domain = cand.company_domain
+    if not domain:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=Candidate+has+no+domain+for+research.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    snap_store = ResearchSnapshotStore()
+    budget = CrawlBudget(max_pages=max_pages or 20)
+    crawler = WebsiteCrawlerV2(snapshot_store=snap_store, budget=budget)
+
+    try:
+        summary = crawler.crawl_website(
+            candidate_id=candidate_id,
+            canonical_domain=domain,
+            company_name=cand.company_name or domain,
+        )
+    except Exception as exc:
+        diag_id = f"diag_{uuid.uuid4().hex[:10]}"
+        logger.error(f"Website crawler execution failed for {candidate_id} [{diag_id}]: {exc}", exc_info=True)
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error=Website+crawl+could+not+be+completed.+Reference:+{diag_id}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    if summary.pages_succeeded == 0:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error=Crawl+failed:+zero+pages+retrieved.+{quote(summary.diagnostic_info or '')}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Update in-memory session cache with deterministic extraction from newly stored snapshot
+    snapshot = snap_store.get_snapshot_by_id(summary.snapshot_id)
+    if snapshot:
+        _RESEARCH_SESSION_CACHE[candidate_id] = load_research_from_snapshot(snapshot, use_llm=False)
+
+    msg = f"Crawl complete: {summary.pages_succeeded} page(s) retrieved and saved in snapshot #{summary.snapshot_id}."
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}/research?message={quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/candidates/{candidate_id}/analyze")
+async def analyze_candidate_snapshot_action(
+    candidate_id: str,
+    provider: Optional[str] = Form("gemini"),
+    model: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf)
+):
+    """
+    Stage 2: Analyze Saved Snapshot with LLM.
+    Runs provider-agnostic LLM extraction against the saved immutable snapshot with ZERO network crawling.
+    """
+    from sales_engine.research.research_store import ResearchSnapshotStore
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+    from sales_engine.research.company_research_service import load_research_from_snapshot
+
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    snap_store = ResearchSnapshotStore()
+    latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
+    if not latest_snapshot or latest_snapshot.pages_succeeded == 0:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error=No+saved+snapshot+available+to+analyze.+Please+crawl+website+first.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    rec = execute_company_analysis(
+        snapshot=latest_snapshot,
+        candidate_id=candidate_id,
+        provider_id=provider or "gemini",
+        model=model,
+        snapshot_store=snap_store,
+    )
+
+    if rec.status == "NOT_CONFIGURED":
+        err_msg = f"Provider '{rec.provider}' is not configured. Please configure credentials (e.g. GEMINI_API_KEY)."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    elif rec.status != "SUCCESS":
+        err_msg = f"LLM analysis failed ({rec.status}): {rec.diagnostic_info or 'Unknown error'}"
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Invalidate session cache so the fresh analysis proposals render
+    if candidate_id in _RESEARCH_SESSION_CACHE:
+        del _RESEARCH_SESSION_CACHE[candidate_id]
+
+    msg = f"LLM analysis completed successfully ({rec.provider}/{rec.model}). Review proposed 13 fields below."
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}/research?message={quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 

@@ -116,49 +116,66 @@
 </div>
 {% endif %}
 
-<!-- Top Stats Banner & Provenance -->
-{% if not research %}
-<div class="card" style="padding: 2.5rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card); margin-bottom: 2rem;">
-  <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔬</div>
-  <h2 style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.5rem;">No Research Snapshot Found</h2>
-  <p style="color: var(--text-secondary); max-width: 650px; margin: 0 auto 1.5rem auto; font-size: 0.95rem;">
-    No crawled website pages or structured research snapshot currently exist for <strong>{{ candidate.company_name }}</strong> (<code>{{ candidate.company_domain }}</code>).
-    Initiating research will execute a safe, bounded same-domain crawl (max 6 pages) and store immutable compressed evidence for offline analysis.
-  </p>
-  <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research" style="display: inline-block;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem; font-weight: 600;">
-      🔬 Start Company Research
-    </button>
-  </form>
-</div>
-{% else %}
-<div class="card" style="padding: 1rem 1.25rem; border: 1px solid var(--border-color); background-color: var(--bg-card); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-  <div>
-    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-      <span class="badge" style="background-color: {% if research.is_from_snapshot %}#0369a1{% else %}#15803d{% endif %}; color: #ffffff; font-size: 0.8rem; padding: 0.25rem 0.6rem; border-radius: 4px; font-weight: 600;">
-        {% if research.is_from_snapshot %}📦 Stored Snapshot (Offline Replay){% else %}⚡ Newly Crawled Session{% endif %}
-      </span>
-      <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);">
-        Snapshot ID: <code>{{ research.snapshot_id or (snapshot.snapshot_id if snapshot else 'In-Memory Only') }}</code>
-      </span>
+<!-- Pipeline Status & Operations Control Center -->
+<div class="card" style="padding: 1.25rem 1.5rem; border: 1px solid var(--border-color); background-color: var(--bg-card); margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span class="badge" style="background-color: {% if pipeline_status in ('Crawl Complete', 'AI Extraction Complete — Review Required', 'Operator Reviewed') %}#15803d{% elif pipeline_status in ('Partial Crawl', 'Awaiting LLM Analysis') %}#0369a1{% else %}#b45309{% endif %}; color: #ffffff; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 4px; font-weight: 600;">
+          {{ pipeline_status }}
+        </span>
+        <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">
+          Pipeline V2: Decoupled Crawl &amp; AI Extraction
+        </span>
+      </div>
+      <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.35rem;">
+        Active Snapshot: <code>{{ snapshot.snapshot_id if snapshot else 'None' }}</code>
+        {% if snapshot %}
+        | Succeeded: <strong>{{ snapshot.pages_succeeded }}</strong> / {{ snapshot.pages_attempted }} pages
+        | Retrieved: <strong>{{ snapshot.created_at[:19] }}</strong>
+        | Checksum: <code>{{ snapshot.content_checksum[:12] if snapshot.content_checksum else 'N/A' }}...</code>
+        {% endif %}
+      </div>
     </div>
-    <div style="font-size: 0.8rem; color: var(--text-secondary);">
-      Retrieved: <strong>{{ snapshot.created_at if snapshot else (research.research_timestamp or 'N/A') }}</strong> |
-      Pages: <strong>{{ snapshot.pages_succeeded if snapshot else research.fetched_pages|length }}</strong> succeeded / {{ snapshot.pages_attempted if snapshot else research.fetched_pages|length }} attempted |
-      Dataset SHA-256: <code>{{ snapshot.content_checksum[:16] if snapshot and snapshot.content_checksum else 'N/A' }}...</code>
+
+    <!-- Independent Action Buttons (A & B) -->
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+      <!-- Button A: Crawl & Save Website -->
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-block;" id="formCrawlWebsite">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="max_pages" value="20">
+        <button type="submit" class="btn btn-primary" id="btnCrawlWebsite" style="padding: 0.55rem 1.25rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='🕷️ Crawling Website...'; document.getElementById('formCrawlWebsite').submit();">
+          🕷️ Crawl &amp; Save Website
+        </button>
+      </form>
+
+      <!-- Button B: Analyze Saved Snapshot with LLM -->
+      {% if snapshot and snapshot.pages_succeeded > 0 %}
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="provider" value="gemini">
+        <button type="submit" class="btn btn-success" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #0284c7; border-color: #0284c7;" onclick="this.disabled=true; this.innerText='🧠 Analyzing Snapshot with LLM...'; document.getElementById('formAnalyzeLLM').submit();">
+          🧠 Analyze Saved Snapshot with LLM
+        </button>
+      </form>
+      {% endif %}
     </div>
   </div>
-  <div>
-    <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research" style="display: inline-block;" onsubmit="return confirm('Initiate a new live web crawl for {{ candidate.company_name }}? This will record a new research snapshot.');">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.45rem 1rem;">
-        🔄 Crawl &amp; Research Again
-      </button>
-    </form>
+
+  <!-- Operational Progress & Configuration Details -->
+  <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-secondary);">
+    <div>
+      Provider: <strong>Google Gemini (gemini-2.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong> | Budget: <strong>Max 20 Pages</strong>
+    </div>
+    <div>
+      {% if latest_analysis %}
+      Analysis Status: <strong>{{ latest_analysis.status }}</strong> ({{ latest_analysis.created_at[:19] }})
+      {% else %}
+      Analysis Status: <em>Awaiting operator analysis trigger</em>
+      {% endif %}
+    </div>
   </div>
 </div>
-{% endif %}
 
 {% if research %}
 <!-- Top Stats Banner -->

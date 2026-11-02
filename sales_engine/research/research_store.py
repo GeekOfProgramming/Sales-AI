@@ -51,6 +51,24 @@ class PageEvidence:
 
 
 @dataclass
+class CompanyAnalysisRecord:
+    """Durable record of an LLM analysis execution linked to a research snapshot."""
+    analysis_id: str
+    candidate_id: str
+    snapshot_id: str
+    provider: str
+    model: str
+    created_at: str
+    status: str  # "SUCCESS", "SCHEMA_INVALID", "FAILED", "NOT_CONFIGURED"
+    proposed_fields: Dict[str, Any] = field(default_factory=dict)
+    raw_response_text: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    cost_estimate: Optional[float] = None
+    diagnostic_info: Optional[str] = None
+
+
+@dataclass
 class ResearchSnapshot:
     """Metadata and status record for an immutable research crawl snapshot."""
     snapshot_id: str
@@ -148,6 +166,29 @@ class ResearchSnapshotStore:
 
                 CREATE INDEX IF NOT EXISTS idx_page_evidences_snapshot
                     ON page_evidences (snapshot_id, page_order ASC);
+
+                CREATE TABLE IF NOT EXISTS company_analysis_records (
+                    analysis_id TEXT PRIMARY KEY,
+                    candidate_id TEXT NOT NULL,
+                    snapshot_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    proposed_fields_json TEXT NOT NULL,
+                    raw_response_text TEXT,
+                    input_tokens INTEGER,
+                    output_tokens INTEGER,
+                    cost_estimate REAL,
+                    diagnostic_info TEXT,
+                    FOREIGN KEY (snapshot_id) REFERENCES research_snapshots(snapshot_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_analysis_candidate
+                    ON company_analysis_records (candidate_id, created_at DESC);
+
+                CREATE INDEX IF NOT EXISTS idx_analysis_snapshot
+                    ON company_analysis_records (snapshot_id, created_at DESC);
             """)
             conn.commit()
 
@@ -421,6 +462,113 @@ class ResearchSnapshotStore:
             "evidence_documents": evidence_docs,
             "combined_research_text": combined_research_text,
         }
+
+    def save_analysis_record(self, record: CompanyAnalysisRecord) -> None:
+        """Persist an LLM analysis record linked to a snapshot."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO company_analysis_records (
+                    analysis_id, candidate_id, snapshot_id, provider, model,
+                    created_at, status, proposed_fields_json, raw_response_text,
+                    input_tokens, output_tokens, cost_estimate, diagnostic_info
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    record.analysis_id,
+                    record.candidate_id,
+                    record.snapshot_id,
+                    record.provider,
+                    record.model,
+                    record.created_at,
+                    record.status,
+                    json.dumps(record.proposed_fields, ensure_ascii=False),
+                    record.raw_response_text,
+                    record.input_tokens,
+                    record.output_tokens,
+                    record.cost_estimate,
+                    record.diagnostic_info,
+                ),
+            )
+            conn.commit()
+
+    def get_analysis_by_id(self, analysis_id: str) -> Optional[CompanyAnalysisRecord]:
+        """Retrieve an analysis record by its ID."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM company_analysis_records WHERE analysis_id = ?;",
+                (analysis_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_analysis(row)
+
+    def get_latest_analysis(
+        self,
+        candidate_id: str,
+        snapshot_id: Optional[str] = None
+    ) -> Optional[CompanyAnalysisRecord]:
+        """Retrieve the most recent analysis record for a candidate (optionally filtered by snapshot)."""
+        with self._get_connection() as conn:
+            if snapshot_id:
+                row = conn.execute(
+                    """
+                    SELECT * FROM company_analysis_records
+                    WHERE candidate_id = ? AND snapshot_id = ?
+                    ORDER BY created_at DESC LIMIT 1;
+                    """,
+                    (candidate_id, snapshot_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT * FROM company_analysis_records
+                    WHERE candidate_id = ?
+                    ORDER BY created_at DESC LIMIT 1;
+                    """,
+                    (candidate_id,),
+                ).fetchone()
+
+            if not row:
+                return None
+            return self._row_to_analysis(row)
+
+    def list_analyses_for_candidate(self, candidate_id: str) -> List[CompanyAnalysisRecord]:
+        """List all historical analysis records for a candidate."""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM company_analysis_records
+                WHERE candidate_id = ?
+                ORDER BY created_at DESC;
+                """,
+                (candidate_id,),
+            ).fetchall()
+            return [self._row_to_analysis(r) for r in rows]
+
+    def _row_to_analysis(self, row: sqlite3.Row) -> CompanyAnalysisRecord:
+        proposed = {}
+        if row["proposed_fields_json"]:
+            try:
+                proposed = json.loads(row["proposed_fields_json"])
+            except Exception:
+                pass
+
+        return CompanyAnalysisRecord(
+            analysis_id=row["analysis_id"],
+            candidate_id=row["candidate_id"],
+            snapshot_id=row["snapshot_id"],
+            provider=row["provider"],
+            model=row["model"],
+            created_at=row["created_at"],
+            status=row["status"],
+            proposed_fields=proposed,
+            raw_response_text=row["raw_response_text"],
+            input_tokens=row["input_tokens"],
+            output_tokens=row["output_tokens"],
+            cost_estimate=row["cost_estimate"],
+            diagnostic_info=row["diagnostic_info"],
+        )
 
     def get_storage_stats(self) -> Dict[str, Any]:
         """Report SQLite file size and record counts for disk accounting."""
