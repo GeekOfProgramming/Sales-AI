@@ -3108,3 +3108,320 @@ def test_51_transactional_failure_in_save_leaves_no_mismatched_metadata(isolated
     reviews = reg_store.get_field_reviews(cid)
     assert len(reviews) == 0
 
+
+# ==============================================================================
+# Research Pipeline V2.1f.2 Final Integrity Closure Tests
+# ==============================================================================
+
+def test_52_legacy_record_with_zero_reviews_loses_research_ready_after_core_field_changed(isolated_db_paths, monkeypatch):
+    """
+    Defect 1: A previously reviewed record with zero field reviews must not remain
+    Research Ready after any core field is changed without renewed approval.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import (
+        lead_register_update_action,
+        evaluate_research_readiness,
+        finalize_candidate_research_action,
+    )
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:test:legacy_52"
+    cand = CandidateCompany(candidate_id=cid, company_name="Legacy Engineering", domain="legacy-eng.it")
+    cand_store.save_candidate(cand)
+
+    # Legacy record marked OPERATOR_REVIEWED with zero field reviews
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Legacy Engineering S.r.l.",
+        official_website="https://legacy-eng.it/",
+        business_activities="MEP and Building Design",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="pilot_research",
+        evidence_urls=["https://legacy-eng.it/"],
+    )
+    reg_store.save_record(rec)
+
+    # Initially evaluates as research_ready via legacy compatibility
+    r_init = evaluate_research_readiness(cand, reg_store=reg_store)
+    assert r_init["research_status"] == "research_ready"
+
+    # Core field 'company_name' is modified via direct Lead Register update
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        lead_register_update_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Modified Legacy Name S.r.l.",
+            official_website="https://legacy-eng.it/",
+            business_activities="MEP and Building Design",
+            verification_status="OPERATOR_REVIEWED",
+        )
+    )
+    assert resp.status_code == 303
+
+    # Must NOT remain Research Ready; status demoted to EXTRACTED
+    reloaded = reg_store.get_record(cid)
+    assert reloaded.verification_status == "EXTRACTED"
+    r_after = evaluate_research_readiness(cand, reg_store=reg_store)
+    assert r_after["research_status"] != "research_ready"
+
+    # Finalization must reject until core fields are explicitly reviewed
+    fin_resp = asyncio.run(finalize_candidate_research_action(candidate_id=cid, csrf=None))
+    assert fin_resp.status_code == 303
+    assert "error=" in fin_resp.headers["location"]
+
+
+def test_53_generic_identity_validator_handles_trading_and_legal_names_without_hardcoded_names(isolated_db_paths):
+    """
+    Defect 2: Company identity validator is completely generic, containing no
+    Energymep/ESAC-specific logic, while properly supporting legal vs. trading names.
+    """
+    from backend.sales_ui.router import is_trustworthy_company_identity
+    import inspect
+
+    # Verify no hardcoded customer strings exist in function source
+    src = inspect.getsource(is_trustworthy_company_identity)
+    assert "energymep" not in src.lower()
+    assert "esac" not in src.lower()
+
+    # Generic matching: same domain token and company token
+    ok, err = is_trustworthy_company_identity("Alfa Sistemi S.r.l.", "Alfa Sistemi", "alfasistemi.it")
+    assert ok is True
+
+    # Generic mismatch: disjoint tokens with zero overlap
+    ok, err = is_trustworthy_company_identity("Beta Costruzioni Spa", "Gamma Impianti", "gammaimpianti.it")
+    assert ok is False
+    assert "Identity contradiction" in err
+
+    # Legitimate legal identity with differing trading name:
+    # e.g., legal entity "Doctor Associates Inc" trading as "Subway" with tax/VAT registration
+    ok, err = is_trustworthy_company_identity(
+        company_name="Doctor Associates Inc",
+        candidate_name="Subway",
+        canonical_domain="subway.com",
+        legal_identity="US-987654321",
+    )
+    assert ok is True
+
+
+def test_54_direct_lead_register_edit_cannot_upgrade_operator_reviewed_to_verified(isolated_db_paths, monkeypatch):
+    """
+    Defect 3: Prevent direct Lead Register editing from upgrading OPERATOR_REVIEWED to VERIFIED.
+    Preserves the distinction between operator review and independent verification.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import lead_register_update_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:test:status_54"
+    cand = CandidateCompany(candidate_id=cid, company_name="Status Test Corp", domain="status-test.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Status Test Corp",
+        official_website="https://status-test.it/",
+        business_activities="Architecture and MEP Services",
+        verification_status="OPERATOR_REVIEWED",
+    )
+    reg_store.save_record(rec)
+
+    # Submitting verification_status="VERIFIED" via register edit form must NOT upgrade the record
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        lead_register_update_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            company_name="Status Test Corp",
+            official_website="https://status-test.it/",
+            business_activities="Architecture and MEP Services",
+            verification_status="VERIFIED",
+        )
+    )
+    assert resp.status_code == 303
+
+    reloaded = reg_store.get_record(cid)
+    # Status remains OPERATOR_REVIEWED, not upgraded to VERIFIED
+    assert reloaded.verification_status == "OPERATOR_REVIEWED"
+
+
+def test_55_manually_corrected_fields_do_not_inherit_ai_excerpt_or_analysis_id(isolated_db_paths, monkeypatch):
+    """
+    Defect 4: Ensure manually corrected fields do not inherit misleading AI evidence URLs,
+    excerpts, or analysis attribution. Preserve valid source references only when independently applicable.
+    """
+    import asyncio
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.research.research_store import ResearchSnapshotStore, CompanyAnalysisRecord
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    import backend.sales_ui.router as r_mod
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:test:uncouple_55"
+    cand = CandidateCompany(candidate_id=cid, company_name="Attribution Test", domain="attr-test.it")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Attribution Test",
+        official_website="https://attr-test.it/",
+        business_activities="Architecture",
+        verification_status="EXTRACTED",
+    )
+    reg_store.save_record(rec)
+
+    snap = snap_store.create_snapshot(
+        candidate_id=cid,
+        canonical_domain="attr-test.it",
+        company_name="Attribution Test",
+        pages=[],
+        snapshot_id="snap:test:55",
+    )
+
+    an_rec = CompanyAnalysisRecord(
+        analysis_id="an:test:55",
+        candidate_id=cid,
+        snapshot_id="snap:test:55",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        created_at="2026-11-02T12:00:00Z",
+        status="SUCCESS",
+        proposed_fields={
+            "business_activities": {
+                "value": "AI Hallucinated Activities",
+                "source_url": "https://attr-test.it/ai-hallucination",
+                "evidence_excerpt": "AI hallucinated excerpt that should not attach to manual edit.",
+                "confidence": 0.40,
+            }
+        },
+    )
+    snap_store.save_analysis_record(an_rec)
+
+    # Operator manually enters true activities
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        save_candidate_research_action(
+            request=req,
+            candidate_id=cid,
+            csrf=None,
+            business_activities="Human Verified Structural BIM Services",
+            official_website="https://attr-test.it/",
+            apply_business_activities="1",
+        )
+    )
+    assert resp.status_code == 303
+
+    reviews = reg_store.get_field_reviews(cid)
+    b_rev = reviews["business_activities"]
+    assert b_rev.approved_value == "Human Verified Structural BIM Services"
+    assert b_rev.source_type == "operator_manual"
+    assert b_rev.review_state == "OPERATOR_CORRECTED"
+    # Misleading AI excerpt is purged
+    assert b_rev.evidence_excerpt is None
+    # AI analysis attribution uncoupled
+    assert b_rev.analysis_id is None
+
+
+def test_56_core_field_invalidation_and_audit_history_is_atomic(isolated_db_paths):
+    """
+    Defect 5: Core-field review invalidation and corresponding record updates are atomic
+    and retain a traceable audit history of superseded review decisions.
+    """
+    from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+
+    cand_db, _ = isolated_db_paths
+    reg_store = LeadRegisterStore(db_path=cand_db)
+
+    cid = "cand:test:atomic_56"
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Original Name S.r.l.",
+        official_website="https://atomic-test.it/",
+        business_activities="Original Activities",
+        verification_status="OPERATOR_REVIEWED",
+    )
+    # Save with review
+    rev = FieldReviewRecord(
+        candidate_id=cid,
+        field_name="company_name",
+        approved_value="Original Name S.r.l.",
+        value_checksum=compute_field_checksum("Original Name S.r.l."),
+        review_state="OPERATOR_APPROVED",
+        reviewed_at="2026-11-02T10:00:00Z",
+    )
+    reg_store.save_record_with_reviews(rec, [rev])
+
+    # Initial state
+    current_revs = reg_store.get_field_reviews(cid)
+    assert "company_name" in current_revs
+    assert len(reg_store.get_field_reviews_history(cid)) == 0
+
+    # Invalidate company_name atomically via update_record_and_invalidate_reviews
+    rec.company_name = "Updated Name S.r.l."
+    rec.verification_status = "EXTRACTED"
+    updated_rec, invalidated = reg_store.update_record_and_invalidate_reviews(
+        record=rec,
+        fields_to_invalidate=["company_name"],
+        superseded_reason="operator_edited_in_console",
+    )
+
+    # Active review removed
+    active_revs = reg_store.get_field_reviews(cid)
+    assert "company_name" not in active_revs
+
+    # Audit history preserved
+    history = reg_store.get_field_reviews_history(cid, "company_name")
+    assert len(history) == 1
+    assert history[0]["approved_value"] == "Original Name S.r.l."
+    assert history[0]["superseded_reason"] == "operator_edited_in_console"
+    assert history[0]["superseded_at"] is not None
+
+

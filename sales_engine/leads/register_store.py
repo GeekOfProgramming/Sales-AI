@@ -89,6 +89,25 @@ class LeadRegisterStore:
                     PRIMARY KEY (candidate_id, field_name)
                 );
                 CREATE INDEX IF NOT EXISTS idx_field_reviews_cid ON lead_register_field_reviews(candidate_id);
+
+                CREATE TABLE IF NOT EXISTS lead_register_field_reviews_history (
+                    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    candidate_id TEXT NOT NULL,
+                    field_name TEXT NOT NULL,
+                    approved_value TEXT NOT NULL,
+                    value_checksum TEXT NOT NULL,
+                    review_state TEXT,
+                    reviewed_at TEXT,
+                    source_type TEXT,
+                    snapshot_id TEXT,
+                    analysis_id TEXT,
+                    evidence_url TEXT,
+                    evidence_excerpt TEXT,
+                    operator_note TEXT,
+                    superseded_at TEXT NOT NULL,
+                    superseded_reason TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_field_reviews_hist_cid ON lead_register_field_reviews_history(candidate_id);
             """)
 
     def _table_exists(self, conn: sqlite3.Connection, table_name: str) -> bool:
@@ -711,17 +730,157 @@ class LeadRegisterStore:
                 )
             return reviews
 
-    def delete_field_review(self, candidate_id: str, field_name: str) -> bool:
-        """Deletes a field review when a field value is modified or revoked."""
+    def delete_field_review(self, candidate_id: str, field_name: str, superseded_reason: str = "field_value_modified") -> bool:
+        """Deletes a field review when a field value is modified or revoked, recording it to audit history."""
         with self._get_connection() as conn:
             if not self._table_exists(conn, "lead_register_field_reviews"):
                 return False
+            now = datetime.now(timezone.utc).isoformat()
+            if self._table_exists(conn, "lead_register_field_reviews_history"):
+                conn.execute("""
+                    INSERT INTO lead_register_field_reviews_history (
+                        candidate_id, field_name, approved_value, value_checksum,
+                        review_state, reviewed_at, source_type, snapshot_id,
+                        analysis_id, evidence_url, evidence_excerpt, operator_note,
+                        superseded_at, superseded_reason
+                    )
+                    SELECT candidate_id, field_name, approved_value, value_checksum,
+                           review_state, reviewed_at, source_type, snapshot_id,
+                           analysis_id, evidence_url, evidence_excerpt, operator_note,
+                           ?, ?
+                    FROM lead_register_field_reviews
+                    WHERE candidate_id = ? AND field_name = ?
+                """, (now, superseded_reason, candidate_id, field_name))
             cur = conn.execute(
                 "DELETE FROM lead_register_field_reviews WHERE candidate_id = ? AND field_name = ?",
                 (candidate_id, field_name)
             )
             conn.commit()
             return cur.rowcount > 0
+
+    def get_field_reviews_history(self, candidate_id: str, field_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieves superseded review audit history for a candidate."""
+        with self._get_connection() as conn:
+            if not self._table_exists(conn, "lead_register_field_reviews_history"):
+                return []
+            if field_name:
+                rows = conn.execute(
+                    "SELECT * FROM lead_register_field_reviews_history WHERE candidate_id = ? AND field_name = ? ORDER BY history_id ASC",
+                    (candidate_id, field_name)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM lead_register_field_reviews_history WHERE candidate_id = ? ORDER BY history_id ASC",
+                    (candidate_id,)
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_record_and_invalidate_reviews(
+        self,
+        record: LeadRegisterRecord,
+        fields_to_invalidate: List[str],
+        superseded_reason: str = "field_value_modified",
+    ) -> Tuple[LeadRegisterRecord, List[str]]:
+        """
+        Atomically updates a LeadRegisterRecord and invalidates (archives to history & removes)
+        the specified field reviews in a single database transaction.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        record.updated_at = now
+        if not record.created_at:
+            record.created_at = now
+
+        if record.record_number is None:
+            record.record_number = self._get_next_record_number()
+
+        with self._get_connection() as conn:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                # 1. Update lead_register_records
+                conn.execute("""
+                    INSERT INTO lead_register_records (
+                        candidate_id, record_number, priority_level, priority_rationale,
+                        company_name, legal_identity, geographic_location, telephone_numbers,
+                        business_activities, official_website, responsible_person,
+                        descriptions_and_notes, job_advertisement_links, other_links_and_references,
+                        contact_email_addresses, provenance_source, research_date,
+                        verification_status, confidence_score, evidence_urls_json,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(candidate_id) DO UPDATE SET
+                        record_number = COALESCE(excluded.record_number, lead_register_records.record_number),
+                        priority_level = excluded.priority_level,
+                        priority_rationale = excluded.priority_rationale,
+                        company_name = excluded.company_name,
+                        legal_identity = excluded.legal_identity,
+                        geographic_location = excluded.geographic_location,
+                        telephone_numbers = excluded.telephone_numbers,
+                        business_activities = excluded.business_activities,
+                        official_website = excluded.official_website,
+                        responsible_person = excluded.responsible_person,
+                        descriptions_and_notes = excluded.descriptions_and_notes,
+                        job_advertisement_links = excluded.job_advertisement_links,
+                        other_links_and_references = excluded.other_links_and_references,
+                        contact_email_addresses = excluded.contact_email_addresses,
+                        provenance_source = excluded.provenance_source,
+                        research_date = COALESCE(excluded.research_date, lead_register_records.research_date),
+                        verification_status = excluded.verification_status,
+                        confidence_score = excluded.confidence_score,
+                        evidence_urls_json = excluded.evidence_urls_json,
+                        updated_at = excluded.updated_at
+                """, (
+                    record.candidate_id,
+                    record.record_number,
+                    record.priority_level,
+                    record.priority_rationale,
+                    record.company_name,
+                    record.legal_identity,
+                    record.geographic_location,
+                    record.telephone_numbers,
+                    record.business_activities,
+                    record.official_website,
+                    record.responsible_person,
+                    record.descriptions_and_notes,
+                    record.job_advertisement_links,
+                    record.other_links_and_references,
+                    record.contact_email_addresses,
+                    record.provenance_source,
+                    record.research_date,
+                    record.verification_status,
+                    record.confidence_score,
+                    json.dumps(record.evidence_urls),
+                    record.created_at,
+                    record.updated_at,
+                ))
+
+                # 2. Archive and delete invalidated field reviews
+                for fn in fields_to_invalidate:
+                    if self._table_exists(conn, "lead_register_field_reviews_history"):
+                        conn.execute("""
+                            INSERT INTO lead_register_field_reviews_history (
+                                candidate_id, field_name, approved_value, value_checksum,
+                                review_state, reviewed_at, source_type, snapshot_id,
+                                analysis_id, evidence_url, evidence_excerpt, operator_note,
+                                superseded_at, superseded_reason
+                            )
+                            SELECT candidate_id, field_name, approved_value, value_checksum,
+                                   review_state, reviewed_at, source_type, snapshot_id,
+                                   analysis_id, evidence_url, evidence_excerpt, operator_note,
+                                   ?, ?
+                            FROM lead_register_field_reviews
+                            WHERE candidate_id = ? AND field_name = ?
+                        """, (now, superseded_reason, record.candidate_id, fn))
+                    conn.execute(
+                        "DELETE FROM lead_register_field_reviews WHERE candidate_id = ? AND field_name = ?",
+                        (record.candidate_id, fn)
+                    )
+
+                conn.commit()
+                return record, fields_to_invalidate
+            except Exception:
+                conn.rollback()
+                raise
+
 
     def save_record_with_reviews(
         self,
@@ -800,6 +959,22 @@ class LeadRegisterStore:
                 ))
 
                 for rev in reviews:
+                    if self._table_exists(conn, "lead_register_field_reviews_history"):
+                        conn.execute("""
+                            INSERT INTO lead_register_field_reviews_history (
+                                candidate_id, field_name, approved_value, value_checksum,
+                                review_state, reviewed_at, source_type, snapshot_id,
+                                analysis_id, evidence_url, evidence_excerpt, operator_note,
+                                superseded_at, superseded_reason
+                            )
+                            SELECT candidate_id, field_name, approved_value, value_checksum,
+                                   review_state, reviewed_at, source_type, snapshot_id,
+                                   analysis_id, evidence_url, evidence_excerpt, operator_note,
+                                   ?, 'superseded_by_new_approval'
+                            FROM lead_register_field_reviews
+                            WHERE candidate_id = ? AND field_name = ?
+                        """, (now, rev.candidate_id, rev.field_name))
+
                     conn.execute("""
                         INSERT INTO lead_register_field_reviews (
                             candidate_id, field_name, approved_value, value_checksum,
