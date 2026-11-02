@@ -3425,3 +3425,263 @@ def test_56_core_field_invalidation_and_audit_history_is_atomic(isolated_db_path
     assert history[0]["superseded_at"] is not None
 
 
+def test_57_research_readiness_matches_finalization_predicate(isolated_db_paths):
+    """
+    Consistency Patch Test 1: Unify approval predicate.
+    A record failing finalization (e.g. domain mismatch, identity mismatch, or missing core review)
+    must NEVER evaluate to 'research_ready' even if verification_status is OPERATOR_REVIEWED.
+    """
+    from backend.sales_ui.router import (
+        evaluate_research_readiness,
+        validate_research_finalization,
+        compute_field_checksum,
+    )
+    from sales_engine.candidates.models import CandidateCompany
+    from sales_engine.leads.register_models import FieldReviewRecord
+
+    cand_db, snap_db = isolated_db_paths
+    reg_store = LeadRegisterStore(db_path=cand_db)
+
+    cid = "cand:test:pred_match_57"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="Alpha Tech",
+        domain="alphatech.com",
+    )
+
+    # Case A: Record marked OPERATOR_REVIEWED but missing business_activities review
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Alpha Tech Srl",
+        official_website="https://alphatech.com",
+        business_activities="Software development services",
+        verification_status="OPERATOR_REVIEWED",
+        evidence_urls=["https://alphatech.com"],
+    )
+    # Only 2 of 3 core reviews provided
+    rev1 = FieldReviewRecord(
+        candidate_id=cid, field_name="company_name",
+        approved_value="Alpha Tech Srl", value_checksum=compute_field_checksum("Alpha Tech Srl"),
+        review_state="OPERATOR_APPROVED", reviewed_at="2026-11-02T10:00:00Z",
+    )
+    rev2 = FieldReviewRecord(
+        candidate_id=cid, field_name="official_website",
+        approved_value="https://alphatech.com", value_checksum=compute_field_checksum("https://alphatech.com"),
+        review_state="OPERATOR_APPROVED", reviewed_at="2026-11-02T10:00:00Z",
+    )
+    reg_store.save_record_with_reviews(rec, [rev1, rev2])
+
+    revs = reg_store.get_field_reviews(cid)
+    eligible, errors, _ = validate_research_finalization(
+        cand=cand, reg_record=rec, field_reviews=revs, latest_snapshot=None
+    )
+    assert eligible is False
+    assert any("business_activities" in e for e in errors)
+
+    readiness = evaluate_research_readiness(
+        cand=cand, reg_store=reg_store, snap_store=None
+    )
+    assert readiness["research_status"] != "research_ready"
+    assert readiness["research_status"] == "missing_evidence"
+
+    # Case B: All 3 reviews present, but official website mismatches domain
+    rev3 = FieldReviewRecord(
+        candidate_id=cid, field_name="business_activities",
+        approved_value="Software development services", value_checksum=compute_field_checksum("Software development services"),
+        review_state="OPERATOR_APPROVED", reviewed_at="2026-11-02T10:00:00Z",
+    )
+    rec.official_website = "https://otherdomain.com"
+    rev2.approved_value = "https://otherdomain.com"
+    rev2.value_checksum = compute_field_checksum("https://otherdomain.com")
+    reg_store.save_record_with_reviews(rec, [rev1, rev2, rev3])
+
+    eligible, errors, _ = validate_research_finalization(
+        cand=cand, reg_record=rec, field_reviews=reg_store.get_field_reviews(cid), latest_snapshot=None
+    )
+    assert eligible is False
+    assert any("canonical domain" in e for e in errors)
+
+    readiness = evaluate_research_readiness(
+        cand=cand, reg_store=reg_store, snap_store=None
+    )
+    assert readiness["research_status"] != "research_ready"
+    assert readiness["research_status"] == "missing_evidence"
+
+
+@pytest.mark.asyncio
+async def test_58_save_candidate_research_suspends_finalization_on_core_change(isolated_db_paths, monkeypatch):
+    """
+    Consistency Patch Test 2: In save_candidate_research_action(),
+    changing any of the 3 core fields on an already finalized record suspends finalization
+    (demoting to EXTRACTED), whereas changing a non-core field preserves OPERATOR_REVIEWED.
+    """
+    from starlette.requests import Request
+    from backend.sales_ui.router import save_candidate_research_action, compute_field_checksum
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_models import FieldReviewRecord
+    import backend.sales_ui.router as r_mod
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+    r_mod._CONSOLE_SERVICES = None
+
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    cand_store = CandidateStore(db_path=cand_db)
+
+    cid = "cand:test:save_suspension_58"
+    cand_store.save_candidate(CandidateCompany(candidate_id=cid, company_name="Beta Solutions", domain="betasolutions.it"))
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        company_name="Beta Solutions Srl",
+        official_website="https://betasolutions.it",
+        business_activities="Engineering consulting",
+        telephone_numbers="+39 02 123456",
+        verification_status="OPERATOR_REVIEWED",
+        evidence_urls=["https://betasolutions.it"],
+    )
+    revs = [
+        FieldReviewRecord(
+            candidate_id=cid, field_name="company_name",
+            approved_value="Beta Solutions Srl", value_checksum=compute_field_checksum("Beta Solutions Srl"),
+            review_state="OPERATOR_APPROVED", reviewed_at="2026-11-02T10:00:00Z",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid, field_name="official_website",
+            approved_value="https://betasolutions.it", value_checksum=compute_field_checksum("https://betasolutions.it"),
+            review_state="OPERATOR_APPROVED", reviewed_at="2026-11-02T10:00:00Z",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid, field_name="business_activities",
+            approved_value="Engineering consulting", value_checksum=compute_field_checksum("Engineering consulting"),
+            review_state="OPERATOR_APPROVED", reviewed_at="2026-11-02T10:00:00Z",
+        ),
+    ]
+    reg_store.save_record_with_reviews(rec, revs)
+
+    req = Request({"type": "http", "method": "POST", "headers": []})
+
+    # Step 1: Update NON-CORE field (telephone_numbers) -> OPERATOR_REVIEWED must be preserved
+    await save_candidate_research_action(
+        request=req,
+        candidate_id=cid,
+        csrf=None,
+        company_name="Beta Solutions Srl",
+        priority_level="B",
+        priority_rationale="Reason",
+        legal_identity="Not Found",
+        geographic_location="Not Found",
+        telephone_numbers="+39 02 999999",
+        contact_email_addresses="Not Found",
+        responsible_person="Not Found",
+        business_activities="Engineering consulting",
+        official_website="https://betasolutions.it",
+        descriptions_and_notes="Not Found",
+        job_advertisement_links="Not Found",
+        other_links_and_references="Not Found",
+        apply_telephone_numbers="1",
+    )
+    updated = reg_store.get_record(cid)
+    assert updated.telephone_numbers == "+39 02 999999"
+    assert updated.verification_status == "OPERATOR_REVIEWED"
+
+    # Step 2: Unchecked core field passed in form but apply_* not set -> must preserve status
+    await save_candidate_research_action(
+        request=req,
+        candidate_id=cid,
+        csrf=None,
+        company_name="Beta Solutions Srl",
+        priority_level="B",
+        priority_rationale="Reason",
+        legal_identity="Not Found",
+        geographic_location="Not Found",
+        telephone_numbers="+39 02 999999",
+        contact_email_addresses="Not Found",
+        responsible_person="Not Found",
+        business_activities="Different text but not checked",
+        official_website="https://betasolutions.it",
+        descriptions_and_notes="Not Found",
+        job_advertisement_links="Not Found",
+        other_links_and_references="Not Found",
+        apply_business_activities=None,
+    )
+    updated = reg_store.get_record(cid)
+    assert updated.business_activities == "Engineering consulting"
+    assert updated.verification_status == "OPERATOR_REVIEWED"
+
+    # Step 3: Check and change a CORE field (business_activities) -> must demote to EXTRACTED
+    await save_candidate_research_action(
+        request=req,
+        candidate_id=cid,
+        csrf=None,
+        company_name="Beta Solutions Srl",
+        priority_level="B",
+        priority_rationale="Reason",
+        legal_identity="Not Found",
+        geographic_location="Not Found",
+        telephone_numbers="+39 02 999999",
+        contact_email_addresses="Not Found",
+        responsible_person="Not Found",
+        business_activities="New specialized HVAC design",
+        official_website="https://betasolutions.it",
+        descriptions_and_notes="Not Found",
+        job_advertisement_links="Not Found",
+        other_links_and_references="Not Found",
+        apply_business_activities="1",
+    )
+    updated = reg_store.get_record(cid)
+    assert updated.business_activities == "New specialized HVAC design"
+    assert updated.verification_status == "EXTRACTED"
+
+
+def test_59_arbitrary_legal_identity_text_rejected_by_identity_validator():
+    """
+    Consistency Patch Test 3: Strengthen is_trustworthy_company_identity().
+    Arbitrary nonempty text or generic company forms must NOT bypass identity validation,
+    while valid structured VAT / Tax ID / Company Registry codes preserve legitimate differences.
+    """
+    from backend.sales_ui.router import is_trustworthy_company_identity
+
+    # Contradictory name, candidate name, and domain
+    company_name = "Foo Bar Alpha"
+    candidate_name = "Omega Zeta Systems"
+    domain = "acme-widgets.com"
+
+    # 1. Arbitrary non-empty strings must NOT bypass identity matching
+    for bad_id in [
+        "random legal identity text",
+        "registered in Milan",
+        "S.r.l.",
+        "verified legally",
+        "LLC registration pending",
+    ]:
+        ok, err = is_trustworthy_company_identity(
+            company_name=company_name,
+            candidate_name=candidate_name,
+            canonical_domain=domain,
+            legal_identity=bad_id,
+        )
+        assert ok is False, f"Expected arbitrary text '{bad_id}' to be rejected, but it passed!"
+        assert "Identity contradiction" in err
+
+    # 2. Verifiable structured identifiers DO allow legitimate trading name differences
+    for good_id in [
+        "IT12345678901",
+        "P.IVA: IT 12345678901",
+        "VAT: 12345678901",
+        "EIN: 12-3456789",
+        "Reg: REA-1234567",
+    ]:
+        ok, err = is_trustworthy_company_identity(
+            company_name=company_name,
+            candidate_name=candidate_name,
+            canonical_domain=domain,
+            legal_identity=good_id,
+        )
+        assert ok is True, f"Expected valid structured ID '{good_id}' to pass, but got error: {err}"
+
+
+

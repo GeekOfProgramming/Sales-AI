@@ -106,8 +106,9 @@ def is_trustworthy_company_identity(
     - Rejects obvious sentence fragments, taglines, or navigation labels (>100 chars or newlines)
     - Verifies token or substring alignment between company_name and either candidate_name
       or canonical_domain (excluding generic corporate forms like srl, spa, llc, ltd, inc, etc.)
-    - Preserves legitimate legal vs. trading name differences when a recognized legal identity
-      (e.g., VAT / tax number / registered company number) is documented.
+    - Preserves legitimate legal vs. trading name differences ONLY when a verifiable, structured
+      legal identity (e.g. VAT / Tax ID / Company Registration Number) is documented.
+      Arbitrary nonempty text does not bypass identity matching.
     """
     if not company_name or not company_name.strip():
         return False, "Missing company name."
@@ -145,17 +146,33 @@ def is_trustworthy_company_identity(
     dom_tokens = {t for t in re.findall(r"\b[a-z0-9]{3,}\b", dom_main) if t not in corporate_form_tokens}
     has_tok_overlap = bool(c_tokens & (cand_tokens | dom_tokens))
 
-    # 3. Legitimate trading/legal identity difference: if candidate or record has a verifiable
-    # legal identity (e.g., P.IVA, VAT, or registration code), differing legal and trading names are valid.
-    has_legal_id = bool(
-        legal_identity and
-        legal_identity.strip() and
-        legal_identity.strip().lower() not in ("not found", "none", "null", "unknown", "n/a") and
-        len(legal_identity.strip()) >= 5
-    )
+    # 3. Legitimate trading/legal identity difference:
+    # Requires documented evidence: a valid structured VAT/tax ID/registration number.
+    # Arbitrary strings, generic company form names, or random text MUST NOT bypass identity matching!
+    has_verifiable_legal_id = False
+    if legal_identity and isinstance(legal_identity, str):
+        raw_id = legal_identity.strip()
+        lower_id = raw_id.lower()
+        if lower_id not in ("not found", "none", "null", "unknown", "n/a", "unverified") and len(raw_id) >= 6:
+            # Strip common documented prefixes
+            for pfx in ("vat:", "p.iva:", "p.iva", "cf:", "c.f.:", "c.f.", "tax id:", "ein:", "reg:", "registration:"):
+                if lower_id.startswith(pfx):
+                    raw_id = raw_id[len(pfx):].strip()
+                    break
+            compact_id = re.sub(r"[\s\.\-_]", "", raw_id)
+            # Recognized patterns:
+            # - Italian / EU VAT: 11 numeric digits or 2-letter country code + 8-12 alphanumeric characters
+            # - US EIN / Tax ID: 9 numeric digits (e.g. 12-3456789 or US-123456789)
+            # - General company registry code: 7 to 14 alphanumeric characters with at least 5 digits
+            is_vat = bool(re.match(r"^(?:[A-Z]{2})?[0-9]{8,12}$", compact_id, re.IGNORECASE))
+            is_ein = bool(re.match(r"^(?:US)?[0-9]{9}$", compact_id, re.IGNORECASE))
+            has_digits = sum(ch.isdigit() for ch in compact_id) >= 5
+            is_general_reg = bool(7 <= len(compact_id) <= 14 and has_digits)
+            if is_vat or is_ein or is_general_reg:
+                has_verifiable_legal_id = True
 
     if dom_main and len(dom_clean) >= 4:
-        if not (has_dom_sub or has_cand_sub or has_tok_overlap or has_legal_id):
+        if not (has_dom_sub or has_cand_sub or has_tok_overlap or has_verifiable_legal_id):
             return False, f"Identity contradiction / mismatch: '{c_name}' shares no common identity tokens with domain '{canon}' or candidate name '{candidate_name}'."
 
     return True, ""
@@ -553,42 +570,30 @@ def evaluate_research_readiness(
 
     # Check for field-level reviews
     has_partial_field_reviews = False
-    core_reviews_valid = False
+    field_reviews: Dict[str, Any] = {}
     if reg_store and cid.strip():
         try:
-            reviews = reg_store.get_field_reviews(cid.strip())
-            has_partial_field_reviews = len(reviews) > 0
-            if reg_record and reviews:
-                req_fields = ("company_name", "official_website", "business_activities")
-                valid_cnt = 0
-                for fn in req_fields:
-                    rev = reviews.get(fn)
-                    if rev and rev.review_state in ("OPERATOR_APPROVED", "OPERATOR_CORRECTED"):
-                        curr_val = getattr(reg_record, fn, None)
-                        if rev.value_checksum == compute_field_checksum(curr_val):
-                            valid_cnt += 1
-                core_reviews_valid = (valid_cnt == len(req_fields))
+            field_reviews = reg_store.get_field_reviews(cid.strip())
+            has_partial_field_reviews = len(field_reviews) > 0
         except Exception:
             pass
 
-    # Explicit trustworthy legacy compatibility path:
-    # A pre-existing record marked OPERATOR_REVIEWED or VERIFIED with zero field reviews
-    # is recognized as legacy-verified if:
-    # 1. No field reviews exist yet.
-    # 2. It has minimum required information (name, website, activities).
-    # 3. It has sufficient evidence or valid operator provenance.
-    # 4. If any core field is edited via the Lead Register, the update action atomically demotes
-    #    the status to EXTRACTED, suspending readiness until re-finalized with explicit reviews.
-    is_legacy_verified = (
-        is_approved_status and
-        has_minimum_info and
-        has_sufficient_evidence and
-        not has_partial_field_reviews
-    )
+    # Unified approval predicate: A record can only be 'research_ready' if it is marked
+    # with an approved verification status AND passes the identical authoritative
+    # validate_research_finalization() rules against the candidate, record, reviews, and snapshot.
+    finalization_eligible = False
+    finalization_errors = []
+    if reg_record and is_approved_status:
+        finalization_eligible, finalization_errors, _ = validate_research_finalization(
+            cand=cand,
+            reg_record=reg_record,
+            field_reviews=field_reviews,
+            latest_snapshot=latest_snapshot,
+            latest_analysis=None,
+        )
 
     if has_explicit_record and is_approved_status:
-        # If field reviews exist, core field reviews MUST be current and valid (not stale/checksum mismatch)
-        if (core_reviews_valid or is_legacy_verified) and has_minimum_info and has_sufficient_evidence:
+        if finalization_eligible:
             research_status = "research_ready"
             research_label = "Research Ready"
             research_badge = "badge-success"
@@ -597,14 +602,8 @@ def evaluate_research_readiness(
             research_status = "missing_evidence"
             research_label = "Missing Evidence"
             research_badge = "badge-warning"
-            reasons = []
-            if not (core_reviews_valid or is_legacy_verified):
-                reasons.append("stale or incomplete core field reviews")
-            if not has_minimum_info:
-                reasons.append("incomplete required profile fields")
-            if not has_sufficient_evidence:
-                reasons.append("insufficient source evidence or provenance")
-            research_title = f"13-Field Register marked {v_status} but has " + ", ".join(reasons) + f" (#{reg_record.record_number})"
+            reasons = finalization_errors if finalization_errors else ["incomplete required fields or source evidence"]
+            research_title = f"13-Field Register marked {v_status} but has " + "; ".join(reasons) + f" (#{reg_record.record_number})"
     elif has_partial_field_reviews:
         research_status = "partially_reviewed"
         research_label = "Partially Reviewed"
@@ -713,7 +712,9 @@ def validate_research_finalization(
     # 4. Adequate traceable source evidence
     has_ev_urls = bool(getattr(reg_record, "evidence_urls", None))
     has_snapshot = bool(latest_snapshot and getattr(latest_snapshot, "pages_succeeded", 0) > 0)
-    has_prov = (getattr(reg_record, "provenance_source", None) or "").lower() in ("operator_edited", "operator_researched", "manual_entry")
+    has_prov = (getattr(reg_record, "provenance_source", None) or "").lower() in (
+        "operator_edited", "operator_researched", "manual_entry", "pilot_research", "historical_import"
+    )
     if not (has_ev_urls or has_snapshot or has_prov):
         errors.append("Insufficient traceable source evidence or crawl snapshot.")
     else:
@@ -748,13 +749,11 @@ def validate_research_finalization(
     # 1. Zero field reviews exist.
     # 2. Existing record is already marked OPERATOR_REVIEWED or VERIFIED.
     # 3. Valid historical/operator provenance.
-    # 4. Provenance source is NOT "operator_edited" resulting from an unsaved/unreviewed core change.
-    # 5. The record possesses complete minimum information and reliable evidence.
+    # 4. The record possesses complete minimum information and reliable evidence.
     is_legacy_finalized = (
         len(field_reviews) == 0 and
         getattr(reg_record, "verification_status", "") in ("OPERATOR_REVIEWED", "VERIFIED") and
-        getattr(reg_record, "provenance_source", "") in ("historical_import", "pilot_research", "operator_researched") and
-        bool(getattr(reg_record, "evidence_urls", None) or (latest_snapshot and latest_snapshot.pages_succeeded > 0))
+        (has_ev_urls or has_snapshot or has_prov)
     )
 
     if not missing_reviews and not stale_reviews:
@@ -4642,13 +4641,32 @@ async def save_candidate_research_action(
     else:
         evidence_urls = []
 
-    # P0 DEFECT FIX (V2.1f): Decouple field approval from record finalization!
+    # Check if any of the three required core profile fields was explicitly checked/applied and changed
+    core_field_changes = {}
+    if _is_checked(apply_company_name):
+        core_field_changes["company_name"] = (getattr(existing, "company_name", None), final_company_name)
+    if _is_checked(apply_official_website):
+        core_field_changes["official_website"] = (getattr(existing, "official_website", None), final_official_website)
+    if _is_checked(apply_business_activities):
+        core_field_changes["business_activities"] = (getattr(existing, "business_activities", None), final_business_activities)
+
+    core_changed = any(
+        (old or "").strip() != (new or "").strip()
+        for old, new in core_field_changes.values()
+    )
+
+    # Invariant: Decouple field approval from record finalization!
     # Approving individual AI-extracted fields updates Lead Register values and stores durable FieldReviewRecords,
     # but NEVER implicitly promotes an unreviewed record to OPERATOR_REVIEWED or Research Ready.
-    # If the record is ALREADY OPERATOR_REVIEWED or VERIFIED (via previous explicit finalization), preserve it.
-    # Otherwise, maintain its current status (or EXTRACTED if newly created from extraction).
+    # If the record was ALREADY OPERATOR_REVIEWED or VERIFIED:
+    # - If any of the three required core fields is changed, suspend existing finalization:
+    #   demote status to EXTRACTED and require renewed explicit finalization.
+    # - Do not downgrade records for unchanged core values or non-core field additions (e.g. telephone).
     if existing and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
-        final_verification_status = existing.verification_status
+        if core_changed:
+            final_verification_status = "EXTRACTED"
+        else:
+            final_verification_status = existing.verification_status
     elif existing and existing.verification_status:
         final_verification_status = existing.verification_status
     else:
