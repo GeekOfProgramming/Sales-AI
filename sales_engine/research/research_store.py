@@ -66,6 +66,11 @@ class CompanyAnalysisRecord:
     output_tokens: Optional[int] = None
     cost_estimate: Optional[float] = None
     diagnostic_info: Optional[str] = None
+    analyzed_pages_count: int = 0
+    chunks_count: int = 0
+    omitted_pages_count: int = 0
+    provider_calls_count: int = 0
+    omitted_pages_reasons: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -181,6 +186,11 @@ class ResearchSnapshotStore:
                     output_tokens INTEGER,
                     cost_estimate REAL,
                     diagnostic_info TEXT,
+                    analyzed_pages_count INTEGER DEFAULT 0,
+                    chunks_count INTEGER DEFAULT 0,
+                    omitted_pages_count INTEGER DEFAULT 0,
+                    provider_calls_count INTEGER DEFAULT 0,
+                    omitted_pages_reasons_json TEXT,
                     FOREIGN KEY (snapshot_id) REFERENCES research_snapshots(snapshot_id) ON DELETE CASCADE
                 );
 
@@ -190,6 +200,18 @@ class ResearchSnapshotStore:
                 CREATE INDEX IF NOT EXISTS idx_analysis_snapshot
                     ON company_analysis_records (snapshot_id, created_at DESC);
             """)
+            # Migrate company_analysis_records for new columns if they do not exist
+            cols_analysis = {r[1] for r in conn.execute("PRAGMA table_info(company_analysis_records);").fetchall()}
+            if "analyzed_pages_count" not in cols_analysis:
+                conn.execute("ALTER TABLE company_analysis_records ADD COLUMN analyzed_pages_count INTEGER DEFAULT 0;")
+            if "chunks_count" not in cols_analysis:
+                conn.execute("ALTER TABLE company_analysis_records ADD COLUMN chunks_count INTEGER DEFAULT 0;")
+            if "omitted_pages_count" not in cols_analysis:
+                conn.execute("ALTER TABLE company_analysis_records ADD COLUMN omitted_pages_count INTEGER DEFAULT 0;")
+            if "provider_calls_count" not in cols_analysis:
+                conn.execute("ALTER TABLE company_analysis_records ADD COLUMN provider_calls_count INTEGER DEFAULT 0;")
+            if "omitted_pages_reasons_json" not in cols_analysis:
+                conn.execute("ALTER TABLE company_analysis_records ADD COLUMN omitted_pages_reasons_json TEXT;")
             conn.commit()
 
     def create_snapshot(
@@ -471,8 +493,10 @@ class ResearchSnapshotStore:
                 INSERT OR REPLACE INTO company_analysis_records (
                     analysis_id, candidate_id, snapshot_id, provider, model,
                     created_at, status, proposed_fields_json, raw_response_text,
-                    input_tokens, output_tokens, cost_estimate, diagnostic_info
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    input_tokens, output_tokens, cost_estimate, diagnostic_info,
+                    analyzed_pages_count, chunks_count, omitted_pages_count,
+                    provider_calls_count, omitted_pages_reasons_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     record.analysis_id,
@@ -488,6 +512,11 @@ class ResearchSnapshotStore:
                     record.output_tokens,
                     record.cost_estimate,
                     record.diagnostic_info,
+                    record.analyzed_pages_count,
+                    record.chunks_count,
+                    record.omitted_pages_count,
+                    record.provider_calls_count,
+                    json.dumps(record.omitted_pages_reasons, ensure_ascii=False),
                 ),
             )
             conn.commit()
@@ -554,6 +583,14 @@ class ResearchSnapshotStore:
             except Exception:
                 pass
 
+        row_keys = row.keys()
+        omitted_reasons = {}
+        if "omitted_pages_reasons_json" in row_keys and row["omitted_pages_reasons_json"]:
+            try:
+                omitted_reasons = json.loads(row["omitted_pages_reasons_json"])
+            except Exception:
+                pass
+
         return CompanyAnalysisRecord(
             analysis_id=row["analysis_id"],
             candidate_id=row["candidate_id"],
@@ -568,6 +605,11 @@ class ResearchSnapshotStore:
             output_tokens=row["output_tokens"],
             cost_estimate=row["cost_estimate"],
             diagnostic_info=row["diagnostic_info"],
+            analyzed_pages_count=row["analyzed_pages_count"] if "analyzed_pages_count" in row_keys and row["analyzed_pages_count"] is not None else 0,
+            chunks_count=row["chunks_count"] if "chunks_count" in row_keys and row["chunks_count"] is not None else 0,
+            omitted_pages_count=row["omitted_pages_count"] if "omitted_pages_count" in row_keys and row["omitted_pages_count"] is not None else 0,
+            provider_calls_count=row["provider_calls_count"] if "provider_calls_count" in row_keys and row["provider_calls_count"] is not None else 0,
+            omitted_pages_reasons=omitted_reasons,
         )
 
     def get_storage_stats(self) -> Dict[str, Any]:

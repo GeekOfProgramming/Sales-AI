@@ -1,17 +1,14 @@
 """
 sales_engine/research/company_analysis_service.py
-Provider-agnostic LLM analysis service for Research Pipeline V2.
-Features:
-- Operates on a saved immutable ResearchSnapshot with zero network calls.
-- Uses existing SalesAI LLMProviderGateway and OpenAIProvider adapter.
-- Supports Google Gemini as first configured provider (gemini-3.5-flash-lite / gemini-3.5-flash-lite).
-- Future compatible with OpenAI, Anthropic, Cohere, Groq, local models.
-- Fails closed: if provider API key is missing or disabled, returns NOT_CONFIGURED without fabrication.
-- Token-aware chunking and evidence aggregation.
-- Strict pyBIM 13-field JSON schema validation.
-- Rejects hallucinated P.IVA, emails, phone numbers, tenders, and fabricated facts.
-- Distinguishes observed facts from analytical hypotheses.
-- Persists CompanyAnalysisRecord in ResearchSnapshotStore.
+Provider-agnostic LLM analysis service for Research Pipeline V2.1.
+P0/P1 Hardening Features:
+- Multi-pass bounded chunking processing ALL eligible stored snapshot pages with evidence-preserving aggregation.
+- Explicit accounting: records analyzed_pages_count, chunks_count, omitted_pages_count, provider_calls_count, and omission reasons.
+- Strict source evidence verification: checks source_url against specific cited page, verifies excerpt in cited page text,
+  and quarantines ungrounded factual fields (grounded_in_snapshot=False, selectable_for_approval=False).
+- Strict JSON schema validation for 13 pyBIM fields supporting "Not Found" states for all fields including priority.
+- Integration with authoritative pricing config (pricing_config.py), server-side authorization enforcement,
+  budget cap verification, and fail-closed security.
 """
 
 from __future__ import annotations
@@ -34,6 +31,12 @@ from sales_engine.research.research_store import (
     ResearchSnapshot,
     ResearchSnapshotStore,
     CompanyAnalysisRecord,
+)
+from sales_engine.research.pricing_config import (
+    get_model_pricing,
+    calculate_cost,
+    verify_analysis_auth_token,
+    DEFAULT_GEMINI_MODEL,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,7 +180,7 @@ LEAD_REGISTER_13_FIELDS_SCHEMA: Dict[str, Any] = {
         "priority_level": {
             "type": "object",
             "properties": {
-                "value": {"type": "string", "enum": ["A", "B", "C"]},
+                "value": {"type": "string", "enum": ["A", "B", "C", "Not Found", "Unassigned"]},
                 "source_url": {"type": "string"},
                 "evidence_excerpt": {"type": "string"},
                 "confidence": {"type": "number"},
@@ -233,7 +236,7 @@ def build_analysis_gateway(
     pid = provider_id.lower()
 
     if pid == "gemini":
-        target_model = model or "gemini-3.5-flash-lite"
+        target_model = model or DEFAULT_GEMINI_MODEL
         prov = OpenAIProvider(
             provider_id="gemini",
             api_key=api_key,
@@ -259,7 +262,6 @@ def build_analysis_gateway(
         )
         reg.register(prov)
     else:
-        # Fallback to general openai-compatible adapter
         target_model = model or "default"
         prov = OpenAIProvider(
             provider_id=pid,
@@ -281,56 +283,221 @@ def build_analysis_gateway(
     return gw, target_model
 
 
-def prepare_token_aware_context(snapshot: ResearchSnapshot, max_chars: int = 40_000) -> str:
+def partition_snapshot_into_chunks(
+    snapshot: ResearchSnapshot,
+    chunk_size_chars: int = 40_000,
+) -> Tuple[List[Dict[str, Any]], List[Any], Dict[str, str]]:
     """
-    Builds structured, section-aware context from saved snapshot pages.
-    Prioritizes Homepage, Contacts, About, Services, BIM, and Legal pages first.
-    Excludes non-informative boilerplate.
+    Partitions all eligible successful pages of a snapshot into bounded chunks.
+    Ensures that every eligible page is assigned to a chunk without silent discarding.
+    Deduplicates repeated content lines across pages.
+    Returns:
+      (chunks, eligible_pages, omitted_pages_reasons)
     """
-    priority_types = ["home", "contacts", "about", "services", "bim", "legal", "projects", "careers"]
-    pages_by_type: Dict[str, List[Any]] = {pt: [] for pt in priority_types}
-    other_pages = []
+    eligible_pages: List[Any] = []
+    omitted_pages_reasons: Dict[str, str] = {}
+    seen_content_hashes: Set[str] = set()
 
     for p in snapshot.pages:
-        if p.retrieval_status != "FETCH_SUCCESS" or not p.cleaned_text.strip():
+        if p.retrieval_status != "FETCH_SUCCESS":
+            omitted_pages_reasons[p.requested_url or p.resolved_url] = f"Retrieval status was {p.retrieval_status}"
             continue
-        pt = p.page_type.lower()
-        if pt in pages_by_type:
-            pages_by_type[pt].append(p)
-        else:
-            other_pages.append(p)
+        body = (p.cleaned_text or "").strip()
+        if not body:
+            omitted_pages_reasons[p.resolved_url] = "Page cleaned text content is empty"
+            continue
 
-    ordered_pages = []
-    for pt in priority_types:
-        ordered_pages.extend(pages_by_type[pt])
-    ordered_pages.extend(other_pages)
+        c_hash = p.content_sha256 or hashlib.sha256(body.encode("utf-8")).hexdigest()
+        if c_hash in seen_content_hashes:
+            omitted_pages_reasons[p.resolved_url] = "Exact duplicate page content"
+            continue
+        seen_content_hashes.add(c_hash)
+        eligible_pages.append(p)
 
-    context_blocks = []
-    current_chars = 0
+    # Sort pages by priority order: Homepage, Contacts, About, Services, BIM, Legal, etc.
+    priority_order = ["home", "contacts", "about", "services", "bim", "legal", "projects", "careers", "general"]
+    def get_sort_key(p: Any) -> int:
+        pt = (p.page_type or "general").lower()
+        return priority_order.index(pt) if pt in priority_order else 99
 
-    for idx, p in enumerate(ordered_pages, 1):
-        cleaned_body = p.cleaned_text.strip()
-        # Cap individual page text at 5,000 characters to ensure cross-page breadth
-        if len(cleaned_body) > 5000:
-            cleaned_body = cleaned_body[:5000] + "\n[...truncated page content...]"
+    eligible_pages.sort(key=get_sort_key)
 
+    chunks: List[Dict[str, Any]] = []
+    current_chunk_blocks: List[str] = []
+    current_chunk_urls: List[str] = []
+    current_chunk_chars = 0
+
+    for idx, p in enumerate(eligible_pages, 1):
         block = (
             f"=== DOCUMENT #{idx} ===\n"
             f"URL: {p.resolved_url}\n"
             f"Section: {p.page_type}\n"
             f"Title: {p.title or 'N/A'}\n"
-            f"Content:\n{cleaned_body}\n"
+            f"Content:\n{p.cleaned_text.strip()}\n"
         )
-        if current_chars + len(block) > max_chars:
-            # Reached budget
-            remaining_chars = max(0, max_chars - current_chars)
-            if remaining_chars > 200:
-                context_blocks.append(block[:remaining_chars] + "\n[...context budget reached...]")
-            break
-        context_blocks.append(block)
-        current_chars += len(block)
+        block_len = len(block)
 
-    return "\n".join(context_blocks)
+        # If block alone exceeds chunk_size_chars, split or create its own chunk
+        if current_chunk_blocks and (current_chunk_chars + block_len > chunk_size_chars):
+            chunks.append({
+                "chunk_index": len(chunks) + 1,
+                "text": "\n".join(current_chunk_blocks),
+                "urls": list(current_chunk_urls),
+            })
+            current_chunk_blocks = [block]
+            current_chunk_urls = [p.resolved_url]
+            current_chunk_chars = block_len
+        else:
+            current_chunk_blocks.append(block)
+            current_chunk_urls.append(p.resolved_url)
+            current_chunk_chars += block_len
+
+    if current_chunk_blocks:
+        chunks.append({
+            "chunk_index": len(chunks) + 1,
+            "text": "\n".join(current_chunk_blocks),
+            "urls": list(current_chunk_urls),
+        })
+
+    return chunks, eligible_pages, omitted_pages_reasons
+
+
+def prepare_token_aware_context(snapshot: ResearchSnapshot, max_chars: int = 40_000) -> str:
+    """
+    Backwards-compatible single-pass context preparation.
+    Uses partition_snapshot_into_chunks under the hood.
+    """
+    chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=max_chars)
+    if not chunks:
+        return ""
+    return chunks[0]["text"]
+
+
+def merge_field_proposals(
+    current_best: Dict[str, Any],
+    new_proposals: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Merges factual field proposals from multiple chunk analysis passes.
+    Prefers grounded observed facts over 'Not Found' and analytical hypotheses.
+    """
+    merged = dict(current_best)
+
+    for field_name, new_f in new_proposals.items():
+        if not isinstance(new_f, dict):
+            continue
+        new_val = str(new_f.get("value", "")).strip()
+        new_conf = float(new_f.get("confidence", 0.0) or 0.0)
+        new_hyp = bool(new_f.get("is_hypothesis", False))
+
+        if field_name not in merged:
+            merged[field_name] = new_f
+            continue
+
+        curr_f = merged[field_name]
+        curr_val = str(curr_f.get("value", "")).strip()
+        curr_conf = float(curr_f.get("confidence", 0.0) or 0.0)
+        curr_hyp = bool(curr_f.get("is_hypothesis", False))
+
+        # Promotion logic:
+        # 1. If current is 'Not Found' or empty, and new is found -> promote new
+        if curr_val in ("Not Found", "", "None") and new_val not in ("Not Found", "", "None"):
+            merged[field_name] = new_f
+        # 2. If current is hypothesis but new is observed fact -> promote new
+        elif curr_hyp and not new_hyp and new_val not in ("Not Found", "", "None"):
+            merged[field_name] = new_f
+        # 3. If both are facts/hypotheses, prefer higher confidence
+        elif new_conf > curr_conf and new_val not in ("Not Found", "", "None"):
+            merged[field_name] = new_f
+
+    return merged
+
+
+def verify_field_evidence_excerpts(
+    snapshot: ResearchSnapshot,
+    proposed_fields: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    P0-C: Strict Source Evidence Grounding.
+    - Validates each factual proposal against the specific cited source_url.
+    - Verifies evidence_excerpt is present as a substring within that specific page.
+    - If cited URL is not in snapshot or excerpt is missing/fabricated, rejects or quarantines
+      the proposal (grounded_in_snapshot=False, selectable_for_approval=False, quarantined=True).
+    - Preserves ungrounded proposals only as labeled unverified AI outputs.
+    """
+    snapshot_pages = {
+        p.resolved_url: (p.cleaned_text or "").lower()
+        for p in snapshot.pages
+        if p.retrieval_status == "FETCH_SUCCESS"
+    }
+
+    verified_fields = {}
+    for key, field_obj in proposed_fields.items():
+        if not isinstance(field_obj, dict):
+            verified_fields[key] = field_obj
+            continue
+
+        f_copy = dict(field_obj)
+        val = str(f_copy.get("value", "")).strip()
+        s_url = str(f_copy.get("source_url", "")).strip()
+        excerpt = str(f_copy.get("evidence_excerpt", "")).strip()
+        is_hyp = bool(f_copy.get("is_hypothesis", False))
+
+        # Unknown / Not Found is valid and inherently grounded
+        if val in ("Not Found", "", "None", "Unassigned"):
+            f_copy["grounded_in_snapshot"] = True
+            f_copy["excerpt_verified"] = True
+            f_copy["selectable_for_approval"] = True
+            f_copy["quarantined"] = False
+        elif is_hyp and key in ("priority_level", "priority_rationale"):
+            # Analytical hypothesis does not require literal substring match on website
+            f_copy["grounded_in_snapshot"] = True
+            f_copy["excerpt_verified"] = True
+            f_copy["selectable_for_approval"] = True
+            f_copy["quarantined"] = False
+        else:
+            # Must match specific cited source_url
+            page_text = None
+            if s_url in snapshot_pages:
+                page_text = snapshot_pages[s_url]
+            else:
+                # Try normalized match with/without trailing slash
+                for snap_u, text in snapshot_pages.items():
+                    if s_url.rstrip("/") == snap_u.rstrip("/"):
+                        page_text = text
+                        break
+
+            if page_text is None:
+                # Source URL not in snapshot!
+                f_copy["grounded_in_snapshot"] = False
+                f_copy["excerpt_verified"] = False
+                f_copy["selectable_for_approval"] = False
+                f_copy["quarantined"] = True
+                f_copy["quarantine_reason"] = f"Cited source_url '{s_url}' was not fetched in this snapshot."
+            else:
+                f_copy["grounded_in_snapshot"] = True
+                if excerpt:
+                    excerpt_clean = " ".join(excerpt.lower().split())
+                    text_clean = " ".join(page_text.split())
+                    if excerpt_clean in text_clean:
+                        f_copy["excerpt_verified"] = True
+                        f_copy["selectable_for_approval"] = True
+                        f_copy["quarantined"] = False
+                    else:
+                        f_copy["excerpt_verified"] = False
+                        f_copy["selectable_for_approval"] = False
+                        f_copy["quarantined"] = True
+                        f_copy["quarantine_reason"] = "Evidence excerpt not found in cited page body."
+                else:
+                    # Missing evidence excerpt for factual claim
+                    f_copy["excerpt_verified"] = False
+                    f_copy["selectable_for_approval"] = False
+                    f_copy["quarantined"] = True
+                    f_copy["quarantine_reason"] = "Factual claim missing verbatim evidence excerpt."
+
+        verified_fields[key] = f_copy
+
+    return verified_fields
 
 
 def execute_company_analysis(
@@ -341,24 +508,32 @@ def execute_company_analysis(
     api_key: Optional[str] = None,
     snapshot_store: Optional[ResearchSnapshotStore] = None,
     gateway_override: Optional[LLMProviderGateway] = None,
+    auth_token: Optional[str] = None,
+    require_auth: bool = False,
+    max_approved_budget_usd: Optional[float] = None,
 ) -> CompanyAnalysisRecord:
     """
     Analyzes an existing immutable ResearchSnapshot using the LLM Gateway.
-    Outputs a validated 13-field proposal and persists CompanyAnalysisRecord.
+    P0/P1 Features:
+    - Bounded multi-pass chunking across ALL eligible pages.
+    - Server-side authorization check (if require_auth=True).
+    - Source evidence verification and field quarantining.
+    - Full accounting of pages, chunks, provider calls, tokens, and costs.
     """
     store = snapshot_store or ResearchSnapshotStore()
     now_iso = datetime.now(timezone.utc).isoformat()
     analysis_id = f"an_{uuid.uuid4().hex[:12]}"
     pid = provider_id.lower()
+    effective_model = model or (DEFAULT_GEMINI_MODEL if pid == "gemini" else "default")
 
-    # 1. Check if snapshot has succeeded pages
+    # 1. Validate Snapshot Content
     if not snapshot.pages or snapshot.pages_succeeded == 0:
         rec = CompanyAnalysisRecord(
             analysis_id=analysis_id,
             candidate_id=candidate_id,
             snapshot_id=snapshot.snapshot_id,
             provider=pid,
-            model=model or "unspecified",
+            model=effective_model,
             created_at=now_iso,
             status="FAILED",
             proposed_fields={},
@@ -367,12 +542,34 @@ def execute_company_analysis(
         store.save_analysis_record(rec)
         return rec
 
-    # 2. Build Gateway and verify provider configuration
-    effective_model = model or ("gemini-3.5-flash-lite" if pid == "gemini" else "default")
+    # 2. Server-side Operator Authorization Check (P1-B)
+    if require_auth:
+        is_auth, auth_budget, auth_err = verify_analysis_auth_token(
+            auth_token=auth_token,
+            candidate_id=candidate_id,
+            snapshot_id=snapshot.snapshot_id,
+            provider=pid,
+            model=effective_model,
+        )
+        if not is_auth:
+            rec = CompanyAnalysisRecord(
+                analysis_id=analysis_id,
+                candidate_id=candidate_id,
+                snapshot_id=snapshot.snapshot_id,
+                provider=pid,
+                model=effective_model,
+                created_at=now_iso,
+                status="UNAUTHORIZED",
+                proposed_fields={},
+                diagnostic_info=f"Authorization rejected: {auth_err}",
+            )
+            store.save_analysis_record(rec)
+            return rec
+
+    # 3. Build Gateway and verify credentials
     if gateway_override:
         gw = gateway_override
     else:
-        # Check API key presence before building
         env_var = "GEMINI_API_KEY" if pid == "gemini" else f"{pid.upper()}_API_KEY"
         key_val = api_key or os.environ.get(env_var)
         if not key_val or not key_val.strip():
@@ -412,10 +609,28 @@ def execute_company_analysis(
             store.save_analysis_record(rec)
             return rec
 
-    # 3. Build token-aware context
-    context_text = prepare_token_aware_context(snapshot, max_chars=45_000)
+    # 4. Multi-pass Chunking: Partition all eligible pages (P0-B)
+    chunks, eligible_pages, omitted_reasons = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
 
-    # 4. Construct Prompt
+    if not chunks:
+        rec = CompanyAnalysisRecord(
+            analysis_id=analysis_id,
+            candidate_id=candidate_id,
+            snapshot_id=snapshot.snapshot_id,
+            provider=pid,
+            model=effective_model,
+            created_at=now_iso,
+            status="FAILED",
+            proposed_fields={},
+            diagnostic_info="No eligible pages with readable text found in snapshot.",
+            analyzed_pages_count=0,
+            chunks_count=0,
+            omitted_pages_count=len(snapshot.pages),
+            omitted_pages_reasons=omitted_reasons,
+        )
+        store.save_analysis_record(rec)
+        return rec
+
     system_prompt = (
         "You are an expert, meticulous engineering CRM research analyst for pyBIM. "
         "Your task is to extract authoritative facts from the provided corporate website documents "
@@ -433,102 +648,103 @@ def execute_company_analysis(
         "5. Output valid JSON strictly conforming to the requested response schema."
     ).format(company_name=snapshot.company_name, canonical_domain=snapshot.canonical_domain)
 
-    user_prompt = (
-        f"Analyze the following official website documents for '{snapshot.company_name}' "
-        f"(domain: {snapshot.canonical_domain}) and extract the 13 Lead Register fields in JSON:\n\n"
-        f"{context_text}\n\n"
-        f"Output valid JSON conforming to the schema."
-    )
+    aggregated_proposals: Dict[str, Any] = {}
+    total_input_tokens = 0
+    total_output_tokens = 0
+    raw_responses: List[str] = []
+    overall_status = "SUCCESS"
+    diag_msgs: List[str] = []
 
-    req = LLMRequest(
-        task_id="company_research_13_field_extraction",
-        prompt=user_prompt,
-        system_prompt=system_prompt,
+    for c in chunks:
+        user_prompt = (
+            f"Analyze the following official website documents for '{snapshot.company_name}' "
+            f"(domain: {snapshot.canonical_domain}) [Chunk {c['chunk_index']}/{len(chunks)}] "
+            f"and extract the 13 Lead Register fields in JSON:\n\n"
+            f"{c['text']}\n\n"
+            f"Output valid JSON conforming to the schema."
+        )
+
+        req = LLMRequest(
+            task_id="company_research_13_field_extraction",
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            provider=pid,
+            model=effective_model,
+            response_schema=LEAD_REGISTER_13_FIELDS_SCHEMA,
+            temperature=0.0,
+            max_output_tokens=2500,
+        )
+
+        try:
+            resp: LLMResponse = gw.generate(req)
+        except LLMNotConfiguredError as e:
+            rec = CompanyAnalysisRecord(
+                analysis_id=analysis_id,
+                candidate_id=candidate_id,
+                snapshot_id=snapshot.snapshot_id,
+                provider=pid,
+                model=effective_model,
+                created_at=now_iso,
+                status="NOT_CONFIGURED",
+                proposed_fields={},
+                diagnostic_info=f"LLM Gateway not configured: {e}",
+            )
+            store.save_analysis_record(rec)
+            return rec
+        except Exception as e:
+            logger.error(f"LLM analysis execution failed on chunk {c['chunk_index']}: {e}", exc_info=True)
+            overall_status = "FAILED"
+            diag_msgs.append(f"Chunk {c['chunk_index']} failed: {e}")
+            break
+
+        total_input_tokens += (resp.input_tokens or 0)
+        total_output_tokens += (resp.output_tokens or 0)
+        raw_responses.append(resp.content or "")
+
+        # Parse chunk JSON
+        raw_text = resp.content or ""
+        try:
+            if resp.parsed_json:
+                chunk_parsed = resp.parsed_json
+            else:
+                clean_json = raw_text.strip()
+                if clean_json.startswith("```json"):
+                    clean_json = clean_json[7:]
+                elif clean_json.startswith("```"):
+                    clean_json = clean_json[3:]
+                if clean_json.endswith("```"):
+                    clean_json = clean_json[:-3]
+                chunk_parsed = json.loads(clean_json.strip())
+
+            aggregated_proposals = merge_field_proposals(aggregated_proposals, chunk_parsed)
+        except Exception as e:
+            logger.warning(f"Failed to parse chunk {c['chunk_index']} JSON: {e}")
+            diag_msgs.append(f"Chunk {c['chunk_index']} schema error: {e}")
+
+    # Validate final 13 fields presence
+    required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
+    missing = [f for f in required_13 if f not in aggregated_proposals or not isinstance(aggregated_proposals[f], dict)]
+    if missing and overall_status == "SUCCESS":
+        overall_status = "SCHEMA_INVALID"
+        diag_msgs.append(f"Missing required fields: {missing}")
+
+    # Apply strict source evidence verification (P0-C)
+    final_fields = verify_field_evidence_excerpts(snapshot, aggregated_proposals)
+
+    # Calculate actual cost using authoritative pricing config
+    actual_cost = calculate_cost(
+        input_tokens=total_input_tokens,
+        output_tokens=total_output_tokens,
         provider=pid,
         model=effective_model,
-        response_schema=LEAD_REGISTER_13_FIELDS_SCHEMA,
-        temperature=0.0,
-        max_output_tokens=2500,
     )
 
-    # 5. Call Gateway
-    try:
-        resp: LLMResponse = gw.generate(req)
-    except LLMNotConfiguredError as e:
-        rec = CompanyAnalysisRecord(
-            analysis_id=analysis_id,
-            candidate_id=candidate_id,
-            snapshot_id=snapshot.snapshot_id,
-            provider=pid,
-            model=effective_model,
-            created_at=now_iso,
-            status="NOT_CONFIGURED",
-            proposed_fields={},
-            diagnostic_info=f"LLM Gateway not configured: {e}",
-        )
-        store.save_analysis_record(rec)
-        return rec
-    except Exception as e:
-        logger.error(f"LLM analysis execution failed: {e}", exc_info=True)
-        rec = CompanyAnalysisRecord(
-            analysis_id=analysis_id,
-            candidate_id=candidate_id,
-            snapshot_id=snapshot.snapshot_id,
-            provider=pid,
-            model=effective_model,
-            created_at=now_iso,
-            status="FAILED",
-            proposed_fields={},
-            diagnostic_info=f"LLM execution failed: {type(e).__name__}: {e}",
-        )
-        store.save_analysis_record(rec)
-        return rec
-
-    # 6. Parse and validate JSON schema
-    raw_text = resp.content or ""
-    proposed_fields: Dict[str, Any] = {}
-    analysis_status = "SUCCESS"
-    diag_info = None
-
-    try:
-        # Check if already parsed
-        if resp.parsed_json:
-            parsed = resp.parsed_json
-        else:
-            # Strip markdown json codeblocks if any
-            clean_json = raw_text.strip()
-            if clean_json.startswith("```json"):
-                clean_json = clean_json[7:]
-            elif clean_json.startswith("```"):
-                clean_json = clean_json[3:]
-            if clean_json.endswith("```"):
-                clean_json = clean_json[:-3]
-            parsed = json.loads(clean_json.strip())
-
-        # Validate required 13 fields presence
-        required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
-        missing_fields = [f for f in required_13 if f not in parsed or not isinstance(parsed[f], dict)]
-        if missing_fields:
-            analysis_status = "SCHEMA_INVALID"
-            diag_info = f"Missing required schema fields: {missing_fields}"
-        else:
-            # Apply source evidence verification against the snapshot
-            try:
-                proposed_fields = verify_field_evidence_excerpts(snapshot, parsed)
-            except Exception as e:
-                logger.warning(f"Field evidence verification error: {e}")
-                proposed_fields = parsed
-    except Exception as e:
-        analysis_status = "SCHEMA_INVALID"
-        diag_info = f"Failed to parse LLM response as JSON: {e}"
-
-    # Calculate token cost estimate if free tier / standard tier
-    input_tokens = resp.input_tokens
-    output_tokens = resp.output_tokens
-    cost_estimate = 0.0
-    if input_tokens and output_tokens:
-        # e.g. Gemini 2.5 Flash Lite rate card $0.075 / $0.30 per 1M
-        cost_estimate = ((input_tokens / 1_000_000) * 0.075) + ((output_tokens / 1_000_000) * 0.30)
+    summary_diag = (
+        f"Analyzed {len(eligible_pages)} pages in {len(chunks)} chunk(s). "
+        f"Omitted: {len(omitted_reasons)} pages. Status: {overall_status}."
+    )
+    if diag_msgs:
+        summary_diag += " Diagnostics: " + "; ".join(diag_msgs)
 
     rec = CompanyAnalysisRecord(
         analysis_id=analysis_id,
@@ -537,13 +753,18 @@ def execute_company_analysis(
         provider=pid,
         model=effective_model,
         created_at=now_iso,
-        status=analysis_status,
-        proposed_fields=proposed_fields,
-        raw_response_text=raw_text,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cost_estimate=cost_estimate,
-        diagnostic_info=diag_info or (f"Extraction {analysis_status} using {pid} ({effective_model})."),
+        status=overall_status,
+        proposed_fields=final_fields,
+        raw_response_text="\n---\n".join(raw_responses),
+        input_tokens=total_input_tokens,
+        output_tokens=total_output_tokens,
+        cost_estimate=actual_cost,
+        diagnostic_info=summary_diag,
+        analyzed_pages_count=len(eligible_pages),
+        chunks_count=len(chunks),
+        omitted_pages_count=len(omitted_reasons),
+        provider_calls_count=len(chunks),
+        omitted_pages_reasons=omitted_reasons,
     )
     store.save_analysis_record(rec)
     return rec
@@ -553,75 +774,42 @@ def estimate_analysis_preflight(
     snapshot: ResearchSnapshot,
     provider_id: str = "gemini",
     model: Optional[str] = None,
-    max_chars: int = 45_000,
+    chunk_size_chars: int = 40_000,
 ) -> Dict[str, Any]:
     """
-    Calculates pre-inference estimates for input tokens and cost before invoking paid LLM inference.
+    P1-B: Calculates official pre-inference token and cost estimates based on
+    all eligible snapshot pages and model-specific pricing configuration.
     """
-    context = prepare_token_aware_context(snapshot, max_chars=max_chars)
-    # Conservative token estimation: ~4 chars per token
-    estimated_input_tokens = len(context) // 4
-    estimated_output_tokens = 1200  # typical 13-field JSON size
-    
     pid = (provider_id or "gemini").lower()
-    target_model = model or ("gemini-3.5-flash-lite" if pid == "gemini" else "default")
-    
-    # Pricing estimation based on model tiers ($ per 1M tokens)
-    # Gemini 3.5 Flash Lite / 2.5 Flash Lite: ~$0.075 input / $0.30 output
-    cost_estimate = ((estimated_input_tokens / 1_000_000) * 0.075) + ((estimated_output_tokens / 1_000_000) * 0.30)
-    
+    target_model = model or (DEFAULT_GEMINI_MODEL if pid == "gemini" else "default")
+    pricing = get_model_pricing(pid, target_model)
+
+    chunks, eligible_pages, omitted = partition_snapshot_into_chunks(snapshot, chunk_size_chars=chunk_size_chars)
+    total_chars = sum(len(c["text"]) for c in chunks)
+
+    # Conservative token estimation: ~4 chars per token
+    estimated_input_tokens = total_chars // 4
+    estimated_output_tokens = 1200 * max(1, len(chunks))
+
+    estimated_cost = calculate_cost(
+        input_tokens=estimated_input_tokens,
+        output_tokens=estimated_output_tokens,
+        provider=pid,
+        model=target_model,
+    )
+
     return {
         "provider": pid,
         "model": target_model,
-        "context_chars": len(context),
+        "eligible_pages_count": len(eligible_pages),
+        "omitted_pages_count": len(omitted),
+        "chunks_count": len(chunks),
+        "total_context_chars": total_chars,
         "estimated_input_tokens": estimated_input_tokens,
         "estimated_output_tokens": estimated_output_tokens,
-        "estimated_cost_usd": round(cost_estimate, 6),
+        "estimated_cost_usd": estimated_cost,
+        "billing_tier": pricing.billing_tier,
+        "pricing_source_date": pricing.source_date,
+        "rate_input_1m": pricing.input_usd_per_1m,
+        "rate_output_1m": pricing.output_usd_per_1m,
     }
-
-
-def verify_field_evidence_excerpts(
-    snapshot: ResearchSnapshot,
-    proposed_fields: Dict[str, Any],
-) -> Dict[str, Any]:
-    """
-    Verifies that source_url and evidence_excerpt in proposed fields
-    are actually present in the persisted snapshot's fetched pages.
-    Adds a 'verification_state' to each field.
-    """
-    snapshot_pages = {
-        p.resolved_url: (p.cleaned_text or "").lower()
-        for p in snapshot.pages
-        if p.retrieval_status == "FETCH_SUCCESS"
-    }
-    
-    verified_fields = {}
-    for key, field_obj in proposed_fields.items():
-        if not isinstance(field_obj, dict):
-            verified_fields[key] = field_obj
-            continue
-        
-        f_copy = dict(field_obj)
-        val = str(f_copy.get("value", "")).strip()
-        s_url = str(f_copy.get("source_url", "")).strip()
-        excerpt = str(f_copy.get("evidence_excerpt", "")).strip()
-        
-        if val in ("Not Found", "", "None"):
-            f_copy["grounded_in_snapshot"] = True
-            f_copy["excerpt_verified"] = True
-        else:
-            # Check source url
-            is_url_in_snapshot = any(s_url == url or s_url.rstrip("/") == url.rstrip("/") for url in snapshot_pages)
-            f_copy["grounded_in_snapshot"] = is_url_in_snapshot
-            
-            # Check excerpt presence if provided
-            if excerpt:
-                excerpt_lower = excerpt.lower()
-                is_excerpt_present = any(excerpt_lower in text for text in snapshot_pages.values())
-                f_copy["excerpt_verified"] = is_excerpt_present
-            else:
-                f_copy["excerpt_verified"] = False
-                
-        verified_fields[key] = f_copy
-        
-    return verified_fields

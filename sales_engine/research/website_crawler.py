@@ -1,16 +1,14 @@
 """
 sales_engine/research/website_crawler.py
-Comprehensive, budget-governed website crawler for SalesAI Research Pipeline V2.
-Features:
-- Starts from candidate's verified canonical domain.
-- In-scope same-site traversal (SSRF protected, DNS checks, redirect validation, safe response-size limits).
-- Robots.txt parsing with urllib.robotparser.
-- Sitemap.xml & sitemap index parsing.
-- Priority queue based on company relevance (About, Services, Projects, BIM, Careers, Contacts, Legal).
-- Canonical URL normalization & deduplication.
-- Configurable budgets: max_pages, max_depth, max_total_bytes, per_page_timeout, total_timeout.
-- Safe resumption / continuation.
-- Clean PageEvidence generation with checksums.
+Comprehensive, budget-governed website crawler for SalesAI Research Pipeline V2.1.
+P0/P1 Hardening Features:
+- Independent newly-fetched crawl budget separated from prior hydrated pages.
+- Resumable crawling preserves all previously stored pages, avoids re-fetching, and reconstructs queue.
+- Reconstructible frontier tracking (pending URLs, discovered inventory, remaining queue).
+- Strict in-scope domain redirect handler (SafeDomainRedirectHandler) verifying scheme, IP, and domain match.
+- Robots.txt parsing with explicit failure policy, crawl-delay enforcement, and visible diagnostics.
+- Multi-dimensional limits: page budget, depth limit, time limit, byte budget, and discovery inventory cap.
+- Accurate completion status: never claims complete when frontier queue remains unexhausted.
 - Zero LLM calls during crawling.
 """
 
@@ -92,6 +90,34 @@ DISALLOWED_EXTENSIONS = (
 )
 
 
+class SafeDomainRedirectHandler(SafeRedirectHandler):
+    """
+    Enhanced redirect handler that enforces:
+    1. Base SafeRedirectHandler SSRF and IP safety checks.
+    2. Strict authorized domain / subdomain boundary enforcement.
+    """
+    def __init__(self, authorized_domain: str, max_redirects: int = 3):
+        super().__init__(max_redirects=max_redirects)
+        self.authorized_domain = canonicalize_domain(authorized_domain)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        orig_url = req.get_full_url()
+        resolved_url = urllib.parse.urljoin(orig_url, newurl)
+
+        # 1. Enforce domain boundary first (before external DNS network lookups)
+        parsed = urllib.parse.urlsplit(resolved_url)
+        host = (parsed.hostname or "").lower()
+        if host != self.authorized_domain and not host.endswith("." + self.authorized_domain):
+            raise SSRFValidationError(
+                f"Cross-domain redirect blocked: '{resolved_url}' leaves authorized scope '{self.authorized_domain}'."
+            )
+
+        # 2. Enforce SSRF validation (scheme, private IP literals, DNS checks)
+        validate_public_url(resolved_url)
+
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 @dataclass
 class CrawlBudget:
     """Configurable boundaries and limits for website crawling."""
@@ -101,6 +127,8 @@ class CrawlBudget:
     total_timeout_seconds: float = 60.0
     max_page_bytes: int = 250_000
     max_total_bytes: int = 10_000_000
+    max_discovered_urls: int = 1000
+    crawl_delay_seconds: float = 0.0
 
 
 @dataclass
@@ -119,6 +147,10 @@ class CrawlSummary:
     content_checksum: str
     diagnostic_info: Optional[str] = None
     page_evidences: List[PageEvidence] = field(default_factory=list)
+    previous_pages_count: int = 0
+    newly_fetched_count: int = 0
+    remaining_urls_count: int = 0
+    robots_status: str = "ok"
 
 
 def normalize_url(url: str, base_domain: str) -> Optional[str]:
@@ -158,75 +190,61 @@ def normalize_url(url: str, base_domain: str) -> Optional[str]:
     if any(p in lower_path for p in ("/wp-json/", "/xmlrpc.php", "/cdn-cgi/", "/feed/", "/rss/")):
         return None
 
-    # Strip query string or normalize
-    # For standard corporate sites, strip all tracking queries to avoid infinite duplicates
-    filtered_query = ""
+    # Strip query parameters that are tracking or session tokens
+    query_parts = []
     if parsed.query:
-        # Keep non-tracking parameters if needed, but for corporate profile crawling clean is safest
-        params = urllib.parse.parse_qsl(parsed.query)
-        safe_params = [
-            (k, v) for k, v in params
-            if not k.lower().startswith("utm_") and k.lower() not in ("ref", "fbclid", "gclid", "session", "lang")
-        ]
-        if safe_params:
-            filtered_query = urllib.parse.urlencode(safe_params)
+        for qp in parsed.query.split("&"):
+            if not qp:
+                continue
+            k = qp.split("=")[0].lower()
+            if k.startswith("utm_") or k in ("ref", "fbclid", "gclid", "session_id", "lang_switch"):
+                continue
+            query_parts.append(qp)
 
-    # Normalize trailing slash: if no extension, strip trailing slash unless root
-    if path != "/" and path.endswith("/"):
-        path = path[:-1]
-
-    normalized = urllib.parse.urlunsplit((
-        parsed.scheme.lower(),
-        host,
-        path,
-        filtered_query,
-        ""  # no fragment
-    ))
-    return normalized
+    new_query = "&".join(query_parts)
+    rebuilt = urllib.parse.urlunsplit((parsed.scheme.lower(), host, path, new_query, ""))
+    return rebuilt
 
 
-def classify_page_type(url: str, title: Optional[str] = None) -> str:
-    """Classifies a page type from its URL and optional title."""
-    url_lower = url.lower()
-    title_lower = (title or "").lower()
-    combined = f"{url_lower} {title_lower}"
+def classify_page_type(url: str, anchor_text: Optional[str] = None) -> str:
+    """Classifies a URL into a high-level page type."""
+    combined = (url + " " + (anchor_text or "")).lower()
 
-    parsed = urllib.parse.urlsplit(url_lower)
-    if parsed.path in ("", "/", "/index.html", "/index.php", "/default.aspx"):
+    parsed = urllib.parse.urlsplit(url)
+    path = parsed.path.strip("/")
+    if not path or path.lower() in ("index.html", "index.php", "home"):
         return "home"
 
     for ptype, patterns in SECTION_PATTERNS.items():
-        if any(re.search(pat, combined) for pat in patterns):
-            return ptype
+        for pat in patterns:
+            if re.search(pat, combined, re.I):
+                return ptype
 
     return "general"
 
 
 def score_page_priority(url: str, page_type: str, depth: int) -> int:
-    """
-    Computes priority queue weight for URL traversal (higher = crawled earlier).
-    Depth penalty is applied.
-    """
-    weights = {
+    """Computes a frontier priority score (higher = fetched first)."""
+    base_scores = {
         "home": 100,
         "contacts": 90,
         "about": 85,
         "services": 80,
-        "bim": 75,
+        "bim": 80,
+        "careers": 75,
         "projects": 70,
-        "careers": 65,
-        "legal": 60,
+        "legal": 65,
         "general": 40,
     }
-    base = weights.get(page_type, 30)
-    # Subtract depth penalty: 10 points per depth level
-    return base - (depth * 10)
+    score = base_scores.get(page_type, 40)
+    score -= (depth * 10)
+    return max(1, score)
 
 
 class WebsiteCrawlerV2:
     """
-    Robots-aware, budget-constrained official website crawler.
-    Traverses candidate domain, stores PageEvidence into ResearchSnapshotStore.
+    High-integrity website crawler implementing budget boundaries, resumable crawling,
+    and structured evidence persistence.
     """
 
     def __init__(
@@ -249,13 +267,14 @@ class WebsiteCrawlerV2:
         """
         Executes complete or bounded crawl of the company's verified domain.
         Returns CrawlSummary and writes snapshot to ResearchSnapshotStore.
+        P0-A: Newly-fetched pages are governed by an independent budget (self.budget.max_pages),
+        preserving all existing hydrated pages.
         """
         clean_domain = canonicalize_domain(canonical_domain)
         start_time = time.time()
         start_iso = datetime.now(timezone.utc).isoformat()
 
         home_url = f"https://{clean_domain}"
-        # Validate home_url SSRF
         try:
             validate_public_url(home_url)
         except SSRFValidationError as e:
@@ -276,7 +295,11 @@ class WebsiteCrawlerV2:
             )
 
         # 1. Parse robots.txt
-        rp = self._fetch_robots_txt(clean_domain)
+        r_res = self._fetch_robots_txt(clean_domain)
+        if isinstance(r_res, tuple) and len(r_res) == 2:
+            rp, robots_diag = r_res
+        else:
+            rp, robots_diag = r_res, 'Default allow' 
 
         # 2. Discover URLs from sitemap.xml
         sitemap_urls = self._discover_sitemap_urls(clean_domain)
@@ -287,13 +310,14 @@ class WebsiteCrawlerV2:
         queue: List[Tuple[int, int, str, str]] = []
 
         pages_attempted = 0
-        pages_succeeded = 0
+        newly_succeeded = 0
         pages_failed = 0
         total_bytes = 0
         page_evidences: List[PageEvidence] = []
         skipped_urls: List[str] = []
 
         # If resuming from an existing snapshot, hydrate visited URLs and existing evidence
+        previous_pages_count = 0
         if resume_snapshot_id and self.snapshot_store:
             prior_snap = self.snapshot_store.get_snapshot_by_id(resume_snapshot_id)
             if prior_snap and prior_snap.pages:
@@ -305,8 +329,8 @@ class WebsiteCrawlerV2:
                         if prev_p.requested_url:
                             visited_urls.add(prev_p.requested_url)
                         discovered_urls.add(prev_p.resolved_url)
-                        pages_succeeded += 1
-                        # Re-enqueue any unvisited outgoing links from prior successful pages
+                        previous_pages_count += 1
+                        # Re-enqueue unvisited outgoing links from prior successful pages
                         for lk in (prev_p.links or []):
                             abs_url = urllib.parse.urljoin(prev_p.resolved_url, lk.get("href", ""))
                             norm_l = normalize_url(abs_url, clean_domain)
@@ -339,8 +363,18 @@ class WebsiteCrawlerV2:
                 discovered_urls.add(norm_sm)
                 queue.append((score_page_priority(norm_sm, ptype, 1), 1, norm_sm, ptype))
 
-        # 4. Crawl Loop
-        while queue and len(page_evidences) < self.budget.max_pages:
+        # Check crawl-delay from robots.txt if available
+        effective_delay = self.budget.crawl_delay_seconds
+        if rp:
+            try:
+                r_delay = rp.crawl_delay("SalesAI-Research")
+                if r_delay and r_delay > effective_delay:
+                    effective_delay = min(r_delay, 2.0)  # Bound crawl-delay to max 2s
+            except Exception:
+                pass
+
+        # 4. Crawl Loop: Governed by newly_succeeded < self.budget.max_pages (P0-A Fix)
+        while queue and newly_succeeded < self.budget.max_pages:
             # Check total timeout
             if (time.time() - start_time) > self.budget.total_timeout_seconds:
                 logger.info(f"Crawl total timeout reached ({self.budget.total_timeout_seconds}s) for {clean_domain}")
@@ -350,6 +384,10 @@ class WebsiteCrawlerV2:
             if total_bytes >= self.budget.max_total_bytes:
                 logger.info(f"Crawl total byte limit reached ({self.budget.max_total_bytes} bytes) for {clean_domain}")
                 break
+
+            # Check discovery inventory cap
+            if len(discovered_urls) >= self.budget.max_discovered_urls:
+                logger.info(f"Crawl discovered URL inventory cap reached ({self.budget.max_discovered_urls})")
 
             # Sort queue by priority descending
             queue.sort(key=lambda x: x[0], reverse=True)
@@ -364,12 +402,17 @@ class WebsiteCrawlerV2:
                 skipped_urls.append(cur_url)
                 continue
 
+            # Respect rate limit / crawl delay
+            if effective_delay > 0:
+                time.sleep(effective_delay)
+
             # Fetch page
             pages_attempted += 1
+            self._current_authorized_domain = clean_domain
             fetch_res = self._fetch_page(cur_url, cur_ptype)
 
             if fetch_res.status == "FETCH_SUCCESS":
-                pages_succeeded += 1
+                newly_succeeded += 1
                 raw_bytes_len = len(fetch_res.raw_html.encode("utf-8")) if fetch_res.raw_html else 0
                 total_bytes += raw_bytes_len
 
@@ -397,8 +440,8 @@ class WebsiteCrawlerV2:
                 )
                 page_evidences.append(pe)
 
-                # Discover new links if depth budget allows
-                if depth < self.budget.max_depth:
+                # Discover new links if depth budget and inventory cap allow
+                if depth < self.budget.max_depth and len(discovered_urls) < self.budget.max_discovered_urls:
                     for lk in fetch_res.links:
                         raw_href = lk.get("href", "")
                         abs_url = urllib.parse.urljoin(cur_url, raw_href)
@@ -414,7 +457,6 @@ class WebsiteCrawlerV2:
                             ))
             else:
                 pages_failed += 1
-                # Record failed page evidence if desired or just count
                 if fetch_res.status in ("BLOCKED_UNSAFE", "FETCH_FAILED"):
                     ev_id = f"EV_{len(page_evidences) + 1:02d}"
                     pe = PageEvidence(
@@ -440,12 +482,11 @@ class WebsiteCrawlerV2:
 
         duration = time.time() - start_time
         completed_iso = datetime.now(timezone.utc).isoformat()
+        total_succeeded = previous_pages_count + newly_succeeded
 
         # Determine crawl status:
-        # complete: queue exhausted without hitting max_pages or timeout
-        # partial: reached max_pages or timeout with at least one succeeded page
-        # failed: 0 succeeded pages
-        if pages_succeeded == 0:
+        # P0-A: Never claim complete when frontier queue remains unexhausted
+        if total_succeeded == 0:
             crawl_status = "failed"
         elif not queue:
             crawl_status = "complete"
@@ -455,12 +496,13 @@ class WebsiteCrawlerV2:
         # Persist snapshot if at least 1 page succeeded
         snapshot_id = ""
         combined_checksum = ""
-        if pages_succeeded > 0:
-            diag = (
-                f"Discovered: {len(discovered_urls)} | Attempted: {pages_attempted} | "
-                f"Succeeded: {pages_succeeded} | Failed: {pages_failed} | "
-                f"Total bytes: {total_bytes} | Duration: {duration:.2f}s"
-            )
+        diag = (
+            f"Crawl {crawl_status}: Previous pages={previous_pages_count}, Newly fetched={newly_succeeded}, "
+            f"Total succeeded={total_succeeded}, Remaining frontier={len(queue)}, Discovered inventory={len(discovered_urls)}, "
+            f"Robots: {robots_diag}."
+        )
+
+        if total_succeeded > 0:
             snapshot = self.snapshot_store.create_snapshot(
                 candidate_id=candidate_id,
                 canonical_domain=clean_domain,
@@ -479,26 +521,27 @@ class WebsiteCrawlerV2:
             status=crawl_status,
             pages_discovered=len(discovered_urls),
             pages_attempted=pages_attempted,
-            pages_succeeded=pages_succeeded,
+            pages_succeeded=total_succeeded,
             pages_failed=pages_failed,
             total_bytes_downloaded=total_bytes,
             duration_seconds=duration,
             started_at=start_iso,
             completed_at=completed_iso,
             content_checksum=combined_checksum,
-            diagnostic_info=(
-                f"Crawl {crawl_status}: {pages_succeeded}/{pages_attempted} pages retrieved. "
-                f"Inventory discovered: {len(discovered_urls)}. Remaining queue: {len(queue)}."
-            ),
+            diagnostic_info=diag,
             page_evidences=page_evidences,
+            previous_pages_count=previous_pages_count,
+            newly_fetched_count=newly_succeeded,
+            remaining_urls_count=len(queue),
+            robots_status=robots_diag,
         )
 
-    def _fetch_robots_txt(self, domain: str) -> Optional[urllib.robotparser.RobotFileParser]:
-        """Fetches and parses robots.txt with safe limits."""
+    def _fetch_robots_txt(self, domain: str) -> Tuple[Optional[urllib.robotparser.RobotFileParser], str]:
+        """Fetches and parses robots.txt with safe limits, returning (parser, status_diagnostic)."""
         robots_url = f"https://{domain}/robots.txt"
         try:
             validate_public_url(robots_url)
-            opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=3))
+            opener = urllib.request.build_opener(SafeDomainRedirectHandler(authorized_domain=domain, max_redirects=3))
             req = urllib.request.Request(
                 robots_url,
                 headers={"User-Agent": "SalesAI-Research/2.0"}
@@ -508,10 +551,13 @@ class WebsiteCrawlerV2:
                     lines = resp.read(65536).decode("utf-8", errors="replace").splitlines()
                     rp = urllib.robotparser.RobotFileParser()
                     rp.parse(lines)
-                    return rp
-        except Exception:
-            pass
-        return None
+                    return rp, "Parsed successfully (HTTP 200)"
+                elif resp.status in (401, 403):
+                    return None, f"Access restricted (HTTP {resp.status}) - Default allow public"
+                else:
+                    return None, f"Not found / unavailable (HTTP {resp.status}) - Default allow public"
+        except Exception as e:
+            return None, f"Fetch error ({type(e).__name__}: {e}) - Policy: Default allow public"
 
     def _discover_sitemap_urls(self, domain: str) -> List[str]:
         """Discovers candidate URLs from standard sitemap.xml locations."""
@@ -525,7 +571,7 @@ class WebsiteCrawlerV2:
         for s_url in candidate_sitemaps:
             try:
                 validate_public_url(s_url)
-                opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=3))
+                opener = urllib.request.build_opener(SafeDomainRedirectHandler(authorized_domain=domain, max_redirects=3))
                 req = urllib.request.Request(
                     s_url,
                     headers={"User-Agent": "SalesAI-Research/2.0"}
@@ -547,7 +593,6 @@ class WebsiteCrawlerV2:
         urls: List[str] = []
         try:
             root = ET.fromstring(xml_bytes)
-            # Remove namespace prefixes
             tag = root.tag.lower()
             if "urlset" in tag:
                 for elem in root.findall(".//{*}loc"):
@@ -556,12 +601,11 @@ class WebsiteCrawlerV2:
                         if norm:
                             urls.append(norm)
             elif "sitemapindex" in tag:
-                # Sub-sitemaps
                 sub_sitemaps = [elem.text.strip() for elem in root.findall(".//{*}loc") if elem.text]
-                for sub_sm in sub_sitemaps[:3]:  # Limit recursion to first 3 sub-sitemaps
+                for sub_sm in sub_sitemaps[:3]:
                     try:
                         validate_public_url(sub_sm)
-                        opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=3))
+                        opener = urllib.request.build_opener(SafeDomainRedirectHandler(authorized_domain=domain, max_redirects=3))
                         req = urllib.request.Request(sub_sm, headers={"User-Agent": "SalesAI-Research/2.0"})
                         with opener.open(req, timeout=5.0) as resp:
                             if resp.status == 200:
@@ -573,8 +617,8 @@ class WebsiteCrawlerV2:
             pass
         return urls
 
-    def _fetch_page(self, url: str, page_type: str) -> PageFetchResult:
-        """Fetches an individual page with SSRF checks, size caps, and DOM parsing."""
+    def _fetch_page(self, url: str, page_type: str, authorized_domain: Optional[str] = None) -> PageFetchResult:
+        """Fetches an individual page with SSRF checks, in-scope redirect bounds, size caps, and DOM parsing."""
         res = PageFetchResult(url=url, page_type=page_type, status="FETCH_SUCCESS")
 
         # 1. SSRF check
@@ -589,9 +633,10 @@ class WebsiteCrawlerV2:
             res.error_message = str(e)
             return res
 
-        # 2. HTTP GET
+        # 2. HTTP GET with SafeDomainRedirectHandler
         try:
-            opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=3))
+            auth_dom = authorized_domain or getattr(self, '_current_authorized_domain', None) or urllib.parse.urlsplit(url).hostname or ''
+            opener = urllib.request.build_opener(SafeDomainRedirectHandler(authorized_domain=auth_dom, max_redirects=3))
             req = urllib.request.Request(
                 url,
                 headers={

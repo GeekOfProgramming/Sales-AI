@@ -820,3 +820,274 @@ def test_15_source_evidence_excerpt_verification(isolated_db_paths):
     # Fake URL and fabricated text must fail grounded check & excerpt check
     assert verified["responsible_person"]["grounded_in_snapshot"] is False
     assert verified["responsible_person"]["excerpt_verified"] is False
+
+
+# ==============================================================================
+# 16. P0-A: Resumed Crawl with 20-Page Saturated Prior Snapshot
+# ==============================================================================
+def test_16_resumed_crawl_with_saturated_20_page_snapshot(isolated_db_paths):
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    # Create saturated snapshot with 20 existing pages
+    prior_pages = []
+    for i in range(1, 21):
+        u = f"https://energymep.it/page-{i:02d}"
+        pe = PageEvidence(
+            snapshot_id="",
+            evidence_id=f"EV_{i:02d}",
+            requested_url=u,
+            resolved_url=u,
+            page_type="general",
+            http_status=200,
+            retrieval_status="FETCH_SUCCESS",
+            retrieved_at="2026-11-02T12:00:00Z",
+            title=f"Page {i}",
+            meta_description=None,
+            content_sha256=f"hash_{i}",
+            cleaned_text=f"Content for page {i}",
+            links=[{"text": f"Page {i+1}", "href": f"/page-{i+1:02d}"}],
+        )
+        prior_pages.append(pe)
+
+    snap_prior = snap_store.create_snapshot(
+        candidate_id="cand:domain:energymep.it",
+        canonical_domain="energymep.it",
+        company_name="Energymep",
+        pages=prior_pages,
+        research_status="partial",
+    )
+    assert snap_prior.pages_succeeded == 20
+
+    # Resume crawl with budget of 5 NEW pages
+    new_budget = CrawlBudget(max_pages=5, per_page_timeout_seconds=5.0)
+    crawler = WebsiteCrawlerV2(snapshot_store=snap_store, budget=new_budget)
+    crawler._fetch_robots_txt = MagicMock(return_value=(None, "Mock allow"))
+    crawler._discover_sitemap_urls = MagicMock(return_value=[
+        f"https://energymep.it/page-{j:02d}" for j in range(21, 30)
+    ])
+    crawler._fetch_page = MagicMock(side_effect=lambda url, ptype: PageFetchResult(
+        url=url,
+        page_type=ptype,
+        status="FETCH_SUCCESS",
+        http_status=200,
+        text_content=f"Content for {url}",
+        title=f"Title {url}",
+        raw_html=f"<html><body>Content for {url}</body></html>",
+    ))
+
+    summary = crawler.crawl_website(
+        candidate_id="cand:domain:energymep.it",
+        canonical_domain="energymep.it",
+        company_name="Energymep",
+        resume_snapshot_id=snap_prior.snapshot_id,
+    )
+
+    # Must crawl 5 NEW pages and retain 20 previous pages -> 25 total!
+    assert summary.previous_pages_count == 20
+    assert summary.newly_fetched_count == 5
+    assert summary.pages_succeeded == 25
+    assert summary.status == "partial"  # Frontier still has unvisited sitemap pages
+
+
+# ==============================================================================
+# 17. P0-B: Multi-Pass Chunking and Late-Page Evidence Preservation
+# ==============================================================================
+def test_17_multi_pass_chunking_and_late_page_evidence(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import partition_snapshot_into_chunks
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    # Create 15 pages with 4,000 characters each (~60,000 chars total)
+    pages = []
+    for i in range(1, 16):
+        u = f"https://energymep.it/article-{i:02d}"
+        pe = PageEvidence(
+            snapshot_id="",
+            evidence_id=f"EV_{i:02d}",
+            requested_url=u,
+            resolved_url=u,
+            page_type="general",
+            http_status=200,
+            retrieval_status="FETCH_SUCCESS",
+            retrieved_at="2026-11-02T12:00:00Z",
+            title=f"Article {i}",
+            meta_description=None,
+            content_sha256=f"hash_art_{i}",
+            cleaned_text=f"Important research evidence on article {i}. " * 100,
+        )
+        pages.append(pe)
+
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", pages)
+
+    chunks, eligible, omitted = partition_snapshot_into_chunks(snap, chunk_size_chars=25_000)
+    # Total chars ~60k divided into ~25k chunks -> 3 chunks
+    assert len(chunks) >= 2
+    assert len(eligible) == 15
+    assert len(omitted) == 0
+    # Confirm late pages (e.g. article-15) are included in chunks
+    all_chunk_urls = [url for c in chunks for url in c["urls"]]
+    assert "https://energymep.it/article-15" in all_chunk_urls
+
+
+# ==============================================================================
+# 18. P0-C: Quarantine Non-Grounded Fields & Reject from Approval
+# ==============================================================================
+def test_18_quarantine_ungrounded_fields_and_reject_approval(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import verify_field_evidence_excerpts
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe = PageEvidence(
+        snapshot_id="",
+        evidence_id="EV_01",
+        requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/",
+        page_type="home",
+        http_status=200,
+        retrieval_status="FETCH_SUCCESS",
+        retrieved_at="2026-11-02T12:00:00Z",
+        title="Energymep",
+        meta_description=None,
+        content_sha256="hash1",
+        cleaned_text="Energymep S.r.l. Ingegneria Padova",
+    )
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe])
+
+    # Proposal citing external bogus URL and hallucinated excerpt
+    proposals = {
+        "company_name": {
+            "value": "Fabricated Corp",
+            "source_url": "https://attacker.com/fake",
+            "evidence_excerpt": "Not on page",
+            "confidence": 0.99,
+            "is_hypothesis": False,
+        },
+        "business_activities": {
+            "value": "Ingegneria Padova",
+            "source_url": "https://energymep.it/",
+            "evidence_excerpt": "Ingegneria Padova",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+        }
+    }
+
+    verified = verify_field_evidence_excerpts(snap, proposals)
+    assert verified["company_name"]["quarantined"] is True
+    assert verified["company_name"]["selectable_for_approval"] is False
+    assert verified["business_activities"]["quarantined"] is False
+    assert verified["business_activities"]["selectable_for_approval"] is True
+
+
+# ==============================================================================
+# 19. P1-A: Stale Analysis Not Displayed for New Snapshot
+# ==============================================================================
+def test_19_stale_analysis_isolated_from_new_snapshot(isolated_db_paths):
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe1 = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-01T12:00:00Z",
+        title="Snap 1", meta_description=None, content_sha256="h1", cleaned_text="Snap 1 text",
+    )
+    snap1 = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe1])
+
+    # Save analysis on snap1
+    an1 = CompanyAnalysisRecord(
+        analysis_id="an_snap1",
+        candidate_id="cand:domain:energymep.it",
+        snapshot_id=snap1.snapshot_id,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        created_at="2026-11-01T12:05:00Z",
+        status="SUCCESS",
+        proposed_fields={"company_name": {"value": "Energymep Snap 1"}},
+    )
+    snap_store.save_analysis_record(an1)
+
+    # Now a new crawl produces snap2
+    pe2 = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Snap 2", meta_description=None, content_sha256="h2", cleaned_text="Snap 2 text",
+    )
+    snap2 = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe2])
+
+    # Query latest analysis bound strictly to snap2
+    an_for_snap2 = snap_store.get_latest_analysis("cand:domain:energymep.it", snapshot_id=snap2.snapshot_id)
+    assert an_for_snap2 is None, "Stale analysis from snap1 must NOT be returned for snap2!"
+
+    # But query for snap1 still returns an1
+    an_for_snap1 = snap_store.get_latest_analysis("cand:domain:energymep.it", snapshot_id=snap1.snapshot_id)
+    assert an_for_snap1 is not None
+    assert an_for_snap1.analysis_id == "an_snap1"
+
+
+# ==============================================================================
+# 20. P1-B: Unauthorized Paid Analysis Direct POST Rejection
+# ==============================================================================
+def test_20_unauthorized_direct_post_analysis_rejected(isolated_db_paths):
+    from sales_engine.research.company_analysis_service import execute_company_analysis
+
+    _, snap_db = isolated_db_paths
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://energymep.it/",
+        resolved_url="https://energymep.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-02T12:00:00Z",
+        title="Snap", meta_description=None, content_sha256="h", cleaned_text="Energymep text",
+    )
+    snap = snap_store.create_snapshot("cand:domain:energymep.it", "energymep.it", "Energymep", [pe])
+
+    # Case A: Missing auth token with require_auth=True
+    rec_no_auth = execute_company_analysis(
+        snapshot=snap,
+        candidate_id="cand:domain:energymep.it",
+        provider_id="gemini",
+        snapshot_store=snap_store,
+        require_auth=True,
+        auth_token=None,
+    )
+    assert rec_no_auth.status == "UNAUTHORIZED"
+    assert "Missing authorization token" in rec_no_auth.diagnostic_info
+
+    # Case B: Tampered auth token
+    rec_bad_auth = execute_company_analysis(
+        snapshot=snap,
+        candidate_id="cand:domain:energymep.it",
+        provider_id="gemini",
+        snapshot_store=snap_store,
+        require_auth=True,
+        auth_token="tampered|token|structure|sig",
+    )
+    assert rec_bad_auth.status == "UNAUTHORIZED"
+
+
+# ==============================================================================
+# 21. P1-C: Cross-Domain Redirect Rejection (SafeDomainRedirectHandler)
+# ==============================================================================
+def test_21_cross_domain_redirect_blocked():
+    from sales_engine.research.website_crawler import SafeDomainRedirectHandler
+    from sales_engine.research.lead_researcher import SSRFValidationError
+
+    handler = SafeDomainRedirectHandler(authorized_domain="energymep.it")
+    mock_req = MagicMock()
+    mock_req.get_full_url.return_value = "https://energymep.it/out"
+
+    # Redirection to external domain must raise SSRFValidationError
+    with pytest.raises(SSRFValidationError) as exc_info:
+        handler.redirect_request(
+            req=mock_req,
+            fp=None,
+            code=302,
+            msg="Found",
+            headers={},
+            newurl="https://malicious-external-site.com/trap",
+        )
+    assert "leaves authorized scope" in str(exc_info.value)

@@ -3798,15 +3798,27 @@ async def candidate_research_view(
 
     historical_snapshots = snap_store.list_snapshots_for_candidate(candidate_id)
 
-    # V2: Retrieve latest durable LLM analysis record for this candidate
-    latest_analysis = snap_store.get_latest_analysis(candidate_id)
+    # V2.1: Retrieve latest durable LLM analysis record bound strictly to active snapshot_id (P1-A)
+    latest_analysis = None
+    if latest_snapshot:
+        latest_analysis = snap_store.get_latest_analysis(candidate_id, snapshot_id=latest_snapshot.snapshot_id)
 
-    # Preflight estimation for next LLM analysis
+    # Preflight estimation and server-side operator authorization token for next LLM analysis (P1-B)
     analysis_preflight = None
+    analysis_auth_token = None
     if latest_snapshot and latest_snapshot.pages_succeeded > 0:
         try:
             from sales_engine.research.company_analysis_service import estimate_analysis_preflight
+            from sales_engine.research.pricing_config import generate_analysis_auth_token
             analysis_preflight = estimate_analysis_preflight(latest_snapshot, provider_id="gemini", model="gemini-3.5-flash-lite")
+            # Generate cryptographic authorization token for operator's confirmation
+            analysis_auth_token = generate_analysis_auth_token(
+                candidate_id=candidate_id,
+                snapshot_id=latest_snapshot.snapshot_id,
+                provider="gemini",
+                model="gemini-3.5-flash-lite",
+                max_budget_usd=max(0.20, (analysis_preflight.get("estimated_cost_usd", 0.0) * 2.0)),
+            )
         except Exception:
             pass
 
@@ -3876,6 +3888,7 @@ async def candidate_research_view(
             "proposed_record": proposed_rec,
             "latest_analysis": latest_analysis,
             "analysis_preflight": analysis_preflight,
+            "analysis_auth_token": analysis_auth_token,
             "pipeline_status": pipeline_status,
             "message": message,
             "error": error,
@@ -3959,16 +3972,21 @@ async def crawl_candidate_website_action(
 async def analyze_candidate_snapshot_action(
     candidate_id: str,
     provider: Optional[str] = Form("gemini"),
-    model: Optional[str] = Form(None),
+    model: Optional[str] = Form("gemini-3.5-flash-lite"),
+    snapshot_id: Optional[str] = Form(None),
+    auth_token: Optional[str] = Form(None),
+    operator_confirmed: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf)
 ):
     """
     Stage 2: Analyze Saved Snapshot with LLM.
     Runs provider-agnostic LLM extraction against the saved immutable snapshot with ZERO network crawling.
+    Enforces server-side operator authorization token verification before paid inference.
     """
     from sales_engine.research.research_store import ResearchSnapshotStore
     from sales_engine.research.company_analysis_service import execute_company_analysis
     from sales_engine.research.company_research_service import load_research_from_snapshot
+    from sales_engine.research.pricing_config import verify_analysis_auth_token
 
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
@@ -3976,19 +3994,45 @@ async def analyze_candidate_snapshot_action(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     snap_store = ResearchSnapshotStore()
-    latest_snapshot = snap_store.get_latest_snapshot(candidate_id)
-    if not latest_snapshot or latest_snapshot.pages_succeeded == 0:
+    # Resolve snapshot: if snapshot_id provided, bind to it explicitly, else latest
+    if snapshot_id:
+        target_snapshot = snap_store.get_snapshot_by_id(snapshot_id)
+    else:
+        target_snapshot = snap_store.get_latest_snapshot(candidate_id)
+
+    if not target_snapshot or target_snapshot.pages_succeeded == 0:
         return RedirectResponse(
             f"/sales/candidates/{candidate_id}/research?error=No+saved+snapshot+available+to+analyze.+Please+crawl+website+first.",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    rec = execute_company_analysis(
-        snapshot=latest_snapshot,
+    eff_provider = provider or "gemini"
+    eff_model = model or "gemini-3.5-flash-lite"
+
+    # P1-B: Server-side Operator Authorization Check
+    is_valid, max_budget, auth_err = verify_analysis_auth_token(
+        auth_token=auth_token,
         candidate_id=candidate_id,
-        provider_id=provider or "gemini",
-        model=model,
+        snapshot_id=target_snapshot.snapshot_id,
+        provider=eff_provider,
+        model=eff_model,
+    )
+    if not is_valid:
+        err_msg = f"Inference execution rejected: {auth_err}"
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    rec = execute_company_analysis(
+        snapshot=target_snapshot,
+        candidate_id=candidate_id,
+        provider_id=eff_provider,
+        model=eff_model,
         snapshot_store=snap_store,
+        auth_token=auth_token,
+        require_auth=True,
+        max_approved_budget_usd=max_budget,
     )
 
     if rec.status == "NOT_CONFIGURED":
@@ -4106,6 +4150,42 @@ async def save_candidate_research_action(
 
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
     existing = reg_store.get_record(candidate_id)
+
+    # P0-C: Verify that any approved field is grounded in the active snapshot
+    # Retrieve latest analysis for this candidate
+    from sales_engine.research.research_store import ResearchSnapshotStore
+    snap_store = ResearchSnapshotStore()
+    latest_snap = snap_store.get_latest_snapshot(candidate_id)
+    latest_an = snap_store.get_latest_analysis(candidate_id, snapshot_id=latest_snap.snapshot_id) if latest_snap else None
+    proposed_analysis_fields = latest_an.proposed_fields if (latest_an and latest_an.status == "SUCCESS") else {}
+
+    # Reject approval of quarantined ungrounded fields
+    quarantined_rejected = []
+    field_flags = [
+        ("company_name", apply_company_name),
+        ("legal_identity", apply_legal_identity),
+        ("geographic_location", apply_geographic_location),
+        ("telephone_numbers", apply_telephone_numbers),
+        ("contact_email_addresses", apply_contact_email_addresses),
+        ("responsible_person", apply_responsible_person),
+        ("business_activities", apply_business_activities),
+        ("official_website", apply_official_website),
+        ("descriptions_and_notes", apply_descriptions_and_notes),
+        ("job_advertisement_links", apply_job_advertisement_links),
+        ("other_links_and_references", apply_other_links_and_references),
+    ]
+    for fn, is_applied in field_flags:
+        if is_applied and fn in proposed_analysis_fields:
+            f_obj = proposed_analysis_fields[fn]
+            if isinstance(f_obj, dict) and f_obj.get("quarantined"):
+                quarantined_rejected.append(fn)
+
+    if quarantined_rejected:
+        err_msg = f"Cannot approve ungrounded fields: {quarantined_rejected}. Fields are quarantined."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     # Check if any field is approved by operator
     approved_any = any([

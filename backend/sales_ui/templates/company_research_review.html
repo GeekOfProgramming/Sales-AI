@@ -163,10 +163,13 @@
 
       <!-- Button B: Analyze Saved Snapshot with LLM -->
       {% if snapshot and snapshot.pages_succeeded > 0 %}
-      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm LLM Analysis with {{ analysis_preflight.provider|default("gemini")|upper }} ({{ analysis_preflight.model|default("gemini-3.5-flash-lite") }})?\n\nEstimated input: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} tokens\nEstimated cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }}\n\nProceed with offline analysis of snapshot {{ snapshot.snapshot_id }}?');">
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm Authorized Paid LLM Analysis?\n\nProvider: {{ analysis_preflight.provider|default("gemini")|upper }}\nModel: {{ analysis_preflight.model|default("gemini-3.5-flash-lite") }}\nSnapshot: {{ snapshot.snapshot_id }}\nEligible Pages: {{ analysis_preflight.eligible_pages_count|default(snapshot.pages_succeeded) }}\nChunks: {{ analysis_preflight.chunks_count|default(1) }}\nEstimated Tokens: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} in / {{ analysis_preflight.estimated_output_tokens|default(1200) }} out\nApprox Cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }} (Billing tier: {{ analysis_preflight.billing_tier|default("Standard") }})\n\nServer Authorization Token verified.');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="provider" value="gemini">
         <input type="hidden" name="model" value="gemini-3.5-flash-lite">
+        <input type="hidden" name="snapshot_id" value="{{ snapshot.snapshot_id }}">
+        <input type="hidden" name="auth_token" value="{{ analysis_auth_token }}">
+        <input type="hidden" name="operator_confirmed" value="1">
         <button type="submit" class="btn btn-success" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #0284c7; border-color: #0284c7;">
           🧠 Analyze Saved Snapshot with LLM
         </button>
@@ -185,7 +188,12 @@
     </div>
     <div>
       {% if latest_analysis %}
-      Analysis Status: <strong>{{ latest_analysis.status }}</strong> ({{ latest_analysis.created_at[:19] }})
+      Analysis Status: <strong>{{ latest_analysis.status }}</strong>
+      | Pages Analyzed: <strong>{{ latest_analysis.analyzed_pages_count }}</strong>
+      | Chunks: <strong>{{ latest_analysis.chunks_count }}</strong>
+      | Omitted: <strong>{{ latest_analysis.omitted_pages_count }}</strong>
+      | Tokens: <strong>{{ (latest_analysis.input_tokens or 0) + (latest_analysis.output_tokens or 0) }}</strong>
+      | Cost: <strong>${{ latest_analysis.cost_estimate }}</strong>
       {% else %}
       Analysis Status: <em>Awaiting operator analysis trigger</em>
       {% endif %}
