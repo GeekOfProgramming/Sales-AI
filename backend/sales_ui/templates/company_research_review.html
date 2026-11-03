@@ -732,14 +732,12 @@
                         <summary style="font-weight: 600; color: #991b1b; cursor: pointer; font-size: 0.8rem;">Independent Operator Verification</summary>
                         <div style="margin-top: 6px; font-size: 0.78rem;">
                           <p style="margin: 0 0 4px 0; color: var(--text-secondary);">Verify authoritative official website independently with verified source URL:</p>
-                          <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: flex; flex-direction: column; gap: 4px;">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                            <input type="hidden" name="field_name" value="official_website">
-                            <input type="text" name="verified_value" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (candidate.company_domain if candidate.company_domain else proposed_record.official_website) }}" placeholder="e.g. https://domain.com/">
-                            <input type="text" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (proposed_record.official_website if proposed_record.official_website else 'https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL">
-                            <input type="text" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
-                            <button type="submit" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Authoritative Website</button>
-                          </form>
+                          <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <input type="text" form="verify-official-website-form" name="verified_value" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (candidate.company_domain if candidate.company_domain else proposed_record.official_website) }}" placeholder="e.g. https://domain.com/">
+                            <input type="text" form="verify-official-website-form" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (proposed_record.official_website if proposed_record.official_website else 'https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL">
+                            <input type="text" form="verify-official-website-form" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
+                            <button type="submit" form="verify-official-website-form" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Authoritative Website</button>
+                          </div>
                         </div>
                       </details>
                     {% endif %}
@@ -969,6 +967,15 @@
     </div>
   </div>
 </form>
+
+<!-- Independent Field Verification Form for Quarantined Website -->
+{% set f_meta_web = analysis_fields.get('official_website') if analysis_fields else None %}
+{% if f_meta_web and f_meta_web.quarantined %}
+<form id="verify-official-website-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="field_name" value="official_website">
+</form>
+{% endif %}
 
 <!-- Independent Finalization Form -->
 <div class="card" style="margin-bottom: 2rem; border: 2px solid {% if is_finalizable %}#16a34a{% else %}#cbd5e1{% endif %}; background-color: var(--bg-card); padding: 1.25rem 1.5rem;">

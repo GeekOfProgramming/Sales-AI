@@ -4528,6 +4528,63 @@ def test_64_stc_quarantined_website_manual_verification_workflow(isolated_db_pat
     assert is_ok_final is True, f"Expected finalization to pass, but failed with: {errs_final}"
     assert checks_final["quarantine_clean"] is True
 
+    # 6. HTML Standards Compliance: Verify template renders unnested, valid forms for both actions
+    import pathlib
+    repo_root = pathlib.Path(__file__).parent.parent
+    from bs4 import BeautifulSoup
+    import jinja2
+
+    tmpl_env = jinja2.Environment(loader=jinja2.FileSystemLoader(str(repo_root / "backend" / "sales_ui" / "templates")))
+    tmpl = tmpl_env.get_template("company_research_review.html")
+
+    render_ctx = {
+        "request": None,
+        "candidate": cand,
+        "current_record": rec,
+        "proposed_record": rec,
+        "analysis_fields": proposed,
+        "csrf_token": "csrf_test_token_xyz",
+        "is_finalizable": False,
+        "finalization_checks": checks,
+        "finalization_errors": errs,
+        "historical_snapshots": [],
+        "research": {"evidence_items": {}, "supplier_signals": [], "career_opportunities": [], "opportunity_urls": []},
+        "lead_status": "DRAFT",
+        "lead_priority": "A",
+        "outreach": {},
+        "field_reviews": {"company_name": rev_name, "business_activities": rev_act},
+        "active_snapshot": snap,
+        "latest_analysis": analysis,
+    }
+    rendered_html = tmpl.render(render_ctx)
+    soup = BeautifulSoup(rendered_html, "html.parser")
+
+    # Form 1: Save Selected Fields form
+    save_form = soup.find("form", action=f"/sales/candidates/{cid}/research/save")
+    assert save_form is not None, "Main research save form must exist"
+    assert save_form.find_parent("form") is None, "Save form must NOT be nested inside another form"
+
+    # Form 2: Verify Authoritative Website form
+    verify_form = soup.find("form", id="verify-official-website-form")
+    assert verify_form is not None, "Independent verification form must exist"
+    assert verify_form["action"] == f"/sales/candidates/{cid}/verify-field"
+    assert verify_form.find_parent("form") is None, "Verify form must NOT be nested inside save form"
+
+    # Verify input association and CSRF
+    v_csrf = verify_form.find("input", attrs={"name": "csrf_token"})
+    assert v_csrf is not None and v_csrf["value"] == "csrf_test_token_xyz"
+    v_field = verify_form.find("input", attrs={"name": "field_name"})
+    assert v_field is not None and v_field["value"] == "official_website"
+
+    # Verify external inputs targeting verify-official-website-form via HTML5 form attribute
+    v_val_input = soup.find("input", attrs={"form": "verify-official-website-form", "name": "verified_value"})
+    assert v_val_input is not None
+    v_url_input = soup.find("input", attrs={"form": "verify-official-website-form", "name": "source_url"})
+    assert v_url_input is not None
+    v_submit_btn = soup.find("button", attrs={"form": "verify-official-website-form", "type": "submit"})
+    assert v_submit_btn is not None
+    assert "Verify Authoritative Website" in v_submit_btn.text
+
 
 def test_65_stale_non_core_field_reviews_invalidated_on_register_edit(isolated_db_paths, monkeypatch):
     """
@@ -4744,9 +4801,24 @@ def test_67_single_provider_launcher_configuration():
     ps1_text = ps1_p.read_text(encoding="utf-8")
     assert "-Mode LoadGemini" in ps1_text
 
-    # 3. run_sales_ai.bat invokes single-provider loading safely
+    # 3. run_sales_ai.bat delegates to run_sales_ai.ps1 for single-process bootstrap & credential inheritance
     bat_p = repo_root / "run_sales_ai.bat"
     assert bat_p.exists()
     bat_text = bat_p.read_text(encoding="utf-8")
-    assert "-Mode LoadGemini" in bat_text
+    assert "run_sales_ai.ps1" in bat_text
+
+    # 4. End-to-end credential propagation verification:
+    # Test that Python process spawned under PowerShell with LoadGemini actually inherits GEMINI_API_KEY
+    import subprocess
+    cmd = [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        r"& '.\scripts\SALESAI-SEVEN-PROVIDERS.ps1' -Mode LoadGemini; & .\.venv\Scripts\python.exe -c 'import os; print(\"VISIBLE_\" + str(bool(os.environ.get(\"GEMINI_API_KEY\"))))'"
+    ]
+    res = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
+    assert res.returncode == 0
+    assert "VISIBLE_True" in res.stdout
 
