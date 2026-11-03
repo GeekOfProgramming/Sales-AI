@@ -1,0 +1,28 @@
+{
+  "candidate_id": "domain:example-engineering.com",
+  "company_name": "Example Engineering",
+  "normalized_company_name": "example engineering",
+  "company_domain": "example-engineering.com",
+  "country": "Italy",
+  "city": "Milan",
+  "company_types": [
+    "engineering",
+    "mep_engineering"
+  ],
+  "legal_form": "S.r.l.",
+  "company_tier": "tier_2",
+  "tier_confidence": 0.75,
+  "bim_maturity": "medium",
+  "fit_assessment": "high",
+  "intent_assessment": "medium",
+  "outsourcing_potential": "high",
+  "automation_potential": "medium",
+  "source_refs": [
+    "src_google",
+    "src_ats"
+  ],
+  "evidence_refs": [
+    "ev_bim_1",
+    "ev_revit_1"
+  ]
+}

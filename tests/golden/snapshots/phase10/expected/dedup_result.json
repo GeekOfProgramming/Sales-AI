@@ -1,0 +1,11 @@
+{
+  "companies_resolved": 1,
+  "canonical_domain": "example-engineering.com",
+  "total_observations": 4,
+  "unique_sources": [
+    "google_maps_it",
+    "ats_greenhouse",
+    "official_website",
+    "telemat_tenders"
+  ]
+}

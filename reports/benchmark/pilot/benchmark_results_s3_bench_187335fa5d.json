@@ -1,0 +1,112 @@
+{
+  "run_id": "s3_bench_187335fa5d",
+  "timestamp": "2026-10-23T08:29:17.581085+00:00",
+  "is_dry_run": false,
+  "tasks_evaluated": [
+    "website_extraction:pass_a"
+  ],
+  "candidate_summaries": [
+    {
+      "candidate_id": "t1_c1",
+      "task_id": "website_extraction",
+      "subtask_id": "pass_a",
+      "provider_id": "openai",
+      "exact_model_id": "gpt-6-luna",
+      "cases_evaluated": 1,
+      "cases_passed": 0,
+      "syntactic_pass_rate": 0.0,
+      "semantic_pass_rate": 0.0,
+      "safety_pass_rate": 1.0,
+      "overall_pass_rate": 0.0,
+      "schema_pass_rate": 0.0,
+      "ground_truth_pass_rate": 0.0,
+      "evidence_pass_rate": 0.0,
+      "safety_violations_count": 0,
+      "needs_review_count": 0,
+      "avg_latency_ms": 7942.0,
+      "total_cost_usd": 0.000197,
+      "qualified": false,
+      "is_smoke_only": true,
+      "disqualification_reasons": [
+        "Smoke test evaluation (1 < 10 cases) cannot qualify or approve candidate (SMOKE_ONLY).",
+        "Overall pass rate 0.0% is below qualification threshold 80.0%."
+      ],
+      "case_results": [
+        {
+          "case_id": "web_a_01",
+          "task_id": "website_extraction",
+          "subtask_id": "pass_a",
+          "group": "GROUNDED",
+          "candidate_id": "t1_c1",
+          "provider_id": "openai",
+          "exact_model_id": "gpt-6-luna",
+          "latency_ms": 7942,
+          "input_tokens": 120,
+          "output_tokens": 369,
+          "cost_usd": 0.000197,
+          "syntactic_valid": false,
+          "semantic_valid": false,
+          "safety_valid": true,
+          "overall_pass": false,
+          "schema_pass": false,
+          "ground_truth_pass": false,
+          "evidence_pass": false,
+          "safety_pass": true,
+          "needs_review": false,
+          "failure_categories": [
+            "SYNTACTIC_VALIDATION_ERROR",
+            "SEMANTIC_GROUNDING_MISSING",
+            "GROUND_TRUTH_COMPANY_MISMATCH",
+            "GROUND_TRUTH_TECH_MISSING"
+          ],
+          "failure_reasons": [
+            "SCHEMA_INVALID_ENUM_OFFERINGS_0_STATUS",
+            "SCHEMA_INVALID_ENUM_OFFERINGS_1_STATUS",
+            "Required evidence citation ['EV_01'] missing from output evidence_refs.",
+            "Extracted company name '' does not match expected reference 'Milano MEP Ingegneria S.r.l.'.",
+            "Expected technologies ['Autodesk Revit', 'Navisworks', 'Solibri'] missing from extracted technologies None."
+          ],
+          "grounding_evidence_found": [
+            "EV_01"
+          ],
+          "forbidden_tokens_found": [],
+          "raw_output_snippet": "{   \"company_name\": \"Milano MEP Ingegneria S.r.l.\",   \"company_summary\": \"Provides specialized BIM clash coordination and MEP modeling services in Lombardy; operating since 2015.\",   \"offerings\": [   ",
+          "validation_safe_log": {
+            "is_valid": false,
+            "task_id": "website_extraction",
+            "subtask_id": "pass_a",
+            "schema_version": "1.0.0",
+            "failure_reasons": [
+              "SCHEMA_INVALID_ENUM_OFFERINGS_0_STATUS",
+              "SCHEMA_INVALID_ENUM_OFFERINGS_1_STATUS"
+            ],
+            "needs_business_review": false,
+            "is_opt_out_overridden": false,
+            "is_bounce_overridden": false,
+            "is_suppression_overridden": false,
+            "effective_local_disposition": null,
+            "normalization_applied": false,
+            "has_repair_proposal": true,
+            "raw_content_length": 610,
+            "metrics": {
+              "input_tokens": 120,
+              "output_tokens": 369,
+              "latency_ms": 7907.236300059594,
+              "cost_usd": 0.000197,
+              "has_provider_request_id": true,
+              "provider_request_id": null
+            },
+            "validator_version": "1.0.2"
+          }
+        }
+      ]
+    }
+  ],
+  "recommended_candidates": {},
+  "total_cases_run": 1,
+  "total_cost_usd": 0.000197,
+  "scorer_version": "s3.1-scorer-v1",
+  "fixture_catalog_version": "s3.0-catalog-v1",
+  "pricing_source_mode": "provider_direct_verified",
+  "is_smoke_only": true
+}

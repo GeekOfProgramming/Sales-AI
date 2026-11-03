@@ -1,0 +1,320 @@
+# config/markets.yaml
+# Target market configuration for SalesAI Phase 10
+# 15 Target Markets: IT, DE, AT, CH, FR, ES, NL, GB, IE, AE, SA, OM, AU, CA, US
+
+markets:
+  - id: italy
+    code: IT
+    name: Italy
+    enabled: true
+    languages:
+      - it
+      - en
+    search_locales:
+      - it-IT
+    preferred_source_ids:
+      - italy_engineering_directory
+      - oice_association_directory
+      - public_tender_portal_italy
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+      - mep_engineering
+      - general_contractor
+      - infrastructure
+    standards_context:
+      - UNI 11337
+      - ISO 19650
+    daily_candidate_limit: 100
+
+  - id: germany
+    code: DE
+    name: Germany
+    enabled: true
+    languages:
+      - de
+      - en
+    search_locales:
+      - de-DE
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+      - ats_lever
+    company_types:
+      - architecture
+      - engineering
+      - general_contractor
+    standards_context:
+      - ISO 19650
+      - DIN
+    daily_candidate_limit: 80
+
+  - id: austria
+    code: AT
+    name: Austria
+    enabled: true
+    languages:
+      - de
+      - en
+    search_locales:
+      - de-AT
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+      - ÖNORM
+    daily_candidate_limit: 50
+
+  - id: switzerland
+    code: CH
+    name: Switzerland
+    enabled: true
+    languages:
+      - de
+      - fr
+      - it
+      - en
+    search_locales:
+      - de-CH
+      - fr-CH
+    preferred_source_ids:
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+      - SIA
+    daily_candidate_limit: 50
+
+  - id: france
+    code: FR
+    name: France
+    enabled: true
+    languages:
+      - fr
+      - en
+    search_locales:
+      - fr-FR
+    preferred_source_ids:
+      - brave_job_search
+      - public_tender_portal
+    company_types:
+      - architecture
+      - engineering
+      - general_contractor
+    standards_context:
+      - ISO 19650
+      - NF
+    daily_candidate_limit: 80
+
+  - id: spain
+    code: ES
+    name: Spain
+    enabled: true
+    languages:
+      - es
+      - en
+    search_locales:
+      - es-ES
+    preferred_source_ids:
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+      - UNE
+    daily_candidate_limit: 60
+
+  - id: netherlands
+    code: NL
+    name: Netherlands
+    enabled: true
+    languages:
+      - nl
+      - en
+    search_locales:
+      - nl-NL
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+    company_types:
+      - architecture
+      - engineering
+      - bim_consultancy
+    standards_context:
+      - ISO 19650
+      - BIM Basis ILS
+    daily_candidate_limit: 60
+
+  - id: united_kingdom
+    code: GB
+    name: United Kingdom
+    enabled: true
+    languages:
+      - en
+    search_locales:
+      - en-GB
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+      - ats_lever
+    company_types:
+      - architecture
+      - engineering
+      - multidisciplinary_consultancy
+    standards_context:
+      - ISO 19650
+      - UK BIM Framework
+    daily_candidate_limit: 80
+
+  - id: ireland
+    code: IE
+    name: Ireland
+    enabled: true
+    languages:
+      - en
+    search_locales:
+      - en-IE
+    preferred_source_ids:
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+    daily_candidate_limit: 40
+
+  - id: united_arab_emirates
+    code: AE
+    name: United Arab Emirates
+    enabled: true
+    languages:
+      - ar
+      - en
+    search_locales:
+      - en-AE
+      - ar-AE
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+    company_types:
+      - architecture
+      - engineering
+      - general_contractor
+      - mega_projects
+    standards_context:
+      - ISO 19650
+      - Dubai Municipality BIM
+    daily_candidate_limit: 80
+
+  - id: saudi_arabia
+    code: SA
+    name: Saudi Arabia
+    enabled: true
+    languages:
+      - ar
+      - en
+    search_locales:
+      - ar-SA
+      - en-SA
+    preferred_source_ids:
+      - brave_job_search
+      - public_tender_portal
+    company_types:
+      - architecture
+      - engineering
+      - giga_projects
+      - general_contractor
+    standards_context:
+      - ISO 19650
+      - SBC
+    daily_candidate_limit: 100
+
+  - id: oman
+    code: OM
+    name: Oman
+    enabled: true
+    languages:
+      - ar
+      - en
+    search_locales:
+      - ar-OM
+      - en-OM
+    preferred_source_ids:
+      - brave_job_search
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+    daily_candidate_limit: 30
+
+  - id: australia
+    code: AU
+    name: Australia
+    enabled: true
+    languages:
+      - en
+    search_locales:
+      - en-AU
+    preferred_source_ids:
+      - brave_job_search
+      - ats_lever
+    company_types:
+      - architecture
+      - engineering
+      - infrastructure
+    standards_context:
+      - ISO 19650
+      - NATSPEC
+    daily_candidate_limit: 60
+
+  - id: canada
+    code: CA
+    name: Canada
+    enabled: true
+    languages:
+      - en
+      - fr
+    search_locales:
+      - en-CA
+      - fr-CA
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+    company_types:
+      - architecture
+      - engineering
+    standards_context:
+      - ISO 19650
+      - CanBIM
+    daily_candidate_limit: 60
+
+  - id: united_states
+    code: US
+    name: United States
+    enabled: true
+    languages:
+      - en
+    search_locales:
+      - en-US
+    preferred_source_ids:
+      - brave_job_search
+      - ats_greenhouse
+      - ats_lever
+    company_types:
+      - architecture
+      - engineering
+      - bim_consultancy
+      - general_contractor
+    standards_context:
+      - ISO 19650
+      - US National BIM Standard (NBIMS-US)
+    daily_candidate_limit: 100

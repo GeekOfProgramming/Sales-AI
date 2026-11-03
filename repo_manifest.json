@@ -1,0 +1,85 @@
+{
+  "manifest_version": "1.0.0",
+  "categories": {
+    "production_runtime": "Core executable modules and server entrypoints",
+    "production_config": "Configuration specifications and dependency definitions",
+    "frozen_legacy_required": "Legacy pyBIM assets and rules retained for backward compatibility",
+    "tests_and_qa": "Automated test suites, fixtures, golden snapshots, and reports",
+    "developer_tools": "Packaging, linters, testing configurations, and setup scripts",
+    "documentation_active": "Active architecture, operational, and reference documentation",
+    "documentation_archive": "Historical phase and QA specs preserved for audit trail",
+    "sanitized_examples": "Synthetic sample exports free of credentials and PII",
+    "generated_runtime_excluded": "Ephemeral databases, vector embeddings, logs, and state",
+    "release_excluded": "Third-party binaries, local tunnels, and virtual environments"
+  },
+  "rules": [
+    {
+      "pattern": "sales_engine/**",
+      "category": "production_runtime"
+    },
+    {
+      "pattern": "backend/**",
+      "category": "production_runtime"
+    },
+    {
+      "pattern": "ai_engine/**",
+      "category": "production_runtime"
+    },
+    {
+      "pattern": "start_server.py",
+      "category": "production_runtime"
+    },
+    {
+      "pattern": "run_sales_ai.bat",
+      "category": "production_runtime"
+    },
+    {
+      "pattern": "config/**",
+      "category": "production_config"
+    },
+    {
+      "pattern": "requirements.txt",
+      "category": "production_config"
+    },
+    {
+      "pattern": "data/rules/**",
+      "category": "frozen_legacy_required"
+    },
+    {
+      "pattern": "tests/**",
+      "category": "tests_and_qa"
+    },
+    {
+      "pattern": "scripts/**",
+      "category": "developer_tools"
+    },
+    {
+      "pattern": "setup/**",
+      "category": "developer_tools"
+    },
+    {
+      "pattern": "*.ini, *.toml, *.json",
+      "category": "developer_tools"
+    },
+    {
+      "pattern": "README.md, README-TEST.md, docs/*.md",
+      "category": "documentation_active"
+    },
+    {
+      "pattern": "docs/archive/**",
+      "category": "documentation_archive"
+    },
+    {
+      "pattern": "exports/sample_export/**",
+      "category": "sanitized_examples"
+    },
+    {
+      "pattern": "*.db*, *.sqlite*, chroma_db/**, *.log",
+      "category": "generated_runtime_excluded"
+    },
+    {
+      "pattern": "cloudflared.exe, PUBLIC_URL.txt, .venv/**, .env*",
+      "category": "release_excluded"
+    }
+  ]
+}

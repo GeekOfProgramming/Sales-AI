@@ -1,0 +1,4233 @@
+{
+  "phase": "Phase 10",
+  "description": "Deterministic Candidate Discovery, Multi-Source Ingestion & Qualification Engine",
+  "run_timestamp": "2026-10-06T08:48:40.524650+00:00",
+  "generated_at": "2026-10-06T08:48:40.524650+00:00",
+  "git_commit": "1786acf",
+  "total_catalog_cases": 245,
+  "total_cases": 245,
+  "mapped_executable_cases": 245,
+  "executed_cases": 245,
+  "passed": 245,
+  "failed": 0,
+  "review": 0,
+  "skipped": 0,
+  "not_run": 0,
+  "unmapped_deterministic_cases": 0,
+  "false_pass_count": 0,
+  "candidate_count": 28,
+  "observation_count": 54,
+  "duplicate_company_count": 0,
+  "overmerge_count": 0,
+  "fake_job_count": 0,
+  "historical_duplicate_count": 0,
+  "cold_outreach_bypass_count": 0,
+  "suppression_bypass_count": 0,
+  "phase5_regression_count": 0,
+  "phase8_grounding_violation_count": 0,
+  "phase9_send_violation_count": 0,
+  "runtime_db_packaged_count": 0,
+  "source_partial_failure_loss_count": 0,
+  "uncredentialed_source_run_count": 0,
+  "source_budget_overrun_count": 0,
+  "path_traversal_violation_count": 0,
+  "unsupported_source_type_count": 0,
+  "critical_regressions": {
+    "P10-REG-001": "PASS",
+    "P10-REG-002": "PASS",
+    "P10-REG-003": "PASS",
+    "P10-REG-004": "PASS",
+    "P10-REG-007": "PASS",
+    "P10-REG-006": "PASS",
+    "P10-REG-005": "PASS",
+    "P10-REG-011": "PASS",
+    "P10-REG-008": "PASS",
+    "P10-REG-009": "PASS",
+    "P10-REG-010": "PASS",
+    "P10-REG-012": "PASS",
+    "P10-REG-013": "PASS",
+    "P10-REG-014": "PASS",
+    "P10-REG-015": "PASS"
+  },
+  "invariants": {
+    "historical_guard_monotonic_unresettable": true,
+    "domain_suppression_strictly_enforced": true,
+    "boolean_parsing_deterministic": true,
+    "phase7_export_bridge_resilient": true,
+    "console_watchlist_bridge_resilient": true,
+    "provenance_preserved_after_roundtrip": true,
+    "phase8_grounding_rejects_subjective_claims": true,
+    "secrets_never_logged_or_exposed": true,
+    "zero_send_contract_strictly_upheld": true,
+    "phase5_score_frozen": true,
+    "source_partial_failure_isolated": true,
+    "repeated_run_idempotent": true
+  },
+  "cases": [
+    {
+      "case_id": "P10-ID-001",
+      "phase": "Phase 10",
+      "title": "Domain Identity Is Primary",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-002",
+      "phase": "Phase 10",
+      "title": "Scheme/Path Normalization",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-003",
+      "phase": "Phase 10",
+      "title": "Same Name, Different Domains Stay Separate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-004",
+      "phase": "Phase 10",
+      "title": "Same Name + Different Country Stays Separate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-005",
+      "phase": "Phase 10",
+      "title": "Trusted Source Identity Can Support Merge",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-006",
+      "phase": "Phase 10",
+      "title": "Weak Manual Name Identity Does Not Overmerge",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-007",
+      "phase": "Phase 10",
+      "title": "Alias Preservation",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-ID-008",
+      "phase": "Phase 10",
+      "title": "Domain History Does Not Delete Prior Identity",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_id_001_to_008_and_reg_001_002_identity"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-001",
+      "phase": "Phase 10",
+      "title": "Same Company Across Multiple Sources Merges Once",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_001_same_company_merges_once",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_001_same_company_merges_once"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-002",
+      "phase": "Phase 10",
+      "title": "Similar Name, Different Trusted Domains Remain Separate",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_002_same_name_different_domains_stay_separate",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_002_same_name_different_domains_stay_separate"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OBS-001",
+      "phase": "Phase 10",
+      "title": "One Source Appearance Creates One Observation",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OBS-002",
+      "phase": "Phase 10",
+      "title": "Observation Stores Source Provenance",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OBS-003",
+      "phase": "Phase 10",
+      "title": "Repeated Same Observation Is Idempotent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OBS-004",
+      "phase": "Phase 10",
+      "title": "New Observation Appends To Existing Company",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OBS-005",
+      "phase": "Phase 10",
+      "title": "Observation Is Not Automatically Business Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OBS-006",
+      "phase": "Phase 10",
+      "title": "Observation Timestamp Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-001",
+      "phase": "Phase 10",
+      "title": "Business Evidence Category",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-002",
+      "phase": "Phase 10",
+      "title": "Intent Evidence Category",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-003",
+      "phase": "Phase 10",
+      "title": "Project Evidence Category",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-004",
+      "phase": "Phase 10",
+      "title": "Historical Evidence Category",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-005",
+      "phase": "Phase 10",
+      "title": "Provenance Required",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-006",
+      "phase": "Phase 10",
+      "title": "Missing Source Cannot Become Verified Fact",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-EVID-007",
+      "phase": "Phase 10",
+      "title": "Evidence History Is Append-Only",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_obs_and_evid_invariants"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-001",
+      "phase": "Phase 10",
+      "title": "Load discovery_sources.yaml",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-002",
+      "phase": "Phase 10",
+      "title": "Enabled Source Runs",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-003",
+      "phase": "Phase 10",
+      "title": "Disabled Source Does Not Run",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-004",
+      "phase": "Phase 10",
+      "title": "Unknown Source Type Rejected",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-005",
+      "phase": "Phase 10",
+      "title": "Source Requires API Key But Key Missing",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-006",
+      "phase": "Phase 10",
+      "title": "Source Priority Deterministic",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-007",
+      "phase": "Phase 10",
+      "title": "max_results_per_run Enforced",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SRC-008",
+      "phase": "Phase 10",
+      "title": "Source Config Does Not Contain Secrets",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-MKT-001",
+      "phase": "Phase 10",
+      "title": "Load markets.yaml",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-MKT-002",
+      "phase": "Phase 10",
+      "title": "Market Enable/Disable",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-MKT-003",
+      "phase": "Phase 10",
+      "title": "Country Is Configuration, Not Architecture Branch",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-MKT-004",
+      "phase": "Phase 10",
+      "title": "Languages Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-MKT-005",
+      "phase": "Phase 10",
+      "title": "Preferred Sources Deterministic",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-MKT-006",
+      "phase": "Phase 10",
+      "title": "Standards Context Is Context Only",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_src_and_mkt_configuration"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-TIER-001",
+      "phase": "Phase 10",
+      "title": "Tier From Multi-Factor Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-TIER-002",
+      "phase": "Phase 10",
+      "title": "Weak Evidence -> unknown",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-TIER-003",
+      "phase": "Phase 10",
+      "title": "Tier Confidence Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-TIER-004",
+      "phase": "Phase 10",
+      "title": "Tier Evidence Refs Required For Non-Unknown Classification",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-003",
+      "phase": "Phase 10",
+      "title": "Legal Form Alone Never Determines Tier",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_003_legal_form_alone_never_determines_tier",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_003_legal_form_alone_never_determines_tier"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-BIM-001",
+      "phase": "Phase 10",
+      "title": "Explicit BIM Evidence Can Raise Maturity",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-BIM-002",
+      "phase": "Phase 10",
+      "title": "Revit/IFC/ISO Evidence Is Grounded",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-BIM-003",
+      "phase": "Phase 10",
+      "title": "BIM Team Evidence Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-004",
+      "phase": "Phase 10",
+      "title": "No BIM Mention Does Not Mean No BIM Capability",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_004_no_bim_mention_is_unknown_not_no_bim",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_004_no_bim_mention_is_unknown_not_no_bim"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FIT-001",
+      "phase": "Phase 10",
+      "title": "Strong Fit, Unknown Intent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FIT-002",
+      "phase": "Phase 10",
+      "title": "Weak Fit, Strong Intent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FIT-003",
+      "phase": "Phase 10",
+      "title": "Missing Job Does Not Lower Fit Automatically",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-INT-001",
+      "phase": "Phase 10",
+      "title": "Relevant Job Is Intent Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-INT-002",
+      "phase": "Phase 10",
+      "title": "Project Award Is Intent Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-INT-003",
+      "phase": "Phase 10",
+      "title": "Tender Is Intent Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-INT-004",
+      "phase": "Phase 10",
+      "title": "Missing Intent Remains unknown/none According To Contract",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OPP-001",
+      "phase": "Phase 10",
+      "title": "Direct Delivery Opportunity",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OPP-002",
+      "phase": "Phase 10",
+      "title": "Technology Partnership Opportunity",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OPP-003",
+      "phase": "Phase 10",
+      "title": "Multiple Opportunity Types Allowed",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OPP-004",
+      "phase": "Phase 10",
+      "title": "Opportunity Type Is Not Stated As Verified Fact Without Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_tier_bim_fit_intent_opp"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-001",
+      "phase": "Phase 10",
+      "title": "XLSX Import",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-002",
+      "phase": "Phase 10",
+      "title": "CSV Import",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-003",
+      "phase": "Phase 10",
+      "title": "Preserve Source Row Reference",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-004",
+      "phase": "Phase 10",
+      "title": "Preserve Raw Human Tier",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-005",
+      "phase": "Phase 10",
+      "title": "Preserve Notes",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-006",
+      "phase": "Phase 10",
+      "title": "Preserve Historical Source",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-007",
+      "phase": "Phase 10",
+      "title": "Preserve Contact Dates",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-008",
+      "phase": "Phase 10",
+      "title": "Preserve Follow-Up Dates",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-009",
+      "phase": "Phase 10",
+      "title": "Preserve Reply Status",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-010",
+      "phase": "Phase 10",
+      "title": "Preserve Wrong/Invalid Email State",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-011",
+      "phase": "Phase 10",
+      "title": "Missing Fields Stay Missing",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-007",
+      "phase": "Phase 10",
+      "title": "Same Historical File Imports Idempotently",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_007_historical_import_is_idempotent",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_007_historical_import_is_idempotent"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-EMAIL-001",
+      "phase": "Phase 10",
+      "title": "Split Multiple Emails",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-EMAIL-002",
+      "phase": "Phase 10",
+      "title": "Email Classification",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-EMAIL-003",
+      "phase": "Phase 10",
+      "title": "Historical Email Is Not Auto-Verified",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-EMAIL-004",
+      "phase": "Phase 10",
+      "title": "Raw Original Cell Preserved For Audit",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-006",
+      "phase": "Phase 10",
+      "title": "Previously Contacted Company Does Not Start New Cold Outreach",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_006_historical_contacted_does_not_enter_cold_outreach",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_006_historical_contacted_does_not_enter_cold_outreach"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-OUTCOME-001",
+      "phase": "Phase 10",
+      "title": "Positive Reply Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-OUTCOME-002",
+      "phase": "Phase 10",
+      "title": "Actual Respondent May Differ From Original Mailbox",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-OUTCOME-003",
+      "phase": "Phase 10",
+      "title": "Reply Outcome Does Not Automatically Re-score Entire Market",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HIST-OUTCOME-004",
+      "phase": "Phase 10",
+      "title": "Small Sample Not Used For Automatic Statistical Optimization",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_historical_import_and_outreach_guard"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-005",
+      "phase": "Phase 10",
+      "title": "Directory Result Never Creates StructuredJob",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_005_directory_result_never_becomes_fake_structured_job",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_005_directory_result_never_becomes_fake_structured_job"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOJOB-002",
+      "phase": "Phase 10",
+      "title": "Project Award Never Creates StructuredJob",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOJOB-003",
+      "phase": "Phase 10",
+      "title": "Tender Never Creates StructuredJob",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOJOB-004",
+      "phase": "Phase 10",
+      "title": "Website Company Profile Never Creates StructuredJob",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOJOB-005",
+      "phase": "Phase 10",
+      "title": "Actual Job Still Creates StructuredJob Through Existing Path",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-JOB-001",
+      "phase": "Phase 10",
+      "title": "Existing Phase 3 Job Query Still Works",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-JOB-002",
+      "phase": "Phase 10",
+      "title": "Existing Phase 4 StructuredJob Shape Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-011",
+      "phase": "Phase 10",
+      "title": "Frozen Phase 5 Score Remains Unchanged",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_011_phase5_frozen_score_remains_unchanged",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_011_phase5_frozen_score_remains_unchanged"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-001",
+      "phase": "Phase 10",
+      "title": "Manual Domain Seed",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-002",
+      "phase": "Phase 10",
+      "title": "Manual Company Name Seed",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-003",
+      "phase": "Phase 10",
+      "title": "Directory Company Candidate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-004",
+      "phase": "Phase 10",
+      "title": "Website Resolution",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-005",
+      "phase": "Phase 10",
+      "title": "Candidate Research",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-006",
+      "phase": "Phase 10",
+      "title": "No Job Required For Candidate Creation",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-COMP-007",
+      "phase": "Phase 10",
+      "title": "Qualification Depends On Company Evidence, Not Fake Job",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-PROJ-001",
+      "phase": "Phase 10",
+      "title": "Project Observation Creates CandidateCompany",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-PROJ-002",
+      "phase": "Phase 10",
+      "title": "Tender Observation Creates CandidateCompany",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-PROJ-003",
+      "phase": "Phase 10",
+      "title": "Participating Company Identity Resolved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-PROJ-004",
+      "phase": "Phase 10",
+      "title": "Project Evidence Retains Source",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-PROJ-005",
+      "phase": "Phase 10",
+      "title": "Project Value Not Invented",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-PROJ-006",
+      "phase": "Phase 10",
+      "title": "Missing Company Role Stays Unknown",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_no_fake_jobs_and_discovery_modes"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-001",
+      "phase": "Phase 10",
+      "title": "Official Website Preferred",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-002",
+      "phase": "Phase 10",
+      "title": "Services Extracted As Grounded Facts",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-003",
+      "phase": "Phase 10",
+      "title": "Project Sectors Grounded",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-004",
+      "phase": "Phase 10",
+      "title": "Careers URL Captured",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-005",
+      "phase": "Phase 10",
+      "title": "BIM Terms Grounded",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-006",
+      "phase": "Phase 10",
+      "title": "No Revenue Fabrication",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-007",
+      "phase": "Phase 10",
+      "title": "No Employee Count Fabrication",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RES-008",
+      "phase": "Phase 10",
+      "title": "No Outsourcing Fact Fabrication",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OUT-001",
+      "phase": "Phase 10",
+      "title": "Assessment Uses Explainable Signals",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OUT-002",
+      "phase": "Phase 10",
+      "title": "High Potential Is Not Stored As \"outsources BIM = true\"",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OUT-003",
+      "phase": "Phase 10",
+      "title": "Missing Evidence -> unknown",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-OUT-004",
+      "phase": "Phase 10",
+      "title": "Assessment Cannot Leak Into Email As Verified Fact",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-AUTO-001",
+      "phase": "Phase 10",
+      "title": "Revit/API Hiring Signal",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-AUTO-002",
+      "phase": "Phase 10",
+      "title": "Python/C# Signal",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-AUTO-003",
+      "phase": "Phase 10",
+      "title": "Large Digital Team Signal",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-AUTO-004",
+      "phase": "Phase 10",
+      "title": "Missing Evidence -> unknown",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-AUTO-005",
+      "phase": "Phase 10",
+      "title": "Potential Is Strategy, Not Factual Claim",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-001",
+      "phase": "Phase 10",
+      "title": "Reject Irrelevant Company",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-002",
+      "phase": "Phase 10",
+      "title": "Watchlist Good Fit/Weak Intent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-003",
+      "phase": "Phase 10",
+      "title": "Research More",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-004",
+      "phase": "Phase 10",
+      "title": "Qualified For Enrichment",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-005",
+      "phase": "Phase 10",
+      "title": "Known Company",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-006",
+      "phase": "Phase 10",
+      "title": "Reengagement Review",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QUAL-007",
+      "phase": "Phase 10",
+      "title": "Suppressed",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-008",
+      "phase": "Phase 10",
+      "title": "Good Fit + Weak Intent Routes To Watchlist",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_008_good_fit_weak_intent_routes_to_watchlist",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_008_good_fit_weak_intent_routes_to_watchlist"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-WATCH-002",
+      "phase": "Phase 10",
+      "title": "Watch Reason Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-WATCH-003",
+      "phase": "Phase 10",
+      "title": "next_check_at Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-WATCH-004",
+      "phase": "Phase 10",
+      "title": "No Outreach From Watchlist Alone",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-WATCH-005",
+      "phase": "Phase 10",
+      "title": "Watchlist Persists Across Process Restart",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_qualification_watchlist_suppression"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-009",
+      "phase": "Phase 10",
+      "title": "New Job/Project Signal Can Promote Candidate",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_009_new_signal_promotes_watchlist_candidate",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_009_new_signal_promotes_watchlist_candidate"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-010",
+      "phase": "Phase 10",
+      "title": "Suppressed Company/Contact Cannot Qualify For Outreach",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_010_suppressed_company_cannot_qualify",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_010_suppressed_company_cannot_qualify"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P6-001",
+      "phase": "Phase 10",
+      "title": "Qualified Non-Job Candidate Reaches Enrichment Adapter",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P6-002",
+      "phase": "Phase 10",
+      "title": "Unqualified Candidate Does Not Reach Phase 6",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P6-003",
+      "phase": "Phase 10",
+      "title": "Historical Contact Reused Before Provider Call",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P6-004",
+      "phase": "Phase 10",
+      "title": "Historical Email Not Treated As Verified",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P6-005",
+      "phase": "Phase 10",
+      "title": "Existing Strong Identity Merge Rules Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-001",
+      "phase": "Phase 10",
+      "title": "Legacy Columns Remain",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-002",
+      "phase": "Phase 10",
+      "title": "Add company_tier",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-003",
+      "phase": "Phase 10",
+      "title": "Add bim_maturity",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-004",
+      "phase": "Phase 10",
+      "title": "Add fit_level",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-005",
+      "phase": "Phase 10",
+      "title": "Add intent_level",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-006",
+      "phase": "Phase 10",
+      "title": "Add outsourcing_potential",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-007",
+      "phase": "Phase 10",
+      "title": "Add automation_potential",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-008",
+      "phase": "Phase 10",
+      "title": "Add discovery_sources",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-009",
+      "phase": "Phase 10",
+      "title": "Add historical state fields",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P7-010",
+      "phase": "Phase 10",
+      "title": "Optional New Sheets Are Additive",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-012",
+      "phase": "Phase 10",
+      "title": "Phase 8 Receives Only Grounded Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_012_phase8_grounding_rejects_subjective_claims",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_012_phase8_grounding_rejects_subjective_claims"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P9-001",
+      "phase": "Phase 10",
+      "title": "Existing Phase 9 Send History Blocks New Cold Sequence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P9-002",
+      "phase": "Phase 10",
+      "title": "Existing Active Conversation Blocks New Cold Sequence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P9-003",
+      "phase": "Phase 10",
+      "title": "Suppression Is Authoritative",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P9-004",
+      "phase": "Phase 10",
+      "title": "Phase 10 Cannot Mark Draft Approved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P9-005",
+      "phase": "Phase 10",
+      "title": "Phase 10 Cannot Send Email",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-P9-006",
+      "phase": "Phase 10",
+      "title": "Phase 10 Cannot Reset Sent State",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_downstream_bridges"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-013",
+      "phase": "Phase 10",
+      "title": "One Source Failure Preserves Other Source Results",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_013_failure_of_one_source_preserves_other_results",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_013_failure_of_one_source_preserves_other_results"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-001",
+      "phase": "Phase 10",
+      "title": "Create DiscoveryRun",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-002",
+      "phase": "Phase 10",
+      "title": "started_at / completed_at",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-003",
+      "phase": "Phase 10",
+      "title": "Markets Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-004",
+      "phase": "Phase 10",
+      "title": "Source IDs Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-005",
+      "phase": "Phase 10",
+      "title": "observations_found Accurate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-006",
+      "phase": "Phase 10",
+      "title": "new_candidates Accurate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-007",
+      "phase": "Phase 10",
+      "title": "known_candidates Accurate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-008",
+      "phase": "Phase 10",
+      "title": "watchlist_candidates Accurate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-009",
+      "phase": "Phase 10",
+      "title": "qualified_candidates Accurate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-010",
+      "phase": "Phase 10",
+      "title": "errors Accurate",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-RUN-011",
+      "phase": "Phase 10",
+      "title": "config_version Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-014",
+      "phase": "Phase 10",
+      "title": "Repeated Daily Run Does Not Duplicate Companies",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_014_repeated_daily_run_does_not_duplicate_candidates",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_014_repeated_daily_run_does_not_duplicate_candidates"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DAILY-001",
+      "phase": "Phase 10",
+      "title": "CLI Entry Exists",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DAILY-002",
+      "phase": "Phase 10",
+      "title": "API Entry Exists",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DAILY-003",
+      "phase": "Phase 10",
+      "title": "Daily Discovery Sends Zero Email",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DAILY-004",
+      "phase": "Phase 10",
+      "title": "Daily Discovery Creates No Approval",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DAILY-005",
+      "phase": "Phase 10",
+      "title": "Daily Discovery Partial Failure Isolated",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FALLBACK-001",
+      "phase": "Phase 10",
+      "title": "Job Search Meets Target",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FALLBACK-002",
+      "phase": "Phase 10",
+      "title": "Weak Job Results Trigger Company-First",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FALLBACK-003",
+      "phase": "Phase 10",
+      "title": "Weak Company Results Trigger Project/Tender",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FALLBACK-004",
+      "phase": "Phase 10",
+      "title": "Good Fit/No Intent Goes Watchlist",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FALLBACK-005",
+      "phase": "Phase 10",
+      "title": "No Arbitrary Lead Count Fabrication",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HEALTH-001",
+      "phase": "Phase 10",
+      "title": "last_success",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HEALTH-002",
+      "phase": "Phase 10",
+      "title": "last_failure",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HEALTH-003",
+      "phase": "Phase 10",
+      "title": "last_error Sanitized",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HEALTH-004",
+      "phase": "Phase 10",
+      "title": "results_last_run",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-HEALTH-005",
+      "phase": "Phase 10",
+      "title": "new_candidates_last_run",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-001",
+      "phase": "Phase 10",
+      "title": "Source API Keys Not Returned",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-002",
+      "phase": "Phase 10",
+      "title": "Source API Keys Not Persisted In Candidate Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-003",
+      "phase": "Phase 10",
+      "title": "Historical File Path Traversal Rejected",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-004",
+      "phase": "Phase 10",
+      "title": "SQL Injection Inputs Remain Data",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-005",
+      "phase": "Phase 10",
+      "title": "Source Error Secrets Sanitized",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-006",
+      "phase": "Phase 10",
+      "title": "No Personal Phone Scraping Added",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-007",
+      "phase": "Phase 10",
+      "title": "No Personal Email Promotion",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-SEC-008",
+      "phase": "Phase 10",
+      "title": "Business Data Only According To Contract",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_discovery_runs_health_security"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-REG-015",
+      "phase": "Phase 10",
+      "title": "Runtime Database Never Enters Release ZIP",
+      "status": "PASS",
+      "mapped_test": "tests/test_phase10_regressions.py::test_p10_reg_015_denylist_excludes_runtime_databases",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/test_phase10_regressions.py::test_p10_reg_015_denylist_excludes_runtime_databases"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-001",
+      "phase": "Phase 10",
+      "title": "Candidate Tables Initialize",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-002",
+      "phase": "Phase 10",
+      "title": "Reinitialization Idempotent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-003",
+      "phase": "Phase 10",
+      "title": "Candidate Identity Constraints",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-004",
+      "phase": "Phase 10",
+      "title": "Observation Uniqueness",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-005",
+      "phase": "Phase 10",
+      "title": "Evidence Persistence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-006",
+      "phase": "Phase 10",
+      "title": "Watchlist Persistence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-007",
+      "phase": "Phase 10",
+      "title": "Historical Batch Persistence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-008",
+      "phase": "Phase 10",
+      "title": "Transaction Rollback On Failure",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-009",
+      "phase": "Phase 10",
+      "title": "No Half-Written Candidate On Internal Error",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-DB-010",
+      "phase": "Phase 10",
+      "title": "Schema Version/Migration Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-POS-001",
+      "phase": "Phase 10",
+      "title": "Direct Delivery Positive Outcome Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-POS-002",
+      "phase": "Phase 10",
+      "title": "Strategic Partnership Positive Outcome Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-POS-003",
+      "phase": "Phase 10",
+      "title": "Outcome Type Does Not Alter Historical Facts",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-POS-004",
+      "phase": "Phase 10",
+      "title": "Positive Outcome Can Inform Opportunity Type",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-POS-005",
+      "phase": "Phase 10",
+      "title": "Positive Outcome Does Not Auto-Approve Future Outreach",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-KNOWN-001",
+      "phase": "Phase 10",
+      "title": "Known Historical Company Found Again",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-KNOWN-002",
+      "phase": "Phase 10",
+      "title": "New Observation Appended",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-KNOWN-003",
+      "phase": "Phase 10",
+      "title": "No New Cold Sequence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-KNOWN-004",
+      "phase": "Phase 10",
+      "title": "New Strong Signal -> reengagement_review",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-KNOWN-005",
+      "phase": "Phase 10",
+      "title": "No Auto Re-Engagement Send",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FRESH-001",
+      "phase": "Phase 10",
+      "title": "observed_at Preserved",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FRESH-002",
+      "phase": "Phase 10",
+      "title": "fresh/recent/old/unknown Classification",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FRESH-003",
+      "phase": "Phase 10",
+      "title": "Historical Evidence Not Deleted",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FRESH-004",
+      "phase": "Phase 10",
+      "title": "Stale Job Signal Not Treated As Current Intent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-FRESH-005",
+      "phase": "Phase 10",
+      "title": "Newer Evidence Can Supersede For Current Assessment Without Deleting History",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LIMIT-001",
+      "phase": "Phase 10",
+      "title": "Candidate Limit",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LIMIT-002",
+      "phase": "Phase 10",
+      "title": "Research Page Limit",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LIMIT-003",
+      "phase": "Phase 10",
+      "title": "Source Limit",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LIMIT-004",
+      "phase": "Phase 10",
+      "title": "Watchlist Check Limit",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LIMIT-005",
+      "phase": "Phase 10",
+      "title": "No Silent Overrun",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-001",
+      "phase": "Phase 10",
+      "title": "Reuse ai_engine/llm_client.py",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-002",
+      "phase": "Phase 10",
+      "title": "No Second Ollama Client",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-003",
+      "phase": "Phase 10",
+      "title": "LLM Cannot Invent Company Facts",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-004",
+      "phase": "Phase 10",
+      "title": "LLM Cannot Invent Jobs",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-005",
+      "phase": "Phase 10",
+      "title": "LLM Cannot Assign Frozen Numeric Lead Score",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-006",
+      "phase": "Phase 10",
+      "title": "Weak Semantic Output Falls Back Safely",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-LLM-007",
+      "phase": "Phase 10",
+      "title": "Tier Can Be unknown",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOSEND-001",
+      "phase": "Phase 10",
+      "title": "discovery_v2 Does Not Import SMTP Sender",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOSEND-002",
+      "phase": "Phase 10",
+      "title": "discovery_v2 Does Not Call SendOrchestrator",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOSEND-003",
+      "phase": "Phase 10",
+      "title": "Discovery API Has No Auto-Send Path",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-NOSEND-004",
+      "phase": "Phase 10",
+      "title": "Provider Delivery Count Always Zero",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-UIBRIDGE-001",
+      "phase": "Phase 10",
+      "title": "Candidate List Has Summary Fields",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-UIBRIDGE-002",
+      "phase": "Phase 10",
+      "title": "Candidate Detail Has Evidence",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-UIBRIDGE-003",
+      "phase": "Phase 10",
+      "title": "Source Health Available",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-UIBRIDGE-004",
+      "phase": "Phase 10",
+      "title": "Watchlist Status Available",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-UIBRIDGE-005",
+      "phase": "Phase 10",
+      "title": "Qualification Reason Available",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-001",
+      "phase": "Phase 10",
+      "title": "Unmapped deterministic case cannot PASS",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-002",
+      "phase": "Phase 10",
+      "title": "Empty pass test cannot count as coverage",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-003",
+      "phase": "Phase 10",
+      "title": "Failed pytest node -> FAIL",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-004",
+      "phase": "Phase 10",
+      "title": "Skipped optional/live source -> NOT_RUN",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-005",
+      "phase": "Phase 10",
+      "title": "Expected and Actual independent",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-006",
+      "phase": "Phase 10",
+      "title": "false_pass_count dynamic",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-007",
+      "phase": "Phase 10",
+      "title": "Mock source success labeled mock",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-008",
+      "phase": "Phase 10",
+      "title": "Fake job count computed, not hardcoded",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-009",
+      "phase": "Phase 10",
+      "title": "Duplicate-company metric computed",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    },
+    {
+      "case_id": "P10-QA-010",
+      "phase": "Phase 10",
+      "title": "Phase 5 regression metric computed",
+      "status": "PASS",
+      "mapped_test": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console",
+      "expected": {
+        "status": "PASS"
+      },
+      "actual": {
+        "status": "PASS",
+        "test_node": "tests/acceptance/test_phase10_acceptance.py::test_p10_remaining_invariants_and_console"
+      },
+      "differences": [],
+      "reason": "",
+      "has_stub_pass": false
+    }
+  ]
+}

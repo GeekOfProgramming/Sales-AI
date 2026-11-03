@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Batch Research Results — Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+      <h1 class="page-title">Batch Company Research Results</h1>
+      <p class="page-subtitle">
+        Completed bounded research run for {{ results|length }} candidate{{ 's' if results|length > 1 else '' }}.
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="/sales/candidates" class="btn btn-secondary">&larr; Back to Candidates</a>
+      <a href="/sales/register" class="btn btn-secondary">Lead Register</a>
+    </div>
+  </div>
+</div>
+
+{% if message %}
+<div class="alert alert-success" style="margin-bottom: 1.25rem;">
+  {{ message }}
+</div>
+{% endif %}
+
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header" style="background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: 0.85rem 1.25rem;">
+    <h3 style="margin: 0; font-size: 1.1rem; color: #212529;">Batch Execution Summary</h3>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    <div class="table-responsive">
+      <table class="table" style="margin-bottom: 0;">
+        <thead>
+          <tr style="background-color: #f1f3f5;">
+            <th>Candidate</th>
+            <th>Domain</th>
+            <th>Proposed Priority</th>
+            <th>P.IVA</th>
+            <th>Emails / Phones</th>
+            <th>Pages</th>
+            <th>Status</th>
+            <th style="text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in results %}
+          <tr>
+            <td>
+              <strong>{{ r.research.company_name }}</strong>
+              <div style="font-size: 0.8rem; color: #666;"><code>{{ r.candidate.candidate_id }}</code></div>
+            </td>
+            <td><code>{{ r.research.canonical_domain }}</code></td>
+            <td>
+              <span class="badge {% if 'A' in r.research.proposed_priority_level %}badge-success{% else %}badge-warning{% endif %}">
+                {{ r.research.proposed_priority_level }}
+              </span>
+            </td>
+            <td><code>{{ r.research.p_iva or 'Not Found' }}</code></td>
+            <td style="font-size: 0.85rem;">
+              <div>{{ r.research.email or 'No email' }}</div>
+              <div style="color: #666;">{{ r.research.telephone or 'No phone' }}</div>
+            </td>
+            <td>{{ r.research.fetched_pages|length }}</td>
+            <td>
+              {% if r.research.is_dnc_or_restricted %}
+              <span class="badge badge-danger">Restricted (DNC/Review)</span>
+              {% else %}
+              <span class="badge badge-info">Researched</span>
+              {% endif %}
+            </td>
+            <td style="text-align: right;">
+              <a href="/sales/candidates/{{ r.candidate.candidate_id }}/research" class="btn btn-primary btn-sm">
+                Review &amp; Approve
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" style="text-align: center; color: #6c757d; padding: 2rem;">No candidates researched in this batch.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

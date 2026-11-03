@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Discoveries | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Discovery Executions</h1>
+    <p class="page-subtitle">Multi-source candidate identification runs with strict zero-send invariants.</p>
+  </div>
+</div>
+
+<!-- Trigger Run Card -->
+<div class="card" id="trigger-run">
+  <div class="card-title">
+    <span>Trigger New Discovery</span>
+  </div>
+  <form method="POST" action="/sales/discoveries/run">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+      <div class="form-group">
+        <label class="form-label">Search Query</label>
+        <input type="text" name="query" class="form-control" value="BIM Architecture" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Discovery Mode</label>
+        <select name="discovery_mode" class="form-control">
+          <option value="company_first">Company-First (Broad Discovery)</option>
+          <option value="project_tender">Project/Tender Mode</option>
+          <option value="lead_first">Lead-First Mode</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Run Discovery</button>
+  </form>
+</div>
+
+<!-- Run History Table -->
+<div class="card">
+  <div class="card-title">
+    <span>Recent Discovery Runs ({{ runs|length }})</span>
+  </div>
+  {% if runs %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Mode</th>
+          <th>Source</th>
+          <th>Started</th>
+          <th>Status</th>
+          <th>Observations</th>
+          <th>New</th>
+          <th>Known</th>
+          <th>Watchlist</th>
+          <th>Qualified</th>
+          <th>Rejected</th>
+          <th>Errors</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td><code>{{ r.run_id[:14] }}</code></td>
+          <td>{{ r.mode }}</td>
+          <td><strong>{{ r.source_name }}</strong></td>
+          <td>{{ r.started_at[:19] }}</td>
+          <td>
+            <span class="badge {% if r.status == 'completed' %}badge-success{% else %}badge-warning{% endif %}">
+              {{ r.status }}
+            </span>
+          </td>
+          <td>{{ r.observations_found }}</td>
+          <td><strong>{{ r.new_candidates }}</strong></td>
+          <td>{{ r.known_candidates }}</td>
+          <td>{{ r.watchlist_candidates }}</td>
+          <td>{{ r.qualified_candidates }}</td>
+          <td>{{ r.rejected_candidates }}</td>
+          <td>
+            {% if r.errors %}
+            <span class="badge badge-danger">{{ r.errors|length }} error(s)</span>
+            {% else %}
+            <span class="badge badge-muted">0</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No candidates found in this run or no discovery runs yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

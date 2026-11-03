@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 CASE_TO_TEST_MAPPING: Dict[str, str] = {
     # Main Golden Case
     "P9-REVIEW-001": "tests/acceptance/test_phase9_acceptance.py::test_p9_review_001_import_pending_draft",
@@ -433,6 +435,170 @@ def calculate_phase9_false_pass_count(cases: List[Dict[str, Any]]) -> int:
     return false_passes
 
 
+def derive_critical_regressions(cases: List[Dict[str, Any]]) -> Dict[str, str]:
+    cases_by_id = {c["case_id"]: c for c in cases}
+    regressions: Dict[str, str] = {}
+    for i in range(1, 22):
+        cid = f"P9-REG-{i:03d}"
+        if cid in cases_by_id:
+            regressions[cid] = cases_by_id[cid].get("status", "NOT_RUN")
+        else:
+            regressions[cid] = "NOT_RUN"
+    return regressions
+
+
+def derive_invariants(cases: List[Dict[str, Any]]) -> Dict[str, bool]:
+    cases_by_id = {c["case_id"]: c for c in cases}
+
+    def all_passed(case_ids: List[str]) -> bool:
+        if not case_ids:
+            return False
+        for cid in case_ids:
+            c = cases_by_id.get(cid)
+            if not c or c.get("status") != "PASS":
+                return False
+        return True
+
+    return {
+        "approval_never_triggers_send": all_passed(["P9-REG-008"]),
+        "stale_approval_fingerprint_blocks_send": all_passed(["P9-REG-001"]),
+        "already_sent_idempotency_prevents_duplicate": all_passed(["P9-REG-006"]),
+        "suppressed_recipient_blocks_send": all_passed(["P9-REG-005"]),
+        "dry_run_invokes_zero_network_transmissions": all_passed(["P9-REG-003"]),
+        "zero_llm_calls_in_phase9": all_passed([f"P9-NOLLM-{i:03d}" for i in range(1, 5)]),
+        "secrets_never_logged_or_exposed": all_passed([f"P9-SEC-{i:03d}" for i in range(1, 11)]),
+    }
+
+
+def derive_safety_counters(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
+    cases_by_id = {c["case_id"]: c for c in cases}
+
+    def all_passed(case_ids: List[str]) -> bool:
+        if not case_ids:
+            return False
+        for cid in case_ids:
+            c = cases_by_id.get(cid)
+            if not c or c.get("status") != "PASS":
+                return False
+        return True
+
+    counters: Dict[str, Any] = {}
+
+    p_dry = all_passed(["P9-REG-003"])
+    counters["provider_calls_in_dry_run"] = 0 if p_dry else None
+    counters["provider_calls_in_dry_run_source"] = CASE_TO_TEST_MAPPING.get(
+        "P9-REG-003", "tests/test_sending.py::test_dry_run_invokes_zero_network_calls"
+    )
+
+    p_unapp = all_passed(["P9-REG-002"])
+    counters["provider_calls_for_unapproved"] = 0 if p_unapp else None
+    counters["provider_calls_for_unapproved_source"] = CASE_TO_TEST_MAPPING.get(
+        "P9-REG-002", "tests/test_sending.py::test_unapproved_draft_send_blocked"
+    )
+
+    p_dup = all_passed(["P9-REG-006"])
+    counters["duplicate_send_count"] = 0 if p_dup else None
+    counters["duplicate_send_count_source"] = CASE_TO_TEST_MAPPING.get(
+        "P9-REG-006", "tests/test_sending.py::test_idempotent_already_sent_blocked"
+    )
+
+    p_supp = all_passed(["P9-REG-005"])
+    counters["suppression_bypass_count"] = 0 if p_supp else None
+    counters["suppression_bypass_count_source"] = CASE_TO_TEST_MAPPING.get(
+        "P9-REG-005", "tests/test_sending.py::test_suppressed_recipient_blocks_send"
+    )
+
+    p_stale = all_passed(["P9-REG-001"])
+    counters["stale_approval_bypass_count"] = 0 if p_stale else None
+    counters["stale_approval_bypass_count_source"] = CASE_TO_TEST_MAPPING.get(
+        "P9-REG-001", "tests/test_sending.py::test_stale_approval_fingerprint_mismatch_blocks_send"
+    )
+
+    sec_ids = [f"P9-SEC-{i:03d}" for i in range(1, 11)] + ["P9-REG-011"]
+    p_sec = all_passed(sec_ids)
+    counters["secrets_detected"] = 0 if p_sec else None
+    counters["secrets_detected_source"] = "tests/acceptance/test_phase9_acceptance.py::test_p9_sec_001_secrets_never_logged, tests/test_sending.py::test_smtp_sender_auth_error_sanitized"
+
+    nollm_ids = [f"P9-NOLLM-{i:03d}" for i in range(1, 5)]
+    p_nollm = all_passed(nollm_ids)
+    counters["llm_calls_detected"] = 0 if p_nollm else None
+    counters["llm_calls_detected_source"] = "tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_001_zero_llm_code_path, tests/acceptance/test_phase9_acceptance.py::test_p9_nollm_002_to_004_zero_llm_calls"
+
+    pack_ids = [f"P9-PACK-{i:03d}" for i in range(1, 6)]
+    p_pack = all_passed(pack_ids)
+    counters["runtime_db_packaged"] = 0 if p_pack else None
+    counters["runtime_db_packaged_source"] = "tests/acceptance/test_phase9_acceptance.py::test_p9_pack_001_to_005_release_zip_security"
+
+    return counters
+
+
+def build_phase9_report(cases: List[Dict[str, Any]], git_commit: str, now_iso: str) -> Dict[str, Any]:
+    false_pass_count = calculate_phase9_false_pass_count(cases)
+    passed_count = sum(1 for c in cases if c["status"] == "PASS")
+    failed_count = sum(1 for c in cases if c["status"] == "FAIL")
+    not_run_count = sum(1 for c in cases if c["status"] == "NOT_RUN")
+    unmapped_cases = sum(1 for c in cases if not c.get("mapped_test"))
+    mapped_executable_cases = sum(1 for c in cases if c.get("mapped_test"))
+    executed_cases = sum(1 for c in cases if c["status"] != "NOT_RUN")
+
+    live_case = next((c for c in cases if c["case_id"] == "P9-LIVE-SMTP-001"), None)
+    live_smtp_status = live_case["status"] if live_case else "NOT_RUN"
+    live_smtp_executed = live_smtp_status in ["PASS", "FAIL"]
+
+    critical_regressions = derive_critical_regressions(cases)
+    invariants = derive_invariants(cases)
+    safety_counters = derive_safety_counters(cases)
+
+    return {
+        "phase": "Phase 9",
+        "description": "Human Review, Approval, Safe Sending & Audit Trail",
+        "run_timestamp": now_iso,
+        "generated_at": now_iso,  # backward compatibility alias
+        "git_commit": git_commit,
+
+        "total_catalog_cases": len(cases),
+        "total_cases": len(cases),  # backward compatibility alias
+        "mapped_executable_cases": mapped_executable_cases,
+        "executed_cases": executed_cases,
+
+        "passed": passed_count,
+        "failed": failed_count,
+        "review": 0,
+        "deferred_model": 0,
+        "deferred": 0,  # backward compatibility alias
+        "not_run": not_run_count,
+
+        "unmapped_deterministic_cases": unmapped_cases,
+        "unmapped_cases": unmapped_cases,  # backward compatibility alias
+        "false_pass_count": false_pass_count,
+
+        "live_smtp_status": live_smtp_status,
+        "live_smtp_executed": live_smtp_executed,
+
+        "critical_regressions": critical_regressions,
+
+        "provider_calls_in_dry_run": safety_counters["provider_calls_in_dry_run"],
+        "provider_calls_in_dry_run_source": safety_counters["provider_calls_in_dry_run_source"],
+        "provider_calls_for_unapproved": safety_counters["provider_calls_for_unapproved"],
+        "provider_calls_for_unapproved_source": safety_counters["provider_calls_for_unapproved_source"],
+        "duplicate_send_count": safety_counters["duplicate_send_count"],
+        "duplicate_send_count_source": safety_counters["duplicate_send_count_source"],
+        "suppression_bypass_count": safety_counters["suppression_bypass_count"],
+        "suppression_bypass_count_source": safety_counters["suppression_bypass_count_source"],
+        "stale_approval_bypass_count": safety_counters["stale_approval_bypass_count"],
+        "stale_approval_bypass_count_source": safety_counters["stale_approval_bypass_count_source"],
+        "secrets_detected": safety_counters["secrets_detected"],
+        "secrets_detected_source": safety_counters["secrets_detected_source"],
+        "llm_calls_detected": safety_counters["llm_calls_detected"],
+        "llm_calls_detected_source": safety_counters["llm_calls_detected_source"],
+        "runtime_db_packaged": safety_counters["runtime_db_packaged"],
+        "runtime_db_packaged_source": safety_counters["runtime_db_packaged_source"],
+
+        "invariants": invariants,
+        "cases": cases,
+    }
+
+
 def run_phase9_report_generation():
     project_root = Path(__file__).parent.parent
     xml_path = project_root / "tests" / "reports" / "phase9_junit.xml"
@@ -493,49 +659,12 @@ def run_phase9_report_generation():
             "execution_time_s": actual.get("execution_time_s", 0.0),
         })
 
-    false_pass_count = calculate_phase9_false_pass_count(p9_cases)
-    passed_count = sum(1 for c in p9_cases if c["status"] == "PASS")
-    failed_count = sum(1 for c in p9_cases if c["status"] == "FAIL")
-    not_run_count = sum(1 for c in p9_cases if c["status"] == "NOT_RUN")
-
-    phase9_report = {
-        "phase": "Phase 9",
-        "description": "Human Review, Approval, Safe Sending & Audit Trail",
-        "generated_at": now_iso,
-        "git_commit": git_commit,
-        "total_cases": len(p9_cases),
-        "passed": passed_count,
-        "failed": failed_count,
-        "review": 0,
-        "deferred": 0,
-        "not_run": not_run_count,
-        "false_pass_count": false_pass_count,
-        "unmapped_cases": unmapped_cases,
-        "unmapped_deterministic_cases": unmapped_cases,
-        "provider_calls_in_dry_run": 0,
-        "provider_calls_for_unapproved": 0,
-        "duplicate_send_count": 0,
-        "suppression_bypass_count": 0,
-        "stale_approval_bypass_count": 0,
-        "secrets_detected": 0,
-        "llm_calls_detected": 0,
-        "runtime_db_packaged": 0,
-        "invariants": {
-            "approval_never_triggers_send": True,
-            "stale_approval_fingerprint_blocks_send": True,
-            "already_sent_idempotency_prevents_duplicate": True,
-            "suppressed_recipient_blocks_send": True,
-            "dry_run_invokes_zero_network_transmissions": True,
-            "zero_llm_calls_in_phase9": True,
-            "secrets_never_logged_or_exposed": True,
-        },
-        "cases": p9_cases,
-    }
+    phase9_report = build_phase9_report(p9_cases, git_commit, now_iso)
 
     p9_file = Path("tests/reports/phase9_latest.json")
     with open(p9_file, "w", encoding="utf-8") as f:
         json.dump(phase9_report, f, indent=2, ensure_ascii=False)
-    print(f"Wrote {p9_file} with {len(p9_cases)} cases. Passed: {passed_count}, Failed: {failed_count}, Not Run: {not_run_count}, False pass count: {false_pass_count}, Unmapped cases: {unmapped_cases}")
+    print(f"Wrote {p9_file} with {len(p9_cases)} cases. Passed: {phase9_report['passed']}, Failed: {phase9_report['failed']}, Not Run: {phase9_report['not_run']}, False pass count: {phase9_report['false_pass_count']}, Unmapped cases: {phase9_report['unmapped_deterministic_cases']}")
 
     # Merge into latest_test_report.json
     report_file = Path("tests/reports/latest_test_report.json")
@@ -572,6 +701,12 @@ def run_phase9_report_generation():
     with open(report_file, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2, ensure_ascii=False)
     print(f"Wrote {report_file} with total {len(merged)} cases")
+
+    try:
+        from scripts.generate_test_report import generate_report
+        generate_report()
+    except Exception as e:
+        print(f"Warning: could not run generate_report: {e}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,24 @@
+<!-- Company-Centric Flow Banner (UX-01) -->
+<div class="company-context-bar">
+  <div class="company-context-info">
+    <span class="company-context-label">Company Context</span>
+    <h2 class="company-context-name">{{ flow_company_name }}</h2>
+    <span class="company-context-meta">
+      Domain: <code>{{ flow_canonical_domain or 'N/A' }}</code> &bull; ID: <code>{{ flow_candidate_id }}</code>
+    </span>
+  </div>
+  <div class="company-flow-tabs">
+    <a href="/sales/candidates/{{ flow_candidate_id }}" class="company-flow-step {% if flow_current_step == 'candidate_detail' %}active{% endif %}">
+      1. Candidate Detail
+    </a>
+    <a href="/sales/candidates/{{ flow_candidate_id }}/research" class="company-flow-step {% if flow_current_step == 'research_review' %}active{% endif %}">
+      2. Research Review
+    </a>
+    <a href="/sales/register/{{ flow_candidate_id }}" class="company-flow-step {% if flow_current_step == 'lead_register' %}active{% endif %}">
+      3. 13-Field Register
+    </a>
+    <a href="/sales/drafts?q={{ flow_canonical_domain }}" class="company-flow-step {% if flow_current_step == 'outreach' %}active{% endif %}">
+      4. Outreach
+    </a>
+  </div>
+</div>

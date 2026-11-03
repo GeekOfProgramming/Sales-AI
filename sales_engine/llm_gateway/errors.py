@@ -1,0 +1,433 @@
+"""
+sales_engine/llm_gateway/errors.py
+Standardized exception hierarchy for SalesAI LLM Gateway.
+Ensures zero leakage of sensitive data, prompts, or credentials in strings/repr.
+"""
+
+from typing import Optional, Any
+
+from sales_engine.llm_gateway.contracts import sanitize_log_str
+
+
+class LLMError(Exception):
+    """
+    Base exception for all LLM Gateway errors.
+    Contains stable error codes and retryability flags without leaking sensitive data.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        error_code: str = "LLM_ERROR",
+        retryable: bool = False,
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code
+        self.retryable = retryable
+        self.provider = provider
+        self.task_id = task_id
+
+    def __str__(self) -> str:
+        ctx = []
+        if self.provider:
+            ctx.append(f"provider={sanitize_log_str(self.provider)}")
+        if self.task_id:
+            ctx.append(f"task={sanitize_log_str(self.task_id)}")
+        ctx_str = f" [{', '.join(ctx)}]" if ctx else ""
+        safe_msg = sanitize_log_str(self.message, max_len=256)
+        return f"[{self.error_code}] {safe_msg}{ctx_str}"
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(error_code={self.error_code!r}, "
+            f"message={sanitize_log_str(self.message, max_len=256)!r}, retryable={self.retryable}, "
+            f"provider={sanitize_log_str(self.provider)!r}, task_id={sanitize_log_str(self.task_id)!r})"
+        )
+
+
+class LLMNotConfiguredError(LLMError):
+    """Raised when no provider/model is configured, active, or registered (fail-closed)."""
+
+    def __init__(
+        self,
+        message: str = "LLM Gateway is not configured or no provider is active.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="NOT_CONFIGURED",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMInvalidRequestError(LLMError):
+    """Raised when provider returns HTTP 400 Bad Request (invalid arguments, malformed request, unparseable payload)."""
+
+    def __init__(
+        self,
+        message: str = "Invalid request or arguments sent to LLM provider.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="INVALID_REQUEST",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMAuthenticationError(LLMError):
+    """Raised when provider authentication fails (HTTP 401, invalid/missing API key)."""
+
+    def __init__(
+        self,
+        message: str = "Authentication failed with LLM provider (HTTP 401).",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="AUTH_ERROR",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMPermissionError(LLMAuthenticationError):
+    """Raised when provider returns HTTP 403 Forbidden (permission denied, unauthorized access). Subclasses LLMAuthenticationError for backward compatibility."""
+
+    def __init__(
+        self,
+        message: str = "Permission denied by LLM provider (HTTP 403).",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            provider=provider,
+            task_id=task_id,
+        )
+        self.error_code = "PERMISSION_DENIED"
+
+
+class LLMTimeoutError(LLMError):
+    """Raised when an LLM call exceeds the configured timeout."""
+
+    def __init__(
+        self,
+        message: str = "LLM request timed out.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+        timeout_category: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="TIMEOUT",
+            retryable=True,
+            provider=provider,
+            task_id=task_id,
+        )
+        self.timeout_category = timeout_category or "REQUEST_TIMEOUT"
+
+
+class LLMRateLimitError(LLMError):
+    """Raised when the upstream provider returns HTTP 429 Rate Limit."""
+
+    def __init__(
+        self,
+        message: str = "LLM provider rate limit exceeded.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+        cause_category: str = "UNKNOWN_RATE_LIMIT",
+        retry_after_seconds: Optional[float] = None,
+        definitive_cause_proven: bool = False,
+        diagnostic: Optional[Any] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="RATE_LIMIT",
+            retryable=True,
+            provider=provider,
+            task_id=task_id,
+        )
+        self.cause_category = cause_category
+        self.retry_after_seconds = retry_after_seconds
+        self.definitive_cause_proven = definitive_cause_proven
+        self.diagnostic = diagnostic
+
+
+class LLMQuotaExceededError(LLMError):
+    """Raised when the provider account runs out of credits or billing quota."""
+
+    def __init__(
+        self,
+        message: str = "LLM provider account quota/credits exhausted.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="QUOTA_EXCEEDED",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMBudgetExceededError(LLMError):
+    """Raised when the local daily or monthly spending budget cap is exceeded."""
+
+    def __init__(
+        self,
+        message: str = "Local SalesAI LLM spending budget ceiling reached.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="BUDGET_EXCEEDED",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMInvalidSchemaError(LLMError):
+    """Raised when provider output fails strict schema parsing/validation."""
+
+    def __init__(
+        self,
+        message: str = "LLM response failed schema validation.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="INVALID_SCHEMA",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMNotFoundError(LLMError):
+    """Raised when provider returns HTTP 404 Not Found (e.g. unknown model, invalid endpoint path)."""
+
+    def __init__(
+        self,
+        message: str = "Requested resource or model was not found (HTTP 404).",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="NOT_FOUND",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMProviderUnavailableError(LLMError):
+    """Raised when provider service is unreachable, returning 5xx or connection error."""
+
+    def __init__(
+        self,
+        message: str = "LLM provider service is temporarily unavailable.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="PROVIDER_UNAVAILABLE",
+            retryable=True,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMRoutingIntegrityError(LLMError, ValueError):
+    """Raised when an approved route fails integrity validation or tampering is detected."""
+
+    def __init__(
+        self,
+        message: str = "Routing integrity validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="ROUTING_INTEGRITY_VIOLATION",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMEvaluationIntegrityError(LLMError, ValueError):
+    """Raised when an evaluation scorecard fails integrity verification (mismatch, replay, stale)."""
+
+    def __init__(
+        self,
+        message: str = "Evaluation scorecard integrity validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="EVALUATION_INTEGRITY_VIOLATION",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMPrivacyError(LLMError, ValueError):
+    """Base exception for all LLM Gateway privacy, redaction, and payload policy violations."""
+
+    def __init__(
+        self,
+        message: str = "Privacy or payload policy validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+        error_code: str = "PRIVACY_VIOLATION",
+    ):
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMUntrustedContentError(LLMPrivacyError):
+    """Raised when untrusted content contains fatal security violations (control chars, malformed envelope, severe injection)."""
+
+    def __init__(
+        self,
+        message: str = "Untrusted content security validation failed.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="UNTRUSTED_CONTENT_VIOLATION",
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMAllowlistViolationError(LLMPrivacyError):
+    """Raised when non-allowlisted, restricted, or forbidden fields are passed to the payload builder."""
+
+    def __init__(
+        self,
+        message: str = "Payload contains forbidden or non-allowlisted fields.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="ALLOWLIST_VIOLATION",
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMPrivacyRejectionError(LLMPrivacyError):
+    """Raised when payload fails privacy scrubbing or ambiguity requires conservative manual review."""
+
+    def __init__(
+        self,
+        message: str = "Payload rejected by privacy filter; manual review required.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="PRIVACY_REJECTION",
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMConcurrencyLimitError(LLMError):
+    """Raised when local concurrency cap or cooldown rate limit is exceeded."""
+
+    def __init__(
+        self,
+        message: str = "Local LLM concurrency limit or cooldown active.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="CONCURRENCY_LIMIT",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMUncertainUsageError(LLMError):
+    """Raised when provider returns unmeasured or ambiguous token usage, requiring manual review."""
+
+    def __init__(
+        self,
+        message: str = "LLM response contains missing or ambiguous token usage; flagged for operator review.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="UNCERTAIN_USAGE",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMDuplicateRequestError(LLMError):
+    """Raised when an identical request_id has already been processed or is currently in flight."""
+
+    def __init__(
+        self,
+        message: str = "Duplicate request_id cannot generate a second paid network dispatch.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="DUPLICATE_REQUEST_ID",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )
+
+
+class LLMCandidateMismatchError(LLMError, ValueError):
+    """Raised when request provider, model, tier, or task diverges from the authorized candidate."""
+
+    def __init__(
+        self,
+        message: str = "Request provider, model, tier, or task diverges from authorized candidate.",
+        provider: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ):
+        super().__init__(
+            message=message,
+            error_code="CANDIDATE_MISMATCH",
+            retryable=False,
+            provider=provider,
+            task_id=task_id,
+        )

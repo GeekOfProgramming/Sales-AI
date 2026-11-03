@@ -21,6 +21,8 @@ env/
 chroma_data/
 chroma_db/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # Environment Variables & Secrets
@@ -38,8 +40,23 @@ chroma_db/
 *.log
 scratch/
 .system_generated/
+runtime/
 PUBLIC_URL.txt
 
 # Large binaries
 cloudflared.exe
 *.exe
+*.zip
+
+# Research Snapshots & Persistent Crawl Evidence
+data/research_snapshots/
+research_cache.sqlite3
+research_cache.sqlite3-wal
+research_cache.sqlite3-shm
+data/staging/
+*.xlsx
+*.xlsm
+*.xls
+
+data/benchmark_results/
+benchmark_results/

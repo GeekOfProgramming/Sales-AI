@@ -1,0 +1,434 @@
+[
+  {
+    "case_id": "P11-GOLD-001",
+    "phase": "Phase 11",
+    "title": "No Autonomous Reply Send",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-002",
+    "phase": "Phase 11",
+    "title": "Suggested Reply Starts Pending Review",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-003",
+    "phase": "Phase 11",
+    "title": "Human Approval Required Before Reply Send",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-004",
+    "phase": "Phase 11",
+    "title": "Explicit Send Confirmation Required",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-005",
+    "phase": "Phase 11",
+    "title": "EMAIL_SEND_ENABLED=false Blocks Live Send",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-006",
+    "phase": "Phase 11",
+    "title": "Trusted Sender Required",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-007",
+    "phase": "Phase 11",
+    "title": "Phase 9 Suppression Blocks Recipient",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-008",
+    "phase": "Phase 11",
+    "title": "Duplicate Reply Send Blocked by Idempotency",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-009",
+    "phase": "Phase 11",
+    "title": "Sent Reply Revision Is Immutable",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-010",
+    "phase": "Phase 11",
+    "title": "Auto-Reply Cannot Trigger Reply Send",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-011",
+    "phase": "Phase 11",
+    "title": "Bounce Cannot Trigger Reply Send",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-GOLD-012",
+    "phase": "Phase 11",
+    "title": "Unsubscribe Cannot Trigger Reply Send and Creates Phase 9 Suppression",
+    "section": "Critical Safety Gates",
+    "mode": "deterministic",
+    "critical_safety": true
+  },
+  {
+    "case_id": "P11-THREAD-001",
+    "phase": "Phase 11",
+    "title": "Provider Thread ID Links Existing Conversation",
+    "section": "Threading",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-THREAD-002",
+    "phase": "Phase 11",
+    "title": "In-Reply-To Header Links Outbound Draft",
+    "section": "Threading",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-THREAD-003",
+    "phase": "Phase 11",
+    "title": "References Header Links Message Hierarchy",
+    "section": "Threading",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-THREAD-004",
+    "phase": "Phase 11",
+    "title": "Exact Recipient and Subject Alignment Links Conversation",
+    "section": "Threading",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-THREAD-005",
+    "phase": "Phase 11",
+    "title": "Exact Known Contact Email Links to Company",
+    "section": "Threading",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-THREAD-006",
+    "phase": "Phase 11",
+    "title": "Ambiguous Messages Without Identity Evidence Remain Unlinked",
+    "section": "Threading",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SYNC-001",
+    "phase": "Phase 11",
+    "title": "Repeated Inbox Sync Is Idempotent",
+    "section": "Inbox Sync",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SYNC-002",
+    "phase": "Phase 11",
+    "title": "Cursor Persistence Tracks Incremental Sync",
+    "section": "Inbox Sync",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SYNC-003",
+    "phase": "Phase 11",
+    "title": "Sync Safety Limits Enforced",
+    "section": "Inbox Sync",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SYNC-004",
+    "phase": "Phase 11",
+    "title": "Partial Sync Failure Isolates Faulty Message",
+    "section": "Inbox Sync",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SYNC-005",
+    "phase": "Phase 11",
+    "title": "Historical Outreach Responses Preserved Without Duplication",
+    "section": "Inbox Sync",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-001",
+    "phase": "Phase 11",
+    "title": "Deterministic Unsubscribe Recognized",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-002",
+    "phase": "Phase 11",
+    "title": "Deterministic Bounce Recognized",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-003",
+    "phase": "Phase 11",
+    "title": "Deterministic Auto-Reply Recognized",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-004",
+    "phase": "Phase 11",
+    "title": "Positive Interest Recognized and Route to Waiting On Us",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-005",
+    "phase": "Phase 11",
+    "title": "Meeting Proposed Extracts Explicit Times Without Inventing",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-006",
+    "phase": "Phase 11",
+    "title": "Referral and Question Categorized and Routed to Review",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-CLASS-007",
+    "phase": "Phase 11",
+    "title": "Ambiguous Content Safely Falls Back to Unknown Needs Review",
+    "section": "Classification",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEC-001",
+    "phase": "Phase 11",
+    "title": "Inbound Prompt Injection Quarantined Without System Override",
+    "section": "Security & Sanitization",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEC-002",
+    "phase": "Phase 11",
+    "title": "Unsafe HTML and Scripts Sanitized",
+    "section": "Security & Sanitization",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEC-003",
+    "phase": "Phase 11",
+    "title": "Provider Secrets Never Render in Logs or UI",
+    "section": "Security & Sanitization",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEC-004",
+    "phase": "Phase 11",
+    "title": "Provider Errors Sanitized in Sync Records",
+    "section": "Security & Sanitization",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEC-005",
+    "phase": "Phase 11",
+    "title": "Release Package Excludes Runtime DBs and Tokens",
+    "section": "Security & Sanitization",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-STATE-001",
+    "phase": "Phase 11",
+    "title": "Positive Human Reply Sets Active Conversation True",
+    "section": "Conversation State",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-STATE-002",
+    "phase": "Phase 11",
+    "title": "Active Conversation Blocks Cold Outreach Sequence",
+    "section": "Conversation State",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-STATE-003",
+    "phase": "Phase 11",
+    "title": "Unsubscribe Sets Do Not Contact and Suppresses Company",
+    "section": "Conversation State",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-STATE-004",
+    "phase": "Phase 11",
+    "title": "Bounce Marks Recipient Bounced Without Whole-Domain Suppression",
+    "section": "Conversation State",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-STATE-005",
+    "phase": "Phase 11",
+    "title": "Colleague Respondent Preserved Separately from Original Recipient",
+    "section": "Conversation State",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SUG-001",
+    "phase": "Phase 11",
+    "title": "Suggested Reply Grounded in pyBIM Context Without Fake Pricing",
+    "section": "Suggested Reply",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SUG-002",
+    "phase": "Phase 11",
+    "title": "Operator Edit Preserves Linkage and Audit Trail",
+    "section": "Suggested Reply",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SUG-003",
+    "phase": "Phase 11",
+    "title": "Human Approval Alone Makes Zero Provider Network Calls",
+    "section": "Suggested Reply",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SUG-004",
+    "phase": "Phase 11",
+    "title": "Manual Reclassification Updates State and Records Event",
+    "section": "Suggested Reply",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-PROV-001",
+    "phase": "Phase 11",
+    "title": "MockMailboxProvider Deterministic Execution",
+    "section": "Provider Boundary",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-PROV-002",
+    "phase": "Phase 11",
+    "title": "Unconfigured Gmail and Graph Return Not Configured",
+    "section": "Provider Boundary",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-PROV-003",
+    "phase": "Phase 11",
+    "title": "Live Providers Do Not Claim False Connected Status",
+    "section": "Provider Boundary",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-UI-001",
+    "phase": "Phase 11",
+    "title": "Replies List Screen Renders Status Sync and Queue",
+    "section": "Console UI & API",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-UI-002",
+    "phase": "Phase 11",
+    "title": "Conversation Detail View Renders Thread and Review Controls",
+    "section": "Console UI & API",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-UI-003",
+    "phase": "Phase 11",
+    "title": "Console UI Has Zero Auto-Reply Toggle",
+    "section": "Console UI & API",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-UI-004",
+    "phase": "Phase 11",
+    "title": "REST API Endpoints Conformance",
+    "section": "Console UI & API",
+    "mode": "deterministic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEM-001",
+    "phase": "Phase 11",
+    "title": "Complex Semantic Intent Nuances Handled Gracefully",
+    "section": "Weak-Model Evaluation",
+    "mode": "semantic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEM-002",
+    "phase": "Phase 11",
+    "title": "Multilingual Reply Phrasing Fallback",
+    "section": "Weak-Model Evaluation",
+    "mode": "semantic",
+    "critical_safety": false
+  },
+  {
+    "case_id": "P11-SEM-003",
+    "phase": "Phase 11",
+    "title": "Multi-Intent Message Routing to Human Review",
+    "section": "Weak-Model Evaluation",
+    "mode": "semantic",
+    "critical_safety": false
+  }
+]

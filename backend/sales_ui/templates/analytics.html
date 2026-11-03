@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics & Learning Loop | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Analytics & Learning Intelligence</h1>
+    <p class="page-subtitle">Deterministic funnel metrics, attribution, small-sample safety, model evaluations, and human-reviewed learning loops.</p>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center;">
+    <form method="GET" action="/sales/analytics" style="display:flex; gap:6px; align-items:center;">
+      <input type="hidden" name="tab" value="{{ active_section }}">
+      <label for="window-select" style="font-size:12px; color:#94a3b8;">Window:</label>
+      <select id="window-select" name="window" class="form-input" style="padding:4px 8px; font-size:12px;" onchange="this.form.submit()">
+        <option value="all" {% if window == 'all' %}selected{% endif %}>All Time</option>
+        <option value="7d" {% if window == '7d' %}selected{% endif %}>Last 7 Days</option>
+        <option value="30d" {% if window == '30d' %}selected{% endif %}>Last 30 Days</option>
+        <option value="90d" {% if window == '90d' %}selected{% endif %}>Last 90 Days</option>
+      </select>
+    </form>
+    <a href="/api/sales/analytics/export?format=csv" class="btn btn-secondary" style="font-size:12px; padding:6px 12px;">📥 Export CSV</a>
+    <a href="/api/sales/analytics/export?format=json" class="btn btn-secondary" style="font-size:12px; padding:6px 12px;">📥 Export JSON</a>
+  </div>
+</div>
+
+<!-- Section Navigation Tabs -->
+<div class="nav-bar" style="margin-bottom:20px; background:#1e293b; border-radius:8px; padding:6px;">
+  <a href="/sales/analytics?tab=overview&window={{ window }}" class="nav-link {% if active_section == 'overview' %}active{% endif %}">Overview</a>
+  <a href="/sales/analytics?tab=funnel&window={{ window }}" class="nav-link {% if active_section == 'funnel' %}active{% endif %}">Funnel</a>
+  <a href="/sales/analytics?tab=sources&window={{ window }}" class="nav-link {% if active_section == 'sources' %}active{% endif %}">Sources</a>
+  <a href="/sales/analytics?tab=markets&window={{ window }}" class="nav-link {% if active_section == 'markets' %}active{% endif %}">Markets</a>
+  <a href="/sales/analytics?tab=contacts&window={{ window }}" class="nav-link {% if active_section == 'contacts' %}active{% endif %}">Contacts</a>
+  <a href="/sales/analytics?tab=messages&window={{ window }}" class="nav-link {% if active_section == 'messages' %}active{% endif %}">Messages</a>
+  <a href="/sales/analytics?tab=replies&window={{ window }}" class="nav-link {% if active_section == 'replies' %}active{% endif %}">Replies</a>
+  <a href="/sales/analytics?tab=opportunities&window={{ window }}" class="nav-link {% if active_section == 'opportunities' %}active{% endif %}">Meetings & Opportunities</a>
+  <a href="/sales/analytics?tab=models&window={{ window }}" class="nav-link {% if active_section == 'models' %}active{% endif %}">Models</a>
+  <a href="/sales/analytics?tab=recommendations&window={{ window }}" class="nav-link {% if active_section == 'recommendations' %}active{% endif %}">Recommendations</a>
+</div>
+
+<!-- TAB 1: OVERVIEW -->
+{% if active_section == 'overview' %}
+<div class="metrics-grid">
+  <div class="metric-card">
+    <span class="metric-label">Discovered Candidates</span>
+    <span class="metric-value">{{ funnel.counts.candidates_discovered }}</span>
+    <span class="metric-subtext">Total multi-source discoveries</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Qualified Candidates</span>
+    <span class="metric-value" style="color:#38bdf8;">{{ funnel.counts.candidates_qualified }}</span>
+    <span class="metric-subtext">Rate: {{ (funnel.rates.qualification_rate.rate * 100) | round(1) }}% (n={{ funnel.rates.qualification_rate.sample_size }})</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Emails Sent</span>
+    <span class="metric-value" style="color:#10b981;">{{ funnel.counts.emails_sent }}</span>
+    <span class="metric-subtext">Delivered: {{ funnel.counts.emails_delivered }} (Bounced: {{ funnel.counts.emails_bounced }})</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Human Replies</span>
+    <span class="metric-value" style="color:#a855f7;">{{ funnel.counts.human_replies }}</span>
+    <span class="metric-subtext">Auto-replies: {{ funnel.counts.auto_replies }} (excluded)</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Positive Interest</span>
+    <span class="metric-value" style="color:#22c55e;">{{ funnel.counts.positive_replies }}</span>
+    <span class="metric-subtext">Rate: {{ (funnel.rates.human_reply_to_positive_rate.rate * 100) | round(1) }}% of replies</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Meetings Scheduled</span>
+    <span class="metric-value" style="color:#f59e0b;">{{ funnel.counts.meetings_scheduled }}</span>
+    <span class="metric-subtext">Proposed: {{ funnel.counts.meetings_proposed }}</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Qualified Opportunities</span>
+    <span class="metric-value" style="color:#ec4899;">{{ funnel.counts.opportunities_qualified }}</span>
+    <span class="metric-subtext">Won: {{ funnel.counts.closed_won }} | Lost: {{ funnel.counts.closed_lost }}</span>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px; background:#1e293b; padding:18px; border-radius:8px;">
+  <h3 style="margin-top:0; color:#f8fafc; font-size:16px;">Data Quality & Integrity Diagnostics</h3>
+  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-top:12px;">
+    <div style="background:#0f172a; padding:10px; border-radius:6px;">
+      <span style="font-size:11px; color:#94a3b8;">Total Analytics Events</span>
+      <div style="font-size:16px; font-weight:bold; color:#f8fafc;">{{ diagnostics.total_events }}</div>
+    </div>
+    <div style="background:#0f172a; padding:10px; border-radius:6px;">
+      <span style="font-size:11px; color:#94a3b8;">Live Provenance</span>
+      <div style="font-size:16px; font-weight:bold; color:#10b981;">{{ diagnostics.live_provenance_count }}</div>
+    </div>
+    <div style="background:#0f172a; padding:10px; border-radius:6px;">
+      <span style="font-size:11px; color:#94a3b8;">Historical Provenance</span>
+      <div style="font-size:16px; font-weight:bold; color:#38bdf8;">{{ diagnostics.historical_provenance_count }}</div>
+    </div>
+    <div style="background:#0f172a; padding:10px; border-radius:6px;">
+      <span style="font-size:11px; color:#94a3b8;">Unknown Market Warnings</span>
+      <div style="font-size:16px; font-weight:bold; color:#f59e0b;">{{ diagnostics.unknown_market_count }}</div>
+    </div>
+    <div style="background:#0f172a; padding:10px; border-radius:6px;">
+      <span style="font-size:11px; color:#94a3b8;">Unlinked Replies</span>
+      <div style="font-size:16px; font-weight:bold; color:#f59e0b;">{{ diagnostics.unlinked_reply_count }}</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- TAB 2: FUNNEL -->
+{% if active_section == 'funnel' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Canonical Outcome Funnel Stages</h2>
+  <p style="color:#94a3b8; font-size:13px; margin-bottom:20px;">Strictly validates denominators and explicitly exposes sample sizes to avoid tiny-sample hallucinations.</p>
+
+  <table class="table" style="width:100%; border-collapse:collapse; color:#f8fafc;">
+    <thead>
+      <tr style="border-bottom:1px solid #334155; text-align:left; font-size:12px; color:#94a3b8;">
+        <th style="padding:10px;">Funnel Stage / Conversion Step</th>
+        <th style="padding:10px;">Numerator</th>
+        <th style="padding:10px;">Denominator</th>
+        <th style="padding:10px;">Conversion Rate</th>
+        <th style="padding:10px;">Sample Size (n)</th>
+        <th style="padding:10px;">Sample Safety Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">Candidate Discovery → Qualification</td>
+        <td style="padding:10px;">{{ funnel.rates.qualification_rate.numerator }}</td>
+        <td style="padding:10px;">{{ funnel.rates.qualification_rate.denominator }}</td>
+        <td style="padding:10px; color:#38bdf8; font-weight:bold;">{{ (funnel.rates.qualification_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ funnel.rates.qualification_rate.sample_size }}</td>
+        <td style="padding:10px;">
+          {% if funnel.rates.qualification_rate.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n &ge; 10)</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient Sample</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">Draft Generation → Human Approval</td>
+        <td style="padding:10px;">{{ funnel.rates.draft_approval_rate.numerator }}</td>
+        <td style="padding:10px;">{{ funnel.rates.draft_approval_rate.denominator }}</td>
+        <td style="padding:10px; color:#38bdf8; font-weight:bold;">{{ (funnel.rates.draft_approval_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ funnel.rates.draft_approval_rate.sample_size }}</td>
+        <td style="padding:10px;">
+          {% if funnel.rates.draft_approval_rate.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n &ge; 10)</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient Sample</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">Emails Sent → Human Replies (excl. auto/bounce)</td>
+        <td style="padding:10px;">{{ funnel.rates.send_to_human_reply_rate.numerator }}</td>
+        <td style="padding:10px;">{{ funnel.rates.send_to_human_reply_rate.denominator }}</td>
+        <td style="padding:10px; color:#38bdf8; font-weight:bold;">{{ (funnel.rates.send_to_human_reply_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ funnel.rates.send_to_human_reply_rate.sample_size }}</td>
+        <td style="padding:10px;">
+          {% if funnel.rates.send_to_human_reply_rate.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n &ge; 10)</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient Sample</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">Human Replies → Positive Interest</td>
+        <td style="padding:10px;">{{ funnel.rates.human_reply_to_positive_rate.numerator }}</td>
+        <td style="padding:10px;">{{ funnel.rates.human_reply_to_positive_rate.denominator }}</td>
+        <td style="padding:10px; color:#38bdf8; font-weight:bold;">{{ (funnel.rates.human_reply_to_positive_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ funnel.rates.human_reply_to_positive_rate.sample_size }}</td>
+        <td style="padding:10px;">
+          {% if funnel.rates.human_reply_to_positive_rate.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n &ge; 10)</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient Sample</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">Meeting Proposed → Meeting Scheduled</td>
+        <td style="padding:10px;">{{ funnel.rates.meeting_proposed_to_scheduled_rate.numerator }}</td>
+        <td style="padding:10px;">{{ funnel.rates.meeting_proposed_to_scheduled_rate.denominator }}</td>
+        <td style="padding:10px; color:#38bdf8; font-weight:bold;">{{ (funnel.rates.meeting_proposed_to_scheduled_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ funnel.rates.meeting_proposed_to_scheduled_rate.sample_size }}</td>
+        <td style="padding:10px;">
+          {% if funnel.rates.meeting_proposed_to_scheduled_rate.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n &ge; 10)</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient Sample</span>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- TAB 3: SOURCES -->
+{% if active_section == 'sources' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Source Performance Attribution</h2>
+  <table class="table" style="width:100%; border-collapse:collapse; color:#f8fafc;">
+    <thead>
+      <tr style="border-bottom:1px solid #334155; text-align:left; font-size:12px; color:#94a3b8;">
+        <th style="padding:10px;">Source ID</th>
+        <th style="padding:10px;">Discovered</th>
+        <th style="padding:10px;">Qualified</th>
+        <th style="padding:10px;">Qual Rate</th>
+        <th style="padding:10px;">Sent</th>
+        <th style="padding:10px;">Replies</th>
+        <th style="padding:10px;">Positive</th>
+        <th style="padding:10px;">Meetings</th>
+        <th style="padding:10px;">Sample Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">{{ s.source_id }}</td>
+        <td style="padding:10px;">{{ s.discovered }}</td>
+        <td style="padding:10px;">{{ s.qualified }}</td>
+        <td style="padding:10px;">{{ (s.qualification_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ s.emails_sent }}</td>
+        <td style="padding:10px;">{{ s.human_replies }}</td>
+        <td style="padding:10px;">{{ s.positive_replies }}</td>
+        <td style="padding:10px;">{{ s.meetings_scheduled }}</td>
+        <td style="padding:10px;">
+          {% if s.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n={{ s.sample_size }})</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient sample (n={{ s.sample_size }})</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" style="padding:12px; text-align:center; color:#94a3b8;">No source data recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- TAB 4: MARKETS -->
+{% if active_section == 'markets' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Target Market Performance (Country / Region)</h2>
+  <table class="table" style="width:100%; border-collapse:collapse; color:#f8fafc;">
+    <thead>
+      <tr style="border-bottom:1px solid #334155; text-align:left; font-size:12px; color:#94a3b8;">
+        <th style="padding:10px;">Market</th>
+        <th style="padding:10px;">Discovered</th>
+        <th style="padding:10px;">Qualified</th>
+        <th style="padding:10px;">Sent</th>
+        <th style="padding:10px;">Human Replies</th>
+        <th style="padding:10px;">Reply Rate</th>
+        <th style="padding:10px;">Positive Replies</th>
+        <th style="padding:10px;">Sample Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in markets %}
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">{{ m.market_id }}</td>
+        <td style="padding:10px;">{{ m.discovered }}</td>
+        <td style="padding:10px;">{{ m.qualified }}</td>
+        <td style="padding:10px;">{{ m.emails_sent }}</td>
+        <td style="padding:10px;">{{ m.human_replies }}</td>
+        <td style="padding:10px;">{{ (m.reply_rate.rate * 100) | round(1) }}%</td>
+        <td style="padding:10px;">{{ m.positive_replies }}</td>
+        <td style="padding:10px;">
+          {% if m.is_statistically_valid %}
+            <span style="color:#10b981; font-size:11px; background:#064e3b; padding:2px 8px; border-radius:4px;">Adequate (n={{ m.sample_size }})</span>
+          {% else %}
+            <span style="color:#f59e0b; font-size:11px; background:#451a03; padding:2px 8px; border-radius:4px;">Insufficient sample (n={{ m.sample_size }})</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="padding:12px; text-align:center; color:#94a3b8;">No market data recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- TAB 5: CONTACTS -->
+{% if active_section == 'contacts' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Contact Persona & Role Analytics</h2>
+  <p style="color:#94a3b8; font-size:13px; margin-bottom:20px;">Strictly aggregated business roles and seniority. Zero sensitive personal attributes.</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+    <div>
+      <h3 style="font-size:14px; color:#94a3b8;">Roles Breakdown</h3>
+      {% for item in contacts %}
+        {% if item.dimension == 'role' %}
+          <ul style="list-style:none; padding:0; color:#f8fafc;">
+            {% for k, v in item.breakdown.items() %}
+              <li style="padding:6px 0; border-bottom:1px solid #334155; display:flex; justify-content:space-between;">
+                <span>{{ k }}</span>
+                <span style="font-weight:bold; color:#38bdf8;">{{ v }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div>
+      <h3 style="font-size:14px; color:#94a3b8;">Seniority Breakdown</h3>
+      {% for item in contacts %}
+        {% if item.dimension == 'seniority' %}
+          <ul style="list-style:none; padding:0; color:#f8fafc;">
+            {% for k, v in item.breakdown.items() %}
+              <li style="padding:6px 0; border-bottom:1px solid #334155; display:flex; justify-content:space-between;">
+                <span>{{ k }}</span>
+                <span style="font-weight:bold; color:#a855f7;">{{ v }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- TAB 6: MESSAGES -->
+{% if active_section == 'messages' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Safe Message Metadata & Tone Analysis</h2>
+  <div class="metrics-grid" style="margin-bottom:20px;">
+    <div class="metric-card">
+      <span class="metric-label">Total Drafts Generated</span>
+      <span class="metric-value">{{ messages.total_drafts }}</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Avg Subject Length</span>
+      <span class="metric-value">{{ messages.average_subject_length }} chars</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Avg Body Word Count</span>
+      <span class="metric-value">{{ messages.average_body_word_count }} words</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- TAB 7: REPLIES -->
+{% if active_section == 'replies' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Reply Classification & Categorization</h2>
+  <div class="metrics-grid" style="margin-bottom:20px;">
+    <div class="metric-card">
+      <span class="metric-label">Total Replies Received</span>
+      <span class="metric-value">{{ replies.total_replies }}</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Human Replies</span>
+      <span class="metric-value" style="color:#10b981;">{{ replies.human_replies }}</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Auto Replies</span>
+      <span class="metric-value" style="color:#f59e0b;">{{ replies.auto_replies }}</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Bounces</span>
+      <span class="metric-value" style="color:#ef4444;">{{ replies.bounces }}</span>
+    </div>
+  </div>
+  <table class="table" style="width:100%; border-collapse:collapse; color:#f8fafc;">
+    <thead>
+      <tr style="border-bottom:1px solid #334155; text-align:left; font-size:12px; color:#94a3b8;">
+        <th style="padding:10px;">Classification Category</th>
+        <th style="padding:10px;">Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for k, v in replies.breakdown.items() %}
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">{{ k }}</td>
+        <td style="padding:10px; color:#38bdf8;">{{ v }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- TAB 8: OPPORTUNITIES / RELATIONSHIPS -->
+{% if active_section == 'opportunities' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Relationship & Opportunity Safety Segregation</h2>
+  <p style="color:#94a3b8; font-size:13px; margin-bottom:20px;">Direct service buyers are kept strictly separate from technology and channel partners to prevent metric conflation.</p>
+  <table class="table" style="width:100%; border-collapse:collapse; color:#f8fafc;">
+    <thead>
+      <tr style="border-bottom:1px solid #334155; text-align:left; font-size:12px; color:#94a3b8;">
+        <th style="padding:10px;">Relationship Type</th>
+        <th style="padding:10px;">Discovered</th>
+        <th style="padding:10px;">Qualified</th>
+        <th style="padding:10px;">Emails Sent</th>
+        <th style="padding:10px;">Human Replies</th>
+        <th style="padding:10px;">Positive Replies</th>
+        <th style="padding:10px;">Meetings</th>
+        <th style="padding:10px;">Closed Won</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in relationships %}
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600;">{{ r.relationship_type }}</td>
+        <td style="padding:10px;">{{ r.discovered }}</td>
+        <td style="padding:10px;">{{ r.qualified }}</td>
+        <td style="padding:10px;">{{ r.emails_sent }}</td>
+        <td style="padding:10px;">{{ r.human_replies }}</td>
+        <td style="padding:10px;">{{ r.positive_replies }}</td>
+        <td style="padding:10px;">{{ r.meetings_scheduled }}</td>
+        <td style="padding:10px; color:#22c55e;">{{ r.closed_won }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="padding:12px; text-align:center; color:#94a3b8;">No relationship data recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- TAB 9: MODELS -->
+{% if active_section == 'models' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <div>
+      <h2 style="font-size:18px; color:#f8fafc; margin:0;">Model & Hardware Evaluation Registry</h2>
+      <p style="color:#94a3b8; font-size:13px; margin:4px 0 0 0;">Offline benchmarking on sanitized fixtures. Prepared for objective comparisons (1.5B vs 14B / 32B).</p>
+    </div>
+  </div>
+
+  <table class="table" style="width:100%; border-collapse:collapse; color:#f8fafc;">
+    <thead>
+      <tr style="border-bottom:1px solid #334155; text-align:left; font-size:12px; color:#94a3b8;">
+        <th style="padding:10px;">Model</th>
+        <th style="padding:10px;">Hardware</th>
+        <th style="padding:10px;">Task</th>
+        <th style="padding:10px;">Fixture Version</th>
+        <th style="padding:10px;">Cases</th>
+        <th style="padding:10px;">Passed</th>
+        <th style="padding:10px;">Deferred</th>
+        <th style="padding:10px;">Avg Latency</th>
+        <th style="padding:10px;">Recorded At</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in model_runs %}
+      <tr style="border-bottom:1px solid #334155;">
+        <td style="padding:10px; font-weight:600; color:#38bdf8;">{{ run.model_name }}</td>
+        <td style="padding:10px;">{{ run.hardware_label }}</td>
+        <td style="padding:10px;">{{ run.task }}</td>
+        <td style="padding:10px;">{{ run.fixture_set_version }}</td>
+        <td style="padding:10px;">{{ run.cases }}</td>
+        <td style="padding:10px; color:#10b981;">{{ run.passed }}</td>
+        <td style="padding:10px; color:#f59e0b;">{{ run.deferred }}</td>
+        <td style="padding:10px;">{{ run.latency_ms }} ms</td>
+        <td style="padding:10px; font-size:12px; color:#94a3b8;">{{ run.created_at[:19] }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" style="padding:12px; text-align:center; color:#94a3b8;">No evaluation runs recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- TAB 10: RECOMMENDATIONS -->
+{% if active_section == 'recommendations' %}
+<div class="card" style="background:#1e293b; padding:20px; border-radius:8px;">
+  <h2 style="font-size:18px; color:#f8fafc; margin-top:0;">Learning Loop Recommendations (Operator Review Only)</h2>
+  <p style="color:#94a3b8; font-size:13px; margin-bottom:20px;">
+    ⚠️ <strong>Core Invariant:</strong> Accepting a recommendation only records the human decision. It NEVER automatically modifies production configuration.
+  </p>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    {% for rec in recommendations %}
+    <div style="background:#0f172a; border:1px solid #334155; border-radius:6px; padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <span style="font-size:11px; text-transform:uppercase; color:#38bdf8; font-weight:bold;">{{ rec.category }}</span>
+          <h3 style="margin:4px 0; color:#f8fafc; font-size:15px;">{{ rec.summary }}</h3>
+          <p style="color:#94a3b8; font-size:12px; margin:4px 0;"><strong>Scope:</strong> {{ rec.scope }} | <strong>Sample Size:</strong> {{ rec.sample_size }} | <strong>Confidence:</strong> {{ rec.confidence_level }}</p>
+          <p style="color:#cbd5e1; font-size:13px; margin:8px 0;"><strong>Proposed Change:</strong> {{ rec.proposed_change }}</p>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+          <span style="font-size:11px; padding:3px 8px; border-radius:4px; font-weight:bold;
+            {% if rec.status == 'accepted' %}background:#064e3b; color:#10b981;
+            {% elif rec.status == 'rejected' %}background:#450a0a; color:#ef4444;
+            {% else %}background:#1e293b; color:#f59e0b;{% endif %}">
+            {{ rec.status | upper }}
+          </span>
+          {% if rec.status == 'proposed' %}
+          <div style="display:flex; gap:6px;">
+            <form method="POST" action="/sales/analytics/recommendations/{{ rec.recommendation_id }}/accept">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-primary" style="font-size:11px; padding:4px 10px;">Accept</button>
+            </form>
+            <form method="POST" action="/sales/analytics/recommendations/{{ rec.recommendation_id }}/reject">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-secondary" style="font-size:11px; padding:4px 10px;">Reject</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:#94a3b8; text-align:center;">No learning recommendations found.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

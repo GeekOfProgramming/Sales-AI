@@ -1,0 +1,1099 @@
+{% extends "base.html" %}
+
+{% block title %}Research Review — {{ candidate.company_name }} — Email Led{% endblock %}
+
+{% block content %}
+<style>
+  /* Accessible Theme-Aware Styling for Review Table */
+  .review-table th {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border-color);
+  }
+  .review-table td {
+    padding: 0.75rem 1rem;
+    vertical-align: top;
+    color: var(--text-primary);
+    background-color: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+  }
+  .review-table code {
+    font-weight: 600;
+    color: var(--border-focus);
+    background-color: var(--bg-input);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+  }
+  .review-table input[type="text"], .review-table textarea, .review-table select {
+    color: var(--text-primary);
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    font-size: 0.88rem;
+    padding: 0.4rem 0.6rem;
+    width: 100%;
+    border-radius: 4px;
+  }
+  .review-table input[type="text"]:focus, .review-table textarea:focus, .review-table select:focus {
+    border-color: var(--border-focus);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+  }
+  .citation-tag {
+    display: block;
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    background-color: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    margin-top: 0.4rem;
+    word-break: break-all;
+  }
+  .stat-card-title {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+  .stat-card-sub {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.2rem;
+  }
+  .field-evidence-details {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+  }
+  .field-evidence-details summary {
+    cursor: pointer;
+    color: var(--border-focus);
+    font-weight: 600;
+  }
+</style>
+
+{% with flow_company_name=(research.company_name if research else candidate.company_name), flow_canonical_domain=(research.canonical_domain if research else candidate.company_domain), flow_candidate_id=candidate.candidate_id, flow_current_step='research_review' %}
+  {% include "candidate_flow_bar.html" %}
+{% endwith %}
+
+<div class="page-header" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+      <h1 class="page-title">Company Research &amp; Enrichment Review</h1>
+      <p class="page-subtitle">
+        Candidate: <strong style="color: var(--text-primary);">{{ research.company_name if research else candidate.company_name }}</strong> |
+        Domain: <code>{{ research.canonical_domain if research else candidate.company_domain }}</code> |
+        Candidate ID: <code>{{ candidate.candidate_id }}</code>
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="/sales/candidates/{{ candidate.candidate_id }}" class="btn btn-secondary">&larr; Back to Candidate</a>
+      <a href="/sales/register" class="btn btn-secondary">Lead Register</a>
+    </div>
+  </div>
+</div>
+
+{% if message %}
+<div class="alert alert-success" style="margin-bottom: 1.25rem;">
+  {{ message }}
+</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-danger" style="margin-bottom: 1.25rem;">
+  {{ error }}
+</div>
+{% endif %}
+
+{% if research.is_dnc_or_restricted %}
+<div class="alert alert-warning" style="margin-bottom: 1.25rem; border-left: 5px solid #d9534f; background-color: #fdf7f7; color: #b52b27; padding: 1rem;">
+  <h4 style="margin: 0 0 0.5rem 0; font-size: 1.05rem;">&Delta; Operational Outreach Restriction</h4>
+  <p style="margin: 0;"><strong>{{ research.restriction_reason }}</strong></p>
+  <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem;">Cold outreach is prohibited. Status is held as <code>relationship_review_pending</code>.</p>
+</div>
+{% endif %}
+
+<!-- Pipeline Status & Operations Control Center -->
+<div class="card" style="padding: 1.25rem 1.5rem; border: 1px solid var(--border-color); background-color: var(--bg-card); margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span class="badge" style="background-color: {% if pipeline_status in ('Crawl Complete', 'AI Extraction Complete — Review Required', 'Operator Reviewed') %}#15803d{% elif pipeline_status in ('Partial Crawl', 'Awaiting LLM Analysis') %}#0369a1{% else %}#b45309{% endif %}; color: #ffffff; font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: 4px; font-weight: 600;">
+          {{ pipeline_status }}
+        </span>
+        <span style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">
+          Pipeline V2: Decoupled Crawl &amp; AI Extraction
+        </span>
+      </div>
+      <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.35rem;">
+        Active Snapshot: <code>{{ snapshot.snapshot_id if snapshot else 'None' }}</code>
+        {% if snapshot %}
+        | Succeeded: <strong>{{ snapshot.pages_succeeded }}</strong> / {{ snapshot.pages_attempted }} pages
+        | Retrieved: <strong>{{ snapshot.created_at[:19] }}</strong>
+        | Checksum: <code>{{ snapshot.content_checksum[:12] if snapshot.content_checksum else 'N/A' }}...</code>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Independent Action Buttons (A & B) -->
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+      <!-- Button A: Crawl & Save Website -->
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-block;" id="formCrawlWebsite">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="max_pages" value="20">
+        <button type="submit" class="btn btn-primary" id="btnCrawlWebsite" style="padding: 0.55rem 1.25rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='🕷️ Crawling Website...'; document.getElementById('formCrawlWebsite').submit();">
+          🕷️ Crawl &amp; Save Website
+        </button>
+      </form>
+
+      <!-- Resume / Continue Crawl Button (if partial crawl exists) -->
+      {% if snapshot and snapshot.pages_succeeded > 0 %}
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-block;" id="formResumeCrawl">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="max_pages" value="20">
+        <input type="hidden" name="resume" value="1">
+        <button type="submit" class="btn btn-secondary" id="btnResumeCrawl" style="padding: 0.55rem 1rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='⏳ Resuming Crawl...'; document.getElementById('formResumeCrawl').submit();">
+          🔄 Continue / Resume Crawl
+        </button>
+      </form>
+      {% endif %}
+
+      <!-- Button B: Analyze Saved Snapshot with LLM (or Resume Analysis) -->
+      {% if snapshot and snapshot.pages_succeeded > 0 %}
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm Authorized Paid LLM Analysis?\n\nProvider: {{ analysis_preflight.provider|default("gemini")|upper }}\nModel: {{ analysis_preflight.model|default("gemini-3.5-flash-lite") }}\nSnapshot: {{ snapshot.snapshot_id }}\nEligible Pages: {{ analysis_preflight.eligible_pages_count|default(snapshot.pages_succeeded) }}\nChunks: {{ analysis_preflight.chunks_count|default(1) }}\nEstimated Tokens: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} in / {{ analysis_preflight.estimated_output_tokens|default(1200) }} out\nApprox Cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }} (Billing tier: {{ analysis_preflight.billing_tier|default("Standard") }})\n{% if chunk_stats and chunk_stats.uncertain > 0 %}\nNOTICE: {{ chunk_stats.uncertain }} chunk(s) previously timed out. Retrying an uncertain chunk may cause duplicate provider processing or billing.\n{% endif %}\nServer Authorization Token verified.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="provider" value="gemini">
+        <input type="hidden" name="model" value="gemini-3.5-flash-lite">
+        <input type="hidden" name="snapshot_id" value="{{ snapshot.snapshot_id }}">
+        <input type="hidden" name="auth_token" value="{{ analysis_auth_token }}">
+        <input type="hidden" name="operator_confirmed" value="1">
+        {% if chunk_stats and chunk_stats.can_resume %}
+        <button type="submit" class="btn btn-warning" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #d97706; border-color: #d97706; color: #ffffff;">
+          🔄 Resume Analysis ({{ chunk_stats.completed }}/{{ chunk_stats.total }} Completed &bull; {{ chunk_stats.remaining }} Remaining)
+        </button>
+        {% elif chunk_stats and chunk_stats.can_retry_first_chunk %}
+        <button type="submit" class="btn btn-warning" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #b45309; border-color: #b45309; color: #ffffff;">
+          ⚠️ Retry Analysis (Chunk 1 Timed Out &bull; Duplicate Usage Warning)
+        </button>
+        {% elif latest_analysis and latest_analysis.status == "SUCCESS" %}
+        <button type="submit" class="btn btn-secondary" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600;">
+          🔄 Re-Analyze Saved Snapshot
+        </button>
+        {% else %}
+        <button type="submit" class="btn btn-success" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #0284c7; border-color: #0284c7;">
+          🧠 Analyze Saved Snapshot with LLM
+        </button>
+        {% endif %}
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Operational Progress & Configuration Details -->
+  <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-secondary);">
+    <div>
+      Provider: <strong>Google Gemini (gemini-3.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong> | Budget: <strong>Max 20 Pages</strong>
+      {% if analysis_preflight %}
+      | Preflight Estimate: <strong>~{{ analysis_preflight.estimated_input_tokens }} tokens (~${{ analysis_preflight.estimated_cost_usd }})</strong>
+      {% if analysis_preflight.will_omit_chunks %}
+      | <span class="badge" style="background-color: #b45309; color: #fff;">Notice: 5-call ceiling active; {{ analysis_preflight.omitted_chunks_count }} chunks omitted</span>
+      {% endif %}
+      {% endif %}
+    </div>
+    <div>
+      {% if latest_analysis %}
+      Analysis Status: <strong>{{ latest_analysis.status }}</strong>
+      | Pages Analyzed: <strong>{{ latest_analysis.analyzed_pages_count }}</strong>
+      | Chunks: <strong>{{ latest_analysis.chunks_count }}</strong>
+      | Omitted: <strong>{{ latest_analysis.omitted_pages_count }}</strong>
+      | Tokens: <strong>{{ (latest_analysis.input_tokens or 0) + (latest_analysis.output_tokens or 0) }}</strong>
+      | Cost: <strong>${{ latest_analysis.cost_estimate }}</strong>
+      {% if chunk_stats and chunk_stats.total > 0 %}
+      | Progress: <strong>{{ chunk_stats.completed }} done, {{ chunk_stats.failed }} failed, {{ chunk_stats.uncertain }} uncertain, {{ chunk_stats.remaining }} remaining</strong>
+      {% endif %}
+      {% else %}
+      Analysis Status: <em>Awaiting operator analysis trigger</em>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if research %}
+<!-- Top Stats Banner -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <!-- Card 1: Proposed Priority Recommendation -->
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
+    <div class="stat-card-title">Priority Recommendation</div>
+    <div style="font-size: 1.3rem; font-weight: 700; color: {% if 'A' in proposed_record.priority_level %}#15803d{% else %}#b45309{% endif %}; margin-top: 0.25rem;">
+      Priority {{ proposed_record.priority_level }}
+    </div>
+    <div class="stat-card-sub" style="color: #b45309; font-weight: 600;">(AI Hypothesis &mdash; Pending Operator Verification)</div>
+  </div>
+
+  <!-- Card 2: Website Crawl Snapshot -->
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
+    <div class="stat-card-title">Public Website Crawl</div>
+    <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-top: 0.25rem;">
+      {% if snapshot %}
+        {{ snapshot.pages_succeeded }} / {{ snapshot.pages_attempted }} Pages
+      {% else %}
+        {{ research.fetched_pages|length if research else 0 }} Pages
+      {% endif %}
+    </div>
+    <div class="stat-card-sub">
+      {% if snapshot %}
+        Snapshot: <code>{{ snapshot.snapshot_id[:16] }}...</code>
+      {% else %}
+        Bounded same-domain fetch
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Card 3: Provider LLM Analysis Status -->
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
+    <div class="stat-card-title">LLM Analysis Status</div>
+    <div style="font-size: 1rem; font-weight: 700; color: {% if latest_analysis and latest_analysis.status == 'SUCCESS' %}#15803d{% elif latest_analysis %}#b45309{% else %}#64748b{% endif %}; margin-top: 0.25rem;">
+      {% if latest_analysis %}
+        {{ latest_analysis.provider|upper }}: {{ latest_analysis.status }}
+      {% else %}
+        Awaiting Trigger
+      {% endif %}
+    </div>
+    <div class="stat-card-sub">
+      {% if latest_analysis and latest_analysis.status == 'SUCCESS' %}
+        {{ latest_analysis.analyzed_pages_count }} pages &bull; {{ (latest_analysis.input_tokens or 0) + (latest_analysis.output_tokens or 0) }} tokens &bull; ${{ latest_analysis.cost_estimate }}
+      {% elif latest_analysis %}
+        Status: {{ latest_analysis.status }}
+      {% else %}
+        Local schema validation only
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Card 4: Operator Field Review Status -->
+  <div class="card" style="padding: 1rem; text-align: center; border: 1px solid var(--border-color); background-color: var(--bg-card);">
+    <div class="stat-card-title">Operator Review Status</div>
+    <div style="font-size: 1.1rem; font-weight: 700; color: {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}#15803d{% elif field_reviews and field_reviews|length > 0 %}#0284c7{% else %}#b45309{% endif %}; margin-top: 0.25rem;">
+      {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}
+        {{ current_record.verification_status }}
+      {% elif field_reviews and field_reviews|length > 0 %}
+        PARTIALLY REVIEWED ({{ field_reviews|length }} approved)
+      {% else %}
+        {{ current_record.verification_status if current_record else 'Unverified' }}
+      {% endif %}
+    </div>
+    <div class="stat-card-sub">
+      {% if current_record and current_record.verification_status in ('OPERATOR_REVIEWED', 'VERIFIED') %}
+        Review explicitly finalized
+      {% elif field_reviews and field_reviews|length > 0 %}
+        Partial save on file &bull; Finalization pending
+      {% else %}
+        Field approval required
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Finalization Readiness Feedback Panel -->
+<div class="card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); background-color: var(--bg-card);">
+  <div class="card-header" style="background-color: var(--bg-hover); border-bottom: 1px solid #cbd5e1; padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.05rem; color: var(--text-primary); font-weight: 700;">Research Review Finalization Criteria</h3>
+      <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary);">
+        Explicit finalization promotes the record to <code>OPERATOR_REVIEWED</code> and marks company <strong>Research Ready</strong>.
+      </p>
+    </div>
+    <div>
+      {% if is_finalizable %}
+        <span class="badge" style="background-color: #15803d; color: white; padding: 0.4rem 0.8rem; font-size: 0.85rem;">Ready to Finalize</span>
+      {% else %}
+        <span class="badge" style="background-color: #b45309; color: white; padding: 0.4rem 0.8rem; font-size: 0.85rem;">Pending Requirements</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body" style="padding: 1rem 1.25rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.identity_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Company Identity:</strong> {% if finalization_checks.identity_valid %}Validated{% else %}Contradiction or Missing{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.website_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Official Website:</strong> {% if finalization_checks.website_valid %}Domain Matches{% else %}Missing or Mismatch{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.activities_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Business Activities:</strong> {% if finalization_checks.activities_valid %}Documented{% else %}Missing{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.evidence_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Source Evidence:</strong> {% if finalization_checks.evidence_valid %}Sufficient Traceable Sources{% else %}Insufficient{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.reviews_valid %}✅{% else %}❌{% endif %}
+        <span><strong>Operator Review:</strong> {% if finalization_checks.reviews_valid %}Core Fields Approved{% else %}Pending Partial Review{% endif %}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        {% if finalization_checks.quarantine_clean %}✅{% else %}❌{% endif %}
+        <span><strong>Quarantine Status:</strong> {% if finalization_checks.quarantine_clean %}No Blocked Claims{% else %}Required Field Quarantined{% endif %}</span>
+      </div>
+    </div>
+    {% if finalization_errors and finalization_errors|length > 0 %}
+    <div style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background-color: #fff1f2; border-left: 3px solid #b91c1c; border-radius: 4px; font-size: 0.82rem; color: #991b1b;">
+      <strong>Action Required to Finalize:</strong>
+      <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+        {% for err in finalization_errors %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Comparison & Approval Form -->
+<form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research/save">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="candidate_id" value="{{ candidate.candidate_id }}">
+
+  <div class="card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+    <div class="card-header" style="background-color: var(--bg-hover); border-bottom: 1px solid #cbd5e1; padding: 0.85rem 1.25rem;">
+      <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary); font-weight: 700;">13-Field Lead Register Comparison &amp; Field Approval</h3>
+      <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">
+        Checkboxes default to unchecked. Only explicitly selected fields will overwrite or enrich existing Lead Register data.
+      </p>
+    </div>
+    <div class="card-body" style="padding: 0;">
+      <div class="table-responsive">
+        <table class="table review-table" style="margin-bottom: 0;">
+          <thead>
+            <tr>
+              <th style="width: 18%;">Field Name</th>
+              <th style="width: 32%;">Currently Stored Value</th>
+              <th style="width: 36%;">Proposed Researched Value</th>
+              <th style="width: 14%; text-align: center;">Approve Field</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 1. Company Name -->
+            {% set f_meta = analysis_fields.get('company_name') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>1. Company Name</strong>
+                {% if field_reviews and 'company_name' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td><code>{{ current_record.company_name if current_record else candidate.company_name }}</code></td>
+              <td>
+                <input type="text" name="company_name" class="form-control" value="{{ proposed_record.company_name }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('company_name') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['company_name'].source_url }} ({{ research.evidence_items['company_name'].validation_status }})</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_company_name" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 2. Priority Level & Rationale -->
+            {% set p_meta = analysis_fields.get('priority_level') if analysis_fields else None %}
+            {% set pr_meta = analysis_fields.get('priority_rationale') if analysis_fields else None %}
+            <tr>
+              <td>
+                <strong>2. Priority Level &amp; Rationale</strong>
+                {% if field_reviews and ('priority_level' in field_reviews or 'priority_rationale' in field_reviews) %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% else %}
+                  <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-secondary">{{ current_record.priority_level if current_record else 'Unassigned' }}</span>
+                <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.25rem;">{{ current_record.priority_rationale if current_record else 'None' }}</div>
+              </td>
+              <td>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.35rem;">
+                  <select name="priority_level" class="form-control" style="width: 130px; font-weight: 600;">
+                    <option value="A" {% if proposed_record.priority_level == 'A' %}selected{% endif %}>Priority A</option>
+                    <option value="B" {% if proposed_record.priority_level == 'B' %}selected{% endif %}>Priority B</option>
+                    <option value="C" {% if proposed_record.priority_level == 'C' %}selected{% endif %}>Priority C</option>
+                  </select>
+                </div>
+                <textarea name="priority_rationale" class="form-control" rows="2">{{ proposed_record.priority_rationale }}</textarea>
+                <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                  {% if pr_meta and pr_meta.source_url and pr_meta.source_url != 'Not Found' %}
+                    <div><strong>Source:</strong> <a href="{{ pr_meta.source_url }}" target="_blank" rel="noopener">{{ pr_meta.source_url }}</a> | <strong>Confidence:</strong> {{ (pr_meta.confidence * 100)|round|int }}%</div>
+                  {% endif %}
+                  <div><em>(AI Commercial Hypothesis &mdash; Subject to operator validation)</em></div>
+                </div>
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" name="apply_priority" value="1">
+              </td>
+            </tr>
+
+            <!-- 3. Legal Identity / P.IVA -->
+            {% set f_meta = analysis_fields.get('legal_identity') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>3. Legal Identity (P.IVA)</strong>
+                {% if field_reviews and 'legal_identity' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td><code>{{ current_record.legal_identity if current_record else 'Not Found' }}</code></td>
+              <td>
+                <input type="text" name="legal_identity" class="form-control" value="{{ proposed_record.legal_identity }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('p_iva') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['p_iva'].source_url }} (Checksum Validated)</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_legal_identity" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 4. Geographic Location -->
+            {% set f_meta = analysis_fields.get('geographic_location') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>4. Geographic Location</strong>
+                {% if field_reviews and 'geographic_location' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>{{ current_record.geographic_location if current_record else (candidate.city or 'Not Verified') }}</td>
+              <td>
+                <input type="text" name="geographic_location" class="form-control" value="{{ proposed_record.geographic_location }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('geographic_location') %}
+                  <div class="citation-tag">
+                    <strong>Source:</strong> <a href="{{ research.evidence_items['geographic_location'].source_url }}" target="_blank" rel="noopener">{{ research.evidence_items['geographic_location'].source_url }}</a><br>
+                    <strong>Status:</strong> {{ research.evidence_items['geographic_location'].validation_status }}<br>
+                    {% if research.evidence_items['geographic_location'].notes %}
+                    <strong>Excerpt/Note:</strong> {{ research.evidence_items['geographic_location'].notes }}
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_geographic_location" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 5. Telephone Numbers -->
+            {% set f_meta = analysis_fields.get('telephone_numbers') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>5. Telephone</strong>
+                {% if field_reviews and 'telephone_numbers' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td><code>{{ current_record.telephone_numbers if current_record else 'Not Found' }}</code></td>
+              <td>
+                <input type="text" name="telephone_numbers" class="form-control" value="{{ proposed_record.telephone_numbers }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('telephone') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['telephone'].source_url }} (Normalized)</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_telephone_numbers" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 6. Contact Emails -->
+            {% set f_meta = analysis_fields.get('contact_email_addresses') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% elif is_malformed_contact_email %}style="background-color: #fefce8;"{% endif %}>
+              <td>
+                <strong>6. Email Addresses</strong>
+                {% if field_reviews and 'contact_email_addresses' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+                {% if is_malformed_contact_email %}
+                  <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">⚠️ Trailing Scraping Noise Detected</span>
+                {% endif %}
+              </td>
+              <td>
+                <code>{{ current_record.contact_email_addresses if current_record else 'Not Found' }}</code>
+                {% if is_malformed_contact_email %}
+                  <div style="color: #b45309; font-size: 0.78rem; margin-top: 4px; font-weight: 500;">
+                    ⚠️ Stored contact address contains trailing scraped token noise (e.g. text run-on). Operator review / manual correction recommended.
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                <input type="text" name="contact_email_addresses" class="form-control" value="{{ proposed_record.contact_email_addresses }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('email') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['email'].source_url }}</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_contact_email_addresses" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 7. Responsible Person / Key Contact -->
+            {% set f_meta = analysis_fields.get('responsible_person') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>7. Responsible Person</strong>
+                {% if field_reviews and 'responsible_person' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>{{ current_record.responsible_person if current_record else 'Not Found' }}</td>
+              <td>
+                <input type="text" name="responsible_person" class="form-control" value="{{ proposed_record.responsible_person }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.evidence_items.get('responsible_person') %}
+                  <div class="citation-tag">Source: {{ research.evidence_items['responsible_person'].source_url }}</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_responsible_person" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 8. Business Activities & BIM -->
+            {% set f_meta = analysis_fields.get('business_activities') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined and not (field_reviews and 'business_activities' in field_reviews) %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>8. Business Activities</strong>
+                {% if field_reviews and 'business_activities' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td style="font-size: 0.85rem;">{{ current_record.business_activities if current_record else 'Not Found' }}</td>
+              <td>
+                <textarea name="business_activities" class="form-control" rows="2">{{ proposed_record.business_activities }}</textarea>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                      <details style="margin-top: 6px; padding: 6px 8px; background-color: #fff; border: 1px solid #fca5a5; border-radius: 4px;">
+                        <summary style="font-weight: 600; color: #991b1b; cursor: pointer; font-size: 0.8rem;">Independent Operator Verification</summary>
+                        <div style="margin-top: 6px; font-size: 0.78rem;">
+                          <p style="margin: 0 0 4px 0; color: var(--text-secondary);">Verify authoritative business activities independently with verified source URL from candidate domain:</p>
+                          <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <textarea form="verify-business-activities-form" name="verified_value" class="form-control" rows="2" style="font-size: 0.78rem; padding: 4px 6px;" placeholder="Authoritative Business Activities description">{{ current_record.business_activities if current_record and current_record.business_activities and current_record.business_activities != 'Not Found' else (proposed_record.business_activities if proposed_record else '') }}</textarea>
+                            <input type="text" form="verify-business-activities-form" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ f_meta.source_url if f_meta.source_url and f_meta.source_url != 'Not Found' else ('https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL (e.g. https://domain.com/chi-siamo)">
+                            <input type="text" form="verify-business-activities-form" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
+                            <button type="submit" form="verify-business-activities-form" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Business Activities</button>
+                          </div>
+                        </div>
+                      </details>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_business_activities" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 9. Official Website -->
+            {% set f_meta = analysis_fields.get('official_website') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined and not (field_reviews and 'official_website' in field_reviews) %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>9. Official Website</strong>
+                {% if field_reviews and 'official_website' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td><a href="{{ current_record.official_website if current_record else proposed_record.official_website }}" target="_blank" rel="noopener">{{ current_record.official_website if current_record else proposed_record.official_website }}</a></td>
+              <td>
+                <input type="text" name="official_website" class="form-control" value="{{ proposed_record.official_website }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                      <details style="margin-top: 6px; padding: 6px 8px; background-color: #fff; border: 1px solid #fca5a5; border-radius: 4px;">
+                        <summary style="font-weight: 600; color: #991b1b; cursor: pointer; font-size: 0.8rem;">Independent Operator Verification</summary>
+                        <div style="margin-top: 6px; font-size: 0.78rem;">
+                          <p style="margin: 0 0 4px 0; color: var(--text-secondary);">Verify authoritative official website independently with verified source URL:</p>
+                          <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <input type="text" form="verify-official-website-form" name="verified_value" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (candidate.company_domain if candidate.company_domain else proposed_record.official_website) }}" placeholder="e.g. https://domain.com/">
+                            <input type="text" form="verify-official-website-form" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (proposed_record.official_website if proposed_record.official_website else 'https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL">
+                            <input type="text" form="verify-official-website-form" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
+                            <button type="submit" form="verify-official-website-form" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Authoritative Website</button>
+                          </div>
+                        </div>
+                      </details>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_official_website" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 10. Descriptions & Notes -->
+            {% set f_meta = analysis_fields.get('descriptions_and_notes') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>10. Notes &amp; Projects</strong>
+                {% if field_reviews and 'descriptions_and_notes' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td style="font-size: 0.82rem; white-space: pre-wrap;">{{ current_record.descriptions_and_notes if current_record else 'None' }}</td>
+              <td>
+                <textarea name="descriptions_and_notes" class="form-control" rows="4">{{ proposed_record.descriptions_and_notes }}</textarea>
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_descriptions_and_notes" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 11. Careers & Opportunities -->
+            {% set f_meta = analysis_fields.get('job_advertisement_links') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% elif is_suspect_job_advertisement %}style="background-color: #fefce8;"{% endif %}>
+              <td>
+                <strong>11. Job / Supplier Links</strong>
+                {% if field_reviews and 'job_advertisement_links' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+                {% if is_suspect_job_advertisement %}
+                  <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">⚠️ Flagged: Non-Job Article</span>
+                {% endif %}
+              </td>
+              <td style="font-size: 0.82rem;">
+                {{ current_record.job_advertisement_links if current_record else 'Not Found' }}
+                {% if is_suspect_job_advertisement %}
+                  <div style="color: #b45309; font-size: 0.78rem; margin-top: 4px; font-weight: 500;">
+                    ⚠️ Link appears to be a general news/CSRD or blog article rather than an active career/job advertisement. Review recommended before sign-off.
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                <input type="text" name="job_advertisement_links" class="form-control" value="{{ proposed_record.job_advertisement_links }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% elif research.opportunity_urls %}
+                  <div class="citation-tag">Extracted {{ research.opportunity_urls|length }} verified URL(s) from anchors</div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_job_advertisement_links" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 12. References & Evidence URLs -->
+            {% set f_meta = analysis_fields.get('other_links_and_references') if analysis_fields else None %}
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+              <td>
+                <strong>12. Reference URLs</strong>
+                {% if field_reviews and 'other_links_and_references' in field_reviews %}
+                  <span class="badge badge-success" style="background-color: #dcfce7; color: #15803d; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">✓ Operator Reviewed</span>
+                {% elif f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">Quarantined / Blocked</span>
+                {% elif f_meta %}
+                  {% if f_meta.is_hypothesis %}
+                    <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Hypothesis — Pending Review</span>
+                  {% else %}
+                    <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td style="font-size: 0.82rem;">{{ current_record.other_links_and_references if current_record else 'Not Found' }}</td>
+              <td>
+                <input type="text" name="other_links_and_references" class="form-control" value="{{ proposed_record.other_links_and_references }}">
+                {% if f_meta %}
+                  <div class="citation-tag" style="margin-top: 6px; font-size: 0.8rem; line-height: 1.4;">
+                    <div><strong>Source:</strong> {% if f_meta.source_url and f_meta.source_url != 'Not Found' %}<a href="{{ f_meta.source_url }}" target="_blank" rel="noopener">{{ f_meta.source_url }}</a>{% else %}<em>N/A</em>{% endif %} | <strong>Confidence:</strong> {{ (f_meta.confidence * 100)|round|int }}%</div>
+                    {% if f_meta.evidence_excerpt %}
+                      <div style="margin-top: 2px;"><strong>Excerpt:</strong> <em>&ldquo;{{ f_meta.evidence_excerpt }}&rdquo;</em></div>
+                    {% endif %}
+                    {% if f_meta.quarantined %}
+                      <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td style="text-align: center; vertical-align: middle;">
+                {% if f_meta and f_meta.quarantined %}
+                  <span class="badge badge-danger" style="background-color: #fee2e2; color: #991b1b; font-size: 0.75rem;">Blocked</span>
+                {% else %}
+                  <input type="checkbox" name="apply_other_links_and_references" value="1">
+                {% endif %}
+              </td>
+            </tr>
+
+            <!-- 13. Provenance & Research Date -->
+            <tr>
+              <td><strong>13. Provenance &amp; Verification</strong></td>
+              <td>
+                <span class="badge badge-info">{{ current_record.provenance_source if current_record else 'unregistered' }}</span>
+                <span class="badge badge-secondary">{{ current_record.verification_status if current_record else 'Unverified' }}</span>
+              </td>
+              <td>
+                <span class="badge badge-primary">
+                  {% if latest_analysis and latest_analysis.status == 'SUCCESS' %}
+                    {{ latest_analysis.provider }}:{{ latest_analysis.model }}
+                  {% else %}
+                    local_research_mvp
+                  {% endif %}
+                </span>
+                <span class="badge badge-info">EXTRACTED (Checksum/HQ Validated)</span>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Research Date: {{ proposed_record.research_date }}</div>
+              </td>
+              <td style="text-align: center; vertical-align: middle; color: #888;">
+                &mdash;
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source Evidence Citations Accordion / Panel -->
+  <div class="card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+    <div class="card-header" style="background-color: var(--bg-hover); border-bottom: 1px solid #cbd5e1; padding: 0.85rem 1.25rem;">
+      <h3 style="margin: 0; font-size: 1.05rem; color: var(--text-primary); font-weight: 700;">Source Citations, Supplier Portals &amp; Opportunity Grounding</h3>
+    </div>
+    <div class="card-body" style="padding: 1rem 1.25rem; background-color: var(--bg-card);">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div>
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">Verified Supplier Intake Portals &amp; Forms</h4>
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 1rem;">
+            {% for s in research.supplier_signals %}
+            <li style="margin-bottom: 0.35rem; color: #15803d; font-weight: 500;">
+              {{ s }}
+            </li>
+            {% else %}
+            <li style="color: #64748b;">No explicit supplier onboarding form or vendor portal identified.</li>
+            {% endfor %}
+          </ul>
+
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">Recruitment &amp; Career Opportunities</h4>
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 0;">
+            {% for c in research.career_opportunities %}
+            <li style="margin-bottom: 0.35rem; color: #0369a1;">
+              {{ c }}
+            </li>
+            {% else %}
+            <li style="color: #64748b;">No active career or internal hiring links identified.</li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div>
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">Identified Work-Package Hypothesis</h4>
+          <div style="font-size: 0.85rem; background-color: var(--bg-card); color: var(--text-primary); padding: 0.75rem; border-radius: 4px; border-left: 3px solid #0284c7; border: 1px solid var(--border-color); margin-bottom: 1rem;">
+            {{ research.work_package_hypothesis or 'No specific BIM package hypothesis generated.' }}
+          </div>
+
+          <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">Direct Opportunity URLs</h4>
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 0;">
+            {% for u in research.opportunity_urls %}
+            <li style="margin-bottom: 0.25rem;"><a href="{{ u }}" target="_blank" rel="noopener">{{ u }}</a></li>
+            {% else %}
+            <li style="color: #64748b;">No opportunity URLs identified.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operator Action Buttons -->
+  <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-top: 1px solid var(--border-color); margin-top: 1rem;">
+    <div>
+      <a href="/sales/candidates/{{ candidate.candidate_id }}" class="btn btn-secondary">Cancel &amp; Discard</a>
+    </div>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+      <button type="submit" class="btn btn-primary" style="padding: 0.65rem 1.5rem; font-weight: 600;">
+        💾 Save Selected Fields (Partial Review)
+      </button>
+    </div>
+  </div>
+</form>
+
+<!-- Independent Field Verification Form for Quarantined Website -->
+{% set f_meta_web = analysis_fields.get('official_website') if analysis_fields else None %}
+{% if f_meta_web and f_meta_web.quarantined %}
+<form id="verify-official-website-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="field_name" value="official_website">
+</form>
+{% endif %}
+
+<!-- Independent Field Verification Form for Quarantined Business Activities -->
+{% set f_meta_act = analysis_fields.get('business_activities') if analysis_fields else None %}
+{% if f_meta_act and f_meta_act.quarantined %}
+<form id="verify-business-activities-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="field_name" value="business_activities">
+</form>
+{% endif %}
+
+<!-- Independent Finalization Form -->
+<div class="card" style="margin-bottom: 2rem; border: 2px solid {% if is_finalizable %}#16a34a{% else %}#cbd5e1{% endif %}; background-color: var(--bg-card); padding: 1.25rem 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">
+        ✅ Finalize Research Review
+      </h3>
+      <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+        Explicitly signs off on this company's research profile. Promotes status to <code>OPERATOR_REVIEWED</code> and marks lead <strong>Research Ready</strong>.
+      </p>
+    </div>
+    <div>
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/research/finalize" onsubmit="return confirm('Explicitly finalize research review for this company?\n\nThis will promote the record to OPERATOR_REVIEWED (Research Ready).');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-success" {% if not is_finalizable %}disabled{% endif %} style="padding: 0.65rem 1.5rem; font-weight: 700; background-color: {% if is_finalizable %}#16a34a{% else %}#94a3b8{% endif %}; border-color: {% if is_finalizable %}#16a34a{% else %}#94a3b8{% endif %};">
+          ✅ Finalize Research Review
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if historical_snapshots and historical_snapshots|length > 0 %}
+<!-- Historical Snapshots Table -->
+<div class="card" style="margin-top: 2rem; border: 1px solid var(--border-color);">
+  <div class="card-header" style="background-color: var(--bg-hover); border-bottom: 1px solid #cbd5e1; padding: 0.75rem 1.25rem;">
+    <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-primary); font-weight: 700;">Research Snapshot History ({{ historical_snapshots|length }})</h4>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    <div class="table-responsive">
+      <table class="table" style="margin-bottom: 0; font-size: 0.85rem;">
+        <thead>
+          <tr style="background-color: var(--bg-card);">
+            <th style="padding: 0.5rem 1rem;">Snapshot ID</th>
+            <th style="padding: 0.5rem 1rem;">Retrieved At</th>
+            <th style="padding: 0.5rem 1rem;">Status</th>
+            <th style="padding: 0.5rem 1rem;">Pages</th>
+            <th style="padding: 0.5rem 1rem;">Checksum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for sn in historical_snapshots %}
+          <tr>
+            <td style="padding: 0.5rem 1rem;"><code>{{ sn.snapshot_id }}</code></td>
+            <td style="padding: 0.5rem 1rem;">{{ sn.created_at }}</td>
+            <td style="padding: 0.5rem 1rem;"><span class="badge" style="background-color: #e2e8f0; color: var(--text-primary);">{{ sn.research_status }}</span></td>
+            <td style="padding: 0.5rem 1rem;">{{ sn.pages_succeeded }} / {{ sn.pages_attempted }}</td>
+            <td style="padding: 0.5rem 1rem;"><code>{{ sn.content_checksum[:12] if sn.content_checksum else 'N/A' }}...</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

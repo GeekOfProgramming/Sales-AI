@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Candidates | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Candidate Intelligence</h1>
+    <p class="page-subtitle">Discovered companies across all sources with tier, intent, BIM maturity, and contact history.</p>
+  </div>
+</div>
+
+<!-- Candidate Status & Lifecycle Reference Guide -->
+<details class="card" style="padding: 0.85rem 1.25rem; margin-bottom: 1rem; border-left: 4px solid var(--border-focus);">
+  <summary style="cursor: pointer; font-weight: 700; color: var(--border-focus); display: flex; justify-content: space-between; align-items: center;">
+    <span>📖 Candidate Status, Verification &amp; Lifecycle Reference</span>
+    <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Click to expand / collapse</span>
+  </summary>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 0.85rem; font-size: 0.82rem;">
+    <div>
+      <h4 style="font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.4rem; text-transform: uppercase;">Discovery &amp; Triage Statuses</h4>
+      <ul style="padding-left: 1.1rem; margin: 0; color: var(--text-secondary); line-height: 1.45;">
+        <li><strong>New:</strong> Newly ingested candidate record awaiting operator review.</li>
+        <li><strong>Needs Research:</strong> Target requires deeper company and website research.</li>
+        <li><strong>Watchlist:</strong> Candidate saved for observation; paused from active pipeline.</li>
+        <li><strong>Qualified for Enrichment:</strong> Meets ICP criteria for deep profile research.</li>
+        <li><strong>Known Company:</strong> Company already exists in historical database.</li>
+        <li><strong>Re-engagement Review:</strong> Past contact requires manual re-evaluation.</li>
+        <li><strong>Rejected:</strong> Candidate does not fit ICP or business requirements.</li>
+      </ul>
+    </div>
+    <div>
+      <h4 style="font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.4rem; text-transform: uppercase;">Research &amp; Contact Invariants</h4>
+      <ul style="padding-left: 1.1rem; margin: 0; color: var(--text-secondary); line-height: 1.45;">
+        <li><strong>Researched:</strong> An immutable, persisted Research Snapshot exists. Does <em>not</em> imply all 13 fields are complete, human-approved, or outreach-eligible.</li>
+        <li><strong>Not Researched:</strong> No offline snapshot available yet.</li>
+        <li><strong>Contact Availability:</strong> Differentiates <em>Verified</em>, <em>Likely</em>, and <em>Unverified</em> emails. Likely emails are never represented as verified.</li>
+        <li><strong>Separation of Concerns:</strong> Discovery status, ICP qualification, research completion, contact verification, and manual outreach eligibility are distinct lifecycle states.</li>
+      </ul>
+    </div>
+  </div>
+</details>
+
+<!-- Filters Bar -->
+<div class="card" style="padding: 1rem;">
+  <form method="GET" action="/sales/candidates" class="form-inline">
+    <div style="flex: 1; min-width: 200px;">
+      <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Search company or domain...">
+    </div>
+    <div style="width: 170px;">
+      <select name="status" class="form-control">
+        <option value="">All Statuses</option>
+        <option value="new" {% if status == 'new' %}selected{% endif %}>New</option>
+        <option value="needs_research" {% if status == 'needs_research' %}selected{% endif %}>Needs Research</option>
+        <option value="watchlist" {% if status == 'watchlist' %}selected{% endif %}>Watchlist</option>
+        <option value="qualified_for_enrichment" {% if status == 'qualified_for_enrichment' %}selected{% endif %}>Qualified for Enrichment</option>
+        <option value="known_company" {% if status == 'known_company' %}selected{% endif %}>Known Company</option>
+        <option value="reengagement_review" {% if status == 'reengagement_review' %}selected{% endif %}>Re-engagement Review</option>
+        <option value="rejected" {% if status == 'rejected' %}selected{% endif %}>Rejected</option>
+      </select>
+    </div>
+    <div style="width: 140px;">
+      <select name="tier" class="form-control">
+        <option value="">All Tiers</option>
+        <option value="tier_1" {% if tier == 'tier_1' %}selected{% endif %}>Tier 1</option>
+        <option value="tier_2" {% if tier == 'tier_2' %}selected{% endif %}>Tier 2</option>
+        <option value="tier_3" {% if tier == 'tier_3' %}selected{% endif %}>Tier 3</option>
+      </select>
+    </div>
+    <div style="width: 110px;">
+      <input type="text" name="country" value="{{ country or '' }}" class="form-control" placeholder="Country">
+    </div>
+    <div style="width: 110px;">
+      <input type="text" name="city" value="{{ city or '' }}" class="form-control" placeholder="City">
+    </div>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+    <a href="/sales/candidates" class="btn btn-secondary btn-sm" style="padding: 0.55rem 0.75rem;">Reset</a>
+    <div style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
+      <a href="/sales/candidates/export?format=csv&approved_only=true" class="btn btn-primary btn-sm" title="Export only operator-approved qualified leads">✅ Export Approved Leads (CSV)</a>
+      <a href="/sales/candidates/export?format=xlsx&approved_only=true" class="btn btn-primary btn-sm" title="Export only operator-approved qualified leads">✅ Export Approved Leads (XLSX)</a>
+      <a href="/sales/candidates/export?format=csv&approved_only=false" class="btn btn-secondary btn-sm" title="Export all candidates">📥 Export All (CSV)</a>
+    </div>
+  </form>
+</div>
+
+<!-- Candidates Table -->
+<div class="card">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Candidates ({{ total }} total, showing page {{ page }})</span>
+    <button type="submit" form="batch-research-form" class="btn btn-secondary btn-sm" title="Batch research up to 3 selected candidates">🔬 Batch Research (Max 3)</button>
+  </div>
+  {% if candidates %}
+  <form id="batch-research-form" method="POST" action="/sales/candidates/batch-research">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="table-responsive">
+      <table class="data-table crm-table">
+        <thead>
+          <tr>
+            <th style="width: 35px; text-align: center;">&check;</th>
+            <th>Company Name</th>
+            <th>Official Domain</th>
+            <th>Country / Market</th>
+            <th>Priority / Qualification</th>
+            <th>Research Status</th>
+            <th>Contact Availability</th>
+            <th>Status</th>
+            <th style="text-align: right; min-width: 140px;">Next Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            <td style="text-align: center;">
+              <input type="checkbox" name="candidate_ids" value="{{ c.candidate_id }}">
+            </td>
+            <td>
+              <a href="/sales/candidates/{{ c.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;">
+                {{ c.company_name }}
+              </a>
+              {% if c.is_previously_contacted %}
+              <span class="badge badge-previously-contacted" title="Contacted previously" style="font-size: 0.7rem; margin-left: 0.25rem;">Previously Contacted</span>
+              {% endif %}
+              {% if c.is_suppressed %}
+              <span class="badge badge-danger" style="font-size: 0.7rem; margin-left: 0.25rem;">Suppressed</span>
+              {% endif %}
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">
+                BIM: {{ c.bim_maturity }}
+              </div>
+            </td>
+            <td>
+              {% if c.domain %}
+                <code>{{ c.domain }}</code>
+              {% else %}
+                <span style="color: var(--text-muted);">N/A</span>
+              {% endif %}
+            </td>
+            <td>{{ c.country or 'Not Verified' }}</td>
+            <td>
+              <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                <span class="badge {% if c.tier == 'tier_1' %}badge-primary{% elif c.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}">
+                  {{ c.tier or 'Unassigned' }}
+                </span>
+                {% if c.fit %}
+                <span class="badge {% if c.fit == 'high' %}badge-success{% elif c.fit == 'medium' %}badge-warning{% else %}badge-muted{% endif %}" title="Fit">
+                  Fit: {{ c.fit }}
+                </span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              {% if c.has_research_snapshot %}
+                <a href="/sales/candidates/{{ c.candidate_id }}/research" style="text-decoration: none;">
+                  <span class="badge badge-success" title="Snapshot ID: {{ c.snapshot_id }}">🔬 Researched</span>
+                </a>
+              {% else %}
+                <span class="badge badge-muted">Not Researched</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.contact_count > 0 %}
+                <span style="font-size: 0.8rem; font-weight: 600;">
+                  {{ c.contact_count }} {% if c.contact_count == 1 %}contact{% else %}contacts{% endif %}
+                </span>
+                {% if c.verified_contact_count > 0 %}
+                  <span class="badge badge-success" style="font-size: 0.68rem; margin-left: 0.2rem;">{{ c.verified_contact_count }} verified</span>
+                {% endif %}
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.8rem;">None recorded</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge {% if c.status == 'qualified_for_enrichment' %}badge-success{% elif c.status == 'needs_research' %}badge-warning{% elif c.status == 'rejected' %}badge-danger{% else %}badge-info{% endif %}">
+                {{ c.status }}
+              </span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <a href="/sales/candidates/{{ c.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
+              <a href="/sales/candidates/{{ c.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="Review Research Snapshot">Research</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+
+  <!-- Pagination controls -->
+  <div class="pagination">
+    <span>Showing {{ candidates|length }} of {{ total }} results</span>
+    <div class="pagination-controls">
+      {% if page > 1 %}
+      <a href="?page={{ page - 1 }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}" class="btn btn-secondary btn-sm">Previous</a>
+      {% endif %}
+      {% if has_next %}
+      <a href="?page={{ page + 1 }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}" class="btn btn-secondary btn-sm">Next</a>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No candidate companies match the selected criteria.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

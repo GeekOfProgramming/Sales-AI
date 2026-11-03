@@ -1,0 +1,455 @@
+{% extends "base.html" %}
+
+{% block title %}Qualified Leads | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Qualified Leads Workspace</h1>
+    <p class="page-subtitle">Scalable operator review and manual AI handoff workspace for Enrichment-Qualified companies. Review evidence, copy structured intelligence, or prepare manual outreach.</p>
+  </div>
+</div>
+
+<!-- Phase 2: Work Queue Tabs / Pills -->
+<div class="queue-nav-bar" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+  <a href="/sales/leads?queue=all{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'all' or not selected_queue %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>All Qualified Leads</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ total_qualified }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=needs_research{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'needs_research' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Needs Research</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_needs_research }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=review_required{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'review_required' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Review Required</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_review_required }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=research_ready{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'research_ready' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Research Ready</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_research_ready }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=draft_ready{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'draft_ready' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Ready for Manual Draft</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_draft_ready }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=verification_required{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'verification_required' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Contact Verification Required</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_verification_required }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=previously_contacted{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'previously_contacted' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Previously Contacted</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_previously_contacted }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=suppressed_or_ineligible{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'suppressed_or_ineligible' %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
+    <span>Suppressed / Ineligible</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_suppressed_or_ineligible }}</span>
+  </a>
+</div>
+
+<!-- Summary KPI Bar (Retained for KPI consistency & test assertions) -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid var(--border-focus);">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Total Enrichment-Qualified</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: var(--text-primary);">{{ total_qualified }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Automated ICP qualified candidates</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #06b6d4;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Research Ready</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #06b6d4;">{{ count_research_ready }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">13 fields reviewed by operator</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #f97316;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Review Required</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #f97316;">{{ count_review_required }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Unreviewed snapshots / records</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #10b981;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Ready for Manual Draft</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #10b981;">{{ count_draft_ready }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Eligible with verified recipient</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #f59e0b;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Verification Required</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #f59e0b;">{{ count_verification_required }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Missing verified contact evidence</div>
+  </div>
+
+  <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #ef4444;">
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Restricted / DNC</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #ef4444;">{{ count_suppressed_or_ineligible + count_prior_contact }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">DNC, prior contact, or policy</div>
+  </div>
+</div>
+
+<!-- Phase 3: Filter Toolbar & Card -->
+<div class="card">
+  <div style="padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
+    <form method="GET" action="/sales/leads" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 0;">
+      <!-- Hidden queue preserve -->
+      {% if selected_queue and selected_queue != 'all' %}
+      <input type="hidden" name="queue" value="{{ selected_queue }}">
+      {% endif %}
+
+      <!-- Search Input -->
+      <div style="flex: 1 1 180px; min-width: 160px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Search Company / Domain</label>
+        <input type="text" name="q" value="{{ query or '' }}" placeholder="Search company or domain..." class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+      </div>
+
+      <!-- Country Filter -->
+      <div style="flex: 0 1 130px; min-width: 120px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Country</label>
+        <select name="country" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Countries</option>
+          {% for c_name in available_countries %}
+            <option value="{{ c_name }}" {% if selected_country == c_name %}selected{% endif %}>{{ c_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- City Filter -->
+      <div style="flex: 0 1 130px; min-width: 120px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">City</label>
+        <input type="text" name="city" value="{{ selected_city or '' }}" placeholder="City..." class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+      </div>
+
+      <!-- Priority Filter -->
+      <div style="flex: 0 1 110px; min-width: 100px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Priority</label>
+        <select name="priority" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Priorities</option>
+          <option value="A" {% if selected_priority == 'A' %}selected{% endif %}>Priority A</option>
+          <option value="B" {% if selected_priority == 'B' %}selected{% endif %}>Priority B</option>
+          <option value="C" {% if selected_priority == 'C' %}selected{% endif %}>Priority C</option>
+          <option value="UNKNOWN" {% if selected_priority == 'UNKNOWN' %}selected{% endif %}>Unknown</option>
+        </select>
+      </div>
+
+      <!-- Tier Filter -->
+      <div style="flex: 0 1 120px; min-width: 110px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Company Tier</label>
+        <select name="tier" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Tiers</option>
+          {% for t_name in available_tiers %}
+            <option value="{{ t_name }}" {% if selected_tier == t_name %}selected{% endif %}>{{ t_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Research Readiness Filter -->
+      <div style="flex: 0 1 150px; min-width: 130px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Research Readiness</label>
+        <select name="research_status" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Research States</option>
+          <option value="research_ready" {% if selected_research == 'research_ready' %}selected{% endif %}>Research Ready (Reviewed)</option>
+          <option value="partially_reviewed" {% if selected_research == 'partially_reviewed' %}selected{% endif %}>Partially Reviewed</option>
+          <option value="review_required" {% if selected_research == 'review_required' %}selected{% endif %}>Review Required</option>
+          <option value="missing_evidence" {% if selected_research == 'missing_evidence' %}selected{% endif %}>Missing Evidence</option>
+          <option value="unresearched" {% if selected_research == 'unresearched' %}selected{% endif %}>Pending Research</option>
+        </select>
+      </div>
+
+      <!-- Outreach Readiness Filter -->
+      <div style="flex: 0 1 170px; min-width: 150px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Outreach Readiness</label>
+        <select name="readiness" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="">All Outreach States</option>
+          <option value="draft_ready" {% if selected_readiness == 'draft_ready' %}selected{% endif %}>Ready for Manual Draft</option>
+          <option value="verification_required" {% if selected_readiness == 'verification_required' %}selected{% endif %}>Contact Verification Required</option>
+          <option value="prior_contact" {% if selected_readiness == 'prior_contact' %}selected{% endif %}>Prior Contact / Active Conv.</option>
+          <option value="suppressed_or_ineligible" {% if selected_readiness == 'suppressed_or_ineligible' %}selected{% endif %}>Suppressed / Ineligible</option>
+        </select>
+      </div>
+
+      <!-- Sort By -->
+      <div style="flex: 0 1 140px; min-width: 120px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Sort By</label>
+        <select name="sort_by" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="readiness" {% if selected_sort == 'readiness' %}selected{% endif %}>Readiness Status</option>
+          <option value="priority" {% if selected_sort == 'priority' %}selected{% endif %}>Priority Level (A-C)</option>
+          <option value="company_name" {% if selected_sort == 'company_name' %}selected{% endif %}>Company Name</option>
+          <option value="research_date" {% if selected_sort == 'research_date' %}selected{% endif %}>Research Date</option>
+        </select>
+      </div>
+
+      <!-- Sort Order -->
+      <div style="flex: 0 1 100px; min-width: 90px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Order</label>
+        <select name="sort_order" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="asc" {% if selected_order == 'asc' %}selected{% endif %}>Ascending</option>
+          <option value="desc" {% if selected_order == 'desc' %}selected{% endif %}>Descending</option>
+        </select>
+      </div>
+
+      <!-- Page Size (10, 25, 50) -->
+      <div style="flex: 0 1 100px; min-width: 90px;">
+        <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.25rem;">Page Size</label>
+        <select name="page_size" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem; height: 34px;">
+          <option value="10" {% if page_size == 10 %}selected{% endif %}>10 / page</option>
+          <option value="25" {% if page_size == 25 %}selected{% endif %}>25 / page</option>
+          <option value="50" {% if page_size == 50 %}selected{% endif %}>50 / page</option>
+        </select>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+        <button type="submit" class="btn btn-secondary btn-sm" style="height: 34px; padding: 0 1rem; font-weight: 600;">Apply Filters</button>
+        {% if query or selected_country or selected_city or selected_priority or selected_tier or selected_readiness or selected_research or selected_sort != 'readiness' or selected_order != 'asc' or page_size != 25 or (selected_queue and selected_queue != 'all') %}
+          <a href="/sales/leads" class="btn btn-outline-secondary btn-sm" style="height: 34px; line-height: 22px; padding: 0.35rem 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-secondary); text-decoration: none;">Reset Filters</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+    <div>
+      <span style="font-weight: 700; font-size: 1.05rem;">Qualified Leads ({{ total_qualified }})</span>
+      <span class="badge badge-success" style="margin-left: 0.5rem;">Enrichment Qualified</span>
+      <span class="badge badge-secondary" style="margin-left: 0.25rem;">Showing {{ leads|length }} of {{ total_filtered }} matching</span>
+      {% if selected_queue and selected_queue != 'all' %}
+      <span class="badge badge-info" style="margin-left: 0.25rem;">Queue: {{ selected_queue }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if leads %}
+  <!-- Phase 4 & 5: Compact Table Layout with One-Click AI Handoff Copy Controls -->
+  <div class="table-responsive">
+    <table class="data-table crm-table">
+      <thead>
+        <tr>
+          <th style="min-width: 170px;">Company &amp; Domain</th>
+          <th style="min-width: 120px;">Location</th>
+          <th style="min-width: 80px;">Priority</th>
+          <th style="min-width: 90px;">Tier / Fit</th>
+          <th style="min-width: 130px;">Research Readiness</th>
+          <th style="min-width: 140px;">Outreach Readiness</th>
+          <th style="text-align: right; min-width: 320px;">Actions &amp; AI Handoff</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in leads %}
+        <tr>
+          <!-- Company & Domain -->
+          <td>
+            {% if l.candidate_id %}
+            <a href="/sales/candidates/{{ l.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;" title="{{ l.raw_company_name }}">
+              {{ l.company_name }}
+            </a>
+            {% else %}
+            <span style="font-weight: 700; color: var(--text-primary);">{{ l.company_name }}</span>
+            <span class="badge badge-danger" style="font-size: 0.68rem; margin-left: 0.25rem;">Invalid ID</span>
+            {% endif %}
+            
+            {% if l.is_previously_contacted %}
+            <span class="badge badge-previously-contacted" style="font-size: 0.68rem; margin-left: 0.25rem;">Previously Contacted</span>
+            {% endif %}
+            {% if l.is_suppressed %}
+            <span class="badge badge-danger" style="font-size: 0.68rem; margin-left: 0.25rem;">Suppressed</span>
+            {% endif %}
+            
+            <div style="font-size: 0.75rem; margin-top: 0.2rem;">
+              {% if l.domain %}
+                <code>{{ l.domain }}</code>
+              {% else %}
+                <span style="color: var(--text-muted);">No domain</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <!-- Location -->
+          <td>
+            <div style="font-size: 0.85rem;">{{ l.location_display }}</div>
+          </td>
+
+          <!-- Priority -->
+          <td>
+            {% if l.priority == 'A' %}
+              <span class="badge badge-success" style="font-weight: 700;">Priority A</span>
+            {% elif l.priority == 'B' %}
+              <span class="badge badge-info" style="font-weight: 700;">Priority B</span>
+            {% elif l.priority == 'C' %}
+              <span class="badge badge-muted" style="font-weight: 700;">Priority C</span>
+            {% else %}
+              <span class="badge badge-secondary" style="font-weight: 600; opacity: 0.85;">Unknown</span>
+            {% endif %}
+          </td>
+
+          <!-- Tier / Fit / Opportunity -->
+          <td>
+            <span class="badge {% if l.tier == 'Tier 1' %}badge-primary{% elif l.tier == 'Tier 2' %}badge-info{% else %}badge-muted{% endif %}">
+              {{ l.tier }}
+            </span>
+            <span class="badge {% if l.fit == 'high' %}badge-success{% elif l.fit == 'medium' %}badge-warning{% elif l.fit == 'low' %}badge-danger{% else %}badge-muted{% endif %}" style="font-size: 0.7rem; margin-left: 0.2rem;">
+              {{ l.fit|capitalize }}
+            </span>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">
+              {% if l.outsourcing_potential != 'Not Evaluated' and l.outsourcing_potential != 'unknown' and l.outsourcing_potential != 'Unknown' %}
+                {{ l.outsourcing_potential }}
+              {% else %}
+                Not Evaluated
+              {% endif %}
+            </div>
+          </td>
+
+          <!-- Research Readiness -->
+          <td>
+            <span class="badge {{ l.research_badge }}" title="{{ l.research_title }}">
+              {{ l.research_label }}
+            </span>
+            {% if l.record_number %}
+              <span style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-top: 2px;">
+                #{{ l.record_number }} ({{ l.verification_status }})
+              </span>
+            {% endif %}
+          </td>
+
+          <!-- Outreach Readiness -->
+          <td>
+            <span class="badge {{ l.readiness_badge }}" title="{{ l.readiness_title }}">
+              {{ l.readiness_label }}
+            </span>
+          </td>
+
+          <!-- Actions & Phase 5 AI Handoff -->
+          <td style="text-align: right; white-space: nowrap;">
+            {% if l.candidate_id and not l.is_invalid_id %}
+              <!-- Hidden copy strings for one-click copy -->
+              <textarea id="copy-intel-{{ loop.index }}" style="display: none;">{{ l.copy_intel_text }}</textarea>
+              <textarea id="copy-13fields-{{ loop.index }}" style="display: none;">{{ l.copy_13_fields_text }}</textarea>
+              <textarea id="copy-brief-{{ loop.index }}" style="display: none;">{{ l.copy_ai_brief_text }}</textarea>
+
+              <div style="display: inline-flex; gap: 0.35rem; align-items: center; justify-content: flex-end; flex-wrap: nowrap;">
+                <!-- One-Click AI Handoff Actions -->
+                <button type="button" class="btn btn-secondary btn-sm" onclick="copyFromEl('copy-intel-{{ loop.index }}', 'Copied Company Intelligence!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Copy unembellished company intelligence to clipboard">📋 Intel</button>
+                
+                <button type="button" class="btn btn-secondary btn-sm" onclick="copyFromEl('copy-13fields-{{ loop.index }}', '{{ l.copy_13_fields_label }}!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="{{ l.copy_13_fields_label }} to clipboard">📋 13 Fields</button>
+
+                <!-- AI Brief Copy Control (Restricted for Suppressed, Previously Contacted, Unresearched, or Unverified) -->
+                {% if l.can_generate_cold_brief %}
+                  <button type="button" class="btn btn-primary btn-sm" onclick="copyFromEl('copy-brief-{{ loop.index }}', 'Copied AI Brief for External LLM!')" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #6366f1; color: white; border: none;" title="Copy complete prompt &amp; context brief for external AI">📋 AI Brief</button>
+                {% elif l.is_suppressed %}
+                  <button type="button" class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.5; cursor: not-allowed;" title="AI Brief generation blocked: Company is on the Suppression / DNC list" disabled>🚫 Brief Blocked</button>
+                {% elif l.is_previously_contacted %}
+                  <button type="button" class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.5; cursor: not-allowed;" title="Cold outreach brief blocked: Candidate has prior outreach history" disabled>⚠️ Cold Brief Blocked</button>
+                {% elif l.research_status != 'research_ready' %}
+                  <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f97316; text-decoration: none;" title="AI Brief blocked: {{ l.ai_brief_blocked_reason }}. Click to review research.">📋 Review Research</a>
+                {% elif not l.has_verified_recipient or l.effective_readiness == 'verification_required' %}
+                  <a href="/sales/candidates/{{ l.candidate_id }}#contacts" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f59e0b; text-decoration: none;" title="AI Brief blocked: {{ l.ai_brief_blocked_reason }}. Click to verify contact evidence.">📋 Verify Contact</a>
+                {% else %}
+                  <span class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.5; cursor: not-allowed;" title="AI Brief blocked: {{ l.ai_brief_blocked_reason or 'Not outreach eligible' }}">🚫 Brief Blocked</span>
+                {% endif %}
+
+                <!-- Standard Workspace & Pipeline Navigation -->
+                <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Open Company Workspace">Workspace</a>
+
+                {% if l.effective_readiness == 'draft_ready' %}
+                  <a href="/sales/candidates/{{ l.candidate_id }}#manual-draft" class="btn btn-success btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #10b981; color: white; border: none;" title="Prepare Offline Manual Draft">Prepare Draft</a>
+                {% elif l.effective_readiness == 'verification_required' %}
+                  <a href="/sales/candidates/{{ l.candidate_id }}#contacts" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f59e0b;" title="Verify Contact Evidence">Verify Contact</a>
+                {% endif %}
+              </div>
+            {% else %}
+              <span class="btn btn-secondary btn-sm disabled" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; opacity: 0.6; cursor: not-allowed;" title="Record has invalid or empty candidate ID">Invalid Record</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination Controls (Preserving All Filter & Queue State) -->
+  {% if total_pages > 1 %}
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.85rem;">
+    <div style="color: var(--text-secondary);">
+      Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong> ({{ total_filtered }} total leads)
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      {% if has_prev %}
+        <a href="/sales/leads?page={{ prev_page }}&page_size={{ page_size }}&queue={{ selected_queue or '' }}&q={{ query or '' }}&country={{ selected_country or '' }}&city={{ selected_city or '' }}&priority={{ selected_priority or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}&research_status={{ selected_research or '' }}&sort_by={{ selected_sort or '' }}&sort_order={{ selected_order or '' }}" class="btn btn-secondary btn-sm">← Previous</a>
+      {% else %}
+        <span class="btn btn-secondary btn-sm disabled" style="opacity: 0.5; cursor: not-allowed;">← Previous</span>
+      {% endif %}
+
+      {% if has_next %}
+        <a href="/sales/leads?page={{ next_page }}&page_size={{ page_size }}&queue={{ selected_queue or '' }}&q={{ query or '' }}&country={{ selected_country or '' }}&city={{ selected_city or '' }}&priority={{ selected_priority or '' }}&tier={{ selected_tier or '' }}&readiness={{ selected_readiness or '' }}&research_status={{ selected_research or '' }}&sort_by={{ selected_sort or '' }}&sort_order={{ selected_order or '' }}" class="btn btn-secondary btn-sm">Next →</a>
+      {% else %}
+        <span class="btn btn-secondary btn-sm disabled" style="opacity: 0.5; cursor: not-allowed;">Next →</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No companies currently match the selected qualification or filter criteria.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- JavaScript for One-Click Clipboard Actions -->
+<script>
+function copyFromEl(elementId, successMsg) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const text = el.value || el.innerText;
+  if (!text) return;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(successMsg || 'Copied to clipboard!');
+    }).catch(err => {
+      fallbackCopy(text, successMsg);
+    });
+  } else {
+    fallbackCopy(text, successMsg);
+  }
+}
+
+function fallbackCopy(text, successMsg) {
+  const tempTextarea = document.createElement('textarea');
+  tempTextarea.value = text;
+  tempTextarea.style.position = 'fixed';
+  tempTextarea.style.left = '-999999px';
+  tempTextarea.style.top = '-999999px';
+  document.body.appendChild(tempTextarea);
+  tempTextarea.focus();
+  tempTextarea.select();
+  try {
+    document.execCommand('copy');
+    showToast(successMsg || 'Copied to clipboard!');
+  } catch (err) {
+    alert('Copy failed. Please manually copy the intelligence text.');
+  }
+  document.body.removeChild(tempTextarea);
+}
+</script>
+{% endblock %}

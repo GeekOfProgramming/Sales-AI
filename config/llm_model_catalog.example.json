@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.1.0",
+  "description": "SalesAI 16-slot candidate model catalog and task routing policy template (S2.3.1 hardened). All tasks start at Tier 1 Budget. All candidate slots default to disabled neutral placeholders with unknown pricing and unverified capabilities. Live verification and operator provenance required before enablement.",
+  "task_policies": {
+    "website_extraction": {
+      "starting_tier": "tier_1_budget",
+      "subtasks": ["pass_a", "pass_b"],
+      "evaluation_focus": "factual_extraction_grounding"
+    },
+    "job_analysis": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "hiring_signals_bim_skills"
+    },
+    "discovery_query_generation": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "query_quality_diversity"
+    },
+    "inbox_classification": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "intent_accuracy_suppression"
+    },
+    "reply_suggestion": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "grounded_facts_no_unauthorized_claims"
+    },
+    "outreach_draft": {
+      "starting_tier": "tier_1_budget",
+      "evaluation_focus": "b2b_tone_evidence_attribution"
+    }
+  },
+  "candidate_slots": [
+    {
+      "candidate_id": "t1_c1",
+      "tier": "tier_1_budget",
+      "priority": 1,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 1. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t1_c2",
+      "tier": "tier_1_budget",
+      "priority": 2,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 2. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t1_c3",
+      "tier": "tier_1_budget",
+      "priority": 3,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 3. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t1_c4",
+      "tier": "tier_1_budget",
+      "priority": 4,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 4. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t2_c1",
+      "tier": "tier_2_balanced",
+      "priority": 1,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 1. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t2_c2",
+      "tier": "tier_2_balanced",
+      "priority": 2,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 2. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t2_c3",
+      "tier": "tier_2_balanced",
+      "priority": 3,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 3. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t2_c4",
+      "tier": "tier_2_balanced",
+      "priority": 4,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 4. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t3_c1",
+      "tier": "tier_3_high_fidelity",
+      "priority": 1,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 1. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t3_c2",
+      "tier": "tier_3_high_fidelity",
+      "priority": 2,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 2. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t3_c3",
+      "tier": "tier_3_high_fidelity",
+      "priority": 3,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 3. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t3_c4",
+      "tier": "tier_3_high_fidelity",
+      "priority": 4,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 4. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t4_c1",
+      "tier": "tier_4_flagship",
+      "priority": 1,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 1. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t4_c2",
+      "tier": "tier_4_flagship",
+      "priority": 2,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 2. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t4_c3",
+      "tier": "tier_4_flagship",
+      "priority": 3,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 3. Disabled placeholder pending live API contract verification."
+    },
+    {
+      "candidate_id": "t4_c4",
+      "tier": "tier_4_flagship",
+      "priority": 4,
+      "provider_id": "unassigned",
+      "exact_model_id": "unverified_slot",
+      "enabled": false,
+      "provider_adapter_kind": "openai_compatible",
+      "allowed_tasks": ["*"],
+      "verified_capabilities": {},
+      "pricing": null,
+      "verification_notes": "Illustrative slot 4. Disabled placeholder pending live API contract verification."
+    }
+  ]
+}

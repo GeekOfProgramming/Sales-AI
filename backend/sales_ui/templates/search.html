@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Global Search Results</h1>
+    <p class="page-subtitle">Search results for "{{ query }}": candidates, domains, contacts, and email drafts.</p>
+  </div>
+</div>
+
+<!-- Candidate Companies Results -->
+<div class="card">
+  <div class="card-title">
+    <span>Candidate Companies ({{ candidate_results|length }})</span>
+  </div>
+  {% if candidate_results %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company Name</th>
+          <th>Domain</th>
+          <th>City</th>
+          <th>Tier</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in candidate_results %}
+        <tr>
+          <td><strong><a href="/sales/candidates/{{ c.id }}">{{ c.name }}</a></strong></td>
+          <td><code>{{ c.domain or 'N/A' }}</code></td>
+          <td>{{ c.city or '-' }}</td>
+          <td><span class="badge badge-tier">{{ c.tier or 'unknown' }}</span></td>
+          <td><span class="badge badge-info">{{ c.status }}</span></td>
+          <td><a href="/sales/candidates/{{ c.id }}" class="btn btn-secondary btn-sm">View Candidate</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No matching candidates found.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Draft Outreach Results -->
+<div class="card">
+  <div class="card-title">
+    <span>Outreach Drafts ({{ draft_results|length }})</span>
+  </div>
+  {% if draft_results %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Draft ID</th>
+          <th>Subject</th>
+          <th>Recipient</th>
+          <th>Approval</th>
+          <th>Send Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in draft_results %}
+        <tr>
+          <td><code>{{ d.draft_id }} (r{{ d.revision }})</code></td>
+          <td><strong><a href="/sales/drafts/{{ d.draft_id }}">{{ d.subject }}</a></strong></td>
+          <td>{{ d.recipient_name }} &lt;{{ d.recipient_email }}&gt;</td>
+          <td><span class="badge badge-info">{{ d.approval_status }}</span></td>
+          <td><span class="badge {% if d.send_status == 'sent' %}badge-success{% else %}badge-muted{% endif %}">{{ d.send_status }}</span></td>
+          <td><a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-secondary btn-sm">Inspect Draft</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No matching drafts found.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Lead Research Pilot (7 Verified Companies) | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Lead Research Pilot — 7 Verified Company Websites</h1>
+    <p class="page-subtitle">Human-reviewed engineering &amp; architecture leads with strict per-field evidence provenance and historical deduplication.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/discovery" class="btn btn-secondary">← Back to Discovery</a>
+    <a href="/sales/candidates" class="btn btn-secondary">View Candidates</a>
+    <a href="/sales/candidates/export?approved_only=true" class="btn btn-primary">Export Approved Leads</a>
+  </div>
+</div>
+
+<!-- Operator Guidance & Safety Notice -->
+<div class="card" style="border-left: 4px solid #3b82f6; margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+    <span style="font-weight: 600; color: var(--text-primary); font-size: 1.05rem;">🛡️ Safe Lead Research &amp; Review Protocol</span>
+    <span class="badge badge-primary">Operator Controlled</span>
+  </div>
+  <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+    This pilot transforms raw web discovery results into verified, structured company leads. 
+    <strong>Safety guarantees:</strong> Zero live Brave search calls, zero external LLM calls, zero autonomous email sending, and zero modifications to the historical Excel baseline.
+  </p>
+  <div style="display: flex; gap: 1.5rem; font-size: 0.85rem; color: var(--text-muted);">
+    <span>• <strong>Source language:</strong> Italian preserved as published</span>
+    <span>• <strong>Deduplication:</strong> Checked against 284 candidate records &amp; historical database</span>
+    <span>• <strong>Approval gate:</strong> Explicit operator review before leads can be exported</span>
+  </div>
+</div>
+
+<!-- Batch Action Controls -->
+<div class="card" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: var(--bg-card); display: flex; justify-content: space-between; align-items: center;">
+  <div>
+    <span style="font-weight: 600;">Pilot Dataset:</span> 7 Verified Italian Engineering &amp; BIM Companies
+    <span style="margin-left: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+      Saved in Candidates DB: <strong>{{ saved_count }} / 7</strong>
+    </span>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    <form method="POST" action="/sales/research/pilot/save-all" style="margin: 0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+      <button type="submit" class="btn btn-primary" {% if saved_count == 7 %}disabled style="opacity: 0.6; cursor: not-allowed;"{% endif %}>
+        💾 Save All Researched Leads to Candidates DB
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Main Operator Review Table -->
+<div class="card" style="padding: 0; overflow-x: auto;">
+  <table class="table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.875rem;">
+    <thead>
+      <tr style="background: var(--bg-hover); border-bottom: 2px solid var(--border-color);">
+        <th style="padding: 0.75rem 1rem;">Company &amp; Domain</th>
+        <th style="padding: 0.75rem 1rem;">Location &amp; P.IVA</th>
+        <th style="padding: 0.75rem 1rem;">Services &amp; Technologies</th>
+        <th style="padding: 0.75rem 1rem;">Classification &amp; Tier</th>
+        <th style="padding: 0.75rem 1rem;">Public Contact Details</th>
+        <th style="padding: 0.75rem 1rem;">Status / Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in pilot_items %}
+      <tr style="border-bottom: 1px solid var(--border-color); vertical-align: top;">
+        <!-- Company & Domain -->
+        <td style="padding: 1rem;">
+          <div style="font-weight: 700; font-size: 1rem; color: var(--text-primary); margin-bottom: 0.25rem;">
+            {{ item.profile.company_name }}
+          </div>
+          <div style="font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <a href="{{ item.profile.source_website_url }}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: none;">
+              🌐 {{ item.profile.canonical_domain }} ↗
+            </a>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">
+            Form: {{ item.profile.legal_form or 'Not Found' }}
+          </div>
+          {% if item.db_status.saved %}
+            <span class="badge badge-success" style="margin-top: 0.5rem; display: inline-block;">Saved in DB</span>
+          {% else %}
+            <span class="badge badge-warning" style="margin-top: 0.5rem; display: inline-block;">Pending Save</span>
+          {% endif %}
+        </td>
+
+        <!-- Location & P.IVA -->
+        <td style="padding: 1rem;">
+          <div><strong>{{ item.profile.city }}</strong>, {{ item.profile.region }}</div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.35rem;">{{ item.profile.country }}</div>
+          <div style="font-size: 0.8rem;">
+            <strong>P.IVA:</strong> 
+            {% if item.profile.vat_number %}
+              <code style="background: var(--bg-hover); padding: 0.1rem 0.3rem; border-radius: 3px;">{{ item.profile.vat_number }}</code>
+            {% else %}
+              <span style="color: var(--text-muted);">Not Found</span>
+            {% endif %}
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+            Address: {{ item.profile.address or 'Padova / Veneto' }}
+          </div>
+        </td>
+
+        <!-- Services & Technologies -->
+        <td style="padding: 1rem; max-width: 280px;">
+          <div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">BIM Capabilities:</div>
+          <ul style="margin: 0 0 0.5rem 1rem; padding: 0; font-size: 0.8rem; color: var(--text-secondary);">
+            {% for s in item.profile.bim_services %}
+              <li>{{ s }}</li>
+            {% endfor %}
+          </ul>
+          <div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Software / Tech:</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.3rem;">
+            {% for t in item.profile.technologies %}
+              <span style="background: var(--bg-hover); border: 1px solid var(--border-color); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">
+                {{ t }}
+              </span>
+            {% endfor %}
+          </div>
+        </td>
+
+        <!-- Classification & Tier -->
+        <td style="padding: 1rem;">
+          <div style="margin-bottom: 0.5rem;">
+            {% if item.profile.classification == 'potential_client' %}
+              <span class="badge badge-primary">🎯 Potential Client</span>
+            {% elif item.profile.classification == 'technical_partner' %}
+              <span class="badge badge-info">🤝 Technical Partner</span>
+            {% elif item.profile.classification == 'competitor' %}
+              <span class="badge badge-danger">⚔️ Competitor / Service Bureau</span>
+            {% else %}
+              <span class="badge badge-secondary">🔍 Needs Review</span>
+            {% endif %}
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <strong style="font-size: 1.1rem; color: {% if item.profile.provisional_tier == 'A' %}#10b981{% elif item.profile.provisional_tier == 'B' %}#3b82f6{% else %}#f59e0b{% endif %};">
+              Priority {{ item.profile.provisional_tier }}
+            </strong>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">({{ (item.profile.tier_confidence * 100)|int }}% conf)</span>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.3;">
+            {{ item.profile.tier_rationale }}
+          </div>
+        </td>
+
+        <!-- Contact Details & Signals -->
+        <td style="padding: 1rem;">
+          <div style="margin-bottom: 0.3rem;">
+            <strong>Email:</strong> 
+            {% if item.profile.email %}
+              <a href="mailto:{{ item.profile.email }}" style="color: #3b82f6;">{{ item.profile.email }}</a>
+            {% else %}
+              <span style="color: var(--text-muted);">Not Listed</span>
+            {% endif %}
+          </div>
+          <div style="margin-bottom: 0.5rem;">
+            <strong>Phone:</strong> 
+            {% if item.profile.phone %}
+              <span>{{ item.profile.phone }}</span>
+            {% else %}
+              <span style="color: var(--text-muted);">Not Listed</span>
+            {% endif %}
+          </div>
+          <div style="font-size: 0.75rem; background: var(--bg-card); border: 1px solid var(--border-color); padding: 0.4rem; border-radius: 4px;">
+            <strong>Signals:</strong>
+            {% for sig in item.profile.opportunity_signals %}
+              <div style="color: var(--text-secondary); margin-top: 0.15rem;">• {{ sig }}</div>
+            {% endfor %}
+          </div>
+        </td>
+
+        <!-- Actions -->
+        <td style="padding: 1rem; min-width: 150px;">
+          {% if item.db_status.saved %}
+            <div style="margin-bottom: 0.5rem; font-size: 0.8rem;">
+              Decision: <strong>{{ item.db_status.manual_review_decision }}</strong>
+            </div>
+            
+            <form method="POST" action="/sales/research/pilot/review-candidate" style="margin-bottom: 0.5rem;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+              <input type="hidden" name="domain" value="{{ item.profile.canonical_domain }}">
+              <input type="hidden" name="candidate_id" value="{{ item.db_status.candidate_id }}">
+              <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                <button type="submit" name="decision" value="APPROVED" class="btn btn-sm btn-success" style="width: 100%; font-size: 0.75rem;">
+                  ✓ Approve for Outreach
+                </button>
+                <button type="submit" name="decision" value="REJECTED" class="btn btn-sm btn-outline-danger" style="width: 100%; font-size: 0.75rem;">
+                  ✗ Reject Lead
+                </button>
+              </div>
+            </form>
+            
+            <a href="/sales/candidates/{{ item.db_status.candidate_id }}" class="btn btn-sm btn-secondary" style="width: 100%; font-size: 0.75rem; text-align: center; display: block; box-sizing: border-box;">
+              Candidate Details →
+            </a>
+          {% else %}
+            <form method="POST" action="/sales/research/pilot/save-single">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+              <input type="hidden" name="domain" value="{{ item.profile.canonical_domain }}">
+              <button type="submit" class="btn btn-sm btn-primary" style="width: 100%; font-size: 0.8rem;">
+                Save to Candidates
+              </button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Provenance & Field Audit Section -->
+<div class="card" style="margin-top: 2rem;">
+  <div class="card-title">🔬 Field Audit &amp; Extraction Provenance Summary</div>
+  <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Complete transparency of what fields were directly extracted from official web disclosures versus what was derived or remains unverified:
+  </p>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+    <div style="background: var(--bg-hover); padding: 1rem; border-radius: 6px;">
+      <h4 style="margin: 0 0 0.5rem 0; color: #10b981;">✓ High Confidence Extracted Fields (100%)</h4>
+      <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary);">
+        <li>Official Apex Domain &amp; Deep BIM Service URLs</li>
+        <li>Registered Legal Company Name &amp; Legal Form</li>
+        <li>Partita IVA / Codice Fiscale (Italian tax identifiers)</li>
+        <li>Primary Geographic City, Region &amp; Office Address</li>
+        <li>Public Switchboard Telephone &amp; Inbound Contact Email</li>
+      </ul>
+    </div>
+
+    <div style="background: var(--bg-hover); padding: 1rem; border-radius: 6px;">
+      <h4 style="margin: 0 0 0.5rem 0; color: #3b82f6;">⚖️ Derived Qualitative Evaluations</h4>
+      <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary);">
+        <li>A/B/C Priority Tiering (based on active hiring, scale, and MEP complexity)</li>
+        <li>Lead Classification (distinguishing potential buyers from service competitors)</li>
+        <li>BIM Maturity Level (deduced from ISO 19650, openBIM IFC, and Revit/Tekla usage)</li>
+      </ul>
+    </div>
+
+    <div style="background: var(--bg-hover); padding: 1rem; border-radius: 6px;">
+      <h4 style="margin: 0 0 0.5rem 0; color: #f59e0b;">⚠️ Unverified / Left Missing (Safe Behavior)</h4>
+      <ul style="margin: 0; padding-left: 1.25rem; color: var(--text-secondary);">
+        <li>Named BIM Managers / Private Personal Direct Emails (not hallucinated)</li>
+        <li>Undisclosed annual turnover / private financial statements</li>
+        <li>Internal proprietary software pipelines not cited on public websites</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

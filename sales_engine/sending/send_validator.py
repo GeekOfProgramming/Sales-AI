@@ -94,11 +94,12 @@ class SendValidator:
             )
 
         # 6. Suppression check (Do-Not-Contact)
-        if suppression_store.is_suppressed(recip_email):
+        recip_domain = recip_email.split("@", 1)[1].strip().lower() if "@" in recip_email else None
+        if suppression_store.is_suppressed(recip_email, company_domain=recip_domain):
             return (
                 False,
                 "suppressed_recipient",
-                f"Recipient {recip_email} is on the do-not-contact suppression list",
+                f"Recipient {recip_email} (or domain {recip_domain}) is on the do-not-contact suppression list",
             )
 
         # 7. Approval Fingerprint (Stale Approval Prevention)

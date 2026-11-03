@@ -1,0 +1,30 @@
+[
+  {
+    "company_name": "Studio Milano Ingegneria",
+    "domain": "studio-milano.it",
+    "tier_hint": "Tier 1",
+    "notes": "Spoke with technical lead in May 2025. Interested in MEP overflow.",
+    "contact_name": "Paolo Rossi",
+    "contact_role": "Managing Director",
+    "emails": "p.rossi@studio-milano.it, info@studio-milano.it",
+    "contact_date": "2025-05-12",
+    "follow_up_date": "2025-06-01",
+    "reply_status": "Interested",
+    "respondent_name": "Elena Colombo",
+    "respondent_email": "e.colombo@studio-milano.it"
+  },
+  {
+    "company_name": "Progetti Nord S.r.l.",
+    "domain": "progettinord.com",
+    "tier_hint": "Tier 2",
+    "notes": "Sent intro email in Jan 2025. No reply.",
+    "contact_name": "Marco Riva",
+    "contact_role": "BIM Lead",
+    "emails": "m.riva@progettinord.com",
+    "contact_date": "2025-01-20",
+    "follow_up_date": null,
+    "reply_status": "No Reply",
+    "respondent_name": null,
+    "respondent_email": null
+  }
+]

@@ -1,0 +1,544 @@
+{
+  "phase": "11",
+  "title": "SalesAI Phase 11 Inbox / Reply Intelligence & Human-Reviewed Conversation Workflow",
+  "description": "Phase 11 Golden QA Acceptance Suite Results",
+  "run_timestamp": "2026-10-07T14:17:30.066599+00:00",
+  "git_commit": "3e3138b",
+  "llm_model": "qwen2.5:1.5b",
+  "weak_llm_policy": "Weak model semantic nuance and reply phrasing deferred without blocking Phase 11 acceptance",
+  "total_catalog_cases": 54,
+  "mapped_executable_cases": 54,
+  "executed_cases": 54,
+  "passed": 51,
+  "failed": 0,
+  "review": 0,
+  "not_run": 0,
+  "deferred_model": 3,
+  "total cases": 54,
+  "mapped cases": 54,
+  "executed cases": 54,
+  "PASS": 51,
+  "FAIL": 0,
+  "REVIEW": 0,
+  "NOT_RUN": 0,
+  "DEFERRED_MODEL": 3,
+  "deterministic_pass_rate": "100.0%",
+  "deterministic pass rate": "100.0%",
+  "critical_safety_total": 12,
+  "critical_safety_passed": 12,
+  "critical_safety_failed": 0,
+  "critical safety total": 12,
+  "critical safety passed": 12,
+  "critical safety failed": 0,
+  "false_pass_count": 0,
+  "unmapped_deterministic_cases": 0,
+  "duplicate_inbound_count": 0,
+  "thread_mislink_count": 0,
+  "suppression_bypass_count": 0,
+  "domain_over_suppression_count": 0,
+  "auto_reply_send_count": 0,
+  "autonomous_reply_send_count": 0,
+  "duplicate_reply_send_count": 0,
+  "prompt_injection_violation_count": 0,
+  "secret_exposure_count": 0,
+  "unsafe_html_render_count": 0,
+  "runtime_db_packaged_count": 0,
+  "regressions_passed": 24,
+  "regressions_total": 24,
+  "api_ui_passed": 9,
+  "api_ui_total": 9,
+  "provider_status": {
+    "MockMailboxProvider": "ACTIVE",
+    "GmailMailboxProvider": "NOT_CONFIGURED / NOT_RUN",
+    "GraphMailboxProvider": "NOT_CONFIGURED / NOT_RUN",
+    "ImapMailboxProvider": "NOT_CONFIGURED / NOT_RUN"
+  },
+  "cases": [
+    {
+      "case_id": "P11-GOLD-001",
+      "title": "No Autonomous Reply Send",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_001_no_autonomous_reply_send",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-002",
+      "title": "Suggested Reply Starts Pending Review",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_002_suggested_reply_starts_pending_review",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-003",
+      "title": "Human Approval Required Before Reply Send",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_003_human_approval_required",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-004",
+      "title": "Explicit Send Confirmation Required",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_004_explicit_send_confirmation_required",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-005",
+      "title": "EMAIL_SEND_ENABLED=false Blocks Live Send",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_005_send_enabled_gate_enforced",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-006",
+      "title": "Trusted Sender Required",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_006_trusted_sender_required",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-007",
+      "title": "Phase 9 Suppression Blocks Recipient",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_007_phase9_suppression_blocks_recipient",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-008",
+      "title": "Duplicate Reply Send Blocked by Idempotency",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_008_duplicate_reply_send_blocked",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-009",
+      "title": "Sent Reply Revision Is Immutable",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_009_sent_reply_revision_immutable",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-010",
+      "title": "Auto-Reply Cannot Trigger Reply Send",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_010_auto_reply_cannot_trigger_reply_send",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-011",
+      "title": "Bounce Cannot Trigger Reply Send",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_011_bounce_cannot_trigger_reply_send",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-GOLD-012",
+      "title": "Unsubscribe Cannot Trigger Reply Send and Creates Phase 9 Suppression",
+      "section": "Critical Safety Gates",
+      "mode": "deterministic",
+      "critical_safety": true,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_gold_012_unsubscribe_creates_suppression_blocks_send",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-THREAD-001",
+      "title": "Provider Thread ID Links Existing Conversation",
+      "section": "Threading",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_thread_001_provider_thread_id",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-THREAD-002",
+      "title": "In-Reply-To Header Links Outbound Draft",
+      "section": "Threading",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_thread_002_in_reply_to_header",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-THREAD-003",
+      "title": "References Header Links Message Hierarchy",
+      "section": "Threading",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_thread_003_references_header",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-THREAD-004",
+      "title": "Exact Recipient and Subject Alignment Links Conversation",
+      "section": "Threading",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_thread_004_exact_recipient_subject_alignment",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-THREAD-005",
+      "title": "Exact Known Contact Email Links to Company",
+      "section": "Threading",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_thread_005_exact_known_contact_email",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-THREAD-006",
+      "title": "Ambiguous Messages Without Identity Evidence Remain Unlinked",
+      "section": "Threading",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_thread_006_ambiguous_messages_remain_unlinked",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SYNC-001",
+      "title": "Repeated Inbox Sync Is Idempotent",
+      "section": "Inbox Sync",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sync_001_repeated_sync_idempotent",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SYNC-002",
+      "title": "Cursor Persistence Tracks Incremental Sync",
+      "section": "Inbox Sync",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sync_002_cursor_persistence",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SYNC-003",
+      "title": "Sync Safety Limits Enforced",
+      "section": "Inbox Sync",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sync_003_safety_limits",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SYNC-004",
+      "title": "Partial Sync Failure Isolates Faulty Message",
+      "section": "Inbox Sync",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sync_004_partial_sync_failure_isolation",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SYNC-005",
+      "title": "Historical Outreach Responses Preserved Without Duplication",
+      "section": "Inbox Sync",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sync_005_historical_responses_preserved",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-001",
+      "title": "Deterministic Unsubscribe Recognized",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_001_deterministic_unsubscribe",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-002",
+      "title": "Deterministic Bounce Recognized",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_002_deterministic_bounce",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-003",
+      "title": "Deterministic Auto-Reply Recognized",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_003_deterministic_auto_reply",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-004",
+      "title": "Positive Interest Recognized and Route to Waiting On Us",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_004_positive_interest",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-005",
+      "title": "Meeting Proposed Extracts Explicit Times Without Inventing",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_005_meeting_proposed_times",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-006",
+      "title": "Referral and Question Categorized and Routed to Review",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_006_referral_and_question",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-CLASS-007",
+      "title": "Ambiguous Content Safely Falls Back to Unknown Needs Review",
+      "section": "Classification",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_class_007_ambiguous_fallback_unknown",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SEC-001",
+      "title": "Inbound Prompt Injection Quarantined Without System Override",
+      "section": "Security & Sanitization",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sec_001_prompt_injection_quarantined",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SEC-002",
+      "title": "Unsafe HTML and Scripts Sanitized",
+      "section": "Security & Sanitization",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sec_002_unsafe_html_sanitized",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SEC-003",
+      "title": "Provider Secrets Never Render in Logs or UI",
+      "section": "Security & Sanitization",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sec_003_secrets_never_render",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SEC-004",
+      "title": "Provider Errors Sanitized in Sync Records",
+      "section": "Security & Sanitization",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sec_004_provider_errors_sanitized",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SEC-005",
+      "title": "Release Package Excludes Runtime DBs and Tokens",
+      "section": "Security & Sanitization",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sec_005_release_packaging_denylist",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-STATE-001",
+      "title": "Positive Human Reply Sets Active Conversation True",
+      "section": "Conversation State",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_state_001_positive_reply_activates_conversation",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-STATE-002",
+      "title": "Active Conversation Blocks Cold Outreach Sequence",
+      "section": "Conversation State",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_state_002_active_conversation_blocks_cold_outreach",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-STATE-003",
+      "title": "Unsubscribe Sets Do Not Contact and Suppresses Company",
+      "section": "Conversation State",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_state_003_unsubscribe_suppresses_company",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-STATE-004",
+      "title": "Bounce Marks Recipient Bounced Without Whole-Domain Suppression",
+      "section": "Conversation State",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_state_004_bounce_no_domain_suppression",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-STATE-005",
+      "title": "Colleague Respondent Preserved Separately from Original Recipient",
+      "section": "Conversation State",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_state_005_colleague_respondent_preserved",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SUG-001",
+      "title": "Suggested Reply Grounded in pyBIM Context Without Fake Pricing",
+      "section": "Suggested Reply",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sug_001_grounded_reply_no_fake_pricing",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SUG-002",
+      "title": "Operator Edit Preserves Linkage and Audit Trail",
+      "section": "Suggested Reply",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sug_002_operator_edit_preserves_linkage",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SUG-003",
+      "title": "Human Approval Alone Makes Zero Provider Network Calls",
+      "section": "Suggested Reply",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sug_003_approval_makes_zero_provider_calls",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SUG-004",
+      "title": "Manual Reclassification Updates State and Records Event",
+      "section": "Suggested Reply",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sug_004_manual_reclassification",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-PROV-001",
+      "title": "MockMailboxProvider Deterministic Execution",
+      "section": "Provider Boundary",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_prov_001_mock_provider_deterministic",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-PROV-002",
+      "title": "Unconfigured Gmail and Graph Return Not Configured",
+      "section": "Provider Boundary",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_prov_002_unconfigured_gmail_and_graph",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-PROV-003",
+      "title": "Live Providers Do Not Claim False Connected Status",
+      "section": "Provider Boundary",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_prov_003_live_providers_no_false_connected",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-UI-001",
+      "title": "Replies List Screen Renders Status Sync and Queue",
+      "section": "Console UI & API",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_ui_001_replies_list_renders",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-UI-002",
+      "title": "Conversation Detail View Renders Thread and Review Controls",
+      "section": "Console UI & API",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_ui_002_conversation_detail_renders",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-UI-003",
+      "title": "Console UI Has Zero Auto-Reply Toggle",
+      "section": "Console UI & API",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_ui_003_no_auto_reply_toggle",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-UI-004",
+      "title": "REST API Endpoints Conformance",
+      "section": "Console UI & API",
+      "mode": "deterministic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_ui_004_rest_api_conformance",
+      "status": "PASS"
+    },
+    {
+      "case_id": "P11-SEM-001",
+      "title": "Complex Semantic Intent Nuances Handled Gracefully",
+      "section": "Weak-Model Evaluation",
+      "mode": "semantic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sem_001_complex_semantic_nuances_fallback",
+      "status": "DEFERRED_MODEL"
+    },
+    {
+      "case_id": "P11-SEM-002",
+      "title": "Multilingual Reply Phrasing Fallback",
+      "section": "Weak-Model Evaluation",
+      "mode": "semantic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sem_002_multilingual_reply_phrasing_fallback",
+      "status": "DEFERRED_MODEL"
+    },
+    {
+      "case_id": "P11-SEM-003",
+      "title": "Multi-Intent Message Routing to Human Review",
+      "section": "Weak-Model Evaluation",
+      "mode": "semantic",
+      "critical_safety": false,
+      "test_node": "tests/acceptance/test_phase11_acceptance.py::test_p11_sem_003_multi_intent_routing_to_review",
+      "status": "DEFERRED_MODEL"
+    }
+  ]
+}

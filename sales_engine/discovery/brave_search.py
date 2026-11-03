@@ -1,6 +1,6 @@
 import os
 import httpx
-from typing import List
+from typing import List, Optional
 from sales_engine.discovery.search_provider import (
     SearchProvider, ConfigurationError, AuthenticationError, 
     RateLimitError, TimeoutError, SearchProviderError
@@ -12,7 +12,13 @@ class BraveSearchProvider(SearchProvider):
         self.api_key = os.environ.get("BRAVE_SEARCH_API_KEY")
         self.base_url = "https://api.search.brave.com/res/v1/web/search"
         
-    async def search(self, query: str, num_results: int = 10) -> List[NormalizedSearchResult]:
+    async def search(
+        self,
+        query: str,
+        num_results: int = 10,
+        country: Optional[str] = None,
+        search_lang: Optional[str] = None,
+    ) -> List[NormalizedSearchResult]:
         if not self.api_key:
             raise ConfigurationError("BRAVE_SEARCH_API_KEY is not configured.")
             
@@ -23,8 +29,12 @@ class BraveSearchProvider(SearchProvider):
         
         params = {
             "q": query,
-            "count": min(num_results, 20)
+            "count": min(num_results, 10)
         }
+        if country:
+            params["country"] = country.strip().upper()
+        if search_lang:
+            params["search_lang"] = search_lang.strip().lower()
         
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:

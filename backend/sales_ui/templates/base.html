@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Email Led{% endblock %}</title>
+  <link rel="stylesheet" href="/static/sales/sales.css">
+</head>
+<body>
+  <!-- Unified Sticky Application Header -->
+  <header class="app-header-unified">
+    <div class="header-brand-row">
+      <a href="/sales" class="brand" title="Email Led — Sales Operator Console">
+        <span class="brand-name">Email Led</span>
+      </a>
+    </div>
+
+    <!-- Operational Workflow Navigation: 5 Logical CRM Groups -->
+    <nav class="nav-bar-unified" aria-label="Main Navigation">
+      <div class="nav-group">
+        <a href="/sales/dashboard" class="nav-link {% if active_tab == 'dashboard' %}active{% endif %}">📊 Dashboard</a>
+      </div>
+
+      <span class="nav-divider"></span>
+      <div class="nav-group">
+        <span class="nav-group-label">Intelligence</span>
+        <a href="/sales/discovery" class="nav-link {% if active_tab in ('discoveries', 'discovery') %}active{% endif %}">Discovery Runs</a>
+        <a href="/sales/sources" class="nav-link {% if active_tab == 'sources' %}active{% endif %}">Sources</a>
+        <a href="/sales/candidates" class="nav-link {% if active_tab == 'candidates' %}active{% endif %}">Candidates</a>
+      </div>
+
+      <span class="nav-divider"></span>
+      <div class="nav-group">
+        <span class="nav-group-label">Lead Pipeline</span>
+        <a href="/sales/register" class="nav-link {% if active_tab == 'register' %}active{% endif %}">13-Field Register</a>
+        <a href="/sales/leads" class="nav-link {% if active_tab == 'leads' %}active{% endif %}">Qualified Leads</a>
+      </div>
+
+      <span class="nav-divider"></span>
+      <div class="nav-group">
+        <span class="nav-group-label">Outreach</span>
+        <a href="/sales/drafts" class="nav-link {% if active_tab == 'drafts' %}active{% endif %}">Draft Review</a>
+        <a href="/sales/approved" class="nav-link {% if active_tab == 'approved' %}active{% endif %}">Approved</a>
+        <a href="/sales/sent" class="nav-link {% if active_tab == 'sent' %}active{% endif %}">Sent</a>
+        <a href="/sales/replies" class="nav-link {% if active_tab == 'replies' %}active{% endif %}">Replies</a>
+      </div>
+
+      <span class="nav-divider"></span>
+      <div class="nav-group">
+        <span class="nav-group-label">Administration</span>
+        <a href="/sales/do-not-contact" class="nav-link {% if active_tab == 'suppression' %}active{% endif %}">Do Not Contact</a>
+        <a href="/sales/watchlist" class="nav-link {% if active_tab == 'watchlist' %}active{% endif %}">Watchlist</a>
+        <a href="/sales/analytics" class="nav-link {% if active_tab == 'analytics' %}active{% endif %}">Analytics</a>
+        <a href="/sales/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}">Settings</a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Alerts & Banners -->
+  <div class="main-content">
+    {% if email_send_enabled is false %}
+    <div class="alert-banner" role="alert">
+      <span>⚠️ <strong>Real sending is disabled on this server.</strong> (EMAIL_SEND_ENABLED=false). Dry Run validation remains fully functional.</span>
+    </div>
+    {% endif %}
+
+    {% if message %}
+    <div class="alert-banner success" role="alert">
+      <span>✅ {{ message }}</span>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert-banner danger" role="alert">
+      <span>⚠️ {{ error }}</span>
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Send Confirmation Modal (Critical Safety Guard) -->
+  <div id="send-confirm-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Confirm Live Email Send</h3>
+      </div>
+      <div class="modal-body">
+        <p>You are about to execute a live send through the Phase 9 Send Gate.</p>
+        <div id="modal-send-details"></div>
+      </div>
+      <div class="modal-footer">
+        <form id="send-confirm-form" method="POST" action="">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" id="modal-send-draft-id" name="draft_id" value="">
+          <input type="hidden" id="modal-send-revision" name="revision" value="">
+          <input type="hidden" name="confirm_send" value="true">
+          <input type="hidden" name="reviewer" value="local_operator">
+          <button type="button" class="btn btn-secondary" onclick="closeSendModal()">Cancel</button>
+          <button type="submit" class="btn btn-danger">Confirm & Send Real Email</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/sales/sales.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

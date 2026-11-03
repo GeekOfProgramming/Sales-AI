@@ -308,6 +308,10 @@ from scripts.update_phase9_report import (
     evaluate_phase9_case,
     calculate_phase9_false_pass_count,
     is_test_empty_or_trivial,
+    derive_critical_regressions,
+    derive_invariants,
+    derive_safety_counters,
+    build_phase9_report,
 )
 
 
@@ -470,4 +474,201 @@ def test_p9_qa_008_live_send_cannot_run_without_explicit_flag():
     assert not (run_live and email_enabled), (
         "Standard test environment MUST NOT have both RUN_LIVE_EMAIL_TESTS and EMAIL_SEND_ENABLED set to true"
     )
+
+
+def test_p9_qa_009_safety_counters_are_not_unconditional_literals():
+    """P9-QA-009: Proves safety counters are not unconditional literals and derive from execution."""
+    # 1. Clean cases
+    clean_cases = [
+        {"case_id": "P9-REG-003", "status": "PASS"},
+        {"case_id": "P9-REG-002", "status": "PASS"},
+        {"case_id": "P9-REG-006", "status": "PASS"},
+        {"case_id": "P9-REG-005", "status": "PASS"},
+        {"case_id": "P9-REG-001", "status": "PASS"},
+        {"case_id": "P9-REG-011", "status": "PASS"},
+    ]
+    for i in range(1, 11):
+        clean_cases.append({"case_id": f"P9-SEC-{i:03d}", "status": "PASS"})
+    for i in range(1, 5):
+        clean_cases.append({"case_id": f"P9-NOLLM-{i:03d}", "status": "PASS"})
+    for i in range(1, 6):
+        clean_cases.append({"case_id": f"P9-PACK-{i:03d}", "status": "PASS"})
+
+    clean_counters = derive_safety_counters(clean_cases)
+    assert clean_counters["provider_calls_in_dry_run"] == 0
+    assert clean_counters["provider_calls_for_unapproved"] == 0
+    assert clean_counters["duplicate_send_count"] == 0
+    assert clean_counters["suppression_bypass_count"] == 0
+    assert clean_counters["stale_approval_bypass_count"] == 0
+    assert clean_counters["secrets_detected"] == 0
+    assert clean_counters["llm_calls_detected"] == 0
+    assert clean_counters["runtime_db_packaged"] == 0
+
+    # Ensure provenance fields exist
+    assert "test_sending.py" in clean_counters["provider_calls_in_dry_run_source"]
+    assert "test_phase9_acceptance.py" in clean_counters["secrets_detected_source"]
+
+    # 2. Adversarial failure on dry run
+    adv_dry_fail = [c.copy() for c in clean_cases]
+    for c in adv_dry_fail:
+        if c["case_id"] == "P9-REG-003":
+            c["status"] = "FAIL"
+    adv_counters = derive_safety_counters(adv_dry_fail)
+    assert adv_counters["provider_calls_in_dry_run"] is None, (
+        "Failed dry run test MUST NOT produce a zero counter implying successful validation"
+    )
+
+    # 3. Adversarial NOT_RUN on security test
+    adv_sec_not_run = [c.copy() for c in clean_cases]
+    for c in adv_sec_not_run:
+        if c["case_id"] == "P9-SEC-004":
+            c["status"] = "NOT_RUN"
+    adv_sec_counters = derive_safety_counters(adv_sec_not_run)
+    assert adv_sec_counters["secrets_detected"] is None, (
+        "NOT_RUN security test MUST NOT produce a zero secrets counter"
+    )
+
+    # 4. Adversarial failure on unapproved send
+    adv_unapp = [c.copy() for c in clean_cases]
+    for c in adv_unapp:
+        if c["case_id"] == "P9-REG-002":
+            c["status"] = "FAIL"
+    adv_unapp_counters = derive_safety_counters(adv_unapp)
+    assert adv_unapp_counters["provider_calls_for_unapproved"] is None
+
+
+def test_p9_qa_010_invariant_booleans_reflect_mapped_test_failures():
+    """P9-QA-010: Proves invariant booleans reflect mapped test failures."""
+    clean_cases = [
+        {"case_id": "P9-REG-008", "status": "PASS"},
+        {"case_id": "P9-REG-001", "status": "PASS"},
+        {"case_id": "P9-REG-006", "status": "PASS"},
+        {"case_id": "P9-REG-005", "status": "PASS"},
+        {"case_id": "P9-REG-003", "status": "PASS"},
+    ]
+    for i in range(1, 5):
+        clean_cases.append({"case_id": f"P9-NOLLM-{i:03d}", "status": "PASS"})
+    for i in range(1, 11):
+        clean_cases.append({"case_id": f"P9-SEC-{i:03d}", "status": "PASS"})
+
+    invariants = derive_invariants(clean_cases)
+    assert invariants["approval_never_triggers_send"] is True
+    assert invariants["stale_approval_fingerprint_blocks_send"] is True
+    assert invariants["already_sent_idempotency_prevents_duplicate"] is True
+    assert invariants["suppressed_recipient_blocks_send"] is True
+    assert invariants["dry_run_invokes_zero_network_transmissions"] is True
+    assert invariants["zero_llm_calls_in_phase9"] is True
+    assert invariants["secrets_never_logged_or_exposed"] is True
+
+    # Adversarial: P9-REG-008 fails
+    fail_p9_reg_008 = [c.copy() for c in clean_cases]
+    for c in fail_p9_reg_008:
+        if c["case_id"] == "P9-REG-008":
+            c["status"] = "FAIL"
+    assert derive_invariants(fail_p9_reg_008)["approval_never_triggers_send"] is False
+
+    # Adversarial: P9-REG-001 fails
+    fail_p9_reg_001 = [c.copy() for c in clean_cases]
+    for c in fail_p9_reg_001:
+        if c["case_id"] == "P9-REG-001":
+            c["status"] = "FAIL"
+    assert derive_invariants(fail_p9_reg_001)["stale_approval_fingerprint_blocks_send"] is False
+
+    # Adversarial: P9-REG-003 fails
+    fail_p9_reg_003 = [c.copy() for c in clean_cases]
+    for c in fail_p9_reg_003:
+        if c["case_id"] == "P9-REG-003":
+            c["status"] = "FAIL"
+    assert derive_invariants(fail_p9_reg_003)["dry_run_invokes_zero_network_transmissions"] is False
+
+    # Adversarial: P9-SEC-005 not run
+    notrun_sec = [c.copy() for c in clean_cases]
+    for c in notrun_sec:
+        if c["case_id"] == "P9-SEC-005":
+            c["status"] = "NOT_RUN"
+    assert derive_invariants(notrun_sec)["secrets_never_logged_or_exposed"] is False
+
+    # Adversarial: P9-NOLLM-002 fails
+    fail_nollm = [c.copy() for c in clean_cases]
+    for c in fail_nollm:
+        if c["case_id"] == "P9-NOLLM-002":
+            c["status"] = "FAIL"
+    assert derive_invariants(fail_nollm)["zero_llm_calls_in_phase9"] is False
+
+
+def test_p9_qa_011_required_report_schema_fields_are_present():
+    """P9-QA-011: Proves required report schema fields from PHASE9-QA-GOLDEN-SPEC.md are present."""
+    import json
+    from pathlib import Path
+    report_path = Path("tests/reports/phase9_latest.json")
+    assert report_path.exists(), "phase9_latest.json must exist"
+
+    with open(report_path, "r", encoding="utf-8") as f:
+        rep = json.load(f)
+
+    required_fields = [
+        "phase",
+        "run_timestamp",
+        "git_commit",
+        "total_catalog_cases",
+        "mapped_executable_cases",
+        "executed_cases",
+        "passed",
+        "failed",
+        "review",
+        "not_run",
+        "deferred_model",
+        "unmapped_deterministic_cases",
+        "false_pass_count",
+        "live_smtp_status",
+        "live_smtp_executed",
+        "critical_regressions",
+        "provider_calls_in_dry_run",
+        "provider_calls_for_unapproved",
+        "duplicate_send_count",
+        "suppression_bypass_count",
+        "stale_approval_bypass_count",
+        "secrets_detected",
+        "llm_calls_detected",
+    ]
+    for field in required_fields:
+        assert field in rep, f"Required schema field `{field}` missing from phase9_latest.json"
+
+    # Contract values for freeze
+    assert rep["total_catalog_cases"] == 185
+    assert rep["mapped_executable_cases"] == 185
+    assert rep["executed_cases"] == 184
+    assert rep["passed"] == 184
+    assert rep["failed"] == 0
+    assert rep["review"] == 0
+    assert rep["not_run"] == 1
+    assert rep["deferred_model"] == 0
+    assert rep["unmapped_deterministic_cases"] == 0
+    assert rep["false_pass_count"] == 0
+    assert rep["live_smtp_status"] == "NOT_RUN"
+    assert rep["live_smtp_executed"] is False
+
+
+def test_p9_qa_012_critical_regressions_are_execution_derived():
+    """P9-QA-012: Proves critical_regressions are execution-derived and not hardcoded PASS."""
+    # 1. Clean cases
+    clean_cases = [{"case_id": f"P9-REG-{i:03d}", "status": "PASS"} for i in range(1, 22)]
+    crit = derive_critical_regressions(clean_cases)
+    assert len(crit) == 21
+    for i in range(1, 22):
+        cid = f"P9-REG-{i:03d}"
+        assert crit[cid] == "PASS"
+
+    # 2. Adversarial failure injection on P9-REG-015
+    adv_cases = [{"case_id": f"P9-REG-{i:03d}", "status": "PASS"} for i in range(1, 22)]
+    adv_cases[14]["status"] = "FAIL"  # P9-REG-015
+    crit_adv = derive_critical_regressions(adv_cases)
+    assert crit_adv["P9-REG-015"] == "FAIL", "critical_regressions MUST reflect failed test node"
+
+    # 3. Adversarial NOT_RUN injection on P9-REG-007
+    adv_cases_2 = [{"case_id": f"P9-REG-{i:03d}", "status": "PASS"} for i in range(1, 22)]
+    adv_cases_2[6]["status"] = "NOT_RUN"  # P9-REG-007
+    crit_adv_2 = derive_critical_regressions(adv_cases_2)
+    assert crit_adv_2["P9-REG-007"] == "NOT_RUN", "critical_regressions MUST reflect not-run test node"
+
 

@@ -1,0 +1,1472 @@
+[
+  {
+    "case_id": "P10-ID-001",
+    "phase": "Phase 10",
+    "title": "Domain Identity Is Primary",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-002",
+    "phase": "Phase 10",
+    "title": "Scheme/Path Normalization",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-003",
+    "phase": "Phase 10",
+    "title": "Same Name, Different Domains Stay Separate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-004",
+    "phase": "Phase 10",
+    "title": "Same Name + Different Country Stays Separate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-005",
+    "phase": "Phase 10",
+    "title": "Trusted Source Identity Can Support Merge",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-006",
+    "phase": "Phase 10",
+    "title": "Weak Manual Name Identity Does Not Overmerge",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-007",
+    "phase": "Phase 10",
+    "title": "Alias Preservation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-ID-008",
+    "phase": "Phase 10",
+    "title": "Domain History Does Not Delete Prior Identity",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-001",
+    "phase": "Phase 10",
+    "title": "Same Company Across Multiple Sources Merges Once",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-002",
+    "phase": "Phase 10",
+    "title": "Similar Name, Different Trusted Domains Remain Separate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OBS-001",
+    "phase": "Phase 10",
+    "title": "One Source Appearance Creates One Observation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OBS-002",
+    "phase": "Phase 10",
+    "title": "Observation Stores Source Provenance",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OBS-003",
+    "phase": "Phase 10",
+    "title": "Repeated Same Observation Is Idempotent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OBS-004",
+    "phase": "Phase 10",
+    "title": "New Observation Appends To Existing Company",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OBS-005",
+    "phase": "Phase 10",
+    "title": "Observation Is Not Automatically Business Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OBS-006",
+    "phase": "Phase 10",
+    "title": "Observation Timestamp Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-001",
+    "phase": "Phase 10",
+    "title": "Business Evidence Category",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-002",
+    "phase": "Phase 10",
+    "title": "Intent Evidence Category",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-003",
+    "phase": "Phase 10",
+    "title": "Project Evidence Category",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-004",
+    "phase": "Phase 10",
+    "title": "Historical Evidence Category",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-005",
+    "phase": "Phase 10",
+    "title": "Provenance Required",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-006",
+    "phase": "Phase 10",
+    "title": "Missing Source Cannot Become Verified Fact",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-EVID-007",
+    "phase": "Phase 10",
+    "title": "Evidence History Is Append-Only",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-001",
+    "phase": "Phase 10",
+    "title": "Load discovery_sources.yaml",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-002",
+    "phase": "Phase 10",
+    "title": "Enabled Source Runs",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-003",
+    "phase": "Phase 10",
+    "title": "Disabled Source Does Not Run",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-004",
+    "phase": "Phase 10",
+    "title": "Unknown Source Type Rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-005",
+    "phase": "Phase 10",
+    "title": "Source Requires API Key But Key Missing",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-006",
+    "phase": "Phase 10",
+    "title": "Source Priority Deterministic",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-007",
+    "phase": "Phase 10",
+    "title": "max_results_per_run Enforced",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SRC-008",
+    "phase": "Phase 10",
+    "title": "Source Config Does Not Contain Secrets",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-MKT-001",
+    "phase": "Phase 10",
+    "title": "Load markets.yaml",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-MKT-002",
+    "phase": "Phase 10",
+    "title": "Market Enable/Disable",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-MKT-003",
+    "phase": "Phase 10",
+    "title": "Country Is Configuration, Not Architecture Branch",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-MKT-004",
+    "phase": "Phase 10",
+    "title": "Languages Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-MKT-005",
+    "phase": "Phase 10",
+    "title": "Preferred Sources Deterministic",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-MKT-006",
+    "phase": "Phase 10",
+    "title": "Standards Context Is Context Only",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-TIER-001",
+    "phase": "Phase 10",
+    "title": "Tier From Multi-Factor Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-TIER-002",
+    "phase": "Phase 10",
+    "title": "Weak Evidence -> unknown",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-TIER-003",
+    "phase": "Phase 10",
+    "title": "Tier Confidence Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-TIER-004",
+    "phase": "Phase 10",
+    "title": "Tier Evidence Refs Required For Non-Unknown Classification",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-003",
+    "phase": "Phase 10",
+    "title": "Legal Form Alone Never Determines Tier",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-BIM-001",
+    "phase": "Phase 10",
+    "title": "Explicit BIM Evidence Can Raise Maturity",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-BIM-002",
+    "phase": "Phase 10",
+    "title": "Revit/IFC/ISO Evidence Is Grounded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-BIM-003",
+    "phase": "Phase 10",
+    "title": "BIM Team Evidence Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-004",
+    "phase": "Phase 10",
+    "title": "No BIM Mention Does Not Mean No BIM Capability",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FIT-001",
+    "phase": "Phase 10",
+    "title": "Strong Fit, Unknown Intent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FIT-002",
+    "phase": "Phase 10",
+    "title": "Weak Fit, Strong Intent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FIT-003",
+    "phase": "Phase 10",
+    "title": "Missing Job Does Not Lower Fit Automatically",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-INT-001",
+    "phase": "Phase 10",
+    "title": "Relevant Job Is Intent Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-INT-002",
+    "phase": "Phase 10",
+    "title": "Project Award Is Intent Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-INT-003",
+    "phase": "Phase 10",
+    "title": "Tender Is Intent Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-INT-004",
+    "phase": "Phase 10",
+    "title": "Missing Intent Remains unknown/none According To Contract",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OPP-001",
+    "phase": "Phase 10",
+    "title": "Direct Delivery Opportunity",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OPP-002",
+    "phase": "Phase 10",
+    "title": "Technology Partnership Opportunity",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OPP-003",
+    "phase": "Phase 10",
+    "title": "Multiple Opportunity Types Allowed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OPP-004",
+    "phase": "Phase 10",
+    "title": "Opportunity Type Is Not Stated As Verified Fact Without Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-001",
+    "phase": "Phase 10",
+    "title": "XLSX Import",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-002",
+    "phase": "Phase 10",
+    "title": "CSV Import",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-003",
+    "phase": "Phase 10",
+    "title": "Preserve Source Row Reference",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-004",
+    "phase": "Phase 10",
+    "title": "Preserve Raw Human Tier",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-005",
+    "phase": "Phase 10",
+    "title": "Preserve Notes",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-006",
+    "phase": "Phase 10",
+    "title": "Preserve Historical Source",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-007",
+    "phase": "Phase 10",
+    "title": "Preserve Contact Dates",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-008",
+    "phase": "Phase 10",
+    "title": "Preserve Follow-Up Dates",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-009",
+    "phase": "Phase 10",
+    "title": "Preserve Reply Status",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-010",
+    "phase": "Phase 10",
+    "title": "Preserve Wrong/Invalid Email State",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-011",
+    "phase": "Phase 10",
+    "title": "Missing Fields Stay Missing",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-007",
+    "phase": "Phase 10",
+    "title": "Same Historical File Imports Idempotently",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-EMAIL-001",
+    "phase": "Phase 10",
+    "title": "Split Multiple Emails",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-EMAIL-002",
+    "phase": "Phase 10",
+    "title": "Email Classification",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-EMAIL-003",
+    "phase": "Phase 10",
+    "title": "Historical Email Is Not Auto-Verified",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-EMAIL-004",
+    "phase": "Phase 10",
+    "title": "Raw Original Cell Preserved For Audit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-006",
+    "phase": "Phase 10",
+    "title": "Previously Contacted Company Does Not Start New Cold Outreach",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-OUTCOME-001",
+    "phase": "Phase 10",
+    "title": "Positive Reply Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-OUTCOME-002",
+    "phase": "Phase 10",
+    "title": "Actual Respondent May Differ From Original Mailbox",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-OUTCOME-003",
+    "phase": "Phase 10",
+    "title": "Reply Outcome Does Not Automatically Re-score Entire Market",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HIST-OUTCOME-004",
+    "phase": "Phase 10",
+    "title": "Small Sample Not Used For Automatic Statistical Optimization",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-005",
+    "phase": "Phase 10",
+    "title": "Directory Result Never Creates StructuredJob",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOJOB-002",
+    "phase": "Phase 10",
+    "title": "Project Award Never Creates StructuredJob",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOJOB-003",
+    "phase": "Phase 10",
+    "title": "Tender Never Creates StructuredJob",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOJOB-004",
+    "phase": "Phase 10",
+    "title": "Website Company Profile Never Creates StructuredJob",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOJOB-005",
+    "phase": "Phase 10",
+    "title": "Actual Job Still Creates StructuredJob Through Existing Path",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-JOB-001",
+    "phase": "Phase 10",
+    "title": "Existing Phase 3 Job Query Still Works",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-JOB-002",
+    "phase": "Phase 10",
+    "title": "Existing Phase 4 StructuredJob Shape Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-011",
+    "phase": "Phase 10",
+    "title": "Frozen Phase 5 Score Remains Unchanged",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-001",
+    "phase": "Phase 10",
+    "title": "Manual Domain Seed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-002",
+    "phase": "Phase 10",
+    "title": "Manual Company Name Seed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-003",
+    "phase": "Phase 10",
+    "title": "Directory Company Candidate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-004",
+    "phase": "Phase 10",
+    "title": "Website Resolution",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-005",
+    "phase": "Phase 10",
+    "title": "Candidate Research",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-006",
+    "phase": "Phase 10",
+    "title": "No Job Required For Candidate Creation",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-COMP-007",
+    "phase": "Phase 10",
+    "title": "Qualification Depends On Company Evidence, Not Fake Job",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-PROJ-001",
+    "phase": "Phase 10",
+    "title": "Project Observation Creates CandidateCompany",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-PROJ-002",
+    "phase": "Phase 10",
+    "title": "Tender Observation Creates CandidateCompany",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-PROJ-003",
+    "phase": "Phase 10",
+    "title": "Participating Company Identity Resolved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-PROJ-004",
+    "phase": "Phase 10",
+    "title": "Project Evidence Retains Source",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-PROJ-005",
+    "phase": "Phase 10",
+    "title": "Project Value Not Invented",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-PROJ-006",
+    "phase": "Phase 10",
+    "title": "Missing Company Role Stays Unknown",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-001",
+    "phase": "Phase 10",
+    "title": "Official Website Preferred",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-002",
+    "phase": "Phase 10",
+    "title": "Services Extracted As Grounded Facts",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-003",
+    "phase": "Phase 10",
+    "title": "Project Sectors Grounded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-004",
+    "phase": "Phase 10",
+    "title": "Careers URL Captured",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-005",
+    "phase": "Phase 10",
+    "title": "BIM Terms Grounded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-006",
+    "phase": "Phase 10",
+    "title": "No Revenue Fabrication",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-007",
+    "phase": "Phase 10",
+    "title": "No Employee Count Fabrication",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RES-008",
+    "phase": "Phase 10",
+    "title": "No Outsourcing Fact Fabrication",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OUT-001",
+    "phase": "Phase 10",
+    "title": "Assessment Uses Explainable Signals",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OUT-002",
+    "phase": "Phase 10",
+    "title": "High Potential Is Not Stored As \"outsources BIM = true\"",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OUT-003",
+    "phase": "Phase 10",
+    "title": "Missing Evidence -> unknown",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-OUT-004",
+    "phase": "Phase 10",
+    "title": "Assessment Cannot Leak Into Email As Verified Fact",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-AUTO-001",
+    "phase": "Phase 10",
+    "title": "Revit/API Hiring Signal",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-AUTO-002",
+    "phase": "Phase 10",
+    "title": "Python/C# Signal",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-AUTO-003",
+    "phase": "Phase 10",
+    "title": "Large Digital Team Signal",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-AUTO-004",
+    "phase": "Phase 10",
+    "title": "Missing Evidence -> unknown",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-AUTO-005",
+    "phase": "Phase 10",
+    "title": "Potential Is Strategy, Not Factual Claim",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-001",
+    "phase": "Phase 10",
+    "title": "Reject Irrelevant Company",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-002",
+    "phase": "Phase 10",
+    "title": "Watchlist Good Fit/Weak Intent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-003",
+    "phase": "Phase 10",
+    "title": "Research More",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-004",
+    "phase": "Phase 10",
+    "title": "Qualified For Enrichment",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-005",
+    "phase": "Phase 10",
+    "title": "Known Company",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-006",
+    "phase": "Phase 10",
+    "title": "Reengagement Review",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QUAL-007",
+    "phase": "Phase 10",
+    "title": "Suppressed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-008",
+    "phase": "Phase 10",
+    "title": "Good Fit + Weak Intent Routes To Watchlist",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-WATCH-002",
+    "phase": "Phase 10",
+    "title": "Watch Reason Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-WATCH-003",
+    "phase": "Phase 10",
+    "title": "next_check_at Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-WATCH-004",
+    "phase": "Phase 10",
+    "title": "No Outreach From Watchlist Alone",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-WATCH-005",
+    "phase": "Phase 10",
+    "title": "Watchlist Persists Across Process Restart",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-009",
+    "phase": "Phase 10",
+    "title": "New Job/Project Signal Can Promote Candidate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-010",
+    "phase": "Phase 10",
+    "title": "Suppressed Company/Contact Cannot Qualify For Outreach",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P6-001",
+    "phase": "Phase 10",
+    "title": "Qualified Non-Job Candidate Reaches Enrichment Adapter",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P6-002",
+    "phase": "Phase 10",
+    "title": "Unqualified Candidate Does Not Reach Phase 6",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P6-003",
+    "phase": "Phase 10",
+    "title": "Historical Contact Reused Before Provider Call",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P6-004",
+    "phase": "Phase 10",
+    "title": "Historical Email Not Treated As Verified",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P6-005",
+    "phase": "Phase 10",
+    "title": "Existing Strong Identity Merge Rules Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-001",
+    "phase": "Phase 10",
+    "title": "Legacy Columns Remain",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-002",
+    "phase": "Phase 10",
+    "title": "Add company_tier",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-003",
+    "phase": "Phase 10",
+    "title": "Add bim_maturity",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-004",
+    "phase": "Phase 10",
+    "title": "Add fit_level",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-005",
+    "phase": "Phase 10",
+    "title": "Add intent_level",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-006",
+    "phase": "Phase 10",
+    "title": "Add outsourcing_potential",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-007",
+    "phase": "Phase 10",
+    "title": "Add automation_potential",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-008",
+    "phase": "Phase 10",
+    "title": "Add discovery_sources",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-009",
+    "phase": "Phase 10",
+    "title": "Add historical state fields",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P7-010",
+    "phase": "Phase 10",
+    "title": "Optional New Sheets Are Additive",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-012",
+    "phase": "Phase 10",
+    "title": "Phase 8 Receives Only Grounded Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P9-001",
+    "phase": "Phase 10",
+    "title": "Existing Phase 9 Send History Blocks New Cold Sequence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P9-002",
+    "phase": "Phase 10",
+    "title": "Existing Active Conversation Blocks New Cold Sequence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P9-003",
+    "phase": "Phase 10",
+    "title": "Suppression Is Authoritative",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P9-004",
+    "phase": "Phase 10",
+    "title": "Phase 10 Cannot Mark Draft Approved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P9-005",
+    "phase": "Phase 10",
+    "title": "Phase 10 Cannot Send Email",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-P9-006",
+    "phase": "Phase 10",
+    "title": "Phase 10 Cannot Reset Sent State",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-013",
+    "phase": "Phase 10",
+    "title": "One Source Failure Preserves Other Source Results",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-001",
+    "phase": "Phase 10",
+    "title": "Create DiscoveryRun",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-002",
+    "phase": "Phase 10",
+    "title": "started_at / completed_at",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-003",
+    "phase": "Phase 10",
+    "title": "Markets Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-004",
+    "phase": "Phase 10",
+    "title": "Source IDs Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-005",
+    "phase": "Phase 10",
+    "title": "observations_found Accurate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-006",
+    "phase": "Phase 10",
+    "title": "new_candidates Accurate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-007",
+    "phase": "Phase 10",
+    "title": "known_candidates Accurate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-008",
+    "phase": "Phase 10",
+    "title": "watchlist_candidates Accurate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-009",
+    "phase": "Phase 10",
+    "title": "qualified_candidates Accurate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-010",
+    "phase": "Phase 10",
+    "title": "errors Accurate",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-RUN-011",
+    "phase": "Phase 10",
+    "title": "config_version Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-014",
+    "phase": "Phase 10",
+    "title": "Repeated Daily Run Does Not Duplicate Companies",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DAILY-001",
+    "phase": "Phase 10",
+    "title": "CLI Entry Exists",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DAILY-002",
+    "phase": "Phase 10",
+    "title": "API Entry Exists",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DAILY-003",
+    "phase": "Phase 10",
+    "title": "Daily Discovery Sends Zero Email",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DAILY-004",
+    "phase": "Phase 10",
+    "title": "Daily Discovery Creates No Approval",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DAILY-005",
+    "phase": "Phase 10",
+    "title": "Daily Discovery Partial Failure Isolated",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FALLBACK-001",
+    "phase": "Phase 10",
+    "title": "Job Search Meets Target",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FALLBACK-002",
+    "phase": "Phase 10",
+    "title": "Weak Job Results Trigger Company-First",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FALLBACK-003",
+    "phase": "Phase 10",
+    "title": "Weak Company Results Trigger Project/Tender",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FALLBACK-004",
+    "phase": "Phase 10",
+    "title": "Good Fit/No Intent Goes Watchlist",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FALLBACK-005",
+    "phase": "Phase 10",
+    "title": "No Arbitrary Lead Count Fabrication",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HEALTH-001",
+    "phase": "Phase 10",
+    "title": "last_success",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HEALTH-002",
+    "phase": "Phase 10",
+    "title": "last_failure",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HEALTH-003",
+    "phase": "Phase 10",
+    "title": "last_error Sanitized",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HEALTH-004",
+    "phase": "Phase 10",
+    "title": "results_last_run",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-HEALTH-005",
+    "phase": "Phase 10",
+    "title": "new_candidates_last_run",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-001",
+    "phase": "Phase 10",
+    "title": "Source API Keys Not Returned",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-002",
+    "phase": "Phase 10",
+    "title": "Source API Keys Not Persisted In Candidate Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-003",
+    "phase": "Phase 10",
+    "title": "Historical File Path Traversal Rejected",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-004",
+    "phase": "Phase 10",
+    "title": "SQL Injection Inputs Remain Data",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-005",
+    "phase": "Phase 10",
+    "title": "Source Error Secrets Sanitized",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-006",
+    "phase": "Phase 10",
+    "title": "No Personal Phone Scraping Added",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-007",
+    "phase": "Phase 10",
+    "title": "No Personal Email Promotion",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-SEC-008",
+    "phase": "Phase 10",
+    "title": "Business Data Only According To Contract",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-REG-015",
+    "phase": "Phase 10",
+    "title": "Runtime Database Never Enters Release ZIP",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-001",
+    "phase": "Phase 10",
+    "title": "Candidate Tables Initialize",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-002",
+    "phase": "Phase 10",
+    "title": "Reinitialization Idempotent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-003",
+    "phase": "Phase 10",
+    "title": "Candidate Identity Constraints",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-004",
+    "phase": "Phase 10",
+    "title": "Observation Uniqueness",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-005",
+    "phase": "Phase 10",
+    "title": "Evidence Persistence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-006",
+    "phase": "Phase 10",
+    "title": "Watchlist Persistence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-007",
+    "phase": "Phase 10",
+    "title": "Historical Batch Persistence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-008",
+    "phase": "Phase 10",
+    "title": "Transaction Rollback On Failure",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-009",
+    "phase": "Phase 10",
+    "title": "No Half-Written Candidate On Internal Error",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-DB-010",
+    "phase": "Phase 10",
+    "title": "Schema Version/Migration Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-POS-001",
+    "phase": "Phase 10",
+    "title": "Direct Delivery Positive Outcome Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-POS-002",
+    "phase": "Phase 10",
+    "title": "Strategic Partnership Positive Outcome Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-POS-003",
+    "phase": "Phase 10",
+    "title": "Outcome Type Does Not Alter Historical Facts",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-POS-004",
+    "phase": "Phase 10",
+    "title": "Positive Outcome Can Inform Opportunity Type",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-POS-005",
+    "phase": "Phase 10",
+    "title": "Positive Outcome Does Not Auto-Approve Future Outreach",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-KNOWN-001",
+    "phase": "Phase 10",
+    "title": "Known Historical Company Found Again",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-KNOWN-002",
+    "phase": "Phase 10",
+    "title": "New Observation Appended",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-KNOWN-003",
+    "phase": "Phase 10",
+    "title": "No New Cold Sequence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-KNOWN-004",
+    "phase": "Phase 10",
+    "title": "New Strong Signal -> reengagement_review",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-KNOWN-005",
+    "phase": "Phase 10",
+    "title": "No Auto Re-Engagement Send",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FRESH-001",
+    "phase": "Phase 10",
+    "title": "observed_at Preserved",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FRESH-002",
+    "phase": "Phase 10",
+    "title": "fresh/recent/old/unknown Classification",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FRESH-003",
+    "phase": "Phase 10",
+    "title": "Historical Evidence Not Deleted",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FRESH-004",
+    "phase": "Phase 10",
+    "title": "Stale Job Signal Not Treated As Current Intent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-FRESH-005",
+    "phase": "Phase 10",
+    "title": "Newer Evidence Can Supersede For Current Assessment Without Deleting History",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LIMIT-001",
+    "phase": "Phase 10",
+    "title": "Candidate Limit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LIMIT-002",
+    "phase": "Phase 10",
+    "title": "Research Page Limit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LIMIT-003",
+    "phase": "Phase 10",
+    "title": "Source Limit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LIMIT-004",
+    "phase": "Phase 10",
+    "title": "Watchlist Check Limit",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LIMIT-005",
+    "phase": "Phase 10",
+    "title": "No Silent Overrun",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-001",
+    "phase": "Phase 10",
+    "title": "Reuse ai_engine/llm_client.py",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-002",
+    "phase": "Phase 10",
+    "title": "No Second Ollama Client",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-003",
+    "phase": "Phase 10",
+    "title": "LLM Cannot Invent Company Facts",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-004",
+    "phase": "Phase 10",
+    "title": "LLM Cannot Invent Jobs",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-005",
+    "phase": "Phase 10",
+    "title": "LLM Cannot Assign Frozen Numeric Lead Score",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-006",
+    "phase": "Phase 10",
+    "title": "Weak Semantic Output Falls Back Safely",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-LLM-007",
+    "phase": "Phase 10",
+    "title": "Tier Can Be unknown",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOSEND-001",
+    "phase": "Phase 10",
+    "title": "discovery_v2 Does Not Import SMTP Sender",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOSEND-002",
+    "phase": "Phase 10",
+    "title": "discovery_v2 Does Not Call SendOrchestrator",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOSEND-003",
+    "phase": "Phase 10",
+    "title": "Discovery API Has No Auto-Send Path",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-NOSEND-004",
+    "phase": "Phase 10",
+    "title": "Provider Delivery Count Always Zero",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-UIBRIDGE-001",
+    "phase": "Phase 10",
+    "title": "Candidate List Has Summary Fields",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-UIBRIDGE-002",
+    "phase": "Phase 10",
+    "title": "Candidate Detail Has Evidence",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-UIBRIDGE-003",
+    "phase": "Phase 10",
+    "title": "Source Health Available",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-UIBRIDGE-004",
+    "phase": "Phase 10",
+    "title": "Watchlist Status Available",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-UIBRIDGE-005",
+    "phase": "Phase 10",
+    "title": "Qualification Reason Available",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-001",
+    "phase": "Phase 10",
+    "title": "Unmapped deterministic case cannot PASS",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-002",
+    "phase": "Phase 10",
+    "title": "Empty pass test cannot count as coverage",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-003",
+    "phase": "Phase 10",
+    "title": "Failed pytest node -> FAIL",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-004",
+    "phase": "Phase 10",
+    "title": "Skipped optional/live source -> NOT_RUN",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-005",
+    "phase": "Phase 10",
+    "title": "Expected and Actual independent",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-006",
+    "phase": "Phase 10",
+    "title": "false_pass_count dynamic",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-007",
+    "phase": "Phase 10",
+    "title": "Mock source success labeled mock",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-008",
+    "phase": "Phase 10",
+    "title": "Fake job count computed, not hardcoded",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-009",
+    "phase": "Phase 10",
+    "title": "Duplicate-company metric computed",
+    "mode": "deterministic"
+  },
+  {
+    "case_id": "P10-QA-010",
+    "phase": "Phase 10",
+    "title": "Phase 5 regression metric computed",
+    "mode": "deterministic"
+  }
+]

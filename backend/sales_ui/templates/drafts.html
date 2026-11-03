@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}Draft Review Queue | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Draft Review Queue</h1>
+    <p class="page-subtitle">Human-in-the-loop review of generated outreach emails before approval and sending.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/drafts?status=pending_review" class="btn btn-secondary btn-sm {% if status_filter == 'pending_review' or not status_filter %}active{% endif %}">Pending Review</a>
+    <a href="/sales/drafts?status=approved" class="btn btn-secondary btn-sm {% if status_filter == 'approved' %}active{% endif %}">Approved</a>
+    <a href="/sales/drafts?status=all" class="btn btn-secondary btn-sm {% if status_filter == 'all' %}active{% endif %}">All Drafts</a>
+  </div>
+</div>
+
+{% if drafts %}
+  {% for d in drafts %}
+  <div class="draft-card" id="draft-{{ d.draft_id }}">
+    <div class="draft-header">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+          <h2 style="font-size: 1.15rem; font-weight: 700;">{{ d.company_name }}</h2>
+          <span class="badge {% if d.approval_status == 'approved' %}badge-success{% elif d.approval_status == 'rejected' %}badge-danger{% else %}badge-warning{% endif %}">
+            {{ d.approval_status }}
+          </span>
+          <span class="badge badge-info">Revision r{{ d.revision }}</span>
+          {% if d.send_status == 'sent' %}
+          <span class="badge badge-success">Sent (Immutable)</span>
+          {% endif %}
+          {% if d.is_suppressed %}
+          <span class="badge badge-danger">Suppressed: Do Not Contact</span>
+          {% endif %}
+          {% if d.is_previously_contacted %}
+          <span class="badge badge-previously-contacted">Previously Contacted</span>
+          {% endif %}
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary);">
+          To: <strong>{{ d.recipient_name }}</strong> &lt;{{ d.recipient_email }}&gt; &bull; 
+          From: {{ d.sender_name or 'System' }} &lt;{{ d.sender_email or 'configured sender' }}&gt;
+        </p>
+      </div>
+      <div>
+        <a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-secondary btn-sm">Full Screen Detail ↗</a>
+      </div>
+    </div>
+
+    <!-- Subject & Full Body Preview -->
+    <div style="margin-bottom: 0.75rem;">
+      <span style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Subject:</span>
+      <div style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary); margin-top: 0.2rem;">{{ d.subject }}</div>
+    </div>
+
+    <div>
+      <span style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Full Reviewable Body:</span>
+      <div class="draft-body-preview">{{ d.body }}</div>
+    </div>
+
+    <!-- Metadata & Audit Bar -->
+    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); flex-wrap: wrap; gap: 0.5rem;">
+      <div>
+        Hash: <code>{{ d.content_hash[:12] }}...</code> &bull; 
+        Model: {{ d.generation_model or 'qwen2.5:1.5b' }} &bull; 
+        Tone: {{ d.tone }}
+      </div>
+      <div>
+        Created: {{ d.created_at[:19] }}
+        {% if d.approved_at %}&bull; Approved: {{ d.approved_at[:19] }} by {{ d.reviewer }}{% endif %}
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="draft-actions">
+      {% if d.send_status == 'sent' %}
+        <!-- P10_5-REG-003: Sent revision exposes no mutable workflow actions -->
+        <span class="badge badge-muted" style="padding: 0.45rem 0.75rem; font-size: 0.85rem;">
+          🔒 Sent Revision is Immutable. No workflow mutations allowed.
+        </span>
+      {% else %}
+        <!-- Approve Button: Never sends directly (P10_5-REG-001) -->
+        {% if d.can_approve %}
+        <form method="POST" action="/sales/drafts/{{ d.draft_id }}/approve" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="revision" value="{{ d.revision }}">
+          <input type="hidden" name="reviewer" value="local_operator">
+          <button type="submit" class="btn btn-success btn-sm">✅ Approve Draft</button>
+        </form>
+        {% endif %}
+
+        <!-- Edit Button -->
+        {% if d.can_edit %}
+        <a href="/sales/drafts/{{ d.draft_id }}#edit" class="btn btn-secondary btn-sm">✏️ Edit Revision</a>
+        {% endif %}
+
+        <!-- Reject Button -->
+        {% if d.can_reject %}
+        <form method="POST" action="/sales/drafts/{{ d.draft_id }}/reject" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="revision" value="{{ d.revision }}">
+          <input type="hidden" name="reviewer" value="local_operator">
+          <button type="submit" class="btn btn-danger btn-sm">❌ Reject</button>
+        </form>
+        {% endif %}
+
+        <!-- Dry Run Validation (P10_5-REG-005: 0 network calls) -->
+        <form method="POST" action="/sales/drafts/{{ d.draft_id }}/dry-run" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="revision" value="{{ d.revision }}">
+          <input type="hidden" name="reviewer" value="local_operator">
+          <button type="submit" class="btn btn-secondary btn-sm">🧪 Dry Run</button>
+        </form>
+
+        <!-- Explicit Send Button (P10_5-REG-004, P10_5-REG-006, P10_5-REG-009) -->
+        {% if not d.sender_email %}
+        <button type="button" class="btn btn-secondary btn-sm" disabled title="Sender email not configured">
+          🚫 Sender Not Configured
+        </button>
+        {% elif d.can_send and not d.is_suppressed and email_send_enabled %}
+        <button type="button" class="btn btn-primary btn-sm" onclick="openSendConfirmation('{{ d.draft_id }}', {{ d.revision }}, '{{ d.recipient_email }}', '{{ d.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ d.company_name|replace('\'', '\\\'') }}', '{{ d.sender_name|replace('\'', '\\\'') if d.sender_name else '' }}', '{{ d.sender_email if d.sender_email else '' }}', '{{ d.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
+          📤 Send Real Email...
+        </button>
+        {% elif d.is_suppressed %}
+        <button type="button" class="btn btn-secondary btn-sm" disabled title="Recipient is suppressed">
+          🚫 Send Blocked (Suppressed)
+        </button>
+        {% elif not email_send_enabled %}
+        <button type="button" class="btn btn-secondary btn-sm" disabled title="Real sending is disabled on this server">
+          📤 Send (Disabled on Server)
+        </button>
+        {% endif %}
+
+        <!-- Do Not Contact Button -->
+        <form method="POST" action="/sales/drafts/{{ d.draft_id }}/suppress" style="display:inline; margin-left:auto;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="email" value="{{ d.recipient_email }}">
+          <input type="hidden" name="company_domain" value="{{ d.company_domain or '' }}">
+          <input type="hidden" name="reason" value="manual">
+          <button type="submit" class="btn btn-secondary btn-sm" style="color:#ef4444;" onclick="return confirm('Suppress this recipient and domain from all future outreach?');">
+            🚫 Do Not Contact
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="card">
+    <div class="empty-state">
+      <p class="empty-state-text">No drafts are awaiting review in this view.</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

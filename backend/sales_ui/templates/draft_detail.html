@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Draft {{ draft.draft_id }} (r{{ draft.revision }}) | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Draft Outreach: {{ draft.subject }}</h1>
+    <p class="page-subtitle">Draft ID: <code>{{ draft.draft_id }}</code> | Revision: <strong>r{{ draft.revision }}</strong></p>
+  </div>
+  <div>
+    <a href="/sales/drafts" class="btn btn-secondary">← Back to Review Queue</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Human Review & Reviewable Payload Gateway</span>
+    <div>
+      {% if draft.is_suppressed %}
+      <span class="badge badge-suppressed">Suppressed</span>
+      {% endif %}
+      <span class="badge badge-info">{{ draft.approval_status }}</span>
+      <span class="badge {% if draft.send_status == 'sent' %}badge-success{% else %}badge-muted{% endif %}">{{ draft.send_status }}</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; font-size: 0.875rem; margin-bottom: 1.5rem;">
+    <div><strong>Target Company:</strong> <code>{{ draft.company_name }}</code></div>
+    <div><strong>Recipient Name:</strong> {{ draft.recipient_name }}</div>
+    <div><strong>Recipient Title:</strong> {{ draft.recipient_title or 'N/A' }}</div>
+    <div>
+      <strong>Recipient Email:</strong> <code>{{ draft.recipient_email }}</code>
+      <button type="button" class="copy-btn" onclick="copyToClipboard('{{ draft.recipient_email }}', this)">📋 Copy</button>
+    </div>
+    <div><strong>Sender Name:</strong> {{ draft.sender_name or 'Sender not configured' }}</div>
+    <div><strong>Sender Email:</strong> <code>{{ draft.sender_email or 'Sender not configured' }}</code></div>
+    <div><strong>Service Pitched:</strong> {{ draft.service_used or 'Tech-Enabled BIM Services' }}</div>
+    <div><strong>Approved Hash:</strong> <code>{{ draft.approved_fingerprint_short or 'None' }}</code></div>
+  </div>
+
+  <!-- Email Content Box with Manual Copy Controls -->
+  <div style="background: var(--bg-hover); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="font-weight: 700; font-size: 1rem; color: var(--text-primary);">
+        Subject: {{ draft.subject }}
+      </div>
+      <div id="draft-subject-text" style="display: none;">{{ draft.subject }}</div>
+      <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('draft-subject-text').innerText, this)">
+        📋 Copy Subject
+      </button>
+    </div>
+    <div style="position: relative;">
+      <div id="email-body-text" style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); font-family: inherit; background: var(--bg-card); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color);">{{ draft.body }}</div>
+      <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end;">
+        <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('email-body-text').innerText, this)">
+          📋 Copy Email Body
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual Outbound Dispatch Logging (Operator Hand-Off) -->
+  <div class="card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); background: rgba(56, 189, 248, 0.03);">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>📝 Manual Outbound Dispatch Log</span>
+      <span class="badge badge-info">Operator Hand-Off</span>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      If you manually copied this draft and sent it via your own email client, record the manual event here for audit compliance and suppression tracking. Copying or clicking does <strong>never</strong> mark the draft sent automatically.
+    </p>
+    <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/log-manual-send" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div style="width: 130px;">
+        <label class="form-label">Channel</label>
+        <select name="channel" class="form-control">
+          <option value="email">Email</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="portal">Web Portal</option>
+        </select>
+      </div>
+      <div style="width: 160px;">
+        <label class="form-label">External Ref (Optional)</label>
+        <input type="text" name="external_ref" class="form-control" placeholder="e.g. Message ID">
+      </div>
+      <div style="flex: 2; min-width: 240px;">
+        <label class="form-label">Operator Notes</label>
+        <input type="text" name="operator_notes" class="form-control" placeholder="Notes on manual transmission...">
+      </div>
+      <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+        <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="confirm_external_transmission" value="1" required>
+            I explicitly confirm this message was transmitted externally outside• Email Led.
+          </label>
+          <label style="font-size: 0.78rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" name="is_retrospective_audit" value="1">
+            Retrospective audit log: message was dispatched in the past (does not authorize new outreach).
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary">
+          📝 Confirm &amp; Log Manual Dispatch
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Review Actions Bar (Human-in-the-Loop) -->
+  <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+    {% if draft.send_status == 'sent' %}
+      <span class="badge badge-success" style="font-size: 0.95rem; padding: 0.5rem 1rem;">
+        🔒 Sent (Immutable) — This revision was sent and is immutable.
+      </span>
+    {% else %}
+      {% if draft.can_approve %}
+      <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/approve" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="revision" value="{{ draft.revision }}">
+        <input type="hidden" name="reviewer" value="local_operator">
+        <button type="submit" class="btn btn-success">✅ Approve</button>
+      </form>
+      {% endif %}
+
+      {% if draft.can_request_changes %}
+      <button type="button" class="btn btn-warning" onclick="document.getElementById('request-changes-modal').classList.add('active')">
+        ⚠️ Request Changes
+      </button>
+      {% endif %}
+
+      {% if draft.can_reject %}
+      <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/reject" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="revision" value="{{ draft.revision }}">
+        <input type="hidden" name="reviewer" value="local_operator">
+        <button type="submit" class="btn btn-danger">❌ Reject</button>
+      </form>
+      {% endif %}
+
+      <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/dry-run" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="revision" value="{{ draft.revision }}">
+        <input type="hidden" name="reviewer" value="local_operator">
+        <button type="submit" class="btn btn-secondary">🧪 Dry Run</button>
+      </form>
+
+      {% if not draft.sender_email %}
+      <button type="button" class="btn btn-secondary" disabled title="Sender email not configured">🚫 Sender Not Configured</button>
+      {% elif draft.can_send and not draft.is_suppressed and email_send_enabled %}
+      <button type="button" class="btn btn-primary" onclick="openSendConfirmation('{{ draft.draft_id }}', {{ draft.revision }}, '{{ draft.recipient_email }}', '{{ draft.subject|replace('\'', '\\\'')|replace('\n', ' ') }}', '{{ draft.company_name|replace('\'', '\\\'') }}', '{{ draft.sender_name|replace('\'', '\\\'') if draft.sender_name else '' }}', '{{ draft.sender_email if draft.sender_email else '' }}', '{{ draft.body|replace('\'', '\\\'')|replace('\n', '\\n')|replace('\r', '') }}')">
+        📤 Send Real Email...
+      </button>
+      {% elif draft.is_suppressed %}
+      <button type="button" class="btn btn-secondary" disabled>🚫 Send Blocked (Suppressed)</button>
+      {% elif not email_send_enabled %}
+      <button type="button" class="btn btn-secondary" disabled>📤 Send Disabled</button>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Request Changes Modal -->
+<div id="request-changes-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Request Changes (r{{ draft.revision }})</h3>
+    </div>
+    <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/request-changes">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="revision" value="{{ draft.revision }}">
+      <input type="hidden" name="reviewer" value="local_operator">
+      <div class="modal-body">
+        <p>Transition this draft to <code>changes_requested</code> in Phase 9. Please provide guidance for the revision.</p>
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label">Reviewer Instructions / Notes</label>
+          <textarea name="note" class="form-control" style="min-height: 100px;" placeholder="Explain required revisions..." required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('request-changes-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-warning">Submit Change Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Draft Form (P10_5-REG-002: Creates new revision & resets approval) -->
+{% if draft.send_status != 'sent' %}
+<div class="card" id="edit">
+  <div class="card-title">
+    <span>Edit Draft & Create New Revision</span>
+    <span class="badge badge-warning">Resets Approval Status</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Editing this draft will create revision <strong>r{{ draft.revision + 1 }}</strong> through Phase 9. The new revision will require human review before it can be sent.
+  </p>
+  <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="revision" value="{{ draft.revision }}">
+    <div class="form-group">
+      <label class="form-label">Recipient Email</label>
+      <input type="email" name="recipient_email" class="form-control" value="{{ draft.recipient_email }}" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Subject Line</label>
+      <input type="text" name="subject" class="form-control" value="{{ draft.subject }}" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email Body</label>
+      <textarea name="body" class="form-control" style="min-height: 200px;" required>{{ draft.body }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Reviewer Note (Optional)</label>
+      <input type="text" name="note" class="form-control" placeholder="Describe rationale for changes...">
+    </div>
+    <button type="submit" class="btn btn-primary">Save as Revision r{{ draft.revision + 1 }}</button>
+  </form>
+</div>
+{% endif %}
+
+<!-- Audit Events History -->
+<div class="card">
+  <div class="card-title">
+    <span>Audit History (Phase 9)</span>
+  </div>
+  {% if events %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Revision</th>
+          <th>Previous Status</th>
+          <th>New Status</th>
+          <th>Reviewer</th>
+          <th>Time</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in events %}
+        <tr>
+          <td><strong>{{ ev.action }}</strong></td>
+          <td>r{{ ev.revision }}</td>
+          <td>{{ ev.previous_status or '-' }}</td>
+          <td><span class="badge badge-info">{{ ev.new_status }}</span></td>
+          <td>{{ ev.reviewer }}</td>
+          <td>{{ ev.created_at[:19] }}</td>
+          <td>{{ ev.review_note or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No audit events recorded for this draft yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

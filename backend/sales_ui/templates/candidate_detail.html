@@ -1,0 +1,1144 @@
+{% extends "base.html" %}
+
+{% block title %}{{ detail.candidate.company_name }} | Unified Company Workspace | Email Led{% endblock %}
+
+{% block content %}
+{% with flow_company_name=detail.candidate.company_name, flow_canonical_domain=detail.candidate.domain, flow_candidate_id=detail.candidate.candidate_id, flow_current_step='candidate_detail' %}
+  {% include "candidate_flow_bar.html" %}
+{% endwith %}
+
+<!-- Top Workspace Header -->
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+      <h1 class="page-title" style="margin-bottom: 0;">{{ clean_display_title }}</h1>
+      {% if is_suppressed %}
+        <span class="badge badge-danger">🚫 Suppressed / DNC</span>
+      {% elif is_previously_contacted %}
+        <span class="badge badge-historical">⏱️ Prior Contact</span>
+      {% elif detail.candidate.status == 'qualified' %}
+        <span class="badge badge-success">✓ Qualified</span>
+      {% elif detail.candidate.status == 'watchlist' %}
+        <span class="badge badge-warning">👁️ Watchlist</span>
+      {% else %}
+        <span class="badge badge-secondary">{{ detail.candidate.status|upper }}</span>
+      {% endif %}
+      <span class="badge badge-info">{{ detail.candidate.tier }}</span>
+      <span class="badge {{ research_info.research_badge if research_info else 'badge-secondary' }}" title="{{ research_info.research_title if research_info else '' }}">
+        {{ research_info.research_label if research_info else 'Research' }}
+      </span>
+      {% if lead_record %}
+        <span class="badge badge-success" title="Associated with Lead Register Record #{{ lead_record.record_number }}">13-Field Linked (#{{ lead_record.record_number }})</span>
+      {% else %}
+        <span class="badge badge-secondary" title="No matching 13-field record for candidate_id {{ detail.candidate.candidate_id }}">13-Field Unlinked</span>
+      {% endif %}
+    </div>
+    <p class="page-subtitle" style="margin-top: 0.25rem;">
+      Candidate ID: <code>{{ detail.candidate.candidate_id }}</code> |
+      Domain: <code>{{ detail.candidate.domain or 'None' }}</code> |
+      Location: <strong>{{ detail.candidate.city or 'Not Specified' }}{% if detail.candidate.city and detail.candidate.country %}, {% endif %}{{ detail.candidate.country or '' }}</strong>
+      {% if detail.candidate.company_name != clean_display_title %}
+        <br><span style="font-size: 0.78rem; color: var(--text-muted);">Authoritative Registered Name: <strong>{{ detail.candidate.company_name }}</strong></span>
+      {% endif %}
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+    <a href="/sales/candidates" class="btn btn-secondary">← Back to Candidates</a>
+    <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary" title="Review researched 13-field proposals or run explicit crawler">🔬 Research Review</a>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-secondary" onclick="return confirm('Launch explicit bounded company research crawling?');" title="Explicitly crawl and snapshot canonical domain">🔍 Research Again</button>
+    </form>
+    <button type="button" class="btn btn-warning" onclick="document.getElementById('watch-modal').classList.add('active')">👁️ Watchlist</button>
+    <button type="button" class="btn btn-danger" onclick="document.getElementById('dnc-modal').classList.add('active')">🚫 DNC / Suppress</button>
+  </div>
+</div>
+
+<!-- Operational Workflow Stage Bar (UX-02.2) -->
+<div class="card" style="margin-bottom: 1.25rem; padding: 0.85rem 1.25rem; background: var(--bg-card); border-top: 3px solid var(--border-focus);">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+    <span style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.04em;">
+      Workflow Stage Pipeline
+    </span>
+    <span style="font-size: 0.78rem; color: var(--text-secondary);">
+      End-to-end human-in-the-loop candidate governance
+    </span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.82rem;">
+    <!-- Step 1: Research -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">1. Research</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if latest_snapshot %}
+          <span class="badge badge-success">Snapshot Available</span>
+        {% else %}
+          <span class="badge badge-secondary">Not Started</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 2: 13-Field Register -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">2. Lead Register</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if lead_record and lead_record.verification_status in ('OPERATOR_REVIEWED', 'EXTRACTED') %}
+          <span class="badge badge-success">Linked (#{{ lead_record.record_number }})</span>
+        {% elif lead_record %}
+          <span class="badge badge-warning">Review Pending</span>
+        {% else %}
+          <span class="badge badge-secondary">Not Linked</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 3: Contacts & Verification -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">3. Contact Status</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if verified_contacts %}
+          <span class="badge badge-success">{{ verified_contacts|length }} Verified</span>
+        {% elif lead_record and lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
+          <span class="badge badge-info" title="Lead Register Documentation Alone Requires Human Verification">Documented (Unverified)</span>
+        {% elif likely_contacts or unverified_contacts %}
+          <span class="badge badge-warning">Unverified</span>
+        {% else %}
+          <span class="badge badge-secondary">Missing</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Step 4: Outreach Eligibility & Stage -->
+    <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">4. Outreach State</div>
+      <div style="margin-top: 0.2rem; font-weight: 600;">
+        {% if is_suppressed or is_previously_contacted %}
+          <span class="badge badge-danger">Restricted</span>
+        {% elif manual_logs %}
+          <span class="badge badge-info">Manually Dispatched</span>
+        {% elif company_drafts %}
+          {% set ns = namespace(has_approved=false) %}
+          {% for d in company_drafts %}
+            {% if d.approval_status == 'approved' %}{% set ns.has_approved = true %}{% endif %}
+          {% endfor %}
+          {% if ns.has_approved %}
+            <span class="badge badge-success">Approved Draft</span>
+          {% else %}
+            <span class="badge badge-warning">Draft Pending</span>
+          {% endif %}
+        {% elif can_generate_draft %}
+          <span class="badge badge-success">Draft Eligible</span>
+        {% else %}
+          <span class="badge badge-secondary">Verification Required</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Operator Review & Decision Bar -->
+<div class="card" style="border: 2px solid #10b981; background: rgba(16, 185, 129, 0.03); margin-bottom: 1.25rem; padding: 1rem 1.25rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+    <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+      <span>Operator Review Decision (Human-in-the-Loop)</span>
+      <span class="badge badge-success" style="font-size: 0.72rem;">Manual Decision Authority</span>
+    </div>
+    <span style="font-size: 0.8rem; color: var(--text-muted);">Current Qualification: <strong>{{ detail.candidate.status }}</strong></span>
+  </div>
+  <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/review" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="width: 200px;">
+      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Decision</label>
+      <select name="decision" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;" required>
+        <option value="approve">✅ Approve Lead</option>
+        <option value="reject">❌ Reject Candidate</option>
+        <option value="duplicate">🔄 Mark Duplicate</option>
+        <option value="needs_research">🔍 Needs Research</option>
+      </select>
+    </div>
+    <div style="flex: 2; min-width: 260px;">
+      <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Review Notes</label>
+      <input type="text" name="notes" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;" placeholder="Operator notes, architectural rationale, or decision context...">
+    </div>
+    <button type="submit" class="btn btn-success" style="font-size: 0.85rem; padding: 0.4rem 0.85rem;">Save Decision</button>
+  </form>
+</div>
+
+<!-- 6-Area Workspace Navigation Tabs -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem; overflow-x: auto;">
+  <button type="button" id="tab-btn-overview" class="btn btn-primary" onclick="switchWorkspaceTab('overview')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
+    🏢 1. Overview
+  </button>
+  <button type="button" id="tab-btn-research" class="btn btn-secondary" onclick="switchWorkspaceTab('research')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
+    🔬 2. Research &amp; Evidence {% if latest_snapshot %}<span class="badge badge-info" style="margin-left: 4px;">{{ historical_snapshots|length }}</span>{% endif %}
+  </button>
+  <button type="button" id="tab-btn-ai-handoff" class="btn btn-secondary" onclick="switchWorkspaceTab('ai-handoff')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem; background-color: rgba(99, 102, 241, 0.1); border-color: #6366f1; color: #6366f1; font-weight: 600;">
+    🤖 AI Handoff &amp; Brief 📋
+  </button>
+  <button type="button" id="tab-btn-register" class="btn btn-secondary" onclick="switchWorkspaceTab('register')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
+    📋 3. 13-Field Lead Register {% if lead_record %}<span class="badge badge-success" style="margin-left: 4px;">#{{ lead_record.record_number }}</span>{% else %}<span class="badge badge-secondary" style="margin-left: 4px;">Unlinked</span>{% endif %}
+  </button>
+  <button type="button" id="tab-btn-contacts" class="btn btn-secondary" onclick="switchWorkspaceTab('contacts')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
+    👥 4. Contacts &amp; Verification <span class="badge badge-secondary" style="margin-left: 4px;">{{ contacts|length }}</span>
+  </button>
+  <button type="button" id="tab-btn-outreach" class="btn btn-secondary" onclick="switchWorkspaceTab('outreach')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
+    ✉️ 5. Outreach &amp; History {% if company_drafts or manual_logs or detail.historical_outreach %}<span class="badge badge-info" style="margin-left: 4px;">{{ (company_drafts|length) + (manual_logs|length) + (detail.historical_outreach|length) }}</span>{% endif %}
+  </button>
+</div>
+
+<!-- ========================================================================= -->
+<!-- AREA 1: OVERVIEW -->
+<!-- ========================================================================= -->
+<div id="section-overview" class="workspace-section">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
+    <!-- Core Profile & Provenance -->
+    <div class="card" style="margin-bottom: 0;">
+      <div class="card-title">
+        <span>Company Profile &amp; Location</span>
+        <span class="badge badge-info">{{ detail.candidate.tier }}</span>
+      </div>
+      <table class="data-table" style="font-size: 0.85rem;">
+        <tbody>
+          <tr><td style="width: 38%; font-weight: 600;">Legal / Trade Name:</td><td>{{ detail.candidate.company_name }}</td></tr>
+          <tr><td style="font-weight: 600;">Official Domain:</td><td>{% if detail.candidate.domain %}<a href="https://{{ detail.candidate.domain }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ detail.candidate.domain }} ↗</a>{% else %}<span style="color:var(--text-muted);">None</span>{% endif %}</td></tr>
+          <tr><td style="font-weight: 600;">Country / City:</td><td>{{ detail.candidate.country or 'Not Verified' }} / {{ detail.candidate.city or 'Not Verified' }}</td></tr>
+          <tr><td style="font-weight: 600;">Legal Form:</td><td>{{ detail.legal_form or '-' }}</td></tr>
+          <tr><td style="font-weight: 600;">Employee Size Hint:</td><td>{{ detail.employee_size_hint or '-' }}</td></tr>
+          <tr><td style="font-weight: 600;">Project Scale Hint:</td><td>{{ detail.project_scale_hint or '-' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Qualification & Status Summary -->
+    <div class="card" style="margin-bottom: 0;">
+      <div class="card-title">
+        <span>Qualification &amp; Readiness</span>
+        {% if detail.candidate.status == 'qualified' %}
+          <span class="badge badge-success">Qualified Lead</span>
+        {% else %}
+          <span class="badge badge-secondary">{{ detail.candidate.status }}</span>
+        {% endif %}
+      </div>
+      <table class="data-table" style="font-size: 0.85rem;">
+        <tbody>
+          <tr><td style="width: 38%; font-weight: 600;">Fit Assessment:</td><td><span class="badge badge-{% if detail.candidate.fit == 'high' %}success{% elif detail.candidate.fit == 'medium' %}info{% else %}secondary{% endif %}">{{ detail.candidate.fit|upper }}</span></td></tr>
+          <tr><td style="font-weight: 600;">Intent Assessment:</td><td><span class="badge badge-{% if detail.candidate.intent == 'high' %}warning{% elif detail.candidate.intent == 'medium' %}info{% else %}secondary{% endif %}">{{ detail.candidate.intent|upper }}</span></td></tr>
+          <tr><td style="font-weight: 600;">BIM Maturity:</td><td>{{ detail.candidate.bim_maturity or 'Unknown' }}</td></tr>
+          <tr><td style="font-weight: 600;">Outreach Allowed:</td><td>{% if is_suppressed %}<span class="badge badge-danger">BLOCKED (Suppressed)</span>{% elif is_previously_contacted %}<span class="badge badge-historical">RESTRICTED (Prior Contact)</span>{% elif can_generate_draft %}<span class="badge badge-success">READY FOR DRAFT</span>{% else %}<span class="badge badge-secondary">NOT ELIGIBLE</span>{% endif %}</td></tr>
+          <tr><td style="font-weight: 600;">Contact Availability:</td><td>{% if verified_contacts %}<span class="badge badge-success">{{ verified_contacts|length }} Verified</span>{% elif likely_contacts %}<span class="badge badge-warning">{{ likely_contacts|length }} Likely (Verification Required)</span>{% else %}<span class="badge badge-secondary">Verification Required</span>{% endif %}</td></tr>
+          <tr><td style="font-weight: 600;">Discovery Provenance:</td><td>{{ ', '.join(detail.candidate.discovery_sources) or 'Ad-hoc Discovery' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Rationales & Context -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Discovery &amp; Intelligence Rationale</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+      <div style="background: var(--bg-card); padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px;">
+        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.35rem;">Discovery Origin</div>
+        <div>{{ detail.why_found }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px;">
+        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.35rem;">Fit Assessment Rationale</div>
+        <div>{{ detail.why_fit }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px;">
+        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 0.35rem;">Intent Signal Analysis</div>
+        <div>{{ detail.why_intent }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chronological Audit Timeline Preview -->
+  <div class="card">
+    <div class="card-title">
+      <span>Candidate Audit Timeline</span>
+      <span class="badge badge-secondary">{{ detail.timeline|length }} Events</span>
+    </div>
+    {% if detail.timeline %}
+    <div class="timeline" style="max-height: 380px; overflow-y: auto;">
+      {% for evt in detail.timeline %}
+      <div class="timeline-item">
+        <div class="timeline-marker"></div>
+        <div class="timeline-content">
+          <div class="timeline-header">
+            <span class="timeline-title">{{ evt.title }}</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">{{ evt.occurred_at[:19] if evt.occurred_at else '' }}</span>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-primary); margin-top: 0.25rem; margin-bottom: 0;">
+            {{ evt.summary }}
+          </p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No audit timeline events recorded yet.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- AREA 2: AI HANDOFF & BRIEF (READ-ONLY INTELLIGENCE & COPY CONTROLS) -->
+<!-- ========================================================================= -->
+<div id="section-ai-handoff" class="workspace-section" style="display: none;">
+  <!-- Safety Warnings for AI Handoff -->
+  {% if is_suppressed %}
+  <div class="card" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #ef4444; font-size: 1rem; margin-bottom: 0.25rem;">
+      🛑 INTERNAL INSPECTION ONLY — DO NOT CONTACT (SUPPRESSED)
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      This company domain or email is in the suppression registry. Autonomous drafting or sales outreach is strictly blocked.
+      The AI Brief below is presented strictly for internal factual review and forbids generating cold outreach.
+    </div>
+  </div>
+  {% elif is_previously_contacted %}
+  <div class="card" style="border-left: 4px solid #8b5cf6; background: rgba(139, 92, 246, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #8b5cf6; font-size: 1rem; margin-bottom: 0.25rem;">
+      ⏱️ PRIOR OUTREACH DETECTED — COLD OUTREACH RESTRICTED
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      Historical communications exist for this company. Duplicate protection is actively enforced.
+      Do not compose or send generic first-contact emails. Inspect prior communication history before taking manual action.
+    </div>
+  </div>
+  {% elif not can_generate_draft %}
+  <div class="card" style="border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #f59e0b; font-size: 1rem; margin-bottom: 0.25rem;">
+      ⚠️ CONTACT VERIFICATION REQUIRED PRIOR TO MESSAGE DISPATCH
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      Company is qualified for research, but no verified recipient is on file. Lead Register documented emails require operator evidence verification before messages are dispatched.
+      Copying this brief facilitates drafting in external AI, but does <strong>NOT</strong> authorize sending without verified recipient evidence.
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.05); margin-bottom: 1.25rem;">
+    <div style="font-weight: 700; color: #10b981; font-size: 1rem; margin-bottom: 0.25rem;">
+      ✅ READY FOR PERSONALIZED MANUAL OUTREACH PREPARATION
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      Company is ICP qualified, clear of suppression and prior contact, with a verified recipient available.
+      Use the structured briefs below in your external AI tool to draft a consultative, personalized message.
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Action Copy Toolbar -->
+  <div class="card" style="margin-bottom: 1.25rem; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Clipboard Copy Controls</h3>
+        <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">
+          Fast one-click copy to clipboard with instant confirmation. Zero LLM API calls, completely read-only.
+        </p>
+      </div>
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('raw-company-intel-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem;">
+          📋 Copy Company Intelligence
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="copyToClipboard(document.getElementById('raw-13-fields-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem;">
+          📋 Copy Reviewed 13 Fields
+        </button>
+        {% if is_suppressed %}
+        <button type="button" class="btn btn-secondary" disabled title="Outreach brief disabled for suppressed / DNC company" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; opacity: 0.5; cursor: not-allowed;">
+          🚫 AI Brief Blocked (Suppressed)
+        </button>
+        {% elif is_previously_contacted %}
+        <button type="button" class="btn btn-secondary" disabled title="Cold outreach brief blocked for previously contacted company" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; opacity: 0.5; cursor: not-allowed;">
+          ⚠️ Cold AI Brief Blocked (Prior Contact)
+        </button>
+        {% else %}
+        <button type="button" class="btn btn-primary" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; background-color: #6366f1; border-color: #6366f1;">
+          📋 Copy AI Brief
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden textareas holding exact unembellished text for clipboard copy -->
+  <textarea id="raw-company-intel-text" style="display:none;" readonly>{{ company_intel_text }}</textarea>
+  <textarea id="raw-13-fields-text" style="display:none;" readonly>{{ reviewed_13_fields_text }}</textarea>
+  <textarea id="raw-ai-brief-text" style="display:none;" readonly>{{ ai_brief_text }}</textarea>
+
+  <!-- Visual Panels for Human Review & Fact-Checking -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
+    <!-- Panel 1: AI Prompt Brief Preview -->
+    <div class="card" style="margin-bottom: 0;">
+      <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>AI Brief Preview (External Sales Prompt)</span>
+        {% if is_suppressed or is_previously_contacted %}
+        <span class="badge badge-danger">Outreach Blocked</span>
+        {% else %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)">Copy Brief</button>
+        {% endif %}
+      </div>
+      <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ ai_brief_text }}</pre>
+    </div>
+
+    <!-- Panel 2: Factual Company Intelligence Preview -->
+    <div class="card" style="margin-bottom: 0;">
+      <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Factual Company Intelligence</span>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-company-intel-text').value, this)">Copy Intel</button>
+      </div>
+      <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 480px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ company_intel_text }}</pre>
+    </div>
+  </div>
+
+  <!-- Panel 3: Structured 13-Field Register Record -->
+  <div class="card">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Authoritative Reviewed 13-Field Workbook Record</span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('raw-13-fields-text').value, this)">Copy 13 Fields</button>
+    </div>
+    <pre style="background: var(--bg-hover); padding: 1rem; border-radius: 6px; font-size: 0.8rem; max-height: 350px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); border: 1px solid var(--border-color); font-family: monospace;">{{ reviewed_13_fields_text }}</pre>
+  </div>
+</div>
+<div id="section-research" class="workspace-section" style="display: none;">
+  {% if latest_snapshot %}
+  <div class="card" style="border-left: 4px solid var(--border-focus); margin-bottom: 1.25rem;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Latest Persisted Research Snapshot</span>
+      <span class="badge badge-success">Loaded Offline</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; font-size: 0.85rem; margin-top: 0.5rem;">
+      <div><strong>Snapshot ID:</strong> <code>{{ latest_snapshot.snapshot_id }}</code></div>
+      <div><strong>Researched At:</strong> {{ latest_snapshot.created_at[:19] }}</div>
+      <div><strong>Pages Attempted/Succeeded:</strong> {{ latest_snapshot.pages_attempted }} / {{ latest_snapshot.pages_succeeded }}</div>
+      <div><strong>Research Status:</strong> <span class="badge badge-info">{{ latest_snapshot.research_status }}</span></div>
+      <div><strong>Crawler Version:</strong> <code>{{ latest_snapshot.crawler_version }}</code></div>
+      <div><strong>Parser Version:</strong> <code>{{ latest_snapshot.parser_version }}</code></div>
+    </div>
+    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+      <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary" style="font-size: 0.82rem;">
+        🔬 Open Full Research Review &amp; Field Proposals
+      </a>
+    </div>
+  </div>
+
+  <!-- Pages Inspected Table -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Inspected Web Pages &amp; Evidence Cache</span>
+      <span class="badge badge-secondary">{{ latest_snapshot.pages|length }} Pages</span>
+    </div>
+    {% if latest_snapshot.pages %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Requested URL</th>
+            <th>Status</th>
+            <th>Title / Snippet</th>
+            <th>Retrieved</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in latest_snapshot.pages %}
+          <tr>
+            <td><span class="badge badge-info">{{ p.page_type }}</span></td>
+            <td><code title="{{ p.requested_url }}">{{ p.requested_url[:55] }}{% if p.requested_url|length > 55 %}...{% endif %}</code></td>
+            <td>
+              {% if p.http_status == 200 %}
+                <span class="badge badge-success">200 OK</span>
+              {% else %}
+                <span class="badge badge-warning">{{ p.http_status or p.retrieval_status }}</span>
+              {% endif %}
+            </td>
+            <td>{{ p.title or p.meta_description or '-' }}</td>
+            <td>{{ p.retrieved_at[:19] if p.retrieved_at else '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No page evidence stored in snapshot.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Historical Snapshots Table -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Historical Research Snapshots</span>
+      <span class="badge badge-secondary">{{ historical_snapshots|length }} Runs</span>
+    </div>
+    {% if historical_snapshots %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Snapshot ID</th>
+            <th>Domain</th>
+            <th>Status</th>
+            <th>Pages Succeeded</th>
+            <th>Recorded At</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in historical_snapshots %}
+          <tr>
+            <td><code>{{ h.snapshot_id }}</code></td>
+            <td>{{ h.canonical_domain }}</td>
+            <td><span class="badge badge-info">{{ h.research_status }}</span></td>
+            <td>{{ h.pages_succeeded }} / {{ h.pages_attempted }}</td>
+            <td>{{ h.created_at[:19] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No prior snapshots recorded.</p>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <!-- No Snapshot Empty State -->
+  <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; margin-bottom: 1.25rem;">
+    <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔬</div>
+    <h3 style="margin-bottom: 0.5rem;">No Persisted Research Snapshot</h3>
+    <p style="color: var(--text-secondary); max-width: 540px; margin: 0 auto 1.25rem auto; font-size: 0.88rem;">
+      Company research has not been executed yet for this candidate. To respect strict bounded-execution and zero implicit crawling guards, research is only triggered explicitly.
+    </p>
+    <div style="display: flex; gap: 0.5rem; justify-content: center;">
+      <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary">
+        🔬 Open Research Review
+      </a>
+      <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-secondary" onclick="return confirm('Launch explicit bounded company research crawling?');">
+          🔍 Execute Explicit Crawl Now
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Market Evidence Items from Candidate Store -->
+  <div class="card">
+    <div class="card-title">
+      <span>Market Evidence Signals (Candidate Store)</span>
+      <span class="badge badge-evidence">{{ detail.evidence_items|length }} Items</span>
+    </div>
+    {% if detail.evidence_items %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Signal Type</th>
+            <th>Evidence Snippet</th>
+            <th>Confidence</th>
+            <th>Observed</th>
+            <th>Source Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in detail.evidence_items %}
+          <tr>
+            <td><span class="badge badge-info">{{ ev.category }}</span></td>
+            <td>{{ ev.signal_type }}</td>
+            <td>{{ ev.text }}</td>
+            <td>{{ ev.confidence or '1.0' }}</td>
+            <td>{{ ev.observed_at[:10] if ev.observed_at else 'Recent' }}</td>
+            <td>
+              {% if ev.source_url and (ev.source_url.startswith('http://') or ev.source_url.startswith('https://')) %}
+              <a href="{{ ev.source_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm">View Source ↗</a>
+              {% elif ev.source_url %}
+              <span class="badge badge-muted" title="{{ ev.source_url }}">Non-Web</span>
+              {% else %}
+              <span style="color:var(--text-muted);">Internal</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No detailed market evidence items recorded yet.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- AREA 3: 13-FIELD LEAD REGISTER -->
+<!-- ========================================================================= -->
+<div id="section-register" class="workspace-section" style="display: none;">
+  {% if lead_record %}
+  <div class="card" style="border-left: 4px solid #10b981; margin-bottom: 1.25rem;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Linked 13-Field Lead Register Record #{{ lead_record.record_number }}</span>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <span class="badge badge-success">{{ lead_record.verification_status }}</span>
+        <a href="/sales/register/{{ lead_record.candidate_id }}" class="btn btn-secondary btn-sm">✏️ Edit 13-Field Record</a>
+      </div>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+      Authoritative association confirmed for candidate ID <code>{{ lead_record.candidate_id }}</code>. Provenance: <strong>{{ lead_record.provenance_source }}</strong>.
+    </p>
+    
+    <!-- 13 Standard Schema Fields Grid -->
+    <table class="data-table" style="font-size: 0.85rem;">
+      <thead>
+        <tr>
+          <th style="width: 25%;">Standard 13-Field Field</th>
+          <th>Authoritative Persisted Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="font-weight: 600;">1. Row / Record Number</td><td>{{ lead_record.record_number }}</td></tr>
+        <tr><td style="font-weight: 600;">2. Company Priority</td><td><span class="badge badge-{% if lead_record.priority_level == 'A' %}success{% elif lead_record.priority_level == 'B' %}info{% else %}secondary{% endif %}">Priority {{ lead_record.priority_level }}</span></td></tr>
+        <tr><td style="font-weight: 600;">3. Priority Rationale</td><td>{{ lead_record.priority_rationale or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">4. Company Name &amp; Legal Identity</td><td><strong>{{ lead_record.company_name }}</strong>{% if lead_record.legal_identity and lead_record.legal_identity != 'Not Found' %} ({{ lead_record.legal_identity }}){% endif %}</td></tr>
+        <tr><td style="font-weight: 600;">5. Geographic Location</td><td>{{ lead_record.geographic_location or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">6. Telephone Numbers</td><td>{{ lead_record.telephone_numbers or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">7. Business Activities / Services</td><td>{{ lead_record.business_activities or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">8. Official Website</td><td>{% if lead_record.official_website and lead_record.official_website != 'Not Found' %}<a href="{{ lead_record.official_website }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ lead_record.official_website }} ↗</a>{% else %}Not Found{% endif %}</td></tr>
+        <tr><td style="font-weight: 600;">9. Responsible Person / Contact</td><td>{{ lead_record.responsible_person or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">10. Descriptions &amp; Operator Notes</td><td>{{ lead_record.descriptions_and_notes or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">11. Job Advertisement Links</td><td>{{ lead_record.job_advertisement_links or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">12. Other Links / Projects / References</td><td>{{ lead_record.other_links_and_references or 'Not Found' }}</td></tr>
+        <tr><td style="font-weight: 600;">13. Contact Email Addresses</td><td><code>{{ lead_record.contact_email_addresses or 'Not Found' }}</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <!-- Explicit Unlinked State (No Association Rule Violation) -->
+  <div class="card" style="text-align: center; padding: 2.5rem 1.5rem; margin-bottom: 1.25rem;">
+    <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">📋</div>
+    <h3 style="margin-bottom: 0.5rem;">Explicit Unlinked State</h3>
+    <p style="color: var(--text-secondary); max-width: 580px; margin: 0 auto 1.25rem auto; font-size: 0.88rem;">
+      No authoritative 13-field Lead Register record is associated with Candidate ID <code>{{ detail.candidate.candidate_id }}</code>.
+      Per strict safety requirements, records are never automatically associated based solely on similar company names.
+    </p>
+    <div style="display: flex; gap: 0.5rem; justify-content: center;">
+      <a href="/sales/register" class="btn btn-secondary">
+        📊 Open Lead Register Directory
+      </a>
+      <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary">
+        🔬 Research Company to Propose 13-Field Values
+      </a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ========================================================================= -->
+<!-- AREA 4: CONTACTS & VERIFICATION -->
+<!-- ========================================================================= -->
+<div id="section-contacts" class="workspace-section" style="display: none;">
+  <!-- Contacts Verification Summary Breakdown -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+    <div class="card" style="margin-bottom: 0; padding: 0.85rem 1rem; text-align: center; border-top: 3px solid #10b981;">
+      <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Verified Contacts</div>
+      <div style="font-size: 1.4rem; font-weight: 700; color: #10b981; margin-top: 0.25rem;">{{ verified_contacts|length }}</div>
+    </div>
+    <div class="card" style="margin-bottom: 0; padding: 0.85rem 1rem; text-align: center; border-top: 3px solid #f59e0b;">
+      <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Likely Contacts</div>
+      <div style="font-size: 1.4rem; font-weight: 700; color: #f59e0b; margin-top: 0.25rem;">{{ likely_contacts|length }}</div>
+    </div>
+    <div class="card" style="margin-bottom: 0; padding: 0.85rem 1rem; text-align: center; border-top: 3px solid var(--border-color);">
+      <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Unverified / Other</div>
+      <div style="font-size: 1.4rem; font-weight: 700; color: var(--text-secondary); margin-top: 0.25rem;">{{ unverified_contacts|length }}</div>
+    </div>
+  </div>
+
+  <!-- Contacts Table -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Company Contacts &amp; Verification Evidence</span>
+      <span class="badge badge-info">{{ contacts|length }} Total</span>
+    </div>
+    {% if contacts %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Role / Title</th>
+            <th>Work Email</th>
+            <th>Status</th>
+            <th>Eligibility</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in contacts %}
+          <tr>
+            <td><strong>{{ c.full_name }}</strong></td>
+            <td>{{ c.job_title }}</td>
+            <td><code>{{ c.work_email }}</code></td>
+            <td>
+              {% if c.email_status == 'verified' %}
+                <span class="badge badge-success">✓ Verified</span>
+              {% elif c.is_documented %}
+                <span class="badge badge-info" title="Documented in 13-Field Lead Register (Not Independently Verified)">Documented</span>
+              {% elif c.email_status == 'likely' %}
+                <span class="badge badge-warning">Likely</span>
+              {% else %}
+                <span class="badge badge-secondary">{{ c.email_status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.is_eligible %}
+                <span class="badge badge-success">Outreach Eligible</span>
+              {% else %}
+                <span class="badge badge-secondary">Verification Required</span>
+              {% endif %}
+            </td>
+            <td>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="populateVerifyModal('{{ c.contact_id }}', '{{ c.full_name }}', '{{ c.work_email }}')">
+                🔍 Verify Evidence
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No contacts discovered yet for this candidate company.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Explicit Evidence-Aware Contact Verification Action -->
+  <div class="card">
+    <div class="card-title">
+      <span>Verify Contact with Audit Trail (Explicit Evidence Source Required)</span>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+      Per Phase P0 safety requirements, arbitrary email addresses cannot be treated as verified without documenting public evidence.
+    </p>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/verify-contact">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label" style="font-size: 0.8rem;">Contact to Verify *</label>
+        <select id="verify-select-contact" name="contact_id" class="form-control" required style="width: 100%;">
+          <option value="" disabled selected>-- Select candidate contact --</option>
+          {% for c in contacts %}
+            <option value="{{ c.contact_id }}">{{ c.full_name }} &lt;{{ c.work_email }}&gt; [Currently: {{ c.email_status }}]</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+        <div>
+          <label class="form-label" style="font-size: 0.8rem;">Evidence Source *</label>
+          <input type="text" name="evidence_source" required class="form-control" placeholder="e.g. Official website footer / Team page">
+        </div>
+        <div>
+          <label class="form-label" style="font-size: 0.8rem;">Evidence Reference (URL / Doc)</label>
+          <input type="text" name="evidence_reference" class="form-control" placeholder="e.g. https://company.it/contatti">
+        </div>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label" style="font-size: 0.8rem;">Operator Audit Notes</label>
+        <input type="text" name="notes" class="form-control" placeholder="Confirmed through official public company registry">
+      </div>
+      <div style="text-align: right;">
+        <button type="submit" class="btn btn-primary" style="font-size: 0.85rem;">
+          ✅ Record Verification &amp; Upgrade Status
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- AREA 5: OUTREACH & HISTORY -->
+<!-- ========================================================================= -->
+<div id="section-outreach" class="workspace-section" style="display: none;">
+  <!-- Safeguard & Eligibility Summary -->
+  <div class="card" style="border-left: 4px solid {% if is_suppressed %}#ef4444{% elif is_previously_contacted %}#8b5cf6{% elif can_generate_draft %}#10b981{% elif company_outreach_eligible %}#f59e0b{% else %}#6b7280{% endif %}; margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Outreach Eligibility &amp; Safety Guards</span>
+      <span class="badge {{ readiness_info.readiness_badge if readiness_info else ('badge-danger' if (is_suppressed or is_previously_contacted) else ('badge-success' if can_generate_draft else 'badge-warning')) }}">
+        {{ readiness_info.readiness_label|upper if readiness_info else ('SUPPRESSED / DNC' if is_suppressed else ('PRIOR OUTREACH DETECTED' if is_previously_contacted else ('ELIGIBLE FOR MANUAL DRAFT' if can_generate_draft else 'CONTACT VERIFICATION REQUIRED'))) }}
+      </span>
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+      {% if is_suppressed %}
+        🚫 <strong>Outreach is strictly blocked:</strong> Company domain or email is in the suppression registry.
+      {% elif is_previously_contacted %}
+        ⏱️ <strong>Cold outreach is restricted:</strong> Historical communications or previous outreach records exist for this company. Duplicate protection is actively enforced.
+      {% elif can_generate_draft %}
+        ✅ <strong>Candidate is outreach eligible:</strong> Qualified company with no prior contact or suppression flags and an explicitly verified recipient. Operators may stage a manual draft for review.
+      {% elif company_outreach_eligible %}
+        ⚠️ <strong>Recipient verification required:</strong> Company is qualified and eligible under policy, but no explicitly verified contact exists on file. Documented 13-Field Lead Register emails require operator verification before drafting.
+      {% else %}
+        ⚠️ <strong>Policy restricted:</strong> Candidate must meet qualification criteria and policy rules before outreach.
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Generated & Review Drafts -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Associated Outreach Drafts ({{ company_drafts|length }})</span>
+      <span class="badge badge-info">Review Store</span>
+    </div>
+    {% if company_drafts %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Draft ID</th>
+            <th>Recipient</th>
+            <th>Subject</th>
+            <th>Approval Status</th>
+            <th>Outreach Status</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in company_drafts %}
+          <tr>
+            <td><code>{{ d.draft_id }}</code></td>
+            <td><strong>{{ d.recipient_name or '' }}</strong> &lt;{{ d.recipient_email }}&gt;</td>
+            <td>{{ d.subject }}</td>
+            <td>
+              {% if d.approval_status == 'approved' %}
+                <span class="badge badge-success">✓ Approved</span>
+              {% elif d.approval_status == 'rejected' %}
+                <span class="badge badge-danger">Rejected</span>
+              {% else %}
+                <span class="badge badge-warning">Pending Review</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if d.outreach_status == 'sent' %}
+                <span class="badge badge-success">Sent</span>
+              {% elif d.outreach_status == 'manual_dispatched' %}
+                <span class="badge badge-info">Manual Dispatched</span>
+              {% else %}
+                <span class="badge badge-secondary">{{ d.outreach_status or 'draft' }}</span>
+              {% endif %}
+            </td>
+            <td>{{ d.created_at[:10] if d.created_at else '-' }}</td>
+            <td>
+              <a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-secondary btn-sm">View Draft ↗</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No outreach drafts created for this company yet.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Confirmed Manual External Dispatches -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
+      <span class="badge badge-info">Operator Hand-Off</span>
+    </div>
+    {% if manual_logs %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Recipient</th>
+            <th>Channel</th>
+            <th>Subject</th>
+            <th>Logged At</th>
+            <th>External Ref</th>
+            <th>Logged By</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in manual_logs %}
+          <tr>
+            <td><strong>{{ m.recipient_name or '' }}</strong> &lt;{{ m.recipient_email }}&gt;</td>
+            <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
+            <td>{{ m.subject }}</td>
+            <td>{{ m.logged_at[:19] }}</td>
+            <td><code>{{ m.external_ref or 'N/A' }}</code></td>
+            <td>{{ m.logged_by }}</td>
+            <td>{{ m.operator_notes or '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No manual external outbound dispatches recorded for this candidate.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Historical Outreach & Prior Communications -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>Historical Communications &amp; Prior Contacts</span>
+      <span class="badge badge-historical">Historical Registry</span>
+    </div>
+    {% if detail.historical_outreach %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Contact Name</th>
+            <th>Email</th>
+            <th>Channel</th>
+            <th>Contact Date</th>
+            <th>Reply Status</th>
+            <th>Meeting</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in detail.historical_outreach %}
+          <tr>
+            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
+            <td><code>{{ h.recipient_email }}</code></td>
+            <td>{{ h.channel or 'email' }}</td>
+            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
+            <td><span class="badge badge-info">{{ h.reply_status or 'no_reply' }}</span></td>
+            <td>{{ h.meeting_status or 'none' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No prior historical outreach recorded for this company (First Contact Safe).</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Manual Draft Staging Box (Safe & Offline) -->
+  {% if can_generate_draft %}
+  <div id="manual-draft" class="card" style="border: 1px dashed var(--border-color);">
+    <div class="card-title">
+      <span>Stage Manual Draft to Review Queue</span>
+      <span class="badge badge-secondary">Safe Offline Composer</span>
+    </div>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/create-manual-draft">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="margin-bottom: 0.75rem;">
+      <label class="form-label" style="font-size: 0.8rem;">Select Verified Recipient *</label>
+      <select id="draft-recipient-select" name="contact_id" class="form-control" onchange="syncManualRecipient(this)" required>
+        <option value="" disabled selected>-- Select verified recipient --</option>
+        {% for c in contacts %}
+          <option value="{{ c.contact_id }}" data-email="{{ c.work_email }}" data-name="{{ c.full_name }}" {% if not c.is_eligible %}disabled{% endif %}>
+            {{ c.full_name }} &lt;{{ c.work_email }}&gt;
+            {% if c.is_verified %}
+              [Verified]
+            {% elif c.is_documented %}
+              [Documented in Lead Register - Verification Required]
+            {% else %}
+              [{{ c.email_status }} - Verification Required]
+            {% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+        🛡️ Only contacts with explicit verified evidence (email_status == 'verified') are eligible for draft creation. Documented contacts from the Lead Register require operator verification before drafting.
+      </div>
+    </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+        <div>
+          <label class="form-label" style="font-size: 0.8rem;">Recipient Email *</label>
+          <input type="email" id="manual-recipient-email" name="recipient_email" required class="form-control" placeholder="verified@company.it">
+        </div>
+        <div>
+          <label class="form-label" style="font-size: 0.8rem;">Recipient Name</label>
+          <input type="text" id="manual-recipient-name" name="recipient_name" class="form-control" placeholder="e.g. Andrea Berro">
+        </div>
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label" style="font-size: 0.8rem;">Subject Line *</label>
+        <input type="text" name="subject" required class="form-control" placeholder="e.g. BIM Coordination &amp; Engineering Partnership">
+      </div>
+      <div style="margin-bottom: 0.75rem;">
+        <label class="form-label" style="font-size: 0.8rem;">Email Body *</label>
+        <textarea name="body" required rows="5" class="form-control" placeholder="Compose draft message..."></textarea>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">
+          🛡️ Safe &amp; Offline: Stages draft directly into Pending Review. Zero external LLM calls.
+        </span>
+        <button type="submit" class="btn btn-secondary">
+          💾 Save Manual Draft to Review Queue
+        </button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <div id="manual-draft-disabled" class="card" style="border: 1px dashed var(--border-color); opacity: 0.85;">
+    <div class="card-title">
+      <span>Manual Outreach Staging (Locked)</span>
+      <span class="badge badge-secondary">Disabled (Verification Required)</span>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+      Draft composer is locked until at least one candidate contact has verified evidence recorded.
+      Unverified contacts and Lead Register documented emails require verification before drafting.
+    </p>
+    <div style="margin-bottom: 0.75rem;">
+      <label class="form-label" style="font-size: 0.8rem;">Discovered / Documented Recipients</label>
+      <select class="form-control" disabled style="background: var(--bg-hover);">
+        {% if contacts %}
+          {% for c in contacts %}
+            <option disabled>
+              {{ c.full_name }} &lt;{{ c.work_email }}&gt;
+              {% if c.is_verified %}
+                [Verified]
+              {% elif c.is_documented %}
+                [Documented in Lead Register - Verification Required]
+              {% else %}
+                [{{ c.email_status }} - Verification Required]
+              {% endif %}
+            </option>
+          {% endfor %}
+        {% else %}
+          <option disabled>No contacts discovered or documented</option>
+        {% endif %}
+      </select>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Watchlist Modal -->
+<div id="watch-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Add to Watchlist</h3>
+    </div>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/watch">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Watch Reason</label>
+          <input type="text" name="reason" class="form-control" placeholder="e.g. Hiring BIM coordinator soon" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Signals to Monitor</label>
+          <input type="text" name="signals" class="form-control" placeholder="e.g. jobs, tenders, bim_news">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('watch-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-warning">Save to Watchlist</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- DNC Modal -->
+<div id="dnc-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Mark Do Not Contact (Suppression)</h3>
+    </div>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/suppress">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem;">This will permanently suppress the company's domain or email from receiving outreach.</p>
+        <div class="form-group">
+          <label class="form-label">Target Domain or Email</label>
+          <input type="text" name="email" class="form-control" value="{{ detail.candidate.domain or '' }}" placeholder="email@domain.com or domain.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reason</label>
+          <select name="reason" class="form-control">
+            <option value="manual">Manual operator request</option>
+            <option value="opt_out">Opt-out requested</option>
+            <option value="invalid_recipient">Invalid recipient</option>
+            <option value="wrong_person">Wrong person / wrong entity</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('dnc-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Confirm Suppression</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function switchWorkspaceTab(tabName) {
+  var sections = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
+  for (var i = 0; i < sections.length; i++) {
+    var sec = document.getElementById('section-' + sections[i]);
+    var btn = document.getElementById('tab-btn-' + sections[i]);
+    if (sec && btn) {
+      if (sections[i] === tabName) {
+        sec.style.display = 'block';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+      } else {
+        sec.style.display = 'none';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+      }
+    }
+  }
+}
+
+function syncManualRecipient(selectEl) {
+  var opt = selectEl.options[selectEl.selectedIndex];
+  if (opt) {
+    var emailInput = document.getElementById('manual-recipient-email');
+    var nameInput = document.getElementById('manual-recipient-name');
+    if (emailInput && opt.getAttribute('data-email')) {
+      emailInput.value = opt.getAttribute('data-email');
+    }
+    if (nameInput && opt.getAttribute('data-name')) {
+      nameInput.value = opt.getAttribute('data-name');
+    }
+  }
+}
+
+function populateVerifyModal(contactId, fullName, email) {
+  switchWorkspaceTab('contacts');
+  var sel = document.getElementById('verify-select-contact');
+  if (sel) {
+    sel.value = contactId;
+    sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// Support direct hash navigation, e.g. #research, #register, #contacts, #outreach, #manual-draft
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.location.hash) {
+    var rawHash = window.location.hash.substring(1).toLowerCase();
+    if (rawHash === 'manual-draft') {
+      switchWorkspaceTab('outreach');
+      var draftEl = document.getElementById('manual-draft');
+      if (draftEl) draftEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    var validTabs = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
+    if (validTabs.indexOf(rawHash) !== -1) {
+      switchWorkspaceTab(rawHash);
+    }
+  }
+});
+</script>
+{% endblock %}

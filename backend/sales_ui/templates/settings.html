@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Settings & Status | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">System Status & Environment Settings</h1>
+    <p class="page-subtitle">Safe inspection of backend configurations, provider connectivity, and security boundaries.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>System Information</span>
+    <span class="badge badge-success">Localhost Bound</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Application Name:</strong> <code>{{ app_name or 'Email Led' }}</code></div>
+    <div><strong>Runtime Mode:</strong> <span class="badge badge-info">{{ runtime_mode or 'Local-First' }}</span></div>
+    <div><strong>Local Server Address:</strong> <code>{{ bind_address or '127.0.0.1:8000' }}</code> (Loopback)</div>
+    <div><strong>Console URL:</strong> <code>http://{{ bind_address or '127.0.0.1:8000' }}/sales</code></div>
+    <div><strong>Database File:</strong> <code>{{ db_path }}</code></div>
+    <div><strong>Email Sending Status:</strong> 
+      <span class="badge {% if email_send_enabled %}badge-success{% else %}badge-warning{% endif %}">
+        {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED' }}
+      </span>
+    </div>
+    <div><strong>Research Storage:</strong> 
+      <span class="badge {% if research_storage_available %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Available (SQLite Snapshots)' if research_storage_available else 'Unavailable' }}
+      </span>
+    </div>
+    <div><strong>Brave Search API Key:</strong> 
+      <span class="badge {% if brave_configured %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Configured' if brave_configured else 'Not Configured' }}
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Sending Gateway Configuration (Phase 9)</span>
+    <span class="badge {% if email_send_enabled %}badge-success{% else %}badge-warning{% endif %}">
+      {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED' }}
+    </span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Real Send Flag (EMAIL_SEND_ENABLED):</strong> <code>{{ email_send_enabled }}</code></div>
+    <div><strong>Provider Mode:</strong> <code>{{ provider_type }}</code></div>
+    <div><strong>SMTP Configured:</strong> <span class="badge {% if smtp_configured %}badge-success{% else %}badge-muted{% endif %}">{{ 'Configured' if smtp_configured else 'Not configured' }}</span></div>
+    <div><strong>Trusted Sender Email:</strong> <code>{{ trusted_sender_email or 'Not configured' }}</code></div>
+    <div><strong>Sender Display Name:</strong> <code>{{ trusted_sender_name or 'Not configured' }}</code></div>
+    <div><strong>Dry Run Invariant:</strong> <code>0 Provider / Network Calls</code></div>
+  </div>
+  <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">
+    🔒 Security Policy: Credentials, SMTP passwords, and API tokens are never exposed in the UI or rendered into HTML/JS payloads.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Local AI Engine Status</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>LLM Model:</strong> <code>{{ llm_model or 'qwen2.5:1.5b' }}</code></div>
+    <div><strong>Ollama Engine Connectivity:</strong> <span class="badge {% if ollama_reachable %}badge-success{% else %}badge-warning{% endif %}">{{ 'Reachable' if ollama_reachable else 'Offline / Fallback' }}</span></div>
+    <div><strong>Vector Database (ChromaDB):</strong> <span class="badge {% if chroma_operational %}badge-success{% else %}badge-warning{% endif %}">{{ 'Operational' if chroma_operational else 'Unavailable' }}</span></div>
+    <div><strong>UI Rendering Invariant:</strong> <code>Zero LLM Calls for Console Pages</code></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Export & Spreadsheets</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Google Sheets API:</strong> <span class="badge badge-muted">{{ 'Configured' if sheets_configured else 'Not configured' }}</span></div>
+    <div><strong>Phase 7 Workbook Export:</strong> <span class="badge badge-success">Available</span></div>
+    <div><strong>Direct SQLite Access:</strong> <span class="badge badge-primary">Internal Only (No Direct Frontend Writes)</span></div>
+  </div>
+</div>
+{% endblock %}

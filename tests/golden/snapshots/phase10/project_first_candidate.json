@@ -1,0 +1,19 @@
+{
+  "observation_id": "obs_tender_881",
+  "source_id": "ted_europa",
+  "source_type": "tender_portal",
+  "source_url": "https://ted.europa.eu/notice/881",
+  "observed_company_name": "BIM Infra S.p.A.",
+  "observed_domain": "biminfra.it",
+  "country": "Italy",
+  "discovery_mode": "project_first",
+  "extracted_data": {
+    "project_title": "Brenner Base Tunnel Civil & MEP Coordination",
+    "technologies": [
+      "OpenBIM",
+      "IFC4",
+      "Navisworks"
+    ],
+    "project_category": "Infrastructure"
+  }
+}

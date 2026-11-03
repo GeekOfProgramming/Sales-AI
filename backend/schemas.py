@@ -422,6 +422,7 @@ class CompanyEnrichment(BaseModel):
     domain_status: Optional[str] = "unknown" # existing, provider_resolved, unknown
 
 class ContactCandidate(BaseModel):
+    contact_id: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     full_name: Optional[str] = None

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Replies & Inbound Intelligence | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Replies & Inbound Intelligence</h1>
+    <p class="page-subtitle">Human-reviewed reply classification, actual respondent resolution, and suggested response workflow.</p>
+  </div>
+  <div class="header-actions">
+    <form method="POST" action="/sales/inbox/sync" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary" id="sync-inbox-btn">
+        📥 Sync Inbox
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Notice banner complying with P10_5-REG-019 and Phase 11 -->
+<div class="alert-banner info" role="alert">
+  <span>ℹ️ <strong>Live inbox synchronization is not connected yet.</strong> (Phase 11 Mock & Operator Sync active). Below are active conversations and historical imported responses.</span>
+</div>
+
+<!-- Inbox Connection Status Card -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-title">
+    <span>Mailbox Provider Connection</span>
+    <span class="badge {% if conn_info.status == 'connected' %}badge-success{% elif conn_info.status == 'configured' %}badge-info{% else %}badge-warning{% endif %}">
+      {{ conn_info.status | upper }}
+    </span>
+  </div>
+  <div style="display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: 0.875rem;">
+    <div><strong>Provider:</strong> <code>{{ conn_info.provider }}</code></div>
+    <div><strong>Mailbox Account:</strong> <code>{{ conn_info.account_email or 'mock-inbox@pybim.it' }}</code></div>
+    <div><strong>Last Sync:</strong> <span>{{ conn_info.last_synced_at[:19] if conn_info.last_synced_at else 'Never' }}</span></div>
+    {% if sync_state %}
+    <div><strong>Messages Synced:</strong> <span>{{ sync_state.messages_fetched }}</span></div>
+    <div><strong>New Replies:</strong> <span>{{ sync_state.new_replies }}</span></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Metrics summary for active conversations and outcomes -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <span class="metric-label">Active Conversations</span>
+    <span class="metric-value" style="color:#38bdf8;">{{ conversations|length }}</span>
+    <span class="metric-subtext">Under human review</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Waiting On Us</span>
+    <span class="metric-value" style="color:#f59e0b;">{{ waiting_count }}</span>
+    <span class="metric-subtext">Action required</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Meetings Proposed / Scheduled</span>
+    <span class="metric-value" style="color:#10b981;">{{ meetings_count }}</span>
+    <span class="metric-subtext">Candidate meeting times</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Historical Positive Replies</span>
+    <span class="metric-value" style="color:#a855f7;">{{ positive_count }}</span>
+    <span class="metric-subtext">Imported records</span>
+  </div>
+</div>
+
+<!-- Active Conversations Queue -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-title">
+    <span>Inbound Conversation Queue ({{ conversations|length }})</span>
+  </div>
+
+  {% if conversations %}
+  <div class="table-responsive">
+    <table class="data-table" id="conversations-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Respondent</th>
+          <th>Category</th>
+          <th>Status</th>
+          <th>Meeting State</th>
+          <th>Last Message</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in conversations %}
+        <tr>
+          <td><strong>{{ c.company_name or 'Independent / Unlinked' }}</strong></td>
+          <td>
+            <span>{{ c.respondent_name or c.respondent_email or 'Contact' }}</span>
+            {% if c.is_colleague %}
+            <span class="badge badge-info" style="font-size:0.65rem;" title="Different from original recipient">Colleague</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {% if c.reply_category == 'positive_interest' %}badge-success{% elif c.reply_category == 'meeting_proposed' %}badge-info{% elif c.reply_category == 'question' %}badge-info{% elif c.reply_category == 'unsubscribe' or c.reply_category == 'bounce' %}badge-danger{% elif c.reply_category == 'not_interested' %}badge-warning{% else %}badge-neutral{% endif %}">
+              {{ c.reply_category }}
+            </span>
+          </td>
+          <td>
+            <span class="badge {% if c.status == 'waiting_on_us' or c.status == 'needs_review' %}badge-warning{% elif c.status == 'closed_positive' %}badge-success{% elif c.status == 'do_not_contact' %}badge-danger{% else %}badge-neutral{% endif %}">
+              {{ c.status }}
+            </span>
+          </td>
+          <td>
+            {% if c.meeting_status != 'none' %}
+            <span class="badge badge-success">{{ c.meeting_status }}</span>
+            {% else %}
+            <span style="color:#64748b;">None</span>
+            {% endif %}
+          </td>
+          <td>{{ c.last_message_at[:16] if c.last_message_at else 'Recent' }}</td>
+          <td>
+            <a href="/sales/replies/{{ c.conversation_id }}" class="btn btn-sm btn-outline" id="view-thread-{{ c.conversation_id }}">
+              View Thread →
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No active conversations found. Click <strong>Sync Inbox</strong> above to import new replies from the mailbox.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Historical Responses Table (Phase 10.5 Compatibility) -->
+<div class="card">
+  <div class="card-title">
+    <span>Historical Recorded Responses ({{ responses|length }})</span>
+  </div>
+  {% if responses %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Respondent</th>
+          <th>Role</th>
+          <th>Email</th>
+          <th>Reply Status</th>
+          <th>Meeting Status</th>
+          <th>Date</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in responses %}
+        <tr>
+          <td><strong>{{ r.company_name or 'N/A' }}</strong></td>
+          <td>{{ r.respondent_name or r.contact_name or 'Contact' }}</td>
+          <td>{{ r.respondent_role or 'N/A' }}</td>
+          <td><code>{{ r.recipient_email or r.contact_email or 'N/A' }}</code></td>
+          <td>
+            <span class="badge {% if r.reply_status == 'positive' or r.reply_status == 'interested' %}badge-success{% elif r.reply_status == 'bounced' %}badge-danger{% else %}badge-info{% endif %}">
+              {{ r.reply_status or 'replied' }}
+            </span>
+          </td>
+          <td>{{ r.meeting_status or 'None' }}</td>
+          <td>{{ r.reply_at[:10] if r.reply_at else (r.contacted_at[:10] if r.contacted_at else 'Historical') }}</td>
+          <td>{{ r.notes or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No historical responses imported.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

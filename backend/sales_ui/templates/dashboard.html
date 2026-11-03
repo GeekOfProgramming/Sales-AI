@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Operational Dashboard</h1>
+    <p class="page-subtitle">Real-time status of candidates, qualifications, draft approvals, and sending activity.</p>
+  </div>
+  <div>
+    <a href="/sales/discoveries#trigger-run" class="btn btn-primary">🚀 Run Discovery</a>
+  </div>
+</div>
+
+<!-- Primary Metric Cards Grid -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <span class="metric-label">New Candidates</span>
+    <span class="metric-value">{{ summary.new_candidates }}</span>
+    <span class="metric-subtext">Awaiting initial discovery review</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Needs Research</span>
+    <span class="metric-value">{{ summary.needs_research }}</span>
+    <span class="metric-subtext">Assigned to research queue</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Watchlist</span>
+    <span class="metric-value">{{ summary.watchlist }}</span>
+    <span class="metric-subtext">Monitored for new hiring/signals</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Qualified Leads</span>
+    <span class="metric-value">{{ summary.qualified_leads }}</span>
+    <span class="metric-subtext">Passed automated ICP qualification</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Historical Outreach Contacts</span>
+    <span class="metric-value">{{ summary.contacts_found }}</span>
+    <span class="metric-subtext">{{ summary.usable_contacts }} non-bounced emails</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Drafts Pending Review</span>
+    <span class="metric-value" style="color:#f59e0b;">{{ summary.drafts_pending_review }}</span>
+    <span class="metric-subtext">Requires human approval</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Approved (Not Sent)</span>
+    <span class="metric-value" style="color:#38bdf8;">{{ summary.approved_not_sent }}</span>
+    <span class="metric-subtext">Ready for explicit send</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Sent Today</span>
+    <span class="metric-value" style="color:#10b981;">{{ summary.sent_today }}</span>
+    <span class="metric-subtext">{{ summary.sent_this_week }} this week</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Suppressed (DNC)</span>
+    <span class="metric-value" style="color:#ef4444;">{{ summary.suppressed }}</span>
+    <span class="metric-subtext">Protected from contact</span>
+  </div>
+  <div class="metric-card">
+    <span class="metric-label">Historical Companies</span>
+    <span class="metric-value">{{ summary.historical_known_companies }}</span>
+    <span class="metric-subtext">Prior contact / known companies</span>
+  </div>
+</div>
+
+<!-- Discovery Run Quick Trigger Panel -->
+<div class="card" id="trigger-run">
+  <div class="card-title">
+    <span>Quick Discovery Trigger</span>
+    <span class="badge badge-info">Zero Autonomous Sends</span>
+  </div>
+  <form method="POST" action="/sales/discoveries/run" class="form-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="flex: 1; min-width: 200px;">
+      <input type="text" name="query" class="form-control" placeholder="Search keywords (e.g. BIM, MEP, Architecture)" value="BIM">
+    </div>
+    <div style="width: 180px;">
+      <select name="discovery_mode" class="form-control">
+        <option value="company_first">Company-First Mode</option>
+        <option value="project_tender">Project/Tender Mode</option>
+        <option value="lead_first">Lead-First Mode</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Start Discovery Run</button>
+  </form>
+</div>
+
+<!-- Pending Actions & Overview Sections -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+  <div class="card">
+    <div class="card-title">
+      <span>Draft Review Queue</span>
+      <a href="/sales/drafts" class="btn btn-secondary btn-sm">View All Drafts</a>
+    </div>
+    {% if pending_drafts %}
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Recipient</th>
+            <th>Subject</th>
+            <th>Revision</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in pending_drafts %}
+          <tr>
+            <td><strong>{{ d.company_name }}</strong></td>
+            <td>{{ d.recipient_email }}</td>
+            <td>{{ d.subject }}</td>
+            <td><span class="badge badge-info">r{{ d.revision }}</span></td>
+            <td><a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-secondary btn-sm">Review</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No drafts are awaiting review.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span>Recent Discovery Runs</span>
+      <a href="/sales/discoveries" class="btn btn-secondary btn-sm">All Runs</a>
+    </div>
+    {% if recent_runs %}
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Source</th>
+            <th>Status</th>
+            <th>New</th>
+            <th>Observations</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in recent_runs %}
+          <tr>
+            <td><code>{{ r.run_id[:12] }}...</code></td>
+            <td>{{ r.source_name }}</td>
+            <td><span class="badge {% if r.status == 'completed' %}badge-success{% else %}badge-warning{% endif %}">{{ r.status }}</span></td>
+            <td><strong>{{ r.new_candidates }}</strong></td>
+            <td>{{ r.observations_found }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No recent discovery runs recorded.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

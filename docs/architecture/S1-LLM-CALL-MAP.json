@@ -1,0 +1,316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SalesAI S1 Machine-Readable LLM Call Map",
+  "version": "1.0.0",
+  "generated_at": "2026-10-21T20:00:00Z",
+  "base_commit": "1b6c50e8f1a615cf462bce296b604b69b915d721",
+  "branch": "audit/salesai-s1-laptop-dependency-map",
+  "total_call_sites": 6,
+  "daily_target_companies": 10,
+  "monthly_planning_prospects": 300,
+  "call_sites": [
+    {
+      "id": "LLM-SITE-01",
+      "name": "Website Analyzer (Pass A & Pass B)",
+      "module": "sales_engine.analysis.website_analyzer",
+      "class_or_function": "WebsiteAnalyzer.analyze_website_async",
+      "originating_workflow": "Phase 3: Candidate Discovery & Website Signal Extraction",
+      "originating_routes_or_jobs": [
+        "POST /sales/candidates/{candidate_id}/analyze",
+        "sales_engine.discovery.jobs.analyze_candidate_batch"
+      ],
+      "model_interface": {
+        "current_client": "ai_engine.llm_client.BIMLLMClient.generate_code_async",
+        "current_env_var": "ANALYSIS_LLM_MODEL",
+        "current_default_model": "qwen2.5:1.5b",
+        "target_s2_tier": "Tier 1 (Fast & Affordable Structured Extraction)",
+        "invocation_mode": "async"
+      },
+      "input_data": {
+        "sources": ["Sanitized candidate website HTML / Markdown excerpt"],
+        "max_context_chars": 8000,
+        "pii_classification": "Low / Public Corporate Web Content",
+        "contains_contact_pii": false
+      },
+      "prompt_construction": {
+        "builder": "Inline 2-pass prompt template",
+        "pass_a": "Extract factual company profile: name, services, BIM tooling, company size",
+        "pass_b": "Derive sales opportunity signals: pain points, hiring hints, digital maturity",
+        "injection_safeguards": "Content truncation and markdown fence isolation"
+      },
+      "expected_output_schema": {
+        "pass_a_schema": "WebAnalysisPassA (Pydantic)",
+        "pass_b_schema": "WebAnalysisPassB (Pydantic)",
+        "aggregated_model": "WebsiteAnalysisResult",
+        "format": "JSON object"
+      },
+      "error_handling_and_fallback": {
+        "retry_policy": "Single JSON repair attempt on malformed syntax",
+        "fallback_mechanism": "Deterministic regex and keyword heuristics on raw HTML",
+        "failure_behavior": "Returns partial analysis with error status; scoring continues with baseline score"
+      },
+      "metrics_estimates": {
+        "measured_status": "unmeasured_estimate",
+        "estimated_input_tokens": 1600,
+        "estimated_output_tokens": 220,
+        "estimated_latency_ms": 2200,
+        "monthly_calls_estimate": 675
+      },
+      "affected_tests": [
+        "tests/test_website_analyzer.py",
+        "tests/test_analysis_pipeline.py"
+      ]
+    },
+    {
+      "id": "LLM-SITE-02",
+      "name": "Job Posting Analyzer",
+      "module": "sales_engine.analysis.job_analyzer",
+      "class_or_function": "JobAnalyzer.analyze_job_posting_async",
+      "originating_workflow": "Phase 4: Hiring Demand & BIM Capability Signal Extraction",
+      "originating_routes_or_jobs": [
+        "POST /sales/candidates/{candidate_id}/analyze-jobs",
+        "sales_engine.discovery.jobs.poll_career_portals"
+      ],
+      "model_interface": {
+        "current_client": "ai_engine.llm_client.BIMLLMClient.generate_code_async",
+        "current_env_var": "ANALYSIS_LLM_MODEL",
+        "current_default_model": "qwen2.5:1.5b",
+        "target_s2_tier": "Tier 1 (Fast & Affordable Structured Extraction)",
+        "invocation_mode": "async"
+      },
+      "input_data": {
+        "sources": ["Public job listing title, description, and requirements text"],
+        "max_context_chars": 6000,
+        "pii_classification": "Low / Public Job Description",
+        "contains_contact_pii": false
+      },
+      "prompt_construction": {
+        "builder": "Inline structured prompt template",
+        "system_instruction": "Extract job title, required BIM software (Revit, Archicad, Tekla), experience level, and hiring urgency as strict JSON",
+        "injection_safeguards": "Text stripping and length limitation"
+      },
+      "expected_output_schema": {
+        "schema": "JobAnalysisResult (Pydantic)",
+        "keys": ["job_title", "requires_bim", "detected_software", "seniority", "urgency_score"],
+        "format": "JSON object"
+      },
+      "error_handling_and_fallback": {
+        "retry_policy": "Single JSON repair prompt retry",
+        "fallback_mechanism": "Deterministic software keyword dictionary matching",
+        "failure_behavior": "Returns JobAnalysisResult with requires_bim=False and logged warning"
+      },
+      "metrics_estimates": {
+        "measured_status": "unmeasured_estimate",
+        "estimated_input_tokens": 1000,
+        "estimated_output_tokens": 170,
+        "estimated_latency_ms": 1600,
+        "monthly_calls_estimate": 300
+      },
+      "affected_tests": [
+        "tests/test_job_analyzer.py",
+        "tests/test_hiring_signals.py"
+      ]
+    },
+    {
+      "id": "LLM-SITE-03",
+      "name": "Discovery Search Query Generator",
+      "module": "sales_engine.discovery.query_generator",
+      "class_or_function": "DiscoveryQueryGenerator.generate_queries_with_llm",
+      "originating_workflow": "Phase 2: Automated Query Generation (Optional LLM Mode)",
+      "originating_routes_or_jobs": [
+        "POST /sales/discovery/generate-queries",
+        "sales_engine.discovery.workflow.run_discovery_batch"
+      ],
+      "model_interface": {
+        "current_client": "ai_engine.llm_client.BIMLLMClient.generate_code",
+        "current_env_var": "DISCOVERY_LLM_MODEL",
+        "current_default_model": "qwen2.5:1.5b",
+        "target_s2_tier": "Tier 1 or Tier 2 (Reasoning & Expansion)",
+        "invocation_mode": "sync"
+      },
+      "input_data": {
+        "sources": ["Target service offering, Italian target regions (Milan, Turin, Rome, etc.), sector taxonomy"],
+        "max_context_chars": 2000,
+        "pii_classification": "Low / Internal Strategy Parameters",
+        "contains_contact_pii": false
+      },
+      "prompt_construction": {
+        "builder": "Template expanding industry niches into Google/Bing search syntaxes",
+        "system_instruction": "Generate high-intent Italian search queries targeting architectural, engineering, and Scan-to-BIM firms",
+        "injection_safeguards": "Fixed query parameters"
+      },
+      "expected_output_schema": {
+        "schema": "List[str] (Array of search query strings)",
+        "format": "JSON array"
+      },
+      "error_handling_and_fallback": {
+        "retry_policy": "None",
+        "fallback_mechanism": "Complete fallback to generate_deterministic_queries()",
+        "failure_behavior": "Executes rule-based combinatorial queries without blocking pipeline"
+      },
+      "metrics_estimates": {
+        "measured_status": "unmeasured_estimate",
+        "estimated_input_tokens": 500,
+        "estimated_output_tokens": 140,
+        "estimated_latency_ms": 1200,
+        "monthly_calls_estimate": 15
+      },
+      "affected_tests": [
+        "tests/test_query_generator.py",
+        "tests/test_discovery_flow.py"
+      ]
+    },
+    {
+      "id": "LLM-SITE-04",
+      "name": "Inbound Email Classifier",
+      "module": "sales_engine.inbox.classifier",
+      "class_or_function": "InboxClassifier._classify_with_llm",
+      "originating_workflow": "Phase 11: Inbound Processing & Intent Classification",
+      "originating_routes_or_jobs": [
+        "POST /sales/inbox/sync",
+        "POST /sales/inbox/messages/{message_id}/reclassify"
+      ],
+      "model_interface": {
+        "current_client": "ai_engine.llm_client.BIMLLMClient.generate_code",
+        "current_env_var": "INBOX_LLM_MODEL",
+        "current_default_model": "qwen2.5:1.5b",
+        "target_s2_tier": "Tier 2 or Tier 3 (Precise Nuanced Classification)",
+        "invocation_mode": "sync"
+      },
+      "input_data": {
+        "sources": ["Inbound email body, subject line, sender domain"],
+        "max_context_chars": 4000,
+        "pii_classification": "High / Customer Confidential PII",
+        "contains_contact_pii": true
+      },
+      "prompt_construction": {
+        "builder": "InboxClassifier prompt with strict boundary isolation",
+        "system_instruction": "Classify inbound reply intent into: interested, not_now, unsubscribe, more_info, referral, out_of_office, other",
+        "injection_safeguards": "Content wrapped in <UNTRUSTED_INBOUND_EMAIL> tags with instructions to ignore embedded directives"
+      },
+      "expected_output_schema": {
+        "schema": "InboxClassificationResult (Pydantic)",
+        "keys": ["intent", "confidence", "sentiment", "summary", "extracted_dates"],
+        "format": "JSON object"
+      },
+      "error_handling_and_fallback": {
+        "retry_policy": "None",
+        "fallback_mechanism": "Deterministic regex keyword matching (Unsubscribe detection runs BEFORE LLM)",
+        "failure_behavior": "Assigns intent='needs_human_triage' with confidence=0.0"
+      },
+      "metrics_estimates": {
+        "measured_status": "unmeasured_estimate",
+        "estimated_input_tokens": 700,
+        "estimated_output_tokens": 100,
+        "estimated_latency_ms": 1100,
+        "monthly_calls_estimate": 30
+      },
+      "affected_tests": [
+        "tests/test_inbox_classifier.py",
+        "tests/test_phase11_inbox.py"
+      ]
+    },
+    {
+      "id": "LLM-SITE-05",
+      "name": "Inbound Reply Suggestion Generator",
+      "module": "sales_engine.inbox.suggestion",
+      "class_or_function": "ReplySuggestionEngine.generate_reply_suggestion",
+      "originating_workflow": "Phase 11: Grounded Reply Draft Proposal",
+      "originating_routes_or_jobs": [
+        "POST /sales/inbox/messages/{message_id}/suggest-reply",
+        "backend.sales_ui.get_inbox_message_detail"
+      ],
+      "model_interface": {
+        "current_client": "ai_engine.llm_client.BIMLLMClient.generate_code",
+        "current_env_var": "INBOX_LLM_MODEL",
+        "current_default_model": "qwen2.5:1.5b",
+        "target_s2_tier": "Tier 3 (High Reasoning & Strict Fact Grounding)",
+        "invocation_mode": "sync"
+      },
+      "input_data": {
+        "sources": ["Customer inquiry, historical outreach draft, verified pyBIM service facts"],
+        "max_context_chars": 5000,
+        "pii_classification": "High / Customer Confidential PII & Commercial Negotiation",
+        "contains_contact_pii": true
+      },
+      "prompt_construction": {
+        "builder": "Grounded prompt injecting verified facts and list of forbidden promises",
+        "system_instruction": "Draft polite, professional B2B reply addressing recipient inquiry using ONLY grounded facts. NEVER invent meeting dates, pricing, or team capacity",
+        "injection_safeguards": "Explicit prohibition rules and boundary markers"
+      },
+      "expected_output_schema": {
+        "schema": "ReplySuggestionResult (Pydantic)",
+        "keys": ["suggested_subject", "suggested_body", "grounded_facts_used", "validation_passed"],
+        "format": "JSON object"
+      },
+      "error_handling_and_fallback": {
+        "retry_policy": "Single repair retry on JSON failure",
+        "fallback_mechanism": "Deterministic template replies based on classified intent",
+        "failure_behavior": "Returns fallback template draft; post-generation validator catches any forbidden claims"
+      },
+      "metrics_estimates": {
+        "measured_status": "unmeasured_estimate",
+        "estimated_input_tokens": 900,
+        "estimated_output_tokens": 300,
+        "estimated_latency_ms": 2000,
+        "monthly_calls_estimate": 12
+      },
+      "affected_tests": [
+        "tests/test_inbox_suggestion.py",
+        "tests/test_phase11_reply_safety.py"
+      ]
+    },
+    {
+      "id": "LLM-SITE-06",
+      "name": "Cold Outreach Email Generator",
+      "module": "sales_engine.outreach.email_generator",
+      "class_or_function": "EmailGenerator.generate_draft",
+      "originating_workflow": "Phase 8: Cold B2B Outreach Draft Generation",
+      "originating_routes_or_jobs": [
+        "POST /sales/leads/{lead_id}/generate-draft",
+        "sales_engine.outreach.workflow.batch_generate_drafts"
+      ],
+      "model_interface": {
+        "current_client": "ai_engine.llm_client.BIMLLMClient.generate_code",
+        "current_env_var": "OUTREACH_LLM_MODEL",
+        "current_default_model": "qwen2.5:1.5b",
+        "target_s2_tier": "Tier 3 (High-Quality B2B Personalization)",
+        "invocation_mode": "sync"
+      },
+      "input_data": {
+        "sources": ["OutreachContext: company name, recipient name, role, detected job signals, website evidence"],
+        "max_context_chars": 4500,
+        "pii_classification": "Medium / B2B Contact Name, Role, and Business Evidence",
+        "contains_contact_pii": true
+      },
+      "prompt_construction": {
+        "builder": "EmailPromptBuilder.build_prompt(context)",
+        "system_instruction": "Generate highly personalized, concise cold B2B outreach email citing specific company evidence and verified pyBIM capabilities",
+        "injection_safeguards": "DraftValidator post-generation checks (no fake links, no unauthorized promises, opt-out footer check)"
+      },
+      "expected_output_schema": {
+        "intermediate_schema": "LLMEmailResponse",
+        "final_schema": "EmailDraft (Pydantic)",
+        "keys": ["subject", "body", "service_used", "personalization_notes", "evidence_refs", "cta"],
+        "format": "JSON object"
+      },
+      "error_handling_and_fallback": {
+        "retry_policy": "Single repair retry with temperature 0.0 on syntax error",
+        "fallback_mechanism": "Returns (None, error_code, error_message); operator review queue displays error banner",
+        "failure_behavior": "Draft generation fails gracefully; NO email is ever sent automatically"
+      },
+      "metrics_estimates": {
+        "measured_status": "unmeasured_estimate",
+        "estimated_input_tokens": 1300,
+        "estimated_output_tokens": 350,
+        "estimated_latency_ms": 2500,
+        "monthly_calls_estimate": 150
+      },
+      "affected_tests": [
+        "tests/test_email_generator.py",
+        "tests/test_phase8_outreach.py",
+        "tests/test_phase9_approval.py"
+      ]
+    }
+  ]
+}

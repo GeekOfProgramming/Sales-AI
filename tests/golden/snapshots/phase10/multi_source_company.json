@@ -1,0 +1,70 @@
+[
+  {
+    "source_id": "google_maps_it",
+    "source_type": "company_directory",
+    "source_url": "https://maps.google.com/biz/example-eng",
+    "observed_company_name": "Example Engineering S.r.l.",
+    "observed_domain": "https://www.example-engineering.com/",
+    "country": "Italy",
+    "city": "Milan",
+    "extracted_data": {
+      "services": [
+        "MEP Design",
+        "HVAC Consulting"
+      ],
+      "technologies": [
+        "Revit"
+      ]
+    }
+  },
+  {
+    "source_id": "ats_greenhouse",
+    "source_type": "ats",
+    "source_url": "https://boards.greenhouse.io/example-eng/jobs/101",
+    "observed_company_name": "Example Engineering",
+    "observed_domain": "example-engineering.com/careers",
+    "country": "Italy",
+    "city": "Milan",
+    "extracted_data": {
+      "job_title": "BIM Specialist MEP",
+      "technologies": [
+        "Revit",
+        "Navisworks"
+      ]
+    }
+  },
+  {
+    "source_id": "official_website",
+    "source_type": "company_website",
+    "source_url": "https://example-engineering.com",
+    "observed_company_name": "Example Engineering Group",
+    "observed_domain": "example-engineering.com",
+    "country": "Italy",
+    "city": "Milan",
+    "extracted_data": {
+      "legal_form": "S.r.l.",
+      "services": [
+        "BIM Coordination",
+        "MEP Engineering"
+      ],
+      "standards": [
+        "UNI 11337",
+        "ISO 19650"
+      ]
+    }
+  },
+  {
+    "source_id": "telemat_tenders",
+    "source_type": "tender_portal",
+    "source_url": "https://telemat.it/tenders/2026/99812",
+    "observed_company_name": "Example Engineering",
+    "observed_domain": "http://example-engineering.com/projects",
+    "country": "Italy",
+    "city": "Milan",
+    "extracted_data": {
+      "tender_reference": "T-2026-99812",
+      "tender_title": "BIM Modeling for Hospital Expansion",
+      "project_title": "Milan Central Hospital Extension"
+    }
+  }
+]

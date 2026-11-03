@@ -68,6 +68,7 @@ class ReviewStore:
                     approval_status TEXT NOT NULL,
                     send_status TEXT NOT NULL,
                     outreach_status TEXT NOT NULL,
+                    candidate_id TEXT,
                     content_hash TEXT NOT NULL,
                     approved_content_hash TEXT,
                     reviewer TEXT,
@@ -126,6 +127,28 @@ class ReviewStore:
                     status TEXT NOT NULL,
                     locked_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS manual_outreach_log (
+                    log_id TEXT PRIMARY KEY,
+                    candidate_id TEXT NOT NULL,
+                    draft_id TEXT,
+                    revision INTEGER,
+                    contact_id TEXT,
+                    recipient_email TEXT NOT NULL,
+                    recipient_name TEXT,
+                    subject TEXT NOT NULL,
+                    channel TEXT NOT NULL DEFAULT 'email',
+                    logged_by TEXT NOT NULL DEFAULT 'local_operator',
+                    external_ref TEXT,
+                    operator_notes TEXT,
+                    confirmed_sent_externally INTEGER NOT NULL DEFAULT 1,
+                    logged_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_manual_log_cand ON manual_outreach_log(candidate_id);
+                CREATE INDEX IF NOT EXISTS idx_manual_log_email ON manual_outreach_log(recipient_email);
+                CREATE INDEX IF NOT EXISTS idx_manual_log_draft ON manual_outreach_log(draft_id);
+                CREATE INDEX IF NOT EXISTS idx_manual_log_ext_ref ON manual_outreach_log(external_ref);
+
             """)
 
             # Additive migration: check if sender_name column exists in drafts table
@@ -133,6 +156,31 @@ class ReviewStore:
             col_names = [r["name"] for r in cur.fetchall()]
             if "sender_name" not in col_names:
                 conn.execute("ALTER TABLE drafts ADD COLUMN sender_name TEXT")
+
+            if "candidate_id" not in col_names:
+                conn.execute("ALTER TABLE drafts ADD COLUMN candidate_id TEXT")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_drafts_candidate ON drafts(candidate_id)")
+
+
+            # Additive migration: check if unique indexes for manual_outreach_log can be created safely
+            try:
+                conn.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_manual_log_ext_ref
+                    ON manual_outreach_log(recipient_email, external_ref)
+                    WHERE external_ref IS NOT NULL AND external_ref != ''
+                """)
+            except sqlite3.OperationalError:
+                # If legacy duplicates exist, index creation is skipped safely without aborting initialization
+                pass
+
+            try:
+                conn.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_manual_log_draft_email
+                    ON manual_outreach_log(draft_id, recipient_email)
+                    WHERE draft_id IS NOT NULL AND draft_id != ''
+                """)
+            except sqlite3.OperationalError:
+                pass
 
     def save_draft(self, draft: StoredDraft) -> StoredDraft:
         with self._lock, self._get_connection() as conn:
@@ -163,10 +211,10 @@ class ReviewStore:
                     subject, body, service_used, personalization_notes,
                     evidence_refs, source_job_urls, language, tone,
                     prompt_version, generation_model,
-                    approval_status, send_status, outreach_status,
+                    approval_status, send_status, outreach_status, candidate_id,
                     content_hash, approved_content_hash, reviewer, review_note,
                     created_at, updated_at, approved_at, sent_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.draft_id,
@@ -191,6 +239,7 @@ class ReviewStore:
                     draft.approval_status,
                     draft.send_status,
                     draft.outreach_status,
+                    getattr(draft, "candidate_id", None),
                     draft.content_hash,
                     draft.approved_content_hash,
                     draft.reviewer,
@@ -245,6 +294,18 @@ class ReviewStore:
         if "recipient_email" in filters and filters["recipient_email"]:
             clauses.append("recipient_email = ?")
             params.append(filters["recipient_email"].strip().lower())
+        if "candidate_id" in filters and filters["candidate_id"]:
+            cid = filters["candidate_id"]
+            lead_ids = filters.get("lead_ids") or []
+            # Strict candidate-draft isolation:
+            # If draft has explicit candidate_id, it MUST match cid.
+            # Legacy fallback: draft has candidate_id IS NULL and lead_id matches.
+            # Conflicting candidate_id is never overridden by a lead_id match.
+            all_match_ids = list(dict.fromkeys([cid] + lead_ids))
+            placeholders = ", ".join("?" for _ in all_match_ids)
+            clauses.append(f"(candidate_id = ? OR (candidate_id IS NULL AND lead_id IN ({placeholders})))")
+            params.append(cid)
+            params.extend(all_match_ids)
 
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
@@ -540,6 +601,7 @@ class ReviewStore:
             approval_status=row["approval_status"],
             send_status=row["send_status"],
             outreach_status=row["outreach_status"],
+            candidate_id=row["candidate_id"] if "candidate_id" in row.keys() else None,
             content_hash=row["content_hash"],
             approved_content_hash=row["approved_content_hash"],
             reviewer=row["reviewer"],
@@ -549,3 +611,147 @@ class ReviewStore:
             approved_at=row["approved_at"],
             sent_at=row["sent_at"],
         )
+
+
+    def check_duplicate_manual_outreach(
+        self,
+        candidate_id: str,
+        recipient_email: str,
+        draft_id: Optional[str] = None,
+        external_ref: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Checks if a matching manual outreach event already exists to prevent duplicate submissions."""
+        with self._lock, self._get_connection() as conn:
+            clean_email = recipient_email.strip().lower()
+            if external_ref and external_ref.strip():
+                row = conn.execute(
+                    "SELECT * FROM manual_outreach_log WHERE recipient_email = ? AND external_ref = ?",
+                    (clean_email, external_ref.strip()),
+                ).fetchone()
+                if row:
+                    return dict(row)
+            elif draft_id and draft_id.strip():
+                row = conn.execute(
+                    "SELECT * FROM manual_outreach_log WHERE draft_id = ? AND recipient_email = ?",
+                    (draft_id.strip(), clean_email),
+                ).fetchone()
+                if row:
+                    return dict(row)
+
+            return None
+
+    def log_manual_outreach(
+        self,
+        candidate_id: str,
+        recipient_email: str,
+        subject: str,
+        draft_id: Optional[str] = None,
+        revision: Optional[int] = None,
+        contact_id: Optional[str] = None,
+        recipient_name: Optional[str] = None,
+        channel: str = "email",
+        logged_by: str = "local_operator",
+        external_ref: Optional[str] = None,
+        operator_notes: Optional[str] = None,
+        confirmed_sent_externally: bool = True,
+    ) -> Dict[str, Any]:
+        """Record operator-confirmed manual external outbound communication with duplicate detection."""
+        import uuid
+        from datetime import datetime, timezone
+
+        valid_channels = {"email", "linkedin", "portal"}
+        clean_channel = channel.strip().lower() if channel and channel.strip().lower() in valid_channels else "email"
+        clean_email = recipient_email.strip().lower()
+        clean_ext_ref = external_ref.strip() if external_ref and external_ref.strip() else None
+
+        existing = self.check_duplicate_manual_outreach(
+            candidate_id=candidate_id,
+            recipient_email=clean_email,
+            draft_id=draft_id,
+            external_ref=clean_ext_ref,
+        )
+        if existing:
+            return {
+                "duplicate": True,
+                "log_id": existing["log_id"],
+                "candidate_id": existing["candidate_id"],
+                "recipient_email": existing["recipient_email"],
+                "subject": existing["subject"],
+                "channel": existing["channel"],
+                "logged_by": existing["logged_by"],
+                "external_ref": existing["external_ref"],
+                "operator_notes": existing["operator_notes"],
+                "logged_at": existing["logged_at"],
+            }
+
+        log_id = f"log_{uuid.uuid4().hex[:16]}"
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._get_connection() as conn:
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO manual_outreach_log (
+                        log_id, candidate_id, draft_id, revision, contact_id, recipient_email, recipient_name,
+                        subject, channel, logged_by, external_ref, operator_notes, confirmed_sent_externally, logged_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        log_id, candidate_id, draft_id, revision, contact_id, clean_email,
+                        recipient_name, subject.strip(), clean_channel, logged_by,
+                        clean_ext_ref, operator_notes, 1 if confirmed_sent_externally else 0, now,
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                # Concurrent duplicate caught by database unique constraint
+                existing = self.check_duplicate_manual_outreach(
+                    candidate_id=candidate_id,
+                    recipient_email=clean_email,
+                    draft_id=draft_id,
+                    external_ref=clean_ext_ref,
+                )
+                if existing:
+                    return {
+                        "duplicate": True,
+                        "log_id": existing["log_id"],
+                        "candidate_id": existing["candidate_id"],
+                        "recipient_email": existing["recipient_email"],
+                        "subject": existing["subject"],
+                        "channel": existing["channel"],
+                        "logged_by": existing["logged_by"],
+                        "external_ref": existing["external_ref"],
+                        "operator_notes": existing["operator_notes"],
+                        "logged_at": existing["logged_at"],
+                    }
+                raise
+
+        return {
+            "duplicate": False,
+            "log_id": log_id,
+            "candidate_id": candidate_id,
+            "draft_id": draft_id,
+            "revision": revision,
+            "recipient_email": clean_email,
+            "subject": subject.strip(),
+            "channel": clean_channel,
+            "logged_by": logged_by,
+            "external_ref": clean_ext_ref,
+            "operator_notes": operator_notes,
+            "confirmed_sent_externally": confirmed_sent_externally,
+            "logged_at": now,
+        }
+
+    def list_manual_outreach_logs(self, candidate_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Retrieve logged manual outreach events."""
+        with self._lock, self._get_connection() as conn:
+            if candidate_id:
+                cur = conn.execute(
+                    "SELECT * FROM manual_outreach_log WHERE candidate_id = ? ORDER BY logged_at DESC LIMIT ?",
+                    (candidate_id, limit),
+                )
+            else:
+                cur = conn.execute(
+                    "SELECT * FROM manual_outreach_log ORDER BY logged_at DESC LIMIT ?",
+                    (limit,),
+                )
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]

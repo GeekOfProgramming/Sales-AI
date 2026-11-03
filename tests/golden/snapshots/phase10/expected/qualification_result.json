@@ -1,0 +1,13 @@
+{
+  "candidate_id": "domain:example-engineering.com",
+  "company_tier": "tier_2",
+  "bim_maturity": "high",
+  "relationship_type": "service_buyer",
+  "opportunity_types": [
+    "direct_bim_delivery",
+    "mep_delivery",
+    "bim_coordination"
+  ],
+  "outcome": "qualified_for_enrichment",
+  "cold_outreach_allowed": true
+}

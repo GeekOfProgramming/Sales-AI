@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Watchlist | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Candidate Watchlist</h1>
+    <p class="page-subtitle">Companies monitored for future hiring, tendering, or project signals before qualification.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Monitored Candidates ({{ items|length }})</span>
+    <span class="badge badge-warning">Zero Direct Send</span>
+  </div>
+  {% if items %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Domain</th>
+          <th>Tier</th>
+          <th>Fit</th>
+          <th>Intent</th>
+          <th>Watch Reason</th>
+          <th>Monitored Signals</th>
+          <th>Last Checked</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in items %}
+        <tr>
+          <td><strong>{{ w.company_name }}</strong></td>
+          <td><code>{{ w.company_domain or 'N/A' }}</code></td>
+          <td><span class="badge badge-primary">{{ w.tier or 'Unassigned' }}</span></td>
+          <td><span class="badge badge-info">{{ w.fit or 'N/A' }}</span></td>
+          <td><span class="badge badge-warning">{{ w.intent or 'N/A' }}</span></td>
+          <td>{{ w.watch_reason }}</td>
+          <td>
+            {% for s in w.signals_to_monitor %}
+            <span class="badge badge-muted">{{ s }}</span>
+            {% endfor %}
+          </td>
+          <td>{{ w.last_checked_at[:10] if w.last_checked_at else 'Pending' }}</td>
+          <td>
+            <div style="display: flex; gap: 0.35rem;">
+              <form method="POST" action="/sales/candidates/{{ w.candidate_id }}/research" style="display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm">Research</button>
+              </form>
+              <form method="POST" action="/sales/candidates/{{ w.candidate_id }}/qualify" style="display:inline;">
+                <button type="submit" class="btn btn-primary btn-sm">Qualify</button>
+              </form>
+              <form method="POST" action="/sales/watchlist/{{ w.candidate_id }}/remove" style="display:inline;">
+                <button type="submit" class="btn btn-secondary btn-sm" style="color:#ef4444;">Remove</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No companies currently on the watchlist.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

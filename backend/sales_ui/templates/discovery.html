@@ -1,0 +1,677 @@
+{% extends "base.html" %}
+
+{% block title %}Discovery Control &amp; Search Profiles | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Discovery Executions &amp; Search Profiles</h1>
+    <p class="page-subtitle">Conduct targeted company discovery via Quick Brave Search or configure reusable multi-market Search Profiles.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/research/pilot" class="btn btn-primary" style="background: #059669; border-color: #059669;">🔬 Lead Research Pilot (7 Targets)</a>
+    <a href="/sales/sources" class="btn btn-secondary">Manage Sources</a>
+  </div>
+</div>
+
+<!-- Mode Selection Tabs -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.75rem;">
+  <button type="button" id="tab-btn-quick" class="btn btn-primary" onclick="switchDiscoveryTab('quick')">
+    ⚡ Quick Company Search (Brave)
+  </button>
+  <button type="button" id="tab-btn-profiles" class="btn btn-secondary" onclick="switchDiscoveryTab('profiles')">
+    📁 Advanced Search Profiles ({{ profiles|length }})
+  </button>
+  <button type="button" id="tab-btn-history" class="btn btn-secondary" onclick="switchDiscoveryTab('history')">
+    🕒 Discovery Execution History ({{ recent_runs|length }})
+  </button>
+</div>
+
+<!-- Quick Stat Badges -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Saved Profiles</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ profiles|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Active Profiles</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #10b981;">{{ profiles|selectattr('enabled')|list|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Total Runs</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #3b82f6;">{{ recent_runs|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Registered Sources</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ sources|length }}</div>
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- SECTION 1: QUICK SEARCH (DEFAULT VISIBLE MODE)                           -->
+<!-- ========================================================================= -->
+<div id="section-quick-search">
+  <div class="card" id="operator-search-card" style="border: 2px solid #3b82f6; background: rgba(59, 130, 246, 0.03); margin-bottom: 2rem;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>⚡ Quick Company Search — Brave</span>
+      <span class="badge badge-primary">Operator Controlled</span>
+    </div>
+    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      Execute an explicitly authorized, bounded discovery search using Brave Web Search API. Enforces strict safety limits: <strong>Maximum 1 query</strong>, <strong>Maximum 10 results</strong>, zero automatic crawlers, zero fake attributes, and zero autonomous LLM billing.
+    </p>
+
+    <!-- Provider Readiness / Quota Gate Notice -->
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.85rem; margin-bottom: 1.25rem; font-size: 0.85rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <div>
+          <strong>Search Provider:</strong> Brave Search Web API (<code>brave_job_search</code>) &bull;
+          <strong>Credential Status:</strong>
+          {% if brave_configured %}
+            <span class="badge badge-success">BRAVE_SEARCH_API_KEY Configured</span>
+          {% else %}
+            <span class="badge badge-warning">BRAVE_SEARCH_API_KEY Not Set</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="badge badge-info">Pilot Limit: Max 1 Query / 10 Results (~$0.005 USD)</span>
+        </div>
+      </div>
+      {% if not brave_configured %}
+      <div style="margin-top: 0.5rem; color: #f59e0b;">
+        ⚠️ <em>Live search is blocked until <code>BRAVE_SEARCH_API_KEY</code> is set in environment. Preview Query (Dry Run) remains fully available.</em>
+      </div>
+      {% endif %}
+    </div>
+
+    <form method="POST" action="/sales/discovery/run">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="discovery_mode" value="company_first">
+      <input type="hidden" name="sources" value="brave_job_search">
+      <input type="hidden" name="idempotency_token" value="{{ preview_token or '' }}">
+
+      <!-- Exact Verified Preview Banner -->
+      {% if preview_query %}
+      <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 0.85rem; margin-bottom: 1.25rem;">
+        <div style="font-size: 0.85rem; font-weight: 700; color: #1e40af; margin-bottom: 0.35rem;">
+          🔍 Verified Preview Parameters Ready for Authorization
+        </div>
+        <div style="font-size: 0.8rem; color: #1e3a8a; font-family: monospace; background: #ffffff; padding: 0.4rem 0.6rem; border-radius: 4px; border: 1px solid #dbeafe; margin-bottom: 0.35rem;">
+          <strong>Effective Brave Query:</strong> {{ preview_query }}
+        </div>
+        <div style="font-size: 0.75rem; color: #3b82f6;">
+          <strong>Target Region:</strong> {{ form_country }} (code: {{ preview_country_code }}, lang: {{ preview_search_lang }}) &bull;
+          <strong>Exclusions:</strong> [{{ preview_exclusions or 'None' }}] &bull;
+          <strong>Limit:</strong> Exactly 1 Query, Max 10 Results (~$0.005 USD)
+        </div>
+      </div>
+      {% endif %}
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+        <div class="form-group">
+          <label class="form-label" style="font-weight: 600;">Country</label>
+          <select name="country" class="form-control" id="search-country">
+            {% for cntry in ["Italy", "Germany", "United Kingdom", "Switzerland", "France", "Spain"] %}
+            <option value="{{ cntry }}" {% if (form_country or 'Italy') == cntry %}selected{% endif %}>{{ cntry }}</option>
+            {% endfor %}
+          </select>
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+            Influences geographic and language search targeting; does not imply legal incorporation.
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="font-weight: 600;">City / Region</label>
+          <input type="text" name="city" class="form-control" placeholder="e.g. Milano, Roma, Torino" value="{{ form_city }}">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+            Geographic search keyword; not a verified headquarters-location filter.
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="font-weight: 600;">Business Category</label>
+          <select name="category" class="form-control">
+            {% for cat in ["BIM Engineering", "Architectural Practice", "MEP Design", "General Contractor", "Structural Engineering"] %}
+            <option value="{{ cat }}" {% if (form_category or 'BIM Engineering') == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+          </select>
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+            Applies predefined industry search terms; not a verified classification.
+          </span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="font-weight: 600;">Search Keywords</label>
+          <input type="text" name="query" class="form-control" value="{{ form_query }}" required>
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 0.25rem;">
+            Primary search phrase combined with category and regional rules.
+          </span>
+        </div>
+      </div>
+
+      <div style="background: rgba(0,0,0,0.03); border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; font-size: 0.8rem;">
+        <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer;">
+          <input type="checkbox" name="billing_confirmed" value="true" {% if billing_confirmed %}checked{% endif %} style="margin-top: 0.2rem;">
+          <span>
+            <strong>Operator Billing Authorization:</strong> I acknowledge that Brave Search Web API charges ~$0.005 USD per query, that no automated zero-cost quota API exists, and I explicitly authorize executing 1 search call (capped at 10 results).
+          </span>
+        </label>
+      </div>
+
+      <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 1rem; flex-wrap: wrap;">
+        <div style="font-size: 0.8rem; color: var(--text-secondary);">
+          🔒 <strong>Operator Financial Guard:</strong> Exactly 1 query &bull; Max 10 results &bull; No retries &bull; Est. ~$0.005 USD
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="submit" name="is_preview" value="true" class="btn btn-secondary">🔍 Preview Query (Dry Run)</button>
+          {% if brave_configured %}
+          <button type="submit" name="confirm_live" value="true" class="btn btn-primary" onclick="return confirm('Authorize small-scale live search? (1 Brave Query, Max 10 Results, ~$0.005 USD)');">
+            🚀 Confirm &amp; Run Live Search
+          </button>
+          {% else %}
+          <button type="button" class="btn btn-primary" disabled title="Set BRAVE_SEARCH_API_KEY in environment to enable live search">
+            🚀 Run Live Search (Key Required)
+          </button>
+          {% endif %}
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- SECTION 2: ADVANCED SEARCH PROFILES                                      -->
+<!-- ========================================================================= -->
+<div id="section-search-profiles" style="display: none;">
+
+  <!-- Execution Plan Preview (If triggered) -->
+  {% if preview_plan %}
+  <div class="card" id="preview-plan-card" style="margin-bottom: 2rem; border-left: 4px solid #3b82f6;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Execution Plan Preview: <strong>{{ preview_plan.scope_name }}</strong></span>
+      <span class="badge badge-info">Zero Network Calls &bull; Zero DB Mutations</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
+      <div><strong>Target Markets:</strong> {{ preview_plan.markets|join(', ') or 'All' }}</div>
+      <div><strong>Modes:</strong> {{ preview_plan.discovery_modes|join(', ') }}</div>
+      <div><strong>Executable Sources:</strong> <span style="color: #10b981; font-weight: 700;">{{ preview_plan.executable_count }}</span></div>
+      <div><strong>Skipped Sources:</strong> <span style="color: #ef4444; font-weight: 700;">{{ preview_plan.skipped_count }}</span></div>
+      <div><strong>Effective Total Budget:</strong> {{ preview_plan.effective_total_budget }} candidates</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+      <!-- Executable Sources -->
+      <div>
+        <h4 style="margin-bottom: 0.5rem; color: #10b981;">Executable Sources ({{ preview_plan.executable_sources|length }})</h4>
+        {% if preview_plan.executable_sources %}
+        <table class="data-table" style="font-size: 0.85rem;">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Priority</th>
+              <th>Max Budget</th>
+              <th>Credential</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in preview_plan.executable_sources %}
+            <tr>
+              <td><strong>{{ s.name }}</strong> (<code>{{ s.source_id }}</code>)</td>
+              <td>P{{ s.priority }}</td>
+              <td>{{ s.effective_budget }}</td>
+              <td><span class="badge badge-success">{{ s.credential_status }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">No executable sources found for this scope.</p>
+        {% endif %}
+      </div>
+
+      <!-- Skipped Sources -->
+      <div>
+        <h4 style="margin-bottom: 0.5rem; color: #ef4444;">Skipped Sources ({{ preview_plan.skipped_sources|length }})</h4>
+        {% if preview_plan.skipped_sources %}
+        <table class="data-table" style="font-size: 0.85rem;">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Status</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in preview_plan.skipped_sources %}
+            <tr>
+              <td><strong>{{ s.name }}</strong></td>
+              <td><span class="badge badge-danger">{{ s.status }}</span></td>
+              <td style="color: var(--text-secondary);">{{ s.reason }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">All requested sources are executable.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; display: flex; gap: 1rem; align-items: center;">
+      {% if preview_plan.enabled %}
+      <form method="POST" action="/sales/discovery/profiles/{{ preview_plan.scope_id }}/run" style="margin: 0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-primary">Start Discovery</button>
+      </form>
+      {% else %}
+      <span class="badge badge-warning" style="padding: 0.5rem 1rem;">Profile is Disabled - Execution Blocked</span>
+      {% endif %}
+      <a href="/sales/discovery" class="btn btn-secondary">Close Preview</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Search Profiles Table -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Saved Search Profiles ({{ profiles|length }})</span>
+      <a href="#create-profile-section" class="btn btn-primary btn-sm" onclick="document.getElementById('create-profile-section').scrollIntoView({behavior: 'smooth'});">+ Create Profile</a>
+    </div>
+    {% if profiles %}
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Profile Name</th>
+            <th>Status</th>
+            <th>Discovery Modes</th>
+            <th>Markets</th>
+            <th>Sources</th>
+            <th>Max Results</th>
+            <th>Last Run</th>
+            <th style="min-width: 280px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in profiles %}
+          <tr>
+            <td>
+              <a href="/sales/discovery/profiles/{{ p.scope_id }}" style="font-weight: 600; text-decoration: none;">
+                {{ p.scope_name }}
+              </a>
+              <div style="font-size: 0.75rem; color: var(--text-secondary);">ID: <code>{{ p.scope_id }}</code></div>
+            </td>
+            <td>
+              {% if p.enabled %}
+              <span class="badge badge-success">Active</span>
+              {% else %}
+              <span class="badge badge-warning">Disabled</span>
+              {% endif %}
+            </td>
+            <td>
+              {% for m in p.discovery_modes %}
+              <span class="badge badge-info" style="margin-right: 2px;">{{ m }}</span>
+              {% endfor %}
+            </td>
+            <td>
+              {% for mkt in p.markets %}
+              <span class="badge badge-secondary" style="margin-right: 2px;">{{ mkt }}</span>
+              {% endfor %}
+            </td>
+            <td>
+              <strong>{{ p.source_count }}</strong>
+              <span style="color: var(--text-secondary); font-size: 0.8rem;">configured</span>
+            </td>
+            <td>{{ p.max_results }}</td>
+            <td>
+              {% if p.last_run_time %}
+              <div>{{ p.last_run_time[:19] }}</div>
+              <span class="badge {% if p.last_run_status == 'completed' %}badge-success{% else %}badge-warning{% endif %}" style="font-size: 0.75rem;">
+                {{ p.last_run_status }} ({{ p.last_results_count }} found)
+              </span>
+              {% else %}
+              <span style="color: var(--text-secondary); font-size: 0.8rem;">Never run</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+                <!-- Preview Plan -->
+                <a href="/sales/discovery?preview_scope_id={{ p.scope_id }}#preview-plan-card" class="btn btn-sm btn-secondary">Preview</a>
+
+                <!-- Run Discovery -->
+                {% if p.enabled %}
+                <form method="POST" action="/sales/discovery/profiles/{{ p.scope_id }}/run" style="margin: 0;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-sm btn-primary">Start</button>
+                </form>
+                {% else %}
+                <button class="btn btn-sm btn-secondary" disabled title="Profile is disabled">Start</button>
+                {% endif %}
+
+                <!-- Edit Profile -->
+                <a href="/sales/discovery/profiles/{{ p.scope_id }}" class="btn btn-sm btn-secondary">Edit</a>
+
+                <!-- Duplicate Profile -->
+                <form method="POST" action="/sales/discovery/profiles/{{ p.scope_id }}/duplicate" style="margin: 0;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-sm btn-secondary" title="Duplicate Profile">Copy</button>
+                </form>
+
+                <!-- Toggle Enable / Disable -->
+                <form method="POST" action="/sales/discovery/profiles/{{ p.scope_id }}/toggle" style="margin: 0;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  {% if p.enabled %}
+                  <button type="submit" class="btn btn-sm btn-warning" title="Disable Profile">Disable</button>
+                  {% else %}
+                  <button type="submit" class="btn btn-sm btn-success" title="Enable Profile">Enable</button>
+                  {% endif %}
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding: 2rem; text-align: center;">
+      <p class="empty-state-text">No Search Profiles configured yet. Create one below to start discovering companies.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Create Profile Section -->
+  <div class="card" id="create-profile-section" style="margin-bottom: 2rem;">
+    <div class="card-title">
+      <span>Create New Search Profile</span>
+    </div>
+    <form method="POST" action="/sales/discovery/profiles/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <!-- Group 1: Basic Configuration -->
+      <fieldset style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; margin-bottom: 1.25rem;">
+        <legend style="font-size: 0.85rem; font-weight: 700; color: var(--border-focus); padding: 0 0.5rem;">Basic Configuration</legend>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Set the profile name, initial enablement status, result budget, and operational discovery modes.</p>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label">Profile Name <span style="color: #ef4444;">*</span></label>
+            <input type="text" name="scope_name" class="form-control" placeholder="e.g. Italy BIM Contractors" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max Results Budget</label>
+            <input type="number" name="max_results" class="form-control" value="50" min="1" max="1000" required>
+          </div>
+          <div class="form-group" style="display: flex; align-items: flex-end;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding-bottom: 0.5rem;">
+              <input type="checkbox" name="enabled" value="true" checked>
+              <span>Enabled</span>
+            </label>
+          </div>
+        </div>
+        <div style="margin-top: 0.75rem;">
+          <label class="form-label">Discovery Modes <span style="color: #ef4444;">*</span></label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+            {% for mode in supported_modes %}
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+              <input type="checkbox" name="discovery_modes" value="{{ mode }}" {% if mode == 'company_first' %}checked{% endif %}>
+              <span>{{ mode }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Group 2: Markets & Sources -->
+      <fieldset style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; margin-bottom: 1.25rem;">
+        <legend style="font-size: 0.85rem; font-weight: 700; color: var(--border-focus); padding: 0 0.5rem;">Markets &amp; Sources</legend>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Select target geographic markets and enabled source adapters from the authoritative registry.</p>
+        <div style="margin-bottom: 1rem;">
+          <label class="form-label">Target Markets <span style="color: #ef4444;">*</span></label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px;">
+            {% for mkt in supported_markets %}
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+              <input type="checkbox" name="markets" value="{{ mkt }}" {% if mkt in ('Italy', 'Germany') %}checked{% endif %}>
+              <span>{{ mkt }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <label class="form-label">Discovery Sources (from Step 2 Registry)</label>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; background: var(--bg-secondary); padding: 0.75rem; border-radius: 4px; max-height: 220px; overflow-y: auto;">
+            {% for s in sources %}
+            <label style="display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; padding: 0.35rem; border: 1px solid var(--border-color); border-radius: 4px;">
+              <input type="checkbox" name="source_ids" value="{{ s.id }}" {% if s.enabled %}checked{% endif %}>
+              <div>
+                <div><strong>{{ s.name }}</strong> (<code>{{ s.id }}</code>)</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">
+                  <span class="badge {% if s.enabled %}badge-success{% else %}badge-warning{% endif %}" style="font-size: 0.7rem;">{{ 'Enabled' if s.enabled else 'Disabled' }}</span>
+                  <span class="badge badge-secondary" style="font-size: 0.7rem;">{{ s.type }}</span>
+                  <span class="badge {% if s.adapter_status == 'AVAILABLE' %}badge-info{% else %}badge-danger{% endif %}" style="font-size: 0.7rem;">{{ s.adapter_status }}</span>
+                  <span class="badge badge-secondary" style="font-size: 0.7rem;">Cred: {{ s.credential_status }}</span>
+                </div>
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Group 3: Targeting & Qualification Taxonomies -->
+      <fieldset style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; margin-bottom: 1.25rem;">
+        <legend style="font-size: 0.85rem; font-weight: 700; color: var(--border-focus); padding: 0 0.5rem;">Targeting &amp; Qualification Criteria</legend>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Define ICP relationship types, business opportunity categories, target company tiers, and BIM maturity requirements.</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+          <div>
+            <label class="form-label">Relationship Types</label>
+            <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px; max-height: 120px; overflow-y: auto;">
+              {% for rt in supported_relationship_types %}
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; margin-bottom: 0.2rem;">
+                <input type="checkbox" name="relationship_types" value="{{ rt }}" {% if rt in ('service_buyer', 'technology_partner') %}checked{% endif %}>
+                <span>{{ rt }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">Opportunity Types</label>
+            <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px; max-height: 120px; overflow-y: auto;">
+              {% for ot in supported_opportunity_types %}
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; margin-bottom: 0.2rem;">
+                <input type="checkbox" name="opportunity_types" value="{{ ot }}" {% if ot in ('direct_bim_delivery', 'mep_delivery', 'automation') %}checked{% endif %}>
+                <span>{{ ot }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">Target Tiers</label>
+            <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px;">
+              {% for tier in supported_company_tiers %}
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; margin-bottom: 0.2rem;">
+                <input type="checkbox" name="company_tiers" value="{{ tier }}" checked>
+                <span>{{ tier }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div>
+            <label class="form-label">BIM Maturity</label>
+            <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: 4px;">
+              {% for bm in supported_bim_maturity %}
+              <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; cursor: pointer; margin-bottom: 0.2rem;">
+                <input type="checkbox" name="bim_maturity" value="{{ bm }}" checked>
+                <span>{{ bm }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Group 4: Search Conditions -->
+      <fieldset style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; margin-bottom: 1.25rem;">
+        <legend style="font-size: 0.85rem; font-weight: 700; color: var(--border-focus); padding: 0 0.5rem;">Search Conditions &amp; Signal Filters</legend>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Supply keywords, required capability signals, negative exclusion terms, and supported languages.</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label">Keywords (comma-separated)</label>
+            <input type="text" name="company_name_keywords" class="form-control" placeholder="e.g. BIM, Architecture, Revit, Engineering">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Required Signals (comma-separated)</label>
+            <input type="text" name="required_signals" class="form-control" placeholder="e.g. revit_api, bim_manager, open_jobs">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Excluded Keywords (comma-separated)</label>
+            <input type="text" name="excluded_keywords" class="form-control" placeholder="e.g. recruiter, staffing, portal, university">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Languages (comma-separated)</label>
+            <input type="text" name="languages" class="form-control" placeholder="e.g. it, en, de">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Group 5: Operator Notes -->
+      <fieldset style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; margin-bottom: 1.25rem;">
+        <legend style="font-size: 0.85rem; font-weight: 700; color: var(--border-focus); padding: 0 0.5rem;">Operator Notes</legend>
+        <div class="form-group" style="margin-bottom: 0;">
+          <textarea name="notes" class="form-control" rows="2" placeholder="Documentation on why this profile was created, target campaign, or specific instructions..."></textarea>
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn btn-primary">Save Search Profile</button>
+    </form>
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- SECTION 3: RECENT DISCOVERY RUNS (HISTORY)                                -->
+<!-- ========================================================================= -->
+<div id="section-discovery-history">
+  <div class="card">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>Discovery Execution History ({{ recent_runs|length }})</span>
+      <span style="font-size: 0.85rem; color: var(--text-secondary);">Authoritative Execution Log &bull; Quick Search &amp; Profile Runs</span>
+    </div>
+    {% if recent_runs %}
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Execution Source</th>
+            <th>Started</th>
+            <th>Status</th>
+            <th>Markets</th>
+            <th>Sources Executed</th>
+            <th>Results</th>
+            <th>Created</th>
+            <th>Updated</th>
+            <th>Errors</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in recent_runs %}
+          <tr>
+            <td>
+              <a href="/sales/discovery/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a>
+            </td>
+            <td>
+              <strong>{{ r.scope_name or r.scope_id or 'Ad-hoc' }}</strong>
+            </td>
+            <td>{{ r.started_at[:19] }}</td>
+            <td>
+              <span class="badge {% if r.status == 'completed' %}badge-success{% elif r.status == 'running' %}badge-info{% else %}badge-warning{% endif %}">
+                {{ r.status }}
+              </span>
+            </td>
+            <td>
+              {% for m in r.markets %}
+              <span class="badge badge-secondary" style="margin-right: 2px;">{{ m }}</span>
+              {% else %}
+              <span style="color: var(--text-secondary); font-size: 0.8rem;">—</span>
+              {% endfor %}
+            </td>
+            <td>
+              {% for s in r.sources_executed %}
+              <span class="badge badge-info" style="margin-right: 2px;">{{ s }}</span>
+              {% else %}
+              <span style="color: var(--text-secondary); font-size: 0.8rem;">None</span>
+              {% endfor %}
+            </td>
+            <td><strong>{{ r.results_found }}</strong></td>
+            <td><span style="color: #10b981; font-weight: 600;">+{{ r.companies_created }}</span></td>
+            <td>{{ r.companies_updated }}</td>
+            <td>
+              {% if r.errors %}
+              <span class="badge badge-danger">{{ r.errors|length }} error(s)</span>
+              {% else %}
+              <span class="badge badge-secondary">0</span>
+              {% endif %}
+            </td>
+            <td>
+              <a href="/sales/discovery/runs/{{ r.run_id }}" class="btn btn-sm btn-secondary">Details</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding: 2rem; text-align: center;">
+      <p class="empty-state-text">No discovery runs executed yet. Run a Quick Search or Search Profile above to start discovery.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function switchDiscoveryTab(tab) {
+  const quickSec = document.getElementById('section-quick-search');
+  const profSec = document.getElementById('section-search-profiles');
+  const histSec = document.getElementById('section-discovery-history');
+  
+  const quickBtn = document.getElementById('tab-btn-quick');
+  const profBtn = document.getElementById('tab-btn-profiles');
+  const histBtn = document.getElementById('tab-btn-history');
+
+  if (tab === 'quick') {
+    quickSec.style.display = 'block';
+    profSec.style.display = 'none';
+    histSec.style.display = 'block';
+
+    quickBtn.className = 'btn btn-primary';
+    profBtn.className = 'btn btn-secondary';
+    histBtn.className = 'btn btn-secondary';
+  } else if (tab === 'profiles') {
+    quickSec.style.display = 'none';
+    profSec.style.display = 'block';
+    histSec.style.display = 'none';
+
+    quickBtn.className = 'btn btn-secondary';
+    profBtn.className = 'btn btn-primary';
+    histBtn.className = 'btn btn-secondary';
+  } else if (tab === 'history') {
+    quickSec.style.display = 'none';
+    profSec.style.display = 'none';
+    histSec.style.display = 'block';
+
+    quickBtn.className = 'btn btn-secondary';
+    profBtn.className = 'btn btn-secondary';
+    histBtn.className = 'btn btn-primary';
+  }
+}
+
+// Preserve active sub-tab if url has hash or preview
+document.addEventListener("DOMContentLoaded", function() {
+  if (window.location.hash === '#create-profile-section' || window.location.search.includes('preview_scope_id')) {
+    switchDiscoveryTab('profiles');
+  }
+});
+</script>
+{% endblock %}

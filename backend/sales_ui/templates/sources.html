@@ -1,0 +1,1017 @@
+{% extends "base.html" %}
+
+{% block title %}Source Management | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Discovery Sources &amp; Intake Registry</h1>
+    <p class="page-subtitle">Manage registered intelligence sources, manually seed new target companies, or import verified historical spreadsheets.</p>
+  </div>
+</div>
+
+<!-- Workflow Section Switcher Tabs -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color); padding-bottom: 0.75rem;">
+  <button type="button" id="tab-btn-sources" class="btn btn-primary" onclick="switchSourcesTab('sources')">
+    📡 Manage Sources ({{ sources|length }})
+  </button>
+  <button type="button" id="tab-btn-manual" class="btn btn-secondary" onclick="switchSourcesTab('manual')">
+    🏢 Add Company Manually
+  </button>
+  <button type="button" id="tab-btn-import" class="btn btn-secondary" onclick="switchSourcesTab('import')">
+    📊 Import Historical Data
+  </button>
+</div>
+
+<div id="section-sources">
+<!-- Quick Stat Badges -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Total Sources</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary);">{{ sources|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Enabled</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #10b981;">{{ sources|selectattr('enabled')|list|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Disabled</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #f59e0b;">{{ sources|rejectattr('enabled')|list|length }}</div>
+  </div>
+  <div class="card" style="padding: 1rem; text-align: center; margin-bottom: 0;">
+    <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase;">Adapters Available</div>
+    <div style="font-size: 1.75rem; font-weight: 700; color: #3b82f6;">{{ sources|selectattr('adapter_status', 'equalto', 'AVAILABLE')|list|length }}</div>
+  </div>
+</div>
+
+<!-- Source Registry Table -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Registered Discovery Sources ({{ sources|length }})</span>
+    <span class="badge badge-info">Authoritative Registry</span>
+  </div>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Source / ID</th>
+          <th>Type</th>
+          <th>State</th>
+          <th>Priority</th>
+          <th>Max Results</th>
+          <th>Markets</th>
+          <th>Discovery Modes</th>
+          <th>Credentials</th>
+          <th>Adapter</th>
+          <th>Health</th>
+          <th>Runs / Errors</th>
+          <th style="min-width: 190px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sources %}
+        <tr id="source-row-{{ s.id }}">
+          <td>
+            <div style="font-weight: 600; color: var(--text-primary);">{{ s.name }}</div>
+            <div style="font-size: 0.75rem; font-family: monospace; color: var(--text-secondary);">{{ s.id }}</div>
+            {% if s.base_url %}
+            <div style="font-size: 0.7rem; color: var(--text-secondary); text-overflow: ellipsis; overflow: hidden; max-width: 180px; white-space: nowrap;">
+              🔗 {{ s.base_url }}
+            </div>
+            {% endif %}
+          </td>
+          <td><span class="badge badge-muted">{{ s.type }}</span></td>
+          <td>
+            {% if s.enabled %}
+              <span class="badge badge-success">Enabled</span>
+            {% else %}
+              <span class="badge badge-warning">Disabled</span>
+            {% endif %}
+          </td>
+          <td><strong>{{ s.priority }}</strong></td>
+          <td>{{ s.max_results_per_run }}</td>
+          <td>
+            {% if s.countries %}
+              <span style="font-size: 0.8rem;">{{ s.countries|join(', ') }}</span>
+            {% else %}
+              <span class="badge badge-muted">Global</span>
+            {% endif %}
+          </td>
+          <td>
+            <span style="font-size: 0.8rem;">{{ s.discovery_mode }}</span>
+          </td>
+          <td>
+            {% if s.requires_api_key %}
+              {% if s.credential_status == 'configured' %}
+                <span class="badge badge-success" title="Configured via {{ s.credential_env_var or 'ENV' }}">Configured</span>
+              {% elif s.credential_status == 'configuration_error' %}
+                <span class="badge badge-danger" title="No env var configured">Configuration error</span>
+              {% else %}
+                <span class="badge badge-warning" title="Missing {{ s.credential_env_var }}">Not configured</span>
+              {% endif %}
+              <div style="font-size: 0.7rem; font-family: monospace; color: var(--text-secondary);">
+                {{ s.credential_env_var or 'Missing VAR' }}
+              </div>
+            {% else %}
+              <span class="badge badge-muted">Not required</span>
+            {% endif %}
+
+          </td>
+          <td>
+            {% if s.adapter_status == 'AVAILABLE' %}
+              <span class="badge badge-success">AVAILABLE</span>
+            {% else %}
+              <span class="badge badge-danger">NOT_AVAILABLE</span>
+            {% endif %}
+            <div style="font-size: 0.7rem; font-family: monospace; color: var(--text-secondary);">
+              {{ s.adapter_id or 'none' }}
+            </div>
+          </td>
+          <td>
+            {% if s.status == 'healthy' or s.status == 'operational' %}
+              <span class="badge badge-success">{{ s.status }}</span>
+            {% elif s.status == 'failing' or s.status == 'unhealthy' %}
+              <span class="badge badge-danger">{{ s.status }}</span>
+            {% else %}
+              <span class="badge badge-warning">{{ s.status }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size: 0.8rem;">
+            <div><strong>{{ s.success_count }}</strong> succ / <strong>{{ s.failure_count }}</strong> fail</div>
+            {% if s.last_success_at %}
+              <div style="font-size: 0.7rem; color: var(--text-secondary);">Last ok: {{ s.last_success_at[:16] }}</div>
+            {% endif %}
+            {% if s.last_error %}
+              <div style="font-size: 0.7rem; color: #ef4444; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ s.last_error }}">
+                Err: {{ s.last_error }}
+              </div>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              <!-- Toggle Enable / Disable -->
+              <form method="POST" action="/sales/sources/{{ s.id }}/toggle" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if s.enabled %}
+                  <button type="submit" class="btn btn-warning btn-sm" title="Disable this source">Disable</button>
+                {% else %}
+                  <button type="submit" class="btn btn-success btn-sm" title="Enable this source">Enable</button>
+                {% endif %}
+              </form>
+
+              <!-- Test Source -->
+              <form method="POST" action="/sales/sources/{{ s.id }}/test" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-secondary btn-sm" title="Safely test source connectivity">Test</button>
+              </form>
+
+              <!-- Quick Edit Toggle -->
+              <button type="button" class="btn btn-outline btn-sm" onclick="toggleEditRow('edit-row-{{ s.id }}')">Edit</button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Inline Edit Form Row -->
+        <tr id="edit-row-{{ s.id }}" style="display: none; background: rgba(255,255,255,0.02);">
+          <td colspan="12" style="padding: 1.25rem;">
+            <form method="POST" action="/sales/sources/{{ s.id }}/update" style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.25rem; color: var(--primary);">
+                Editing Configuration for Source: <code>{{ s.id }}</code>
+              </div>
+              
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Source Name</label>
+                  <input type="text" name="name" class="form-control" value="{{ s.name }}" required>
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Priority (higher = prioritized)</label>
+                  <input type="number" name="priority" class="form-control" value="{{ s.priority }}" min="1" max="1000">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Max Results Per Run</label>
+                  <input type="number" name="max_results_per_run" class="form-control" value="{{ s.max_results_per_run }}" min="1" max="500">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Adapter ID</label>
+                  <input type="text" name="adapter_id" class="form-control" value="{{ s.adapter_id or '' }}">
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Supported Markets (comma-separated)</label>
+                  <input type="text" name="countries" class="form-control" value="{{ s.countries|join(', ') if s.countries else '' }}" placeholder="IT, DE, US, UAE">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Discovery Modes (comma-separated)</label>
+                  <input type="text" name="discovery_modes" class="form-control" value="{{ s.discovery_mode }}" placeholder="company_first, project_first">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Credential ENV Var Name (NO secrets)</label>
+                  <input type="text" name="credential_env_var" class="form-control" value="{{ s.credential_env_var or '' }}" placeholder="e.g. BRAVE_SEARCH_API_KEY">
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Base URL (http/https)</label>
+                  <input type="url" name="base_url" class="form-control" value="{{ s.base_url or '' }}" placeholder="https://api.provider.com">
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Operator Instructions (Non-executable guidance)</label>
+                  <textarea name="operator_instructions" class="form-control" rows="2" placeholder="Search tips, query formats, rate-limit cautions...">{{ s.operator_instructions or '' }}</textarea>
+                </div>
+                <div>
+                  <label style="font-size: 0.75rem; color: var(--text-secondary);">Notes</label>
+                  <textarea name="notes" class="form-control" rows="2" placeholder="Internal maintenance notes...">{{ s.notes or '' }}</textarea>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" name="requires_api_key" value="true" {% if s.requires_api_key %}checked{% endif %}>
+                  Requires API Key
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; cursor: pointer;">
+                  <input type="checkbox" name="enabled" value="true" {% if s.enabled %}checked{% endif %}>
+                  Source Enabled
+                </label>
+                <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditRow('edit-row-{{ s.id }}')">Cancel</button>
+                  <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+                </div>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Add New Source Card -->
+<div style="margin-bottom: 1rem; padding: 0.75rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+  ℹ️ <em>Source Status Explanations:</em> <strong>AVAILABLE</strong>: Local adapter implementation exists; <strong>Configured</strong>: Required environment credentials present; <strong>Healthy</strong>: Operating normally; <strong>Degraded</strong>: Recent errors logged; <strong>Disabled</strong>: Inactive. Note: Adapter availability does not constitute proof of active external endpoint responses.
+</div>
+<details class="card" id="add-source-section" style="margin-bottom: 2rem;">
+  <summary style="cursor: pointer; font-weight: 700; color: var(--border-focus); padding: 0.5rem 0;">➕ Advanced Source Administration: Add New Discovery Source</summary>
+  <div style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem 0;">Note: Registering a new source entry configures discovery metadata and rules. It does not automatically generate a web crawler or external API adapter.</div>
+  <div class="card-title">
+    <span>Add Discovery Source</span>
+    <span class="badge badge-info">Safe Config Only</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Register a new data stream or discovery source. Credentials must only be specified as environment variable names (never raw secrets). Safe protocols only (http/https). Instructions are stored strictly as text/guidance.
+  </p>
+  <form method="POST" action="/sales/sources/add" style="display: flex; flex-direction: column; gap: 1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Source ID *</label>
+        <input type="text" name="id" class="form-control" placeholder="e.g. germang_bim_portal" required pattern="^[a-zA-Z0-9_\-]+$">
+        <small style="color: var(--text-secondary); font-size: 0.7rem;">Unique identifier (alphanumeric, underscore, hyphen)</small>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Display Name *</label>
+        <input type="text" name="name" class="form-control" placeholder="e.g. German BIM Industry Portal" required>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Source Type *</label>
+        <select name="type" class="form-control" required>
+          {% for st in supported_source_types %}
+            <option value="{{ st }}">{{ st }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Adapter ID</label>
+        <input type="text" name="adapter_id" class="form-control" placeholder="e.g. generic_http, brave_search, manual">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Priority (1-1000)</label>
+        <input type="number" name="priority" class="form-control" value="100" min="1" max="1000">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Max Results Per Run</label>
+        <input type="number" name="max_results_per_run" class="form-control" value="50" min="1" max="500">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Supported Markets</label>
+        <input type="text" name="countries" class="form-control" placeholder="e.g. IT, DE, CH (blank for global)">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Discovery Modes</label>
+        <input type="text" name="discovery_modes" class="form-control" value="company_first, project_first" placeholder="company_first, project_first">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Base URL</label>
+        <input type="url" name="base_url" class="form-control" placeholder="https://api.source.com or directory URL">
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Credential Environment Variable</label>
+        <input type="text" name="credential_env_var" class="form-control" placeholder="e.g. BRAVE_SEARCH_API_KEY (never enter secret keys!)">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Operator Instructions</label>
+        <textarea name="operator_instructions" class="form-control" rows="2" placeholder="Search keywords, filtering instructions, language guidelines..."></textarea>
+      </div>
+      <div>
+        <label style="font-size: 0.8rem; font-weight: 600;">Description & Notes</label>
+        <textarea name="description" class="form-control" rows="2" placeholder="Description of the source data, coverage, reliability..."></textarea>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 1.5rem; align-items: center;">
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="requires_api_key" value="true">
+        Requires API Key / Auth
+      </label>
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;">
+        <input type="checkbox" name="enabled" value="true" checked>
+        Enabled immediately
+      </label>
+      <div style="margin-left: auto;">
+        <button type="submit" class="btn btn-primary">Create Source</button>
+      </div>
+    </div>
+  </form>
+</details>
+</div><!-- /#section-sources -->
+
+<div id="section-manual" style="display: none;">
+<!-- Manual Candidate Seed Input -->
+<div class="card" style="margin-bottom: 2rem; border-left: 4px solid #3b82f6;">
+  <div class="card-title">
+    <span>🏢 Add Company Manually (Candidate Seed)</span>
+    <span class="badge badge-info">Standard Research Flow</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Manually entered companies enter the normal research, deduplication, and qualification pipeline. A known official domain can enter the candidate workflow without using Brave Search.
+  </p>
+  <form method="POST" action="/sales/sources/manual-seed" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div style="flex: 1; min-width: 180px;">
+      <input type="text" name="company_name" class="form-control" placeholder="Company Name (e.g. Acme BIM Studio)" required>
+    </div>
+    <div style="flex: 1; min-width: 180px;">
+      <input type="text" name="domain" class="form-control" placeholder="Domain (e.g. acme-bim.com)">
+    </div>
+    <div style="width: 140px;">
+      <input type="text" name="country" class="form-control" placeholder="Country (e.g. IT, DE)">
+    </div>
+    <div style="flex: 1; min-width: 220px;">
+      <input type="url" name="source_url" class="form-control" placeholder="Source URL / Directory Link">
+    </div>
+    <button type="submit" class="btn btn-primary">Add Candidate Seed</button>
+  </form>
+  <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem; margin-bottom: 0; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+    🔒 <strong>Safety Guard:</strong> Manually entered companies enter with pending triage status. Saving a company manually will never automatically crawl its website, call an LLM, qualify the company, create an email draft, or send an email. Existing duplicates are safely detected and preserved.
+  </p>
+</div>
+</div><!-- /#section-manual -->
+
+<div id="section-import" style="display: none;">
+{% if preview %}<div id="preview-staged-flag" style="display:none;"></div>{% endif %}
+
+
+<!-- Historical Spreadsheet Import (Preview -> Confirm Workflow) -->
+<div class="card">
+  <div class="card-title">
+    <span>Import Historical Spreadsheet</span>
+    <span class="badge badge-muted">Preview → Confirm Workflow</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    Import historical outreach, company lists, or past contacts with root restriction, deduplication, and safety guards. Preview parsing results before executing authoritative writes.
+  </p>
+  <form method="POST" action="/sales/sources/import-history/preview" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
+      <div class="form-group">
+        <label class="form-label" style="font-weight: 600;">Choose Excel / CSV File to Upload</label>
+        <input type="file" name="file" accept=".xlsx,.xlsm,.csv" class="form-control" style="padding: 0.4rem;">
+        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+          Supported: <code>.xlsx</code>, <code>.xlsm</code>, <code>.csv</code> (Max 25MB). Uploaded safely to local temporary staging.
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="font-weight: 600;">Target Sheet Name (Optional)</label>
+        <input type="text" name="sheet_name" class="form-control" placeholder="Leave blank to inspect all sheets">
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <span style="font-size: 0.8rem; color: var(--text-secondary); font-style: italic;">— OR specify an allowed repository file path: —</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 3fr 1fr; gap: 1rem; align-items: flex-end;">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label">Local File Path</label>
+        <input type="text" name="file_path" class="form-control" placeholder="e.g. Emails-10-26-2026-12-44.xlsx or data/historical_leads.csv">
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">1. Preview Import</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Preview Confirmation Card (If Preview Staged) -->
+{% if preview %}
+<div class="card" style="border: 1px solid var(--border-focus); background: var(--bg-surface); margin-top: 1.5rem;">
+  <div class="card-title">
+    <span>Stage 2: Confirm Historical Import</span>
+    {% if preview.readiness_status == 'READY' %}
+    <span class="badge badge-success">READY</span>
+    {% elif preview.readiness_status == 'REVIEW_REQUIRED' %}
+    <span class="badge badge-warning">REVIEW REQUIRED (COLLISIONS)</span>
+    {% else %}
+    <span class="badge badge-danger">BLOCKED</span>
+    {% endif %}
+  </div>
+
+  <!-- Import Readiness Summary Alert -->
+  <div style="background: var(--bg-card); border-left: 4px solid {% if preview.readiness_status == 'READY' %}var(--color-success, #22c55e){% elif preview.readiness_status == 'REVIEW_REQUIRED' %}var(--color-warning, #f59e0b){% else %}var(--color-danger, #ef4444){% endif %}; padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 1rem; font-size: 0.85rem;">
+    <strong>Readiness Status: {{ preview.readiness_status }}</strong>
+    <ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">
+      {% for reason in preview.readiness_reasons %}
+      <li>{{ reason }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Key Metrics Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.85rem; margin-bottom: 1rem;">
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Company Source Rows</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.rows_detected }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Valid Primary Websites</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success, #22c55e);">{{ preview.valid_website_rows_count or preview.distinct_canonical_domains }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Distinct Canonical Domains</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.distinct_canonical_domains or preview.companies_detected }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Domain Collisions</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.domain_collisions_count %}var(--color-warning, #f59e0b){% else %}var(--text-primary){% endif %};">
+        {{ preview.domain_collisions_count }}
+      </div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">True Outreach Events</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.historical_outreach_events }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Liaison Persons Preserved</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.populated_contact_name_count }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Email Addresses Extracted</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.contacts_detected }}</div>
+    </div>
+  </div>
+
+  <!-- Multi-Link Website Intelligence Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.85rem; margin-bottom: 1.25rem;">
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Multiline Website Cells</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.multiline_cells_count }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Total Extracted Reference URLs</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.total_extracted_links }}</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Unresolved Link Placeholders</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.placeholders_count %}var(--color-warning, #f59e0b){% else %}var(--text-primary){% endif %};">
+        {{ preview.placeholders_count }}
+      </div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Missing / Placeholder Only</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.missing_domain_count %}var(--color-warning, #f59e0b){% else %}var(--text-primary){% endif %};">
+        {{ preview.missing_domain_count }}
+      </div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <div style="color: var(--text-secondary); font-size: 0.75rem;">Multiple Plausible Domains</div>
+      <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.multiple_plausible_domains_count %}var(--color-warning, #f59e0b){% else %}var(--text-primary){% endif %};">
+        {{ preview.multiple_plausible_domains_count }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw Status Distribution vs Normalized Classifications Table -->
+  {% if preview.status_distribution or preview.classification_counts %}
+  <div style="margin-top: 1rem; margin-bottom: 1rem;">
+    <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Outreach Status &amp; Communication Reconciliation</h4>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div class="table-responsive">
+        <table class="data-table" style="font-size: 0.8rem;">
+          <thead>
+            <tr>
+              <th>Raw Excel Status (Verbatim)</th>
+              <th style="text-align: right;">Rows</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for st_name, st_count in preview.status_distribution.items() %}
+            <tr>
+              <td><code>{{ st_name }}</code></td>
+              <td style="text-align: right; font-weight: 600;">{{ st_count }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table" style="font-size: 0.8rem;">
+          <thead>
+            <tr>
+              <th>Normalized State / Evidence</th>
+              <th style="text-align: right;">Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-info">uncontacted</span> (Initial review / allowed cold)</td>
+              <td style="text-align: right; font-weight: 600;">{{ preview.classification_counts.get('uncontacted', 0) }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-primary">contacted</span> (Email sent / cold blocked)</td>
+              <td style="text-align: right; font-weight: 600;">{{ preview.classification_counts.get('contacted', 0) }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-success">replied</span> (Interview / positive conversation)</td>
+              <td style="text-align: right; font-weight: 600;">{{ preview.classification_counts.get('replied', 0) }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-warning">follow_up_needed</span> (Follow-up scheduled)</td>
+              <td style="text-align: right; font-weight: 600;">{{ preview.classification_counts.get('follow_up_needed', 0) }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-danger">invalid_email</span> (Bounced / wrong address flagged)</td>
+              <td style="text-align: right; font-weight: 600;">{{ preview.classification_counts.get('invalid_emails', 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Domain Collisions Report (If Any) -->
+  {% if preview.domain_collisions %}
+  <div style="margin-top: 1rem; margin-bottom: 1rem;">
+    <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--color-warning, #f59e0b);">
+      ⚠️ Canonical Domain Collisions Detected ({{ preview.domain_collisions|length }} Groups) — Human Review Advised
+    </h4>
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.8rem;">
+        <thead>
+          <tr>
+            <th>Canonical Domain</th>
+            <th>Type</th>
+            <th>Source Rows &amp; Locations</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for col in preview.domain_collisions %}
+          <tr>
+            <td><code>{{ col.domain }}</code> ({{ col.occurrence_count }} rows)</td>
+            <td><span class="badge badge-warning">{{ col.collision_type }}</span></td>
+            <td>
+              {% for r in col.rows %}
+              <div>&bull; Sheet: <strong>{{ r.sheet }}</strong> (row {{ r.row_number }}): <em>{{ r.company_name }}</em> [{{ r.city or 'no city' }}, {{ r.country or 'no country' }}] — Status: <code>{{ r.raw_outreach_status }}</code></div>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Ambiguous Multiple Plausible Primary Domains Panel (MVP-01.4.2 Release Fix) -->
+  {% if preview.ambiguous_rows %}
+  <div style="margin-top: 1rem; margin-bottom: 1.5rem; background: var(--bg-card); border: 1px solid var(--color-warning, #f59e0b); border-radius: 6px; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+      <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0; color: var(--color-warning, #f59e0b);">
+        ⚠️ Unresolved Multiple Plausible Domains ({{ preview.ambiguous_rows|length }} Rows) — Explicit Operator Selection Required
+      </h4>
+      <span class="badge badge-warning" id="ambiguous-unresolved-badge">{{ preview.ambiguous_rows|length }} Unresolved</span>
+    </div>
+    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      Each of the following rows contains multiple distinct corporate domains. In accordance with pyBIM safety standards, automatic import is blocked until verified primary host selections or quarantines are explicitly chosen.
+    </p>
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.8rem;">
+        <thead>
+          <tr>
+            <th style="min-width: 110px;">Sheet &amp; Row</th>
+            <th style="min-width: 140px;">Company Name</th>
+            <th style="min-width: 130px;">Current Proposed Host</th>
+            <th style="min-width: 140px;">Alternate Candidates</th>
+            <th style="min-width: 180px;">Associated URLs &amp; Provenance</th>
+            <th style="min-width: 220px;">Operator Decision</th>
+            <th style="min-width: 140px;">Operator Note</th>
+            <th style="min-width: 90px;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in preview.ambiguous_rows %}
+          <tr class="operator-decision-row" data-sheet="{{ r.sheet }}" data-row="{{ r.row_number }}" data-company="{{ r.company_name|e }}" data-proposed="{{ r.selected_primary_host }}" data-candidates='{{ r.candidate_hosts|tojson }}'>
+            <td><strong>{{ r.sheet }}</strong> (R{{ r.row_number }})</td>
+            <td>
+              <strong>{{ r.company_name.split('\n')[0] }}</strong>
+              {% if '\n' in r.company_name %}
+              <details style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 4px;">
+                <summary style="cursor: pointer;">Details</summary>
+                <pre style="white-space: pre-wrap; margin-top: 4px; font-family: inherit;">{{ r.company_name }}</pre>
+              </details>
+              {% endif %}
+            </td>
+            <td><code>{{ r.selected_primary_host }}</code></td>
+            <td>
+              {% for h in r.candidate_hosts %}
+                {% if h != r.selected_primary_host %}
+                <span class="badge badge-info" style="margin-right: 4px; margin-bottom: 2px; display: inline-block;">{{ h }}</span>
+                {% endif %}
+              {% endfor %}
+            </td>
+            <td>
+              {% if r.website_links %}
+              <details style="font-size: 0.72rem;">
+                <summary style="cursor: pointer; color: var(--primary);">{{ r.website_links|length }} link(s)</summary>
+                <div style="max-height: 120px; overflow-y: auto; margin-top: 4px; padding: 4px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+                  {% for lnk in r.website_links %}
+                  <div style="margin-bottom: 3px; font-size: 0.7rem; border-bottom: 1px dotted rgba(255,255,255,0.1); padding-bottom: 2px;">
+                    <span class="badge badge-secondary" style="font-size: 0.65rem;">{{ lnk.category or 'OTHER' }}</span>
+                    {% if lnk.raw_label %}<strong>{{ lnk.raw_label }}:</strong>{% endif %}
+                    {% if lnk.is_placeholder %}
+                      <em style="color: var(--color-warning, #f59e0b);">[link removed]</em>
+                    {% else %}
+                      <code>{{ lnk.host or lnk.raw_url }}</code>
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </details>
+              {% else %}
+              <span style="color: var(--text-secondary); font-size: 0.75rem;">(none)</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <select class="form-control decision-type-select" style="font-size: 0.75rem; padding: 4px 6px;" onchange="updateOperatorDecision('{{ r.sheet }}', {{ r.row_number }})">
+                  <option value="">-- Select Decision --</option>
+                  <option value="ACCEPT_DEFAULT">Accept Default ({{ r.selected_primary_host }})</option>
+                  <option value="SELECT_PRIMARY_HOST">Select Primary Host...</option>
+                  <option value="QUARANTINE_NO_PRIMARY">Quarantine (No Primary Domain)</option>
+                  <option value="EXTERNAL_REFERENCE">Classify External Reference Only</option>
+                </select>
+                <select class="form-control candidate-host-select" style="font-size: 0.75rem; padding: 4px 6px; display: none;" onchange="updateOperatorDecision('{{ r.sheet }}', {{ r.row_number }})">
+                  {% for h in r.candidate_hosts %}
+                  <option value="{{ h }}" {% if h == r.selected_primary_host %}selected{% endif %}>{{ h }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </td>
+            <td>
+              <input type="text" class="form-control decision-note-input" placeholder="Operator note..." style="font-size: 0.75rem; padding: 4px 6px;" oninput="updateOperatorDecision('{{ r.sheet }}', {{ r.row_number }})">
+            </td>
+            <td>
+              <span class="badge badge-warning decision-status-badge">Unresolved</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Missing / Placeholder Only Primary Domains Panel (MVP-01.4.2 Release Fix) -->
+  {% if preview.missing_domain_rows %}
+  <div style="margin-top: 1rem; margin-bottom: 1.5rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+      <h4 style="font-size: 0.95rem; font-weight: 700; margin: 0; color: var(--text-primary);">
+        ℹ️ Companies with Placeholder-Only / Unresolved Websites ({{ preview.missing_domain_rows|length }} Row) — Explicit Operator Decision Required
+      </h4>
+      <span class="badge badge-warning" id="missing-unresolved-badge">{{ preview.missing_domain_rows|length }} Unresolved</span>
+    </div>
+    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      The following company rows lack a trusted standalone primary website root. In accordance with release-safety rules, operator review is required to select quarantine, external reference classification, or custom verified host.
+    </p>
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.8rem;">
+        <thead>
+          <tr>
+            <th style="min-width: 110px;">Sheet &amp; Row</th>
+            <th style="min-width: 140px;">Company Name</th>
+            <th style="min-width: 130px;">Location</th>
+            <th style="min-width: 180px;">Raw Website Cell / Links</th>
+            <th style="min-width: 220px;">Operator Decision</th>
+            <th style="min-width: 140px;">Operator Note</th>
+            <th style="min-width: 90px;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in preview.missing_domain_rows %}
+          <tr class="operator-decision-row" data-sheet="{{ r.sheet }}" data-row="{{ r.row_number }}" data-company="{{ r.company_name|e }}" data-proposed="" data-candidates='[]'>
+            <td><strong>{{ r.sheet }}</strong> (R{{ r.row_number }})</td>
+            <td><strong>{{ r.company_name }}</strong></td>
+            <td>{{ r.city or '-' }}, {{ r.country or '-' }}</td>
+            <td>
+              <code style="word-break: break-all; font-size: 0.72rem;">{{ r.raw_website_cell or '(blank)' }}</code>
+              {% if r.website_links %}
+              <details style="font-size: 0.72rem; margin-top: 4px;">
+                <summary style="cursor: pointer; color: var(--primary);">{{ r.website_links|length }} link(s)</summary>
+                <div style="margin-top: 4px; padding: 4px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+                  {% for lnk in r.website_links %}
+                  <div style="margin-bottom: 2px;">
+                    <span class="badge badge-secondary" style="font-size: 0.65rem;">{{ lnk.category or 'OTHER' }}</span>
+                    <code>{{ lnk.raw_label or lnk.raw_url }}</code>
+                  </div>
+                  {% endfor %}
+                </div>
+              </details>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <select class="form-control decision-type-select" style="font-size: 0.75rem; padding: 4px 6px;" onchange="updateOperatorDecision('{{ r.sheet }}', {{ r.row_number }})">
+                  <option value="">-- Select Decision --</option>
+                  <option value="QUARANTINE_NO_PRIMARY">Quarantine (No Primary Domain)</option>
+                  <option value="EXTERNAL_REFERENCE">Classify External Reference Only</option>
+                </select>
+              </div>
+            </td>
+            <td>
+              <input type="text" class="form-control decision-note-input" placeholder="Operator note..." style="font-size: 0.75rem; padding: 4px 6px;" oninput="updateOperatorDecision('{{ r.sheet }}', {{ r.row_number }})">
+            </td>
+            <td>
+              <span class="badge badge-warning decision-status-badge">Unresolved</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Sheets and Column Mappings Report -->
+  {% if preview.sheets %}
+  <div style="margin-top: 1rem; margin-bottom: 1rem;">
+    <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Workbook Sheets &amp; Geographies Detected ({{ preview.sheets|length }})</h4>
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      {% for s in preview.sheets %}
+      <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.8rem;">
+        <strong>{{ s.sheet_name }}</strong>: {{ s.row_count }} rows
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if preview.column_mappings %}
+  <div style="margin-top: 1rem; margin-bottom: 1.5rem;">
+    <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Detected Column Mapping Report</h4>
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.8rem;">
+        <thead>
+          <tr>
+            <th>Spreadsheet Header</th>
+            <th>Canonical Field</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for col, canon in preview.column_mappings.items() %}
+          <tr>
+            <td><code>{{ col }}</code></td>
+            <td><strong>{{ canon }}</strong></td>
+            <td>
+              {% if canon != 'unmapped' %}
+              <span class="badge badge-success">Mapped</span>
+              {% else %}
+              <span class="badge badge-danger">Unmapped</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/sales/sources/import-history/confirm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="file_path" value="{{ preview.file_path }}">
+    <input type="hidden" name="file_hash" value="{{ preview.file_hash }}">
+    <input type="hidden" name="preview_token" value="{{ preview.preview_token }}">
+    <input type="hidden" name="sheet_name" value="{{ preview.sheet_name or '' }}">
+    <input type="hidden" name="operator_decisions_json" id="operator_decisions_json" value="">
+
+    {% if preview.readiness_status == 'BLOCKED' %}
+    <button type="button" class="btn btn-danger" disabled style="opacity: 0.6; cursor: not-allowed;">⛔ Authoritative Import Blocked (Fix Validation Errors Above)</button>
+    {% elif preview.readiness_status == 'REVIEW_REQUIRED' %}
+    <button type="submit" id="confirm-import-btn" class="btn btn-warning" disabled style="opacity: 0.75; cursor: not-allowed; background: #d97706; color: white;">
+      ⚠️ Authoritative Import Blocked (Requires Row-Level Review &amp; Resolution Above)
+    </button>
+    {% else %}
+    <button type="submit" class="btn btn-success">✅ Confirm &amp; Execute Authoritative Import (Writes {{ preview.rows_detected }} Rows to Store)</button>
+    {% endif %}
+  </form>
+</div>
+{% endif %}
+
+</div><!-- /#section-import -->
+
+<script>
+
+function switchSourcesTab(tab) {
+  const secSources = document.getElementById('section-sources');
+  const secManual = document.getElementById('section-manual');
+  const secImport = document.getElementById('section-import');
+
+  const btnSources = document.getElementById('tab-btn-sources');
+  const btnManual = document.getElementById('tab-btn-manual');
+  const btnImport = document.getElementById('tab-btn-import');
+
+  if (tab === 'sources') {
+    secSources.style.display = 'block';
+    secManual.style.display = 'none';
+    secImport.style.display = 'none';
+    btnSources.className = 'btn btn-primary';
+    btnManual.className = 'btn btn-secondary';
+    btnImport.className = 'btn btn-secondary';
+  } else if (tab === 'manual') {
+    secSources.style.display = 'none';
+    secManual.style.display = 'block';
+    secImport.style.display = 'none';
+    btnSources.className = 'btn btn-secondary';
+    btnManual.className = 'btn btn-primary';
+    btnImport.className = 'btn btn-secondary';
+  } else if (tab === 'import') {
+    secSources.style.display = 'none';
+    secManual.style.display = 'none';
+    secImport.style.display = 'block';
+    btnSources.className = 'btn btn-secondary';
+    btnManual.className = 'btn btn-secondary';
+    btnImport.className = 'btn btn-primary';
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  if (window.location.search.includes('preview') || document.getElementById('preview-staged-flag') || window.location.hash === '#import') {
+    switchSourcesTab('import');
+  } else if (window.location.hash === '#manual') {
+    switchSourcesTab('manual');
+  }
+});
+
+function toggleEditRow(rowId) {
+  var row = document.getElementById(rowId);
+  if (row) {
+    if (row.style.display === 'none' || row.style.display === '') {
+      row.style.display = 'table-row';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+}
+
+function updateOperatorDecision(sheetName, rowNumber) {
+  var rows = document.querySelectorAll('.operator-decision-row');
+  var decisions = [];
+  var unresolvedCount = 0;
+  var ambiguousUnresolved = 0;
+  var missingUnresolved = 0;
+
+  rows.forEach(function(row) {
+    var s = row.getAttribute('data-sheet');
+    var r = parseInt(row.getAttribute('data-row'), 10);
+    var comp = row.getAttribute('data-company');
+    var proposed = row.getAttribute('data-proposed');
+    var candidates = [];
+    try {
+      candidates = JSON.parse(row.getAttribute('data-candidates') || '[]');
+    } catch(e) {
+      candidates = [];
+    }
+
+    var typeSelect = row.querySelector('.decision-type-select');
+    var hostSelect = row.querySelector('.candidate-host-select');
+    var noteInput = row.querySelector('.decision-note-input');
+    var badge = row.querySelector('.decision-status-badge');
+
+    var dType = typeSelect ? typeSelect.value : '';
+    var note = noteInput ? noteInput.value.trim() : '';
+
+    if (hostSelect) {
+      if (dType === 'SELECT_PRIMARY_HOST') {
+        hostSelect.style.display = 'block';
+      } else {
+        hostSelect.style.display = 'none';
+      }
+    }
+
+    if (!dType) {
+      unresolvedCount++;
+      if (candidates.length > 1) {
+        ambiguousUnresolved++;
+      } else {
+        missingUnresolved++;
+      }
+      if (badge) {
+        badge.className = 'badge badge-warning decision-status-badge';
+        badge.innerText = 'Unresolved';
+      }
+    } else {
+      var selectedHost = null;
+      if (dType === 'ACCEPT_DEFAULT') {
+        selectedHost = proposed;
+      } else if (dType === 'SELECT_PRIMARY_HOST') {
+        selectedHost = hostSelect ? hostSelect.value : proposed;
+      }
+
+      decisions.push({
+        source_file_hash: '{{ preview.file_hash if preview else "" }}',
+        sheet_name: s,
+        row_number: r,
+        company_name: comp,
+        decision_type: dType,
+        selected_host: selectedHost,
+        notes: note || null,
+        actor: 'local_operator'
+      });
+
+      if (badge) {
+        badge.className = 'badge badge-success decision-status-badge';
+        badge.innerText = 'Resolved (' + dType + ')';
+      }
+    }
+  });
+
+  // Update badges
+  var ambBadge = document.getElementById('ambiguous-unresolved-badge');
+  if (ambBadge) {
+    ambBadge.innerText = ambiguousUnresolved + ' Unresolved';
+    ambBadge.className = ambiguousUnresolved === 0 ? 'badge badge-success' : 'badge badge-warning';
+  }
+  var misBadge = document.getElementById('missing-unresolved-badge');
+  if (misBadge) {
+    misBadge.innerText = missingUnresolved + ' Unresolved';
+    misBadge.className = missingUnresolved === 0 ? 'badge badge-success' : 'badge badge-warning';
+  }
+
+  // Populate hidden input
+  var input = document.getElementById('operator_decisions_json');
+  if (input) {
+    input.value = JSON.stringify(decisions);
+  }
+
+  // Toggle Confirm button
+  var btn = document.getElementById('confirm-import-btn');
+  if (btn) {
+    if (unresolvedCount === 0 && rows.length > 0) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      btn.style.background = '#10b981';
+      btn.style.color = '#ffffff';
+      btn.className = 'btn btn-success';
+      btn.innerText = '✅ Confirm & Execute Authoritative Import (' + decisions.length + ' Decisions Verified)';
+    } else {
+      btn.disabled = true;
+      btn.style.opacity = '0.75';
+      btn.style.cursor = 'not-allowed';
+      btn.style.background = '#d97706';
+      btn.style.color = '#ffffff';
+      btn.className = 'btn btn-warning';
+      btn.innerText = '⚠️ Authoritative Import Blocked (' + unresolvedCount + ' Row Decision' + (unresolvedCount === 1 ? '' : 's') + ' Remaining)';
+    }
+  }
+}
+</script>
+{% endblock %}

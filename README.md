@@ -62,8 +62,11 @@ SalesAI transforms raw web data into sales-ready qualified leads using a modular
 | **Phase 5** | Lead Scoring & Aggregation | ✅ Completed | Deterministic company entity resolution, dedup, recency, signal evidence, and 0–100 qualification scoring. |
 | **Phase 6** | Company & Contact Enrichment | ✅ Completed | Discovers decision-makers (Apollo/Hunter), buyer-role ranking, and strict work email verification. |
 | **Phase 7** | Export / Review Workspace | ✅ Completed | Multi-sheet formatted Excel (`.xlsx`), CSVs, CRM-neutral JSON, and optional Google Sheets Upsert/Snapshot. |
-| **Phase 8** | Personalized Outreach | 🟡 Next | Generates tailored email drafts and value propositions on top of Phase 7 structure. |
-| **Phase 9** | Approval & Outreach Dispatch | 🟡 Next | Human review interface, email sending controls, and campaign state tracking. |
+| **Phase 8** | Personalized Outreach | ✅ Completed | Grounded cold outreach email drafts based on candidate evidence. |
+| **Phase 9** | Approval & Outreach Dispatch | ✅ Frozen | Review queue, suppression list, rate limiting, and dispatch safety. |
+| **Phase 10** | Continuous Discovery & Qualification | ✅ Accepted | Multi-source discovery engine, historical outreach importer, and qualification. |
+| **Phase 10.5** | Local Operator Console | ✅ Frozen | Local operator UI for draft review, suppression management, and monitoring. |
+| **Phase 11** | Inbox & Reply Intelligence | 🔨 Implemented | Inbound email sync, thread resolution, reply classification, suggested replies, and human-in-the-loop review. |
 
 ---
 
