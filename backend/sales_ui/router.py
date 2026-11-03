@@ -4001,6 +4001,7 @@ async def lead_register_research_new_action(
 @router.get("/candidates", response_class=HTMLResponse)
 async def candidates_list_view(
     request: Request,
+    queue: Optional[str] = Query("active"),
     q: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     tier: Optional[str] = Query(None),
@@ -4011,103 +4012,182 @@ async def candidates_list_view(
     message: Optional[str] = None,
     error: Optional[str] = None,
 ):
-    svcs = get_console_services()
-    bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
-
-    all_summaries = bridge.get_candidate_list_summary(
-        status=status,
-        tier=tier,
-        limit=1000,
+    from sales_engine.candidates.lifecycle_service import (
+        CandidateLifecycleService,
+        CandidateQueueType,
+        project_candidate_lifecycle,
     )
 
-    filtered = all_summaries
-    if country:
-        filtered = [c for c in filtered if (c.get("country") or "").lower() == country.lower()]
-    if city:
-        filtered = [c for c in filtered if (c.get("city") or "").lower() == city.lower()]
-    if q:
-        query_lower = q.lower()
-        filtered = [
-            c for c in filtered
-            if query_lower in (c.get("name") or c.get("company_name") or "").lower()
-            or query_lower in (c.get("canonical_domain") or c.get("company_domain") or "").lower()
-        ]
+    svcs = get_console_services()
+    store = svcs["cand_store"]
+    lifecycle_svc = CandidateLifecycleService(store)
+
+    # 1. Authoritative queue counts across entire database without arbitrary truncation
+    queue_counts = lifecycle_svc.compute_queue_counts()
+
+    # 2. Retrieve all candidates
+    all_cands = store.list_candidates()
+
+    # Pre-collect snapshot IDs, lead register statuses, and suppression domains in bulk
+    snap_cids = set()
+    snapshot_map = {}
+    lr_map = {}
+    contact_map = {}
+    supp_domains = set()
+
+    try:
+        with store._get_connection() as conn:
+            snap_rows = conn.execute("SELECT candidate_id, snapshot_id FROM research_snapshots").fetchall()
+            for r in snap_rows:
+                snap_cids.add(r[0])
+                if r[0] not in snapshot_map:
+                    snapshot_map[r[0]] = r[1]
+
+            lr_rows = conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall()
+            for r in lr_rows:
+                lr_map[r[0]] = r[1]
+
+            cur = conn.cursor()
+            cur.execute("SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts GROUP BY candidate_id")
+            for cr in cur.fetchall():
+                contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+
+            cur.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL")
+            for sr in cur.fetchall():
+                if sr[0]:
+                    supp_domains.add(sr[0].strip().lower())
+    except Exception:
+        pass
+
+    # Also check external research cache if available
+    res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
+    if res_cache_path.exists():
+        try:
+            import sqlite3 as sq3
+            c_conn = sq3.connect(str(res_cache_path), timeout=5.0)
+            c_cur = c_conn.cursor()
+            c_cur.execute("SELECT candidate_id, snapshot_id FROM research_snapshots")
+            for cr in c_cur.fetchall():
+                snap_cids.add(cr[0])
+                if cr[0] not in snapshot_map:
+                    snapshot_map[cr[0]] = cr[1]
+            c_conn.close()
+        except Exception:
+            pass
+
+    # 3. Project each candidate and filter by lifecycle queue
+    active_queue = (queue or "active").strip().lower()
+
+    matched_candidates = []
+    for c in all_cands:
+        cid = getattr(c, "candidate_id", "") or ""
+        dom = (getattr(c, "company_domain", "") or "").strip().lower()
+        is_supp = dom in supp_domains if dom else False
+        has_snap = cid in snap_cids
+        lr_stat = lr_map.get(cid)
+
+        state = project_candidate_lifecycle(
+            cand=c,
+            has_snapshot=has_snap,
+            lead_register_status=lr_stat,
+            is_suppressed_domain=is_supp,
+        )
+
+        # Queue membership filter
+        include_in_queue = False
+        if active_queue == "active":
+            include_in_queue = state.is_active_work
+        elif active_queue == "new":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEW
+        elif active_queue == "needs_research":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEEDS_RESEARCH
+        elif active_queue == "needs_verification":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEEDS_VERIFICATION
+        elif active_queue == "needs_correction":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEEDS_CORRECTION
+        elif active_queue in ("historical_pending", "historical"):
+            include_in_queue = state.primary_queue == CandidateQueueType.HISTORICAL_PENDING
+        elif active_queue in ("all", "all_companies", "archive"):
+            include_in_queue = True
+        else:
+            # Fallback to active work
+            include_in_queue = state.is_active_work
+
+        if not include_in_queue:
+            continue
+
+        matched_candidates.append((c, state))
+
+    # 4. Secondary filters (q, status, tier, country, city)
+    filtered = []
+    for c, state in matched_candidates:
+        c_country = getattr(c, "country", None) or ""
+        c_city = getattr(c, "city", None) or ""
+        c_tier = str(getattr(c, "company_tier", None) or "").lower()
+        c_status = str(getattr(c, "discovery_status", None) or "").lower()
+        c_name = getattr(c, "company_name", None) or getattr(c, "name", "") or ""
+        c_domain = getattr(c, "company_domain", None) or getattr(c, "domain", "") or ""
+
+        if country and c_country.lower() != country.strip().lower():
+            continue
+        if city and c_city.lower() != city.strip().lower():
+            continue
+        if tier and c_tier != tier.strip().lower():
+            continue
+        if status and c_status != status.strip().lower():
+            continue
+        if q:
+            q_lower = q.strip().lower()
+            if q_lower not in c_name.lower() and q_lower not in c_domain.lower():
+                continue
+
+        filtered.append((c, state))
 
     total = len(filtered)
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     page_items = filtered[start_idx:end_idx]
 
-    # Pre-fetch snapshot status and contact counts offline for page items
-    cand_ids = [c.get("company_id") or c.get("candidate_id", "") for c in page_items if (c.get("company_id") or c.get("candidate_id"))]
-    snapshot_map = {}
-    contact_map = {}
-    if cand_ids:
-        try:
-            with svcs["cand_store"]._get_connection() as conn:
-                cur = conn.cursor()
-                # Check research_snapshots in main db
-                q_marks = ",".join(["?"] * len(cand_ids))
-                cur.execute(f"SELECT candidate_id, snapshot_id FROM research_snapshots WHERE candidate_id IN ({q_marks})", cand_ids)
-                for r in cur.fetchall():
-                    snapshot_map[r[0]] = r[1]
-
-                # Check research_cache if available
-                res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
-                if res_cache_path.exists():
-                    try:
-                        import sqlite3 as sq3
-                        c_conn = sq3.connect(str(res_cache_path), timeout=5.0)
-                        c_cur = c_conn.cursor()
-                        c_cur.execute(f"SELECT candidate_id, snapshot_id FROM research_snapshots WHERE candidate_id IN ({q_marks})", cand_ids)
-                        for cr in c_cur.fetchall():
-                            if cr[0] not in snapshot_map:
-                                snapshot_map[cr[0]] = cr[1]
-                        c_conn.close()
-                    except Exception:
-                        pass
-
-                # Check candidate_contacts
-                cur.execute(f"SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts WHERE candidate_id IN ({q_marks}) GROUP BY candidate_id", cand_ids)
-                for cr in cur.fetchall():
-                    contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
-        except Exception:
-            pass
-
     candidates: List[CandidateListItem] = []
-    for c in page_items:
-        cid = c.get("company_id") or c.get("candidate_id", "")
-        dom = c.get("canonical_domain") or c.get("company_domain") or ""
-        # Authoritative domain suppression check
-        is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
+    for c, state in page_items:
+        cid = getattr(c, "candidate_id", "") or ""
+        dom = getattr(c, "company_domain", "") or None
+        is_supp = dom.lower() in supp_domains if dom else bool(getattr(c, "suppressed", False))
 
-        raw_bim = c.get("bim_maturity")
-        bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
+        raw_bim = getattr(c, "bim_maturity", None)
+        bim_display = raw_bim.value if hasattr(raw_bim, "value") else str(raw_bim or "Unknown")
+        if bim_display.lower() == "unknown" or not bim_display.strip():
+            bim_display = "Unknown"
 
         snap_id = snapshot_map.get(cid)
         c_stats = contact_map.get(cid, (0, 0))
 
+        disc_sources = getattr(c, "source_refs", []) or []
+
         candidates.append(
             CandidateListItem(
                 candidate_id=cid,
-                company_name=c.get("name") or c.get("company_name", ""),
-                domain=dom or None,
-                country=c.get("country"),
-                city=c.get("city"),
-                tier=format_company_tier_label(c.get("company_tier")),
-                fit=c.get("fit_assessment") or c.get("fit_level"),
-                intent=c.get("intent_assessment") or c.get("intent_level"),
+                company_name=getattr(c, "company_name", "") or getattr(c, "name", "") or "Unnamed Company",
+                domain=dom,
+                country=getattr(c, "country", None),
+                city=getattr(c, "city", None),
+                tier=format_company_tier_label(getattr(c, "company_tier", None)),
+                fit=getattr(c, "fit_assessment", None) or getattr(c, "fit_level", None),
+                intent=getattr(c, "intent_assessment", None) or getattr(c, "intent_level", None),
                 bim_maturity=bim_display,
-                outsourcing_potential=c.get("outsourcing_potential"),
-                automation_potential=c.get("automation_potential"),
-                discovery_sources=c.get("discovery_sources", []),
-                status=c.get("status") or c.get("discovery_status", "new"),
-                is_previously_contacted=c.get("historical_contact_status") in ("contacted", "replied", "converted", "dnc") or c.get("historical_outreach_summary") in ("contacted", "replied", "converted", "dnc"),
+                outsourcing_potential=getattr(c, "outsourcing_potential", None),
+                automation_potential=getattr(c, "automation_potential", None),
+                discovery_sources=disc_sources,
+                status=getattr(c, "discovery_status", "new"),
+                is_previously_contacted=c.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(c, "previous_outreach_detected", False),
                 is_suppressed=is_supp,
                 has_research_snapshot=bool(snap_id),
                 snapshot_id=snap_id,
                 contact_count=c_stats[0],
                 verified_contact_count=c_stats[1],
+                lifecycle_queue=state.primary_queue.value if hasattr(state.primary_queue, "value") else str(state.primary_queue),
+                actionable_next_step=state.actionable_next_step,
+                recommended_action_url=state.recommended_action_url,
             )
         )
 
@@ -4128,6 +4208,8 @@ async def candidates_list_view(
             "tier": tier,
             "country": country,
             "city": city,
+            "current_queue": active_queue,
+            "queue_counts": queue_counts,
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
@@ -5634,8 +5716,73 @@ async def review_candidate_action(
         cand.discovery_status = DiscoveryStatus.researching
         cand.last_researched_at = now_iso
         msg = f"Candidate '{cand.name}' marked for FURTHER RESEARCH."
+    elif decision_clean in ("reopen", "reopened"):
+        cand.manual_review_decision = "REOPENED"
+        cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' explicitly REOPENED for correction in Active Work."
+    elif decision_clean in ("needs_correction", "correction"):
+        cand.manual_review_decision = "NEEDS_CORRECTION"
+        cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' marked as NEEDS CORRECTION in Active Work."
+    elif decision_clean in ("finalize_historical", "historical_finalized"):
+        cand.manual_review_decision = "HISTORICAL_FINALIZED"
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' historical outreach FINALIZED and archived."
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported review decision '{decision}'")
+
+    if note_text not in cand.qualification_reasons:
+        cand.qualification_reasons.append(note_text)
+
+    svcs["cand_store"].save_candidate(cand)
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/candidates/{candidate_id}/lifecycle")
+async def candidate_lifecycle_action(
+    candidate_id: str,
+    action: str = Form(...),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    Operator candidate lifecycle transition endpoint:
+    - 'reopen': Explicitly return candidate to Active Work (needs_correction subqueue).
+    - 'needs_correction': Explicitly mark candidate as requiring operator correction.
+    - 'finalize_historical': Reconcile and finalize historical communication, archiving from Active Work.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    action_clean = action.strip().lower()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    note_text = f"Lifecycle Action ({action_clean}): {notes.strip()}" if notes and notes.strip() else f"Lifecycle Action: {action_clean}"
+
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    if notes and notes.strip():
+        cand.manual_review_notes = notes.strip()
+
+    if action_clean in ("reopen", "reopened"):
+        cand.manual_review_decision = "REOPENED"
+        cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' explicitly REOPENED for correction in Active Work."
+    elif action_clean in ("needs_correction", "correction"):
+        cand.manual_review_decision = "NEEDS_CORRECTION"
+        cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' marked as NEEDS CORRECTION in Active Work."
+    elif action_clean in ("finalize_historical", "historical_finalized"):
+        cand.manual_review_decision = "HISTORICAL_FINALIZED"
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' historical outreach FINALIZED and archived."
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported lifecycle action '{action}'")
 
     if note_text not in cand.qualification_reasons:
         cand.qualification_reasons.append(note_text)

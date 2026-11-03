@@ -63,6 +63,10 @@ class CandidateListItem(BaseModel):
     snapshot_id: Optional[str] = None
     contact_count: int = 0
     verified_contact_count: int = 0
+    # Lifecycle Work Queue fields
+    lifecycle_queue: str = "active"  # active, new, needs_research, needs_verification, needs_correction, historical_pending, all
+    actionable_next_step: Optional[str] = None
+    recommended_action_url: Optional[str] = None
 
 
 class CandidateDetailView(BaseModel):
