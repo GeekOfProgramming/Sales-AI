@@ -231,7 +231,19 @@ class ApprovalService:
         new_recip_email = edit.recipient_email.strip().lower() if edit.recipient_email is not None else latest.recipient_email
         trusted_senders = get_trusted_senders()
         primary_trusted = trusted_senders[0] if trusted_senders else None
-        sender_email = latest.sender_email if (latest.sender_email and latest.sender_email in trusted_senders) else primary_trusted
+
+        # Resolve sender email: if operator specified a sender_email, it must be in trusted_senders!
+        if edit.sender_email is not None and edit.sender_email.strip():
+            candidate_sender = edit.sender_email.strip().lower()
+            if not trusted_senders:
+                raise ValueError("No authorized senders are configured in SMTP_FROM_EMAIL or SMTP_ALLOWED_SENDERS.")
+            if candidate_sender not in trusted_senders:
+                allowed_str = ", ".join(trusted_senders)
+                raise ValueError(f"Unauthorized sender identity: '{candidate_sender}'. Allowed senders: {allowed_str}")
+            sender_email = candidate_sender
+        else:
+            sender_email = latest.sender_email if (latest.sender_email and latest.sender_email in trusted_senders) else primary_trusted
+
         new_sender_name = (
             edit.sender_name.strip()
             if (edit.sender_name is not None and edit.sender_name.strip())

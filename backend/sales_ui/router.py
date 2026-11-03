@@ -4261,6 +4261,8 @@ async def candidate_detail_view(
     )
 
     clean_display_title = format_company_display_name(cand.company_name, cand.company_domain)
+    trusted_senders = get_trusted_senders()
+    default_sender_name = (os.environ.get("SMTP_FROM_NAME") or "pyBIM Team").strip()
 
     return render_console_template(
         request=request,
@@ -4270,6 +4272,8 @@ async def candidate_detail_view(
             "active_tab": "candidates",
             "detail": view,
             "clean_display_title": clean_display_title,
+            "trusted_senders": trusted_senders,
+            "default_sender_name": default_sender_name,
             "contacts": contacts_view,
             "verified_contacts": verified_contacts,
             "likely_contacts": likely_contacts,
@@ -5780,11 +5784,13 @@ async def create_manual_draft_action(
     contact_id: Optional[str] = Form(None),
     recipient_email: str = Form(...),
     recipient_name: Optional[str] = Form(None),
+    sender_name: Optional[str] = Form(None),
+    sender_email: Optional[str] = Form(None),
     subject: str = Form(...),
     body: str = Form(...),
     csrf: None = Depends(validate_csrf),
 ):
-    """Creates a manual draft without LLM inference, strictly enforcing unified readiness, suppression, and verified contact evidence."""
+    """Creates a manual draft without LLM inference, strictly enforcing unified readiness, suppression, verified contact evidence, and authorized sender identity."""
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -5792,6 +5798,33 @@ async def create_manual_draft_action(
 
     from sales_engine.leads.register_store import LeadRegisterStore
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+
+    # 0. Sender Identity Enforcement: must be configured and authorized
+    trusted_senders = get_trusted_senders()
+    if not trusted_senders:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=No authorized company sender configured. Please configure SMTP_FROM_EMAIL or SMTP_ALLOWED_SENDERS.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    resolved_sender_email = None
+    if sender_email and sender_email.strip():
+        candidate_sender = sender_email.strip().lower()
+        if candidate_sender not in trusted_senders:
+            allowed_str = ", ".join(trusted_senders)
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}?error=Unauthorized sender identity: '{candidate_sender}'. Allowed senders: {allowed_str}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        resolved_sender_email = candidate_sender
+    else:
+        resolved_sender_email = trusted_senders[0]
+
+    resolved_sender_name = (
+        sender_name.strip()
+        if (sender_name is not None and sender_name.strip())
+        else (os.environ.get("SMTP_FROM_NAME") or "pyBIM Team").strip()
+    )
 
     # Evaluate authoritative readiness
     readiness_info = evaluate_candidate_readiness(
@@ -5879,11 +5912,11 @@ async def create_manual_draft_action(
     # Documented Lead Register emails without explicit verification are NOT eligible to draft.
     is_verified_evidence = False
     resolved_contact_id = None
-    resolved_contact_name = recipient_name
+    resolved_contact_name = (recipient_name.strip() if recipient_name and isinstance(recipient_name, str) and recipient_name.strip() else None)
 
     if matched_contact:
         resolved_contact_id = matched_contact.contact_id
-        resolved_contact_name = resolved_contact_name or matched_contact.full_name
+        resolved_contact_name = resolved_contact_name or matched_contact.full_name or "Contact"
         st = (matched_contact.email_status or "unknown").strip().lower()
         if st == "verified":
             is_verified_evidence = True
@@ -5917,10 +5950,6 @@ async def create_manual_draft_action(
     draft_id = f"draft:manual:{uuid.uuid4().hex[:12]}"
     lead_id = f"domain:{cand_domain}" if cand_domain else candidate_id
 
-    trusted_senders = get_trusted_senders()
-    primary_sender = trusted_senders[0] if trusted_senders else (os.environ.get("SMTP_FROM_EMAIL") or "outreach@pybim-studio.com")
-    primary_sender_name = os.environ.get("SMTP_FROM_NAME") or "pyBIM Team"
-
     draft_dict = {
         "draft_id": draft_id,
         "revision": 1,
@@ -5930,8 +5959,8 @@ async def create_manual_draft_action(
         "recipient_name": resolved_contact_name or "Contact",
         "recipient_title": "Key Contact",
         "recipient_email": clean_email,
-        "sender_name": primary_sender_name,
-        "sender_email": primary_sender,
+        "sender_name": resolved_sender_name,
+        "sender_email": resolved_sender_email,
         "subject": subject.strip(),
         "body": body.strip(),
         "service_used": "Tech-Enabled BIM Services",
@@ -6555,6 +6584,8 @@ async def draft_detail_view(
         can_send=(draft.approval_status == "approved" and draft.send_status != "sent" and not is_supp),
     )
 
+    trusted_senders = get_trusted_senders()
+
     return render_console_template(
         request=request,
         name="draft_detail.html",
@@ -6563,6 +6594,7 @@ async def draft_detail_view(
             "active_tab": "drafts",
             "draft": card,
             "events": events,
+            "trusted_senders": trusted_senders,
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
@@ -6609,6 +6641,8 @@ async def edit_draft_action(
     subject: str = Form(...),
     body: str = Form(...),
     recipient_email: Optional[str] = Form(None),
+    sender_name: Optional[str] = Form(None),
+    sender_email: Optional[str] = Form(None),
     reviewer: str = Form("local_operator"),
     note: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
@@ -6627,6 +6661,8 @@ async def edit_draft_action(
         subject=subject,
         body=body,
         recipient_email=recipient_email,
+        sender_name=sender_name,
+        sender_email=sender_email,
         reviewer=reviewer,
         review_note=note,
     )
