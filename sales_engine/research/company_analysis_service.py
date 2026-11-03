@@ -478,6 +478,61 @@ def merge_field_proposals(
     return merged
 
 
+def validate_chunk_checkpoint_integrity(
+    cp: AnalysisChunkRecord,
+    expected_chunk_hash: str,
+    snapshot_checksum: str,
+    expected_provider: str,
+    expected_model: str,
+    expected_schema_version: str = "2.1.0",
+    expected_prompt_version: str = "2.1.0",
+) -> Tuple[bool, Optional[str]]:
+    """
+    P0-2: Strict revalidation of existing or legacy chunk checkpoints before reuse.
+    Verifies:
+      - Full identity contract (candidate, snapshot, checksum, hash, provider, model, schema/prompt versions)
+      - Checkpoint status == 'COMPLETED'
+      - Valid non-empty JSON proposals conforming to the 13 required fields
+      - Nested field structure (value, source_url, confidence, is_hypothesis)
+      - Finish reason is not truncated (e.g. length, max_tokens)
+    Returns (is_valid, rejection_reason).
+    """
+    if cp.status != "COMPLETED":
+        return False, f"Status is not COMPLETED ({cp.status})"
+    if cp.chunk_hash != expected_chunk_hash:
+        return False, f"Chunk content hash mismatch (cp: {cp.chunk_hash[:8]} vs planned: {expected_chunk_hash[:8]})"
+    if cp.snapshot_checksum != snapshot_checksum:
+        return False, "Snapshot content checksum mismatch"
+    if cp.provider != expected_provider:
+        return False, f"Provider mismatch ({cp.provider} vs {expected_provider})"
+    if cp.model != expected_model:
+        return False, f"Model mismatch ({cp.model} vs {expected_model})"
+    if cp.schema_version != expected_schema_version or cp.prompt_version != expected_prompt_version:
+        return False, f"Extraction contract version mismatch (schema {cp.schema_version}, prompt {cp.prompt_version})"
+
+    # Check raw_response finish metadata if available in error_message or raw text
+    err_lower = (cp.error_message or "").lower()
+    if "truncated" in err_lower or "finish_reason: length" in err_lower or "finish_reason: max_tokens" in err_lower:
+        return False, "Checkpoint output was truncated by provider"
+
+    # Validate proposed fields JSON
+    pf = cp.proposed_fields
+    if not isinstance(pf, dict) or not pf:
+        return False, "Checkpoint proposed_fields is empty or malformed"
+
+    required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
+    missing_fields = [
+        f for f in required_13
+        if f not in pf
+        or not isinstance(pf[f], dict)
+        or not all(k in pf[f] for k in ("value", "source_url", "confidence", "is_hypothesis"))
+    ]
+    if missing_fields:
+        return False, f"Checkpoint proposed_fields missing or malformed required fields: {missing_fields}"
+
+    return True, None
+
+
 def verify_field_evidence_excerpts(
     snapshot: ResearchSnapshot,
     proposed_fields: Dict[str, Any],
@@ -576,6 +631,7 @@ def execute_company_analysis(
     auth_token: Optional[str] = None,
     require_auth: bool = False,
     max_approved_budget_usd: Optional[float] = None,
+    chunk_size_chars: int = 40_000,
 ) -> CompanyAnalysisRecord:
     """
     Analyzes an existing immutable ResearchSnapshot using the LLM Gateway.
@@ -705,7 +761,7 @@ def execute_company_analysis(
             return rec
 
     # 4. Multi-pass Chunking: Partition all eligible pages (P0-B)
-    chunks, eligible_pages, omitted_reasons = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
+    chunks, eligible_pages, omitted_reasons = partition_snapshot_into_chunks(snapshot, chunk_size_chars=chunk_size_chars)
 
     if not chunks:
         rec = CompanyAnalysisRecord(
@@ -778,25 +834,41 @@ def execute_company_analysis(
     executed_chunks_count = 0
     resumed_chunks_count = 0
 
-    # Hydrate completed checkpoints first
+    # Hydrate and strictly revalidate completed checkpoints first (P0-2)
+    valid_reusable_chunks = set()
     for c in chunks:
         c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
         cp = checkpoint_map.get((c["chunk_index"], c_hash))
-        if cp and cp.status == "COMPLETED" and cp.snapshot_checksum == snapshot.content_checksum:
-            logger.info(f"Resuming analysis: chunk {c['chunk_index']} already completed (hash: {c_hash[:8]}).")
-            resumed_chunks_count += 1
-            total_input_tokens += (cp.input_tokens or 0)
-            total_output_tokens += (cp.output_tokens or 0)
-            if cp.raw_response:
-                raw_responses.append(cp.raw_response)
-            if cp.proposed_fields:
-                aggregated_proposals = merge_field_proposals(aggregated_proposals, cp.proposed_fields)
+        if cp and cp.status == "COMPLETED":
+            is_valid, reject_reason = validate_chunk_checkpoint_integrity(
+                cp=cp,
+                expected_chunk_hash=c_hash,
+                snapshot_checksum=snapshot.content_checksum,
+                expected_provider=pid,
+                expected_model=effective_model,
+                expected_schema_version=SCHEMA_VERSION,
+                expected_prompt_version=PROMPT_VERSION,
+            )
+            if is_valid:
+                logger.info(f"Resuming analysis: chunk {c['chunk_index']} valid and verified (hash: {c_hash[:8]}).")
+                valid_reusable_chunks.add((c["chunk_index"], c_hash))
+                resumed_chunks_count += 1
+                total_input_tokens += (cp.input_tokens or 0)
+                total_output_tokens += (cp.output_tokens or 0)
+                if cp.raw_response:
+                    raw_responses.append(cp.raw_response)
+                if cp.proposed_fields:
+                    aggregated_proposals = merge_field_proposals(aggregated_proposals, cp.proposed_fields)
+            else:
+                logger.warning(
+                    f"Rejecting historical completed checkpoint for chunk {c['chunk_index']}: {reject_reason}. "
+                    f"Will re-execute chunk."
+                )
 
     for c in chunks:
         c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
-        cp = checkpoint_map.get((c["chunk_index"], c_hash))
-        # Skip if already completed with identical checksum and contract
-        if cp and cp.status == "COMPLETED" and cp.snapshot_checksum == snapshot.content_checksum:
+        # Skip if already verified as valid completed chunk
+        if (c["chunk_index"], c_hash) in valid_reusable_chunks:
             continue
 
         # Enforce provider-call ceiling
@@ -1046,8 +1118,8 @@ def execute_company_analysis(
     # Apply strict source evidence verification (P0-C)
     final_fields = verify_field_evidence_excerpts(snapshot, aggregated_proposals)
 
-    # Check for complete coverage of all planned chunks (P0-2)
-    # Re-query all valid COMPLETED checkpoints strictly matching the active execution contract
+    # Check for complete coverage of all planned chunks (P0-3)
+    # Re-query all checkpoints strictly matching the active execution contract
     final_checkpoints = store.get_chunk_checkpoints(
         candidate_id=candidate_id,
         snapshot_id=snapshot.snapshot_id,
@@ -1057,11 +1129,37 @@ def execute_company_analysis(
         prompt_version=PROMPT_VERSION,
         snapshot_checksum=snapshot.content_checksum,
     )
-    completed_checkpoint_indices = {
-        cp.chunk_index for cp in final_checkpoints if cp.status == "COMPLETED"
+    final_cp_map = {
+        (cp.chunk_index, cp.chunk_hash): cp
+        for cp in final_checkpoints
+        if cp.provider == pid
+        and cp.model == effective_model
+        and cp.schema_version == SCHEMA_VERSION
+        and cp.prompt_version == PROMPT_VERSION
+        and cp.snapshot_checksum == snapshot.content_checksum
     }
-    all_chunk_indices = {c["chunk_index"] for c in chunks}
-    completed_chunks_count = len(completed_checkpoint_indices & all_chunk_indices)
+
+    # Only count a planned chunk as genuinely completed when its full identity matches:
+    # chunk_index, chunk_hash, snapshot_checksum, provider, model, schema/prompt versions,
+    # AND satisfies strict output revalidation.
+    genuinely_completed_chunk_indices = set()
+    for c in chunks:
+        c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
+        cp = final_cp_map.get((c["chunk_index"], c_hash))
+        if cp and cp.status == "COMPLETED":
+            is_valid, _ = validate_chunk_checkpoint_integrity(
+                cp=cp,
+                expected_chunk_hash=c_hash,
+                snapshot_checksum=snapshot.content_checksum,
+                expected_provider=pid,
+                expected_model=effective_model,
+                expected_schema_version=SCHEMA_VERSION,
+                expected_prompt_version=PROMPT_VERSION,
+            )
+            if is_valid:
+                genuinely_completed_chunk_indices.add(c["chunk_index"])
+
+    completed_chunks_count = len(genuinely_completed_chunk_indices)
     pending_chunks_count = len(chunks) - completed_chunks_count
 
     if completed_chunks_count < len(chunks):
@@ -1072,7 +1170,7 @@ def execute_company_analysis(
     # Calculate actual pages covered by completed chunks
     covered_urls = set()
     for c in chunks:
-        if c["chunk_index"] in completed_checkpoint_indices:
+        if c["chunk_index"] in genuinely_completed_chunk_indices:
             covered_urls.update(c.get("urls", []))
     covered_pages_count = sum(1 for p in eligible_pages if (p.resolved_url in covered_urls or p.requested_url in covered_urls))
     coverage_pct = round((covered_pages_count / len(eligible_pages) * 100.0), 1) if eligible_pages else 0.0

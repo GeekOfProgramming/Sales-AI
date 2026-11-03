@@ -4319,7 +4319,10 @@ async def candidate_research_view(
     )
 
     # Query chunk stats for latest analysis if present
-    chunk_stats = {"completed": 0, "failed": 0, "uncertain": 0, "remaining": 0, "total": 0, "can_resume": False}
+    chunk_stats = {
+        "completed": 0, "failed": 0, "uncertain": 0, "remaining": 0,
+        "total": 0, "can_resume": False, "can_retry_first_chunk": False
+    }
     if latest_snapshot and latest_analysis:
         all_checkpoints = snap_store.get_chunk_checkpoints(
             candidate_id=candidate_id,
@@ -4340,6 +4343,7 @@ async def candidate_research_view(
             "remaining": c_rem,
             "total": total_p,
             "can_resume": (c_done > 0 and c_rem > 0 and latest_analysis.status != "SUCCESS"),
+            "can_retry_first_chunk": (c_done == 0 and c_unc > 0 and latest_analysis.status in ("TIMEOUT", "FAILED")),
         }
 
     return render_console_template(

@@ -77,6 +77,33 @@ class AnalysisChunkRecord:
 
 
 @dataclass
+class AnalysisChunkAttemptRecord:
+    """Historical audit record for each attempted chunk invocation."""
+    attempt_id: str
+    chunk_record_id: str
+    analysis_id: str
+    candidate_id: str
+    snapshot_id: str
+    snapshot_checksum: str
+    chunk_index: int
+    total_chunks: int
+    chunk_hash: str
+    provider: str
+    model: str
+    schema_version: str
+    prompt_version: str
+    status: str
+    created_at: str
+    completed_at: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    cost_estimate: Optional[float] = None
+    raw_response: Optional[str] = None
+    proposed_fields: Dict[str, Any] = field(default_factory=dict)
+    error_message: Optional[str] = None
+
+
+@dataclass
 class CompanyAnalysisRecord:
     """Durable record of an LLM analysis execution linked to a research snapshot."""
     analysis_id: str
@@ -230,6 +257,38 @@ class ResearchSnapshotStore:
                 CREATE INDEX IF NOT EXISTS idx_chunk_candidate_snapshot
                     ON analysis_chunk_checkpoints (candidate_id, snapshot_id);
 
+                CREATE TABLE IF NOT EXISTS analysis_chunk_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    chunk_record_id TEXT NOT NULL,
+                    analysis_id TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL,
+                    snapshot_id TEXT NOT NULL,
+                    snapshot_checksum TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    total_chunks INTEGER NOT NULL,
+                    chunk_hash TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    prompt_version TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    input_tokens INTEGER,
+                    output_tokens INTEGER,
+                    cost_estimate REAL,
+                    raw_response TEXT,
+                    proposed_fields_json TEXT NOT NULL,
+                    error_message TEXT,
+                    FOREIGN KEY (snapshot_id) REFERENCES research_snapshots(snapshot_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_attempts_candidate_snapshot
+                    ON analysis_chunk_attempts (candidate_id, snapshot_id, chunk_index ASC);
+
+                CREATE INDEX IF NOT EXISTS idx_attempts_chunk_hash
+                    ON analysis_chunk_attempts (candidate_id, chunk_hash, created_at DESC);
+
                 CREATE TABLE IF NOT EXISTS company_analysis_records (
                     analysis_id TEXT PRIMARY KEY,
                     candidate_id TEXT NOT NULL,
@@ -271,6 +330,116 @@ class ResearchSnapshotStore:
             if "omitted_pages_reasons_json" not in cols_analysis:
                 conn.execute("ALTER TABLE company_analysis_records ADD COLUMN omitted_pages_reasons_json TEXT;")
             conn.commit()
+
+            # Execute transactional migration for analysis_chunk_checkpoints schema & constraints
+            self._migrate_chunk_checkpoints_table(conn)
+
+    def _migrate_chunk_checkpoints_table(self, conn: sqlite3.Connection) -> None:
+        """
+        Transactional, versioned SQLite migration for analysis_chunk_checkpoints.
+        Ensures the table has the complete contract identity unique constraint:
+        UNIQUE(candidate_id, snapshot_id, snapshot_checksum, chunk_index, chunk_hash, provider, model, schema_version, prompt_version)
+        Preserves all historical rows, backs them up prior to table rebuild, and safely rolls back on any error.
+        """
+        tbl_info = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='analysis_chunk_checkpoints';").fetchone()
+        if not tbl_info:
+            return
+
+        expected_cols = {
+            "chunk_record_id", "analysis_id", "candidate_id", "snapshot_id", "snapshot_checksum",
+            "chunk_index", "total_chunks", "chunk_hash", "provider", "model", "schema_version",
+            "prompt_version", "status", "created_at", "completed_at", "input_tokens",
+            "output_tokens", "cost_estimate", "raw_response", "proposed_fields_json", "error_message"
+        }
+        current_cols = {r[1] for r in conn.execute("PRAGMA table_info(analysis_chunk_checkpoints);").fetchall()}
+
+        expected_unique = [
+            "candidate_id", "snapshot_id", "snapshot_checksum", "chunk_index",
+            "chunk_hash", "provider", "model", "schema_version", "prompt_version"
+        ]
+        has_correct_unique = False
+        idx_list = conn.execute("PRAGMA index_list(analysis_chunk_checkpoints);").fetchall()
+        for idx in idx_list:
+            if idx[2]:  # unique == 1
+                cols = [c[2] for c in conn.execute(f"PRAGMA index_info('{idx[1]}');").fetchall()]
+                if cols == expected_unique:
+                    has_correct_unique = True
+                    break
+
+        # If columns and uniqueness match, no migration needed
+        if expected_cols.issubset(current_cols) and has_correct_unique:
+            return
+
+        logger.info("Migrating analysis_chunk_checkpoints to V2.2.2 full contract identity schema...")
+
+        # 1. Back up existing table outside main DDL transaction so backup is retained
+        with conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS _backup_analysis_chunk_checkpoints AS SELECT * FROM analysis_chunk_checkpoints;")
+
+        # 2. Transactional rebuild with foreign_keys = OFF during swap
+        conn.execute("PRAGMA foreign_keys = OFF;")
+        try:
+            with conn:
+                conn.execute("""
+                    CREATE TABLE analysis_chunk_checkpoints_v222 (
+                        chunk_record_id TEXT PRIMARY KEY,
+                        analysis_id TEXT NOT NULL,
+                        candidate_id TEXT NOT NULL,
+                        snapshot_id TEXT NOT NULL,
+                        snapshot_checksum TEXT NOT NULL,
+                        chunk_index INTEGER NOT NULL,
+                        total_chunks INTEGER NOT NULL,
+                        chunk_hash TEXT NOT NULL,
+                        provider TEXT NOT NULL,
+                        model TEXT NOT NULL,
+                        schema_version TEXT NOT NULL,
+                        prompt_version TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        completed_at TEXT,
+                        input_tokens INTEGER,
+                        output_tokens INTEGER,
+                        cost_estimate REAL,
+                        raw_response TEXT,
+                        proposed_fields_json TEXT NOT NULL,
+                        error_message TEXT,
+                        FOREIGN KEY (snapshot_id) REFERENCES research_snapshots(snapshot_id) ON DELETE CASCADE,
+                        UNIQUE(candidate_id, snapshot_id, snapshot_checksum, chunk_index, chunk_hash, provider, model, schema_version, prompt_version)
+                    );
+                """)
+
+                # Copy existing data safely, supplying defaults for any newly introduced columns
+                common_cols = [c for c in [
+                    "chunk_record_id", "analysis_id", "candidate_id", "snapshot_id", "snapshot_checksum",
+                    "chunk_index", "total_chunks", "chunk_hash", "provider", "model", "schema_version",
+                    "prompt_version", "status", "created_at", "completed_at", "input_tokens",
+                    "output_tokens", "cost_estimate", "raw_response", "proposed_fields_json", "error_message"
+                ] if c in current_cols]
+
+                cols_clause = ", ".join(common_cols)
+                conn.execute(f"""
+                    INSERT INTO analysis_chunk_checkpoints_v222 ({cols_clause})
+                    SELECT {cols_clause} FROM analysis_chunk_checkpoints;
+                """)
+
+                conn.execute("DROP TABLE analysis_chunk_checkpoints;")
+                conn.execute("ALTER TABLE analysis_chunk_checkpoints_v222 RENAME TO analysis_chunk_checkpoints;")
+
+                # Recreate auxiliary indexes
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_chunk_analysis
+                        ON analysis_chunk_checkpoints (analysis_id, chunk_index ASC);
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_chunk_candidate_snapshot
+                        ON analysis_chunk_checkpoints (candidate_id, snapshot_id);
+                """)
+            logger.info("Successfully migrated analysis_chunk_checkpoints table to V2.2.2.")
+        except Exception as e:
+            logger.error(f"Migration of analysis_chunk_checkpoints failed, rolled back: {e}", exc_info=True)
+            raise
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON;")
 
     def create_snapshot(
         self,
@@ -544,7 +713,10 @@ class ResearchSnapshotStore:
         }
 
     def save_chunk_checkpoint(self, record: AnalysisChunkRecord) -> None:
-        """Persist or update an analysis chunk execution checkpoint."""
+        """
+        Persist or update an analysis chunk execution checkpoint,
+        and append an immutable audit record to analysis_chunk_attempts.
+        """
         with self._get_connection() as conn:
             conn.execute(
                 """
@@ -580,7 +752,99 @@ class ResearchSnapshotStore:
                     record.error_message,
                 ),
             )
+
+            # Append to immutable attempts history
+            attempt_id = f"att_{uuid.uuid4().hex[:16]}"
+            conn.execute(
+                """
+                INSERT INTO analysis_chunk_attempts (
+                    attempt_id, chunk_record_id, analysis_id, candidate_id,
+                    snapshot_id, snapshot_checksum, chunk_index, total_chunks,
+                    chunk_hash, provider, model, schema_version, prompt_version,
+                    status, created_at, completed_at, input_tokens, output_tokens,
+                    cost_estimate, raw_response, proposed_fields_json, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    attempt_id,
+                    record.chunk_record_id,
+                    record.analysis_id,
+                    record.candidate_id,
+                    record.snapshot_id,
+                    record.snapshot_checksum,
+                    record.chunk_index,
+                    record.total_chunks,
+                    record.chunk_hash,
+                    record.provider,
+                    record.model,
+                    record.schema_version,
+                    record.prompt_version,
+                    record.status,
+                    record.created_at,
+                    record.completed_at,
+                    record.input_tokens,
+                    record.output_tokens,
+                    record.cost_estimate,
+                    record.raw_response,
+                    json.dumps(record.proposed_fields, ensure_ascii=False),
+                    record.error_message,
+                ),
+            )
             conn.commit()
+
+    def list_chunk_attempts(
+        self,
+        candidate_id: str,
+        snapshot_id: Optional[str] = None,
+        chunk_hash: Optional[str] = None,
+    ) -> List[AnalysisChunkAttemptRecord]:
+        """Retrieve audit history of chunk attempts."""
+        with self._get_connection() as conn:
+            query = "SELECT * FROM analysis_chunk_attempts WHERE candidate_id = ?"
+            params: List[Any] = [candidate_id]
+            if snapshot_id:
+                query += " AND snapshot_id = ?"
+                params.append(snapshot_id)
+            if chunk_hash:
+                query += " AND chunk_hash = ?"
+                params.append(chunk_hash)
+            query += " ORDER BY created_at ASC;"
+            rows = conn.execute(query, tuple(params)).fetchall()
+            attempts = []
+            for r in rows:
+                pf = {}
+                if r["proposed_fields_json"]:
+                    try:
+                        pf = json.loads(r["proposed_fields_json"])
+                    except Exception:
+                        pass
+                attempts.append(
+                    AnalysisChunkAttemptRecord(
+                        attempt_id=r["attempt_id"],
+                        chunk_record_id=r["chunk_record_id"],
+                        analysis_id=r["analysis_id"],
+                        candidate_id=r["candidate_id"],
+                        snapshot_id=r["snapshot_id"],
+                        snapshot_checksum=r["snapshot_checksum"],
+                        chunk_index=r["chunk_index"],
+                        total_chunks=r["total_chunks"],
+                        chunk_hash=r["chunk_hash"],
+                        provider=r["provider"],
+                        model=r["model"],
+                        schema_version=r["schema_version"],
+                        prompt_version=r["prompt_version"],
+                        status=r["status"],
+                        created_at=r["created_at"],
+                        completed_at=r["completed_at"],
+                        input_tokens=r["input_tokens"],
+                        output_tokens=r["output_tokens"],
+                        cost_estimate=r["cost_estimate"],
+                        raw_response=r["raw_response"],
+                        proposed_fields=pf,
+                        error_message=r["error_message"],
+                    )
+                )
+            return attempts
 
     def get_chunk_checkpoints(
         self,

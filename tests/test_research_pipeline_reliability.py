@@ -22,6 +22,7 @@ ALL TESTS ARE 100% OFFLINE. ZERO LIVE CRAWLING. ZERO PAID API CALLS.
 import os
 import json
 import uuid
+import hashlib
 import tempfile
 import asyncio
 from unittest.mock import MagicMock, patch
@@ -586,3 +587,345 @@ def test_14_operational_data_not_modified_by_tests(tmp_path):
     assert saved is not None
     assert saved.company_name == "STC S.r.l. - Studio Tecnico Cavallaro"
     assert saved.verification_status == "OPERATOR_REVIEWED"
+
+
+# ---------------------------------------------------------------------------
+# 15. V2.2.2: Existing V2.2 database migrates without losing data
+# ---------------------------------------------------------------------------
+def test_15_v22_database_migrates_safely_preserving_data(tmp_path):
+    import sqlite3
+    db_file = tmp_path / "v22_legacy.sqlite3"
+
+    # Create real V2.2 SQLite schema fixture
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("""
+        CREATE TABLE research_snapshots (
+            snapshot_id TEXT PRIMARY KEY,
+            candidate_id TEXT NOT NULL,
+            canonical_domain TEXT NOT NULL,
+            company_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            crawler_version TEXT NOT NULL,
+            parser_version TEXT NOT NULL,
+            dataset_schema_version TEXT NOT NULL,
+            research_status TEXT NOT NULL,
+            pages_attempted INTEGER NOT NULL DEFAULT 0,
+            pages_succeeded INTEGER NOT NULL DEFAULT 0,
+            content_checksum TEXT NOT NULL,
+            diagnostic_info TEXT
+        );
+    """)
+    conn.execute("""
+        CREATE TABLE analysis_chunk_checkpoints (
+            chunk_record_id TEXT PRIMARY KEY,
+            analysis_id TEXT NOT NULL,
+            candidate_id TEXT NOT NULL,
+            snapshot_id TEXT NOT NULL,
+            snapshot_checksum TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            total_chunks INTEGER NOT NULL,
+            chunk_hash TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            schema_version TEXT NOT NULL,
+            prompt_version TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            cost_estimate REAL,
+            raw_response TEXT,
+            proposed_fields_json TEXT NOT NULL,
+            error_message TEXT,
+            UNIQUE(candidate_id, snapshot_id, chunk_hash, model)
+        );
+    """)
+    conn.execute("""
+        CREATE TABLE company_analysis_records (
+            analysis_id TEXT PRIMARY KEY,
+            candidate_id TEXT NOT NULL,
+            snapshot_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            status TEXT NOT NULL,
+            proposed_fields_json TEXT NOT NULL,
+            raw_response_text TEXT,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            cost_estimate REAL,
+            diagnostic_info TEXT,
+            analyzed_pages_count INTEGER DEFAULT 0,
+            chunks_count INTEGER DEFAULT 0,
+            omitted_pages_count INTEGER DEFAULT 0,
+            provider_calls_count INTEGER DEFAULT 0,
+            omitted_pages_reasons_json TEXT
+        );
+    """)
+
+    # Insert historical V2.2 records
+    conn.execute("""
+        INSERT INTO analysis_chunk_checkpoints VALUES (
+            'chk_v22_01', 'an_v22', 'cand:domain:energymep.it', 'snap_v22', 'cs_v22',
+            0, 1, 'hash_v22', 'gemini', 'gemini-3.5-flash-lite', '2.1.0', '2.1.0',
+            'COMPLETED', '2026-11-02T12:00:00Z', '2026-11-02T12:00:05Z', 500, 200, 0.001,
+            '{"company_name": "Energymep"}', '{"company_name": {"value": "Energymep", "source_url": "https://energymep.it/", "confidence": 1.0, "is_hypothesis": false}}',
+            NULL
+        );
+    """)
+    conn.execute("""
+        INSERT INTO company_analysis_records (analysis_id, candidate_id, snapshot_id, provider, model, created_at, status, proposed_fields_json)
+        VALUES ('an_v22', 'cand:domain:energymep.it', 'snap_v22', 'gemini', 'gemini-3.5-flash-lite', '2026-11-02T12:00:00Z', 'SUCCESS', '{}');
+    """)
+    conn.commit()
+    conn.close()
+
+    # Now open with ResearchSnapshotStore (triggers migration)
+    store = ResearchSnapshotStore(db_path=str(db_file))
+
+    # Verify migration succeeded and data was preserved
+    chk = store.get_chunk_checkpoint_by_hash(
+        candidate_id="cand:domain:energymep.it",
+        snapshot_id="snap_v22",
+        chunk_hash="hash_v22",
+        model="gemini-3.5-flash-lite",
+        provider="gemini",
+        schema_version="2.1.0",
+        prompt_version="2.1.0",
+        snapshot_checksum="cs_v22",
+    )
+    assert chk is not None
+    assert chk.chunk_record_id == "chk_v22_01"
+    assert chk.status == "COMPLETED"
+
+    # Verify backup table exists
+    with store._get_connection() as c:
+        bk_count = c.execute("SELECT COUNT(*) FROM _backup_analysis_chunk_checkpoints;").fetchone()[0]
+        assert bk_count == 1
+        an_count = c.execute("SELECT COUNT(*) FROM company_analysis_records;").fetchone()[0]
+        assert an_count == 1
+
+        # Verify new unique constraint schema
+        expected_unique = [
+            "candidate_id", "snapshot_id", "snapshot_checksum", "chunk_index",
+            "chunk_hash", "provider", "model", "schema_version", "prompt_version"
+        ]
+        has_v222_unique = False
+        for idx in c.execute("PRAGMA index_list(analysis_chunk_checkpoints);").fetchall():
+            if idx[2]:
+                cols = [col[2] for col in c.execute(f"PRAGMA index_info('{idx[1]}');").fetchall()]
+                if cols == expected_unique:
+                    has_v222_unique = True
+                    break
+        assert has_v222_unique is True
+
+
+# ---------------------------------------------------------------------------
+# 16. V2.2.2: Revalidation of legacy COMPLETED checkpoints
+# ---------------------------------------------------------------------------
+def test_16_revalidation_of_legacy_completed_checkpoints(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_revalidate.db"))
+    snapshot = _create_test_snapshot(store, "snap_revalidate", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+
+    chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
+    c0 = chunks[0]
+    c0_hash = hashlib.sha256(c0["text"].encode("utf-8")).hexdigest()
+
+    # Create a legacy malformed COMPLETED checkpoint (missing 12 of 13 fields)
+    malformed_fields = {
+        "company_name": {"value": "Renerwave", "source_url": "https://renerwave.com/", "confidence": 1.0, "is_hypothesis": False}
+    }
+    legacy_chk = AnalysisChunkRecord(
+        chunk_record_id="chk_legacy_malformed",
+        analysis_id="an_legacy",
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_id=snapshot.snapshot_id,
+        snapshot_checksum=snapshot.content_checksum,
+        chunk_index=c0["chunk_index"],
+        total_chunks=len(chunks),
+        chunk_hash=c0_hash,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        schema_version="2.1.0",
+        prompt_version="2.1.0",
+        status="COMPLETED",
+        created_at="2026-11-02T12:00:00Z",
+        completed_at="2026-11-02T12:00:05Z",
+        input_tokens=400,
+        output_tokens=100,
+        cost_estimate=0.001,
+        raw_response=json.dumps(malformed_fields),
+        proposed_fields=malformed_fields,
+        error_message=None,
+    )
+    store.save_chunk_checkpoint(legacy_chk)
+
+    # Execute company analysis with a mock gateway that supplies a valid 13-field response
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        content=json.dumps(_dummy_13_field_response(1)),
+        model="gemini-3.5-flash-lite",
+        provider="gemini",
+        task_id="analysis",
+        request_id="r_fresh",
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+    )
+
+    # Because legacy checkpoint was malformed, it was NOT reused; mock_gw was called!
+    assert mock_gw.generate.call_count >= 1
+    assert rec.status == "SUCCESS"
+
+
+# ---------------------------------------------------------------------------
+# 17. V2.2.2: Chunk hash mismatch cannot count toward final coverage
+# ---------------------------------------------------------------------------
+def test_17_chunk_hash_mismatch_cannot_count_toward_final_coverage(tmp_path):
+    """
+    15 planned chunks.
+    5 valid completed chunks.
+    10 stale COMPLETED records with mismatched hashes.
+    Ceiling allows 5 calls.
+    Final status MUST be INCOMPLETE, not SUCCESS.
+    Covered pages MUST reflect only genuinely completed chunks.
+    """
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_hash_mismatch.db"))
+    # Create snapshot with 15 pages
+    snapshot = _create_test_snapshot(store, "snap_15_chunks", "cand:domain:renerwave.com", "renerwave.com", 15, chunk_text_multiplier=100)
+    p_len = len(snapshot.pages[0].cleaned_text)
+    test_chunk_size = p_len + 100
+    chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=test_chunk_size)
+    assert len(chunks) == 15
+
+    # 1. Store 5 valid completed checkpoints for chunks 0..4
+    for i in range(5):
+        c = chunks[i]
+        c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
+        valid_chk = AnalysisChunkRecord(
+            chunk_record_id=f"chk_valid_{i}",
+            analysis_id="an_valid",
+            candidate_id="cand:domain:renerwave.com",
+            snapshot_id=snapshot.snapshot_id,
+            snapshot_checksum=snapshot.content_checksum,
+            chunk_index=c["chunk_index"],
+            total_chunks=15,
+            chunk_hash=c_hash,
+            provider="gemini",
+            model="gemini-3.5-flash-lite",
+            schema_version="2.1.0",
+            prompt_version="2.1.0",
+            status="COMPLETED",
+            created_at="2026-11-03T10:00:00Z",
+            completed_at="2026-11-03T10:00:05Z",
+            input_tokens=300,
+            output_tokens=150,
+            cost_estimate=0.001,
+            raw_response=json.dumps(_dummy_13_field_response(1)),
+            proposed_fields=_dummy_13_field_response(1),
+            error_message=None,
+        )
+        store.save_chunk_checkpoint(valid_chk)
+
+    # 2. Store 10 stale COMPLETED checkpoints for chunks 5..14 with MISMATCHED hashes
+    for i in range(5, 15):
+        c = chunks[i]
+        stale_hash = f"stale_mismatched_hash_{i}"
+        stale_chk = AnalysisChunkRecord(
+            chunk_record_id=f"chk_stale_{i}",
+            analysis_id="an_stale",
+            candidate_id="cand:domain:renerwave.com",
+            snapshot_id=snapshot.snapshot_id,
+            snapshot_checksum=snapshot.content_checksum,
+            chunk_index=c["chunk_index"],
+            total_chunks=15,
+            chunk_hash=stale_hash,
+            provider="gemini",
+            model="gemini-3.5-flash-lite",
+            schema_version="2.1.0",
+            prompt_version="2.1.0",
+            status="COMPLETED",
+            created_at="2026-11-02T10:00:00Z",
+            completed_at="2026-11-02T10:00:05Z",
+            input_tokens=300,
+            output_tokens=150,
+            cost_estimate=0.001,
+            raw_response=json.dumps(_dummy_13_field_response(1)),
+            proposed_fields=_dummy_13_field_response(1),
+            error_message=None,
+        )
+        store.save_chunk_checkpoint(stale_chk)
+
+    # 3. Execute analysis with chunk_size_chars=test_chunk_size.
+    # Since chunks 5..14 have mismatched hashes, they cannot be reused.
+    # Provider ceiling of 5 calls will allow analyzing chunks 5..9 (5 calls executed).
+    # Chunks 10..14 remain pending.
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        content=json.dumps(_dummy_13_field_response(1)),
+        model="gemini-3.5-flash-lite",
+        provider="gemini",
+        task_id="analysis",
+        request_id="r_call",
+        finish_reason="stop",
+    )
+
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+        chunk_size_chars=test_chunk_size,
+    )
+
+    # Final status MUST be INCOMPLETE because not all 15 chunks completed
+    assert rec.status == "INCOMPLETE"
+    assert rec.analyzed_pages_count < 15
+    assert rec.provider_calls_count == 5  # Ceiling hit
+    assert "Incomplete analysis" in rec.diagnostic_info or "ceiling" in rec.diagnostic_info
+
+
+# ---------------------------------------------------------------------------
+# 18. V2.2.2: Append-only attempt history survives retry and restart
+# ---------------------------------------------------------------------------
+def test_18_attempt_history_survives_retry_and_restart(tmp_path):
+    db_file = tmp_path / "test_history.db"
+    store = ResearchSnapshotStore(db_path=str(db_file))
+    snapshot = _create_test_snapshot(store, "snap_hist", "cand:domain:renerwave.com", "renerwave.com", 1, chunk_text_multiplier=10)
+
+    # Attempt 1: Times out
+    auth_token_1 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw_1 = MagicMock()
+    mock_gw_1.generate.side_effect = LLMTimeoutError("Read timeout", timeout_category="READ_TIMEOUT")
+    rec_1 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_1, auth_token=auth_token_1, require_auth=True)
+    assert rec_1.status == "TIMEOUT"
+
+    # Attempt 2: Succeeds on retry
+    auth_token_2 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw_2 = MagicMock()
+    mock_gw_2.generate.return_value = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r2")
+    rec_2 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_2, auth_token=auth_token_2, require_auth=True)
+    assert rec_2.status == "SUCCESS"
+
+    # Simulate restart by instantiating new store
+    store_restarted = ResearchSnapshotStore(db_path=str(db_file))
+    attempts = store_restarted.list_chunk_attempts("cand:domain:renerwave.com", snapshot_id=snapshot.snapshot_id)
+    assert len(attempts) >= 2
+
+    # Check statuses recorded in order
+    statuses = [a.status for a in attempts]
+    assert "UNCERTAIN_TIMEOUT" in statuses
+    assert "COMPLETED" in statuses
