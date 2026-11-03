@@ -236,6 +236,101 @@ def is_suspect_job_advertisement_url(url_str: Optional[str]) -> bool:
             return True
     return False
 
+
+def is_safe_and_valid_evidence_reference(
+    source_url: str,
+    source_classification: str,
+    candidate_domain: str,
+    field_name: str,
+) -> Tuple[bool, str]:
+    """
+    Validates manual evidence reference URLs with SSRF protections and domain checks.
+    - Scheme: http or https only.
+    - Length: maximum 2048 chars.
+    - Host: valid, resolvable syntax, no localhost, no loopback, no private IPs.
+    - Source classification:
+        * 'official_website': requires canonical domain matching with candidate_domain.
+        * 'independent_external': legitimate authoritative external URLs (e.g. registry, LinkedIn, press).
+          Note: official_website field itself cannot point to an external source.
+    """
+    import ipaddress
+    if not source_url or not isinstance(source_url, str):
+        return False, "Manual verification requires a valid source URL."
+    clean_url = source_url.strip()
+    if len(clean_url) > 2048:
+        return False, "Source URL exceeds maximum allowed length of 2048 characters."
+    if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+        return False, "Source URL must use http:// or https:// scheme."
+    try:
+        parsed = urlparse(clean_url)
+    except Exception as e:
+        return False, f"Malformed Source URL: {e}"
+    if parsed.scheme.lower() not in ("http", "https"):
+        return False, "Source URL must use http:// or https:// scheme."
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        return False, "Source URL must contain a valid domain host."
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        return False, f"Local/loopback evidence URL host '{host}' is not permitted."
+    if host.endswith(".local") or host.endswith(".internal") or host.endswith(".onion"):
+        return False, f"Internal/non-routable evidence URL host '{host}' is not permitted."
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+            return False, f"Private or local IP address '{host}' is not permitted as evidence source."
+    except ValueError:
+        pass
+    if "." not in host:
+        return False, f"Invalid hostname '{host}' (must contain top-level domain)."
+
+    norm_class = (source_classification or "official_website").strip().lower()
+    cand_dom = (candidate_domain or "").strip().lower()
+    if norm_class in ("official_website", "official", "company_website"):
+        if not cand_dom:
+            return False, "Candidate has no official domain recorded to validate official company source."
+        if host != cand_dom and not host.endswith("." + cand_dom):
+            return False, f"Source URL '{clean_url}' does not belong to candidate official domain '{cand_dom}'."
+    elif norm_class in ("independent_external", "external", "external_source", "registry", "press", "directory"):
+        if field_name == "official_website":
+            return False, "The official_website field must point to the candidate's own official domain, not an external source."
+    else:
+        return False, f"Invalid source classification: '{source_classification}'. Must be 'official_website' or 'independent_external'."
+
+    return True, ""
+
+
+def validate_field_value_format(field_name: str, value: str) -> Tuple[bool, str]:
+    """
+    Validates field-specific value syntax and invariants prior to manual draft/verification persistence.
+    """
+    if not value or not isinstance(value, str):
+        return False, f"Field '{field_name}' cannot have an empty value."
+    clean_val = value.strip()
+    if clean_val.lower() in ("not found", "none", "null", "n/a"):
+        return False, f"Cannot verify field '{field_name}' with placeholder '{clean_val}'."
+    if len(clean_val) > 10000:
+        return False, f"Field '{field_name}' value exceeds maximum allowed length of 10000 characters."
+
+    if field_name == "official_website":
+        if not (clean_val.startswith("http://") or clean_val.startswith("https://")):
+            return False, "Official website must start with http:// or https://"
+    elif field_name == "contact_email_addresses":
+        tokens = [t.strip() for t in clean_val.split(",") if t.strip()]
+        for t in tokens:
+            if "@" not in t or not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}$", t):
+                return False, f"Invalid email address format: '{t}'"
+    elif field_name == "priority_level":
+        if clean_val.upper() not in ("A", "B", "C"):
+            return False, "Priority level must be A, B, or C."
+    elif field_name == "business_activities":
+        if len(clean_val) < 5:
+            return False, "Business activities description must be at least 5 characters long."
+    elif field_name == "company_name":
+        if len(clean_val) < 2:
+            return False, "Company name must be at least 2 characters long."
+
+    return True, ""
+
 from sales_engine.candidates.models import CandidateCompany
 from sales_engine.candidates.classifier import CompanyClassifier
 from sales_engine.discovery_v2.source_registry import SourceRegistry, sanitize_secret_text
@@ -5078,15 +5173,20 @@ async def verify_candidate_field_action(
     candidate_id: str,
     field_name: str = Form(...),
     verified_value: str = Form(...),
-    source_url: str = Form(...),
+    action_type: str = Form("verify"),  # "verify" (Verify & Approve) or "draft" (Save Manual Draft)
+    source_classification: str = Form("official_website"),  # "official_website" or "independent_external"
+    source_url: Optional[str] = Form(None),
     operator_note: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
     """
-    Explicit Evidence-Aware Manual Field Verification Action.
-    Allows an operator to independently verify and approve a quarantined or unverified field
-    with explicit domain ownership checks, valid source URL, and full audit provenance.
-    Never approves or unquarantines the original unsupported AI claim.
+    Universal Evidence-Aware Manual Field Correction & Independent Operator Verification Action.
+    Supports two distinct operations:
+    1. 'draft' (Save Manual Draft): Preserves operator-entered value without falsely labeling it verified/approved.
+    2. 'verify' (Verify & Approve): Requires explicit operator confirmation, strict source URL validation,
+       and persists an authoritative FieldReviewRecord (review_state='OPERATOR_APPROVED', source_type='operator_manual').
+    Atomically suspends existing finalization if a core profile field (company_name, official_website, business_activities)
+    is modified on an already finalized record.
     """
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
@@ -5118,31 +5218,15 @@ async def verify_candidate_field_action(
         )
 
     val = verified_value.strip()
-    if not val or val.lower() in ("not found", "none", "null"):
-        err_msg = f"Cannot verify field '{fn}' with empty or 'Not Found' value."
+    # Field value validation
+    v_ok, v_err = validate_field_value_format(fn, val)
+    if not v_ok:
         return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            f"/sales/candidates/{candidate_id}/research?error={quote(v_err)}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    src = source_url.strip()
-    if not src or not src.startswith(("http://", "https://")):
-        err_msg = f"Manual verification of '{fn}' requires a valid HTTP/HTTPS source URL."
-        return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
-    # Harden evidence source URL validation:
-    # Source URL must correspond to candidate's official domain and preferably match crawled snapshot pages
     cand_domain = cand.company_domain or cand.domain or ""
-    if cand_domain and not is_canonical_domain_match(src, cand_domain):
-        err_msg = f"Evidence URL '{src}' does not belong to candidate's official domain '{cand_domain}'."
-        return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
     # Domain ownership validation for official_website
     if fn == "official_website":
         if not is_canonical_domain_match(val, cand_domain):
@@ -5152,14 +5236,70 @@ async def verify_candidate_field_action(
                 status_code=status.HTTP_303_SEE_OTHER,
             )
 
+    # Extract string values handling possible direct Python call without FastAPI dependency resolution (e.g. in tests)
+    action_type_str = getattr(action_type, "default", action_type) if hasattr(action_type, "default") else action_type
+    if not isinstance(action_type_str, str):
+        action_type_str = "verify"
+    source_class_str = getattr(source_classification, "default", source_classification) if hasattr(source_classification, "default") else source_classification
+    if not isinstance(source_class_str, str):
+        source_class_str = "official_website"
+    source_url_str = getattr(source_url, "default", source_url) if hasattr(source_url, "default") else source_url
+    if not isinstance(source_url_str, str):
+        source_url_str = str(source_url_str) if source_url_str is not None else ""
+    operator_note_str = getattr(operator_note, "default", operator_note) if hasattr(operator_note, "default") else operator_note
+    if not isinstance(operator_note_str, str):
+        operator_note_str = str(operator_note_str) if operator_note_str is not None else ""
+
+    is_verify = (action_type_str.strip().lower() in ("verify", "approve", "verify_approve"))
+
+    src = (source_url_str or "").strip()
+    if is_verify:
+        s_ok, s_err = is_safe_and_valid_evidence_reference(
+            source_url=src,
+            source_classification=source_class_str,
+            candidate_domain=cand_domain,
+            field_name=fn,
+        )
+        if not s_ok:
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}/research?error={quote(s_err)}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+    else:
+        # For manual draft, if source_url is provided, it must still be safe (no SSRF/loopback)
+        if src:
+            s_ok, s_err = is_safe_and_valid_evidence_reference(
+                source_url=src,
+                source_classification=source_class_str,
+                candidate_domain=cand_domain,
+                field_name=fn,
+            )
+            if not s_ok:
+                return RedirectResponse(
+                    f"/sales/candidates/{candidate_id}/research?error={quote(s_err)}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+    # Detect if core field is changed on an already finalized record
+    core_fields = ("company_name", "official_website", "business_activities")
+    is_core_field = (fn in core_fields)
+    old_val = getattr(existing, fn, None)
+    is_changed = ((old_val or "").strip() != val)
+
+    new_verification_status = existing.verification_status or "EXTRACTED"
+    if is_core_field and is_changed and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        # Atomically suspend prior finalization!
+        new_verification_status = "EXTRACTED"
+
     # Prepare updated LeadRegisterRecord
     updated_dict = existing.to_dict()
     updated_dict[fn] = val
     updated_dict["provenance_source"] = "operator_edited"
+    updated_dict["verification_status"] = new_verification_status
     updated_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
-    # If source URL is not already in evidence_urls, append it
+    # Maintain evidence URLs list safely
     ev_urls = list(existing.evidence_urls or [])
-    if src not in ev_urls:
+    if src and src not in ev_urls:
         ev_urls.append(src)
     updated_dict["evidence_urls"] = ev_urls
 
@@ -5167,31 +5307,50 @@ async def verify_candidate_field_action(
 
     latest_snap = snap_store.get_latest_snapshot(candidate_id)
     chk = compute_field_checksum(val)
-    f_rev = FieldReviewRecord(
-        candidate_id=candidate_id,
-        field_name=fn,
-        approved_value=val,
-        value_checksum=chk,
-        review_state="OPERATOR_APPROVED",
-        reviewed_at=datetime.now(timezone.utc).isoformat(),
-        source_type="operator_manual",
-        snapshot_id=latest_snap.snapshot_id if latest_snap else None,
-        analysis_id=None,
-        evidence_url=src,
-        evidence_excerpt=None,
-        operator_note=operator_note.strip() if operator_note and operator_note.strip() else f"Independently verified via {src}",
+    note_text = operator_note_str.strip() if operator_note_str and operator_note_str.strip() else (
+        f"Independently verified via {src} ({source_class_str})" if is_verify else "Manual draft saved by operator"
     )
 
-    reg_store.save_record_with_reviews(updated_rec, [f_rev])
+    reviews_to_save: List[FieldReviewRecord] = []
+    if is_verify:
+        f_rev = FieldReviewRecord(
+            candidate_id=candidate_id,
+            field_name=fn,
+            approved_value=val,
+            value_checksum=chk,
+            review_state="OPERATOR_APPROVED",
+            reviewed_at=datetime.now(timezone.utc).isoformat(),
+            source_type="operator_manual",
+            snapshot_id=latest_snap.snapshot_id if latest_snap else None,
+            analysis_id=None,
+            evidence_url=src,
+            evidence_excerpt=None,
+            operator_note=note_text,
+        )
+        reviews_to_save.append(f_rev)
+    else:
+        # Saving manual draft: invalidate any existing approved review for this field since value was edited
+        # without renewed verification approval
+        reg_store.delete_field_review(candidate_id, fn, superseded_reason="superseded_by_manual_draft")
+
+    # Save record and review atomically
+    if reviews_to_save:
+        reg_store.save_record_with_reviews(updated_rec, reviews_to_save)
+    else:
+        reg_store.save_record(updated_rec)
 
     # Sync candidate domain if official_website was verified
-    if fn == "official_website":
+    if fn == "official_website" and is_verify:
         canon_w = canonicalize_domain(val)
         if canon_w and not cand.company_domain:
             cand.company_domain = canon_w
             svcs["cand_store"].save_candidate(cand)
 
-    msg = f"Field '{fn}' independently verified and approved by operator."
+    action_label = "independently verified and approved" if is_verify else "saved as manual draft"
+    msg = f"Field '{fn}' {action_label} by operator."
+    if is_core_field and is_changed and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        msg += " Previous Research Finalization has been suspended; renewed explicit finalization is required."
+
     return RedirectResponse(
         f"/sales/candidates/{candidate_id}/research?message={quote(msg)}",
         status_code=status.HTTP_303_SEE_OTHER,
