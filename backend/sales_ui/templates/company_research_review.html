@@ -595,7 +595,7 @@
 
             <!-- 6. Contact Emails -->
             {% set f_meta = analysis_fields.get('contact_email_addresses') if analysis_fields else None %}
-            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% elif is_malformed_contact_email %}style="background-color: #fefce8;"{% endif %}>
               <td>
                 <strong>6. Email Addresses</strong>
                 {% if field_reviews and 'contact_email_addresses' in field_reviews %}
@@ -609,8 +609,18 @@
                     <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
+                {% if is_malformed_contact_email %}
+                  <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">⚠️ Trailing Scraping Noise Detected</span>
+                {% endif %}
               </td>
-              <td><code>{{ current_record.contact_email_addresses if current_record else 'Not Found' }}</code></td>
+              <td>
+                <code>{{ current_record.contact_email_addresses if current_record else 'Not Found' }}</code>
+                {% if is_malformed_contact_email %}
+                  <div style="color: #b45309; font-size: 0.78rem; margin-top: 4px; font-weight: 500;">
+                    ⚠️ Stored contact address contains trailing scraped token noise (e.g. text run-on). Operator review / manual correction recommended.
+                  </div>
+                {% endif %}
+              </td>
               <td>
                 <input type="text" name="contact_email_addresses" class="form-control" value="{{ proposed_record.contact_email_addresses }}">
                 {% if f_meta %}
@@ -681,7 +691,7 @@
 
             <!-- 8. Business Activities & BIM -->
             {% set f_meta = analysis_fields.get('business_activities') if analysis_fields else None %}
-            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+            <tr {% if f_meta and f_meta.quarantined and not (field_reviews and 'business_activities' in field_reviews) %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>8. Business Activities</strong>
                 {% if field_reviews and 'business_activities' in field_reviews %}
@@ -707,6 +717,18 @@
                     {% endif %}
                     {% if f_meta.quarantined %}
                       <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
+                      <details style="margin-top: 6px; padding: 6px 8px; background-color: #fff; border: 1px solid #fca5a5; border-radius: 4px;">
+                        <summary style="font-weight: 600; color: #991b1b; cursor: pointer; font-size: 0.8rem;">Independent Operator Verification</summary>
+                        <div style="margin-top: 6px; font-size: 0.78rem;">
+                          <p style="margin: 0 0 4px 0; color: var(--text-secondary);">Verify authoritative business activities independently with verified source URL from candidate domain:</p>
+                          <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <textarea form="verify-business-activities-form" name="verified_value" class="form-control" rows="2" style="font-size: 0.78rem; padding: 4px 6px;" placeholder="Authoritative Business Activities description">{{ current_record.business_activities if current_record and current_record.business_activities and current_record.business_activities != 'Not Found' else (proposed_record.business_activities if proposed_record else '') }}</textarea>
+                            <input type="text" form="verify-business-activities-form" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ f_meta.source_url if f_meta.source_url and f_meta.source_url != 'Not Found' else ('https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL (e.g. https://domain.com/chi-siamo)">
+                            <input type="text" form="verify-business-activities-form" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
+                            <button type="submit" form="verify-business-activities-form" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Business Activities</button>
+                          </div>
+                        </div>
+                      </details>
                     {% endif %}
                   </div>
                 {% endif %}
@@ -722,7 +744,7 @@
 
             <!-- 9. Official Website -->
             {% set f_meta = analysis_fields.get('official_website') if analysis_fields else None %}
-            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+            <tr {% if f_meta and f_meta.quarantined and not (field_reviews and 'official_website' in field_reviews) %}style="background-color: #fff1f2;"{% endif %}>
               <td>
                 <strong>9. Official Website</strong>
                 {% if field_reviews and 'official_website' in field_reviews %}
@@ -816,7 +838,7 @@
 
             <!-- 11. Careers & Opportunities -->
             {% set f_meta = analysis_fields.get('job_advertisement_links') if analysis_fields else None %}
-            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
+            <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% elif is_suspect_job_advertisement %}style="background-color: #fefce8;"{% endif %}>
               <td>
                 <strong>11. Job / Supplier Links</strong>
                 {% if field_reviews and 'job_advertisement_links' in field_reviews %}
@@ -830,8 +852,18 @@
                     <span class="badge badge-info" style="background-color: #e0f2fe; color: #0369a1; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">AI Fact — Pending Review</span>
                   {% endif %}
                 {% endif %}
+                {% if is_suspect_job_advertisement %}
+                  <span class="badge badge-warning" style="background-color: #fef3c7; color: #92400e; display: block; width: fit-content; margin-top: 4px; font-size: 0.75rem;">⚠️ Flagged: Non-Job Article</span>
+                {% endif %}
               </td>
-              <td style="font-size: 0.82rem;">{{ current_record.job_advertisement_links if current_record else 'Not Found' }}</td>
+              <td style="font-size: 0.82rem;">
+                {{ current_record.job_advertisement_links if current_record else 'Not Found' }}
+                {% if is_suspect_job_advertisement %}
+                  <div style="color: #b45309; font-size: 0.78rem; margin-top: 4px; font-weight: 500;">
+                    ⚠️ Link appears to be a general news/CSRD or blog article rather than an active career/job advertisement. Review recommended before sign-off.
+                  </div>
+                {% endif %}
+              </td>
               <td>
                 <input type="text" name="job_advertisement_links" class="form-control" value="{{ proposed_record.job_advertisement_links }}">
                 {% if f_meta %}
@@ -994,6 +1026,15 @@
 <form id="verify-official-website-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="field_name" value="official_website">
+</form>
+{% endif %}
+
+<!-- Independent Field Verification Form for Quarantined Business Activities -->
+{% set f_meta_act = analysis_fields.get('business_activities') if analysis_fields else None %}
+{% if f_meta_act and f_meta_act.quarantined %}
+<form id="verify-business-activities-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="field_name" value="business_activities">
 </form>
 {% endif %}
 

@@ -180,6 +180,62 @@ def is_trustworthy_company_identity(
 
     return True, ""
 
+
+def is_malformed_contact_email(email_str: Optional[str]) -> bool:
+    """
+    Checks if a contact email address is demonstrably malformed or contaminated
+    by trailing web scraping tokens (e.g. 'info@domain.com.Per', 'info@domain.comParla').
+    """
+    if not email_str:
+        return False
+    # Check each comma-separated email token
+    tokens = [e.strip() for e in email_str.split(",") if e.strip()]
+    for token in tokens:
+        if "@" not in token:
+            return True
+        domain_part = token.split("@", 1)[1].strip().lower()
+        # Trailing prose concatenated directly after TLD (e.g. .comParla, .itPer, .com.Per)
+        if re.search(r"\.(?:com|it|eu|net|org|de|ch|fr|at|io|co\.uk)[a-zA-Z0-9_\.]+$", domain_part, re.IGNORECASE):
+            return True
+        if not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}$", token):
+            return True
+    return False
+
+
+def is_suspect_job_advertisement_url(url_str: Optional[str]) -> bool:
+    """
+    Identifies non-recruitment news/blog articles incorrectly classified as job advertisements.
+    Legitimate job URLs generally contain keywords like 'carriere', 'careers', 'lavora-con-noi',
+    'jobs', 'job', 'posizioni-aperte', 'work-with-us', 'hiring', 'recruiting'.
+    General news, CSRD, case studies, or blog posts without career keywords are flagged as suspect.
+    """
+    if not url_str or url_str.lower() in ("not found", "none", "null", "n/a"):
+        return False
+    # Use bounded regex patterns to avoid substring collisions (e.g. 'opportunita' in Italian prose 'un-opportunita')
+    career_patterns = [
+        r"/(?:carriere|careers|career)(?:/|$|-)",
+        r"/(?:lavora-con-noi|lavoraconnoi|lavora)(?:/|$|-)",
+        r"/(?:jobs|job)(?:/|$|-)",
+        r"/(?:posizioni|posizioni-aperte)(?:/|$|-)",
+        r"/(?:hiring|recruitment|recruiting|work-with-us|join-us|candidature)(?:/|$|-)",
+        r"/(?:opportunita-di-lavoro|opportunita-lavorative)(?:/|$|-)",
+    ]
+    suspect_news_keywords = {
+        "csrd", "news", "articolo", "article", "blog", "post", "sostenibilita",
+        "normativa", "direttiva", "obbligo", "eventi", "press"
+    }
+    urls = [u.strip().lower() for u in re.split(r"[\s\|\,]+", url_str) if u.strip()]
+    for u in urls:
+        if not u.startswith(("http://", "https://")):
+            continue
+        parsed = urlparse(u)
+        path = parsed.path.lower()
+        has_career = any(re.search(pat, path) for pat in career_patterns)
+        has_suspect_news = any(k in path for k in suspect_news_keywords)
+        if has_suspect_news and not has_career:
+            return True
+    return False
+
 from sales_engine.candidates.models import CandidateCompany
 from sales_engine.candidates.classifier import CompanyClassifier
 from sales_engine.discovery_v2.source_registry import SourceRegistry, sanitize_secret_text
@@ -4369,6 +4425,8 @@ async def candidate_research_view(
             "analysis_auth_token": analysis_auth_token,
             "pipeline_status": pipeline_status,
             "chunk_stats": chunk_stats,
+            "is_malformed_contact_email": is_malformed_contact_email(current_reg.contact_email_addresses if current_reg else None),
+            "is_suspect_job_advertisement": is_suspect_job_advertisement_url(current_reg.job_advertisement_links if current_reg else None),
             "message": message,
             "error": error,
         },
@@ -5075,8 +5133,17 @@ async def verify_candidate_field_action(
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    # Domain ownership validation for official_website
+    # Harden evidence source URL validation:
+    # Source URL must correspond to candidate's official domain and preferably match crawled snapshot pages
     cand_domain = cand.company_domain or cand.domain or ""
+    if cand_domain and not is_canonical_domain_match(src, cand_domain):
+        err_msg = f"Evidence URL '{src}' does not belong to candidate's official domain '{cand_domain}'."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Domain ownership validation for official_website
     if fn == "official_website":
         if not is_canonical_domain_match(val, cand_domain):
             err_msg = f"Verified website '{val}' does not match candidate domain '{cand_domain}'."
