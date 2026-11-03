@@ -688,7 +688,10 @@ class WebsiteCrawlerV2:
                     if href and not href.startswith("javascript:"):
                         res.links.append({"text": link_text, "href": href})
 
-                # Clean DOM
+                # Clean DOM: decompose non-content tags
+                for tag in soup(["script", "style", "noscript", "svg", "header", "footer", "nav"]):
+                    # Note: keep header/footer in soup for link extraction if done earlier, but clean non-content
+                    pass
                 for tag in soup(["script", "style", "noscript", "svg"]):
                     tag.decompose()
 
@@ -699,7 +702,9 @@ class WebsiteCrawlerV2:
                 if meta_desc and meta_desc.get("content"):
                     res.meta_description = re.sub(r"\s+", " ", meta_desc["content"]).strip()
 
-                res.text_content = re.sub(r"\s+", " ", soup.get_text()).strip()
+                # Preserve element boundaries by using separator=" " and normalize whitespace
+                raw_text = soup.get_text(separator=" ", strip=True)
+                res.text_content = re.sub(r"[ \t]+", " ", raw_text).strip()
 
         except SSRFValidationError as e:
             res.status = "BLOCKED_UNSAFE"

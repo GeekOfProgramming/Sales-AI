@@ -54,6 +54,18 @@ class EvidenceCategory(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+def is_generic_page_title(title_text: Optional[str]) -> bool:
+    if not title_text or not title_text.strip():
+        return True
+    t_clean = title_text.strip().lower()
+    if t_clean in GENERIC_TITLES_AND_TERMS:
+        return True
+    # Check patterns like 'Home page - RENERWAVE' or 'Homepage | Company'
+    if re.match(r"^(?:home\s*page|homepage|benvenuti|welcome|home)\b", t_clean):
+        return True
+    return False
+
+
 def validate_italian_piva(piva: str) -> bool:
     """
     Validates Italian Partita IVA format and checksum algorithm.
@@ -270,7 +282,8 @@ def fetch_bounded_page(
             if meta_desc and meta_desc.get("content"):
                 res.meta_description = re.sub(r"\s+", " ", meta_desc["content"]).strip()
 
-            res.text_content = soup.get_text()
+            raw_text = soup.get_text(separator=" ", strip=True)
+            res.text_content = re.sub(r"[ \t]+", " ", raw_text).strip()
 
     except SSRFValidationError as e:
         res.status = "BLOCKED_UNSAFE"
@@ -338,7 +351,8 @@ def discover_relevant_subpage_urls(home_url: str, raw_html: str) -> Dict[str, st
 GENERIC_TITLES_AND_TERMS = {
     "bim specialist", "bim coordinator", "bim manager", "ingegneria", "architettura",
     "home", "homepage", "studio", "progettazione", "servizi", "contatti", "benvenuti",
-    "welcome", "chi siamo", "lavora con noi", "careers", "company", "privacy policy"
+    "welcome", "chi siamo", "lavora con noi", "careers", "company", "privacy policy",
+    "bim mep", "mep bim", "progettazione bim", "modellazione bim", "consulenza bim",
 }
 
 PARTNER_OR_RELATION_WORDS = (
@@ -624,25 +638,83 @@ def extract_deterministic_facts(
                 logger.warning(f"Rejected invalid Italian P.IVA candidate '{piv}' on {p.url} (checksum/format failure).")
 
         # -------------------------------------------------------------
-        # 4. Emails & Phones
+        # 4. Emails & Phones (Source-backed: mailto:, tel:, contact blocks)
         # -------------------------------------------------------------
-        found_emails = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", text)
-        for em in found_emails:
-            em_clean = em.lower().strip()
-            if not any(em_clean.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".css", ".js"]):
+        p_soup = BeautifulSoup(html, "html.parser") if html else None
+
+        # A. mailto: links (highest confidence)
+        mailto_emails = set()
+        if p_soup:
+            for a in p_soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if href.lower().startswith("mailto:"):
+                    clean_m = href[7:].split("?")[0].strip().lower()
+                    if "@" in clean_m:
+                        mailto_emails.add(clean_m)
+        elif getattr(p, "links", None):
+            for lk in p.links:
+                href = lk.get("href", "") if isinstance(lk, dict) else str(lk)
+                if href.lower().startswith("mailto:"):
+                    clean_m = href[7:].split("?")[0].strip().lower()
+                    if "@" in clean_m:
+                        mailto_emails.add(clean_m)
+
+        for em in mailto_emails:
+            if not any(em.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".css", ".js"]):
                 all_emails.add(em)
-                if "email" not in result.evidence_items and not em_clean.endswith("pec.it") and not "legalmail" in em_clean:
+                if "email" not in result.evidence_items and not em.endswith("pec.it") and "legalmail" not in em:
                     result.evidence_items["email"] = FieldEvidenceItem(
                         field_name="email",
                         extracted_value=em,
                         source_url=p.url,
-                        source_page_title=page_title,
+                        source_page_title=f"{page_title} (mailto link)",
                         retrieval_timestamp=now_iso,
                         evidence_category=EvidenceCategory.VERIFIED_FACT,
                         validation_status="EXTRACTED",
-                        confidence_score=0.85
+                        confidence_score=0.95
                     )
 
+        # B. Regex email fallback (strict word boundary, no leading digits, no trailing prose)
+        found_emails = re.findall(r"(?<![A-Za-z0-9._%+-])[A-Za-z][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])", text)
+        for em in found_emails:
+            em_clean = em.lower().strip()
+            # Strip trailing punctuation if accidentally captured
+            em_clean = re.sub(r"[.,;:!]+$", "", em_clean)
+            # Filter asset extensions
+            if not any(em_clean.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".css", ".js"]):
+                # Reject malformed concatenated emails (e.g., development@stcpi.comParla or 8935842development@)
+                # Check that domain part ends with standard valid TLD
+                domain_part = em_clean.split("@")[-1]
+                tld = domain_part.split(".")[-1]
+                if tld in ("it", "com", "net", "org", "eu", "de", "fr", "uk", "ch", "at", "info", "io"):
+                    all_emails.add(em_clean)
+                    if "email" not in result.evidence_items and not em_clean.endswith("pec.it") and "legalmail" not in em_clean:
+                        result.evidence_items["email"] = FieldEvidenceItem(
+                            field_name="email",
+                            extracted_value=em_clean,
+                            source_url=p.url,
+                            source_page_title=page_title,
+                            retrieval_timestamp=now_iso,
+                            evidence_category=EvidenceCategory.VERIFIED_FACT,
+                            validation_status="EXTRACTED",
+                            confidence_score=0.85
+                        )
+
+        # C. tel: links
+        tel_phones = set()
+        if p_soup:
+            for a in p_soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if href.lower().startswith("tel:"):
+                    clean_t = href[4:].split("?")[0].strip()
+                    if clean_t:
+                        tel_phones.add(clean_t)
+        for t_ph in tel_phones:
+            digits = re.sub(r"\D", "", t_ph)
+            if len(digits) >= 8 and digits not in all_pivas:
+                all_raw_phones.add(t_ph)
+
+        # D. Regex phone fallback
         found_phones = re.findall(r"(?:\+39\s*)?(?:0\d{1,4}\s*[\d\s.-]{5,10}|\b3\d{2}\s*[\d\s.-]{6,8}\b)", text)
         for ph in found_phones:
             digits = re.sub(r"\D", "", ph)
@@ -832,8 +904,13 @@ def extract_deterministic_facts(
 
         def get_name_score(item):
             name, url, src, kind = item
-            lower_name = name.lower()
+            lower_name = name.lower().strip()
             name_words = re.findall(r"[a-z0-9]+", lower_name)
+            
+            # Reject if candidate legal name is itself a generic service or page title
+            if lower_name in GENERIC_TITLES_AND_TERMS or any(lower_name.startswith(g) for g in ["bim mep", "mep bim", "servizi bim", "progettazione"]):
+                return -100
+
             score = 0
             # Source reliability
             if kind == "jsonld_legal":
@@ -1026,11 +1103,51 @@ def extract_deterministic_facts(
     if unverified_projs:
         result.unverified_projects = unverified_projs[:4]
 
+    def is_generic_page_title(title_text: Optional[str]) -> bool:
+        if not title_text or not title_text.strip():
+            return True
+        t_clean = title_text.strip().lower()
+        if t_clean in GENERIC_TITLES_AND_TERMS:
+            return True
+        # Check patterns like 'Home page - RENERWAVE' or 'Homepage | Company'
+        if re.match(r"^(?:home\s*page|homepage|benvenuti|welcome|home)\b", t_clean):
+            return True
+        return False
+
+    # Prefer informative description from services/about pages or genuine meta_description
+    activities_found = None
+    # 1. Check services or about page meta description or summary
+    service_pages = [p for p in pages if p.page_type in ("services", "about") and p.status == "FETCH_SUCCESS"]
+    for sp in service_pages:
+        if sp.meta_description and not is_generic_page_title(sp.meta_description):
+            activities_found = sp.meta_description
+            break
+
+    # 2. Check home page meta_description if not generic
     home_page = next((p for p in pages if p.page_type == "home"), None)
-    if home_page and home_page.meta_description:
-        result.business_activities = home_page.meta_description
-    elif home_page and home_page.title:
-        result.business_activities = home_page.title
+    if not activities_found and home_page and home_page.meta_description:
+        if not is_generic_page_title(home_page.meta_description):
+            activities_found = home_page.meta_description
+
+    # 3. Check services page first readable paragraph / text
+    if not activities_found and service_pages:
+        for sp in service_pages:
+            t = (sp.text_content or "").strip()
+            # find substantial paragraph (>40 chars, <300 chars)
+            for line in t.splitlines():
+                line_s = line.strip()
+                if 40 < len(line_s) < 300 and not is_generic_page_title(line_s):
+                    activities_found = line_s
+                    break
+            if activities_found:
+                break
+
+    # 4. Check home page title only if it is genuinely descriptive and not a generic 'Home page - X'
+    if not activities_found and home_page and home_page.title:
+        if not is_generic_page_title(home_page.title):
+            activities_found = home_page.title
+
+    result.business_activities = activities_found or "Not Found"
 
     # -------------------------------------------------------------
     # Defensible Priority & Work Package Hypothesis

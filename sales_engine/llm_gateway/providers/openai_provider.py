@@ -31,6 +31,19 @@ from sales_engine.llm_gateway.rate_limit_diagnostics import classify_http_429
 from sales_engine.llm_gateway.interface import BaseLLMProvider
 
 
+def classify_httpx_timeout(e: Exception) -> str:
+    """Classify underlying HTTPX timeout exception into granular sanitized categories."""
+    if isinstance(e, httpx.ConnectTimeout):
+        return "CONNECT_TIMEOUT"
+    elif isinstance(e, httpx.ReadTimeout):
+        return "READ_TIMEOUT"
+    elif isinstance(e, httpx.WriteTimeout):
+        return "WRITE_TIMEOUT"
+    elif isinstance(e, httpx.PoolTimeout):
+        return "POOL_TIMEOUT"
+    return "REQUEST_TIMEOUT"
+
+
 DEFAULT_ALLOWED_HOSTS: Set[str] = {
     "api.openai.com",
     "generativelanguage.googleapis.com",
@@ -516,10 +529,12 @@ class OpenAIProvider(BaseLLMProvider):
                     resp = client.post(endpoint, json=payload, headers=headers)
             t1 = time.perf_counter()
         except httpx.TimeoutException as e:
+            cat = classify_httpx_timeout(e)
             raise LLMTimeoutError(
-                message=f"Request timed out after {request.timeout_seconds}s.",
+                message=f"Request timed out after {request.timeout_seconds}s ({cat}).",
                 provider=self._provider_id,
                 task_id=request.task_id,
+                timeout_category=cat,
             ) from e
         except httpx.NetworkError as e:
             raise LLMProviderUnavailableError(
@@ -576,10 +591,12 @@ class OpenAIProvider(BaseLLMProvider):
                     resp = await client.post(endpoint, json=payload, headers=headers)
             t1 = time.perf_counter()
         except httpx.TimeoutException as e:
+            cat = classify_httpx_timeout(e)
             raise LLMTimeoutError(
-                message=f"Request timed out after {request.timeout_seconds}s.",
+                message=f"Request timed out after {request.timeout_seconds}s ({cat}).",
                 provider=self._provider_id,
                 task_id=request.task_id,
+                timeout_category=cat,
             ) from e
         except httpx.NetworkError as e:
             raise LLMProviderUnavailableError(
@@ -636,10 +653,12 @@ class OpenAIProvider(BaseLLMProvider):
                     resp = client.get(endpoint, headers=headers)
             t1 = time.perf_counter()
         except httpx.TimeoutException as e:
+            cat = classify_httpx_timeout(e)
             raise LLMTimeoutError(
-                message=f"Model probe timed out after {timeout_seconds}s.",
+                message=f"Model probe timed out after {timeout_seconds}s ({cat}).",
                 provider=self._provider_id,
                 task_id="probe_models",
+                timeout_category=cat,
             ) from e
         except httpx.NetworkError as e:
             raise LLMProviderUnavailableError(
@@ -714,10 +733,12 @@ class OpenAIProvider(BaseLLMProvider):
                     resp = await client.get(endpoint, headers=headers)
             t1 = time.perf_counter()
         except httpx.TimeoutException as e:
+            cat = classify_httpx_timeout(e)
             raise LLMTimeoutError(
-                message=f"Model probe timed out after {timeout_seconds}s.",
+                message=f"Model probe timed out after {timeout_seconds}s ({cat}).",
                 provider=self._provider_id,
                 task_id="probe_models",
+                timeout_category=cat,
             ) from e
         except httpx.NetworkError as e:
             raise LLMProviderUnavailableError(

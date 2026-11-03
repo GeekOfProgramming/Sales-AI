@@ -61,6 +61,9 @@ from sales_engine.candidates.candidate_store import CandidateStore, canonicalize
 from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
 from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
 
+# In-memory tracking for active analysis tasks per snapshot
+_ANALYSIS_SUBMISSION_LOCKS: set = set()
+
 
 def normalize_url_host(url_str: str) -> str:
     """Extracts, normalizes, and strips leading www. and port from URL host."""
@@ -4201,8 +4204,10 @@ async def candidate_research_view(
 
     # V2.1: Retrieve latest durable LLM analysis record bound strictly to active snapshot_id (P1-A)
     latest_analysis = None
+    latest_successful_analysis = None
     if latest_snapshot:
         latest_analysis = snap_store.get_latest_analysis(candidate_id, snapshot_id=latest_snapshot.snapshot_id)
+        latest_successful_analysis = snap_store.get_latest_successful_analysis(candidate_id, snapshot_id=latest_snapshot.snapshot_id)
 
     # Preflight estimation and server-side operator authorization token for next LLM analysis (P1-B)
     analysis_preflight = None
@@ -4224,31 +4229,33 @@ async def candidate_research_view(
             pass
 
     # If an analysis record exists and has valid proposed fields, overlay them onto proposed_rec
+    # Preserve latest successful analysis proposals if later attempt failed
+    effective_analysis_for_proposals = latest_successful_analysis or (latest_analysis if (latest_analysis and latest_analysis.status == "SUCCESS") else None)
     llm_analysis_status_display = None
     if latest_analysis:
         llm_analysis_status_display = latest_analysis.status
-        if latest_analysis.status == "SUCCESS" and latest_analysis.proposed_fields:
-            pf = latest_analysis.proposed_fields
-            def get_f_val(field_key: str, default_val: Any) -> Any:
-                item = pf.get(field_key)
-                if isinstance(item, dict) and "value" in item and item["value"] and item["value"] != "Not Found":
-                    return item["value"]
-                return default_val
+    if effective_analysis_for_proposals and effective_analysis_for_proposals.proposed_fields:
+        pf = effective_analysis_for_proposals.proposed_fields
+        def get_f_val(field_key: str, default_val: Any) -> Any:
+            item = pf.get(field_key)
+            if isinstance(item, dict) and "value" in item and item["value"] and item["value"] != "Not Found":
+                return item["value"]
+            return default_val
 
-            if proposed_rec:
-                proposed_rec.company_name = get_f_val("company_name", proposed_rec.company_name)
-                proposed_rec.priority_level = get_f_val("priority_level", proposed_rec.priority_level)
-                proposed_rec.priority_rationale = get_f_val("priority_rationale", proposed_rec.priority_rationale)
-                proposed_rec.legal_identity = get_f_val("legal_identity", proposed_rec.legal_identity)
-                proposed_rec.geographic_location = get_f_val("geographic_location", proposed_rec.geographic_location)
-                proposed_rec.telephone_numbers = get_f_val("telephone_numbers", proposed_rec.telephone_numbers)
-                proposed_rec.business_activities = get_f_val("business_activities", proposed_rec.business_activities)
-                proposed_rec.official_website = get_f_val("official_website", proposed_rec.official_website)
-                proposed_rec.responsible_person = get_f_val("responsible_person", proposed_rec.responsible_person)
-                proposed_rec.descriptions_and_notes = get_f_val("descriptions_and_notes", proposed_rec.descriptions_and_notes)
-                proposed_rec.job_advertisement_links = get_f_val("job_advertisement_links", proposed_rec.job_advertisement_links)
-                proposed_rec.other_links_and_references = get_f_val("other_links_and_references", proposed_rec.other_links_and_references)
-                proposed_rec.contact_email_addresses = get_f_val("contact_email_addresses", proposed_rec.contact_email_addresses)
+        if proposed_rec:
+            proposed_rec.company_name = get_f_val("company_name", proposed_rec.company_name)
+            proposed_rec.priority_level = get_f_val("priority_level", proposed_rec.priority_level)
+            proposed_rec.priority_rationale = get_f_val("priority_rationale", proposed_rec.priority_rationale)
+            proposed_rec.legal_identity = get_f_val("legal_identity", proposed_rec.legal_identity)
+            proposed_rec.geographic_location = get_f_val("geographic_location", proposed_rec.geographic_location)
+            proposed_rec.telephone_numbers = get_f_val("telephone_numbers", proposed_rec.telephone_numbers)
+            proposed_rec.business_activities = get_f_val("business_activities", proposed_rec.business_activities)
+            proposed_rec.official_website = get_f_val("official_website", proposed_rec.official_website)
+            proposed_rec.responsible_person = get_f_val("responsible_person", proposed_rec.responsible_person)
+            proposed_rec.descriptions_and_notes = get_f_val("descriptions_and_notes", proposed_rec.descriptions_and_notes)
+            proposed_rec.job_advertisement_links = get_f_val("job_advertisement_links", proposed_rec.job_advertisement_links)
+            proposed_rec.other_links_and_references = get_f_val("other_links_and_references", proposed_rec.other_links_and_references)
+            proposed_rec.contact_email_addresses = get_f_val("contact_email_addresses", proposed_rec.contact_email_addresses)
 
     field_reviews = reg_store.get_field_reviews(candidate_id)
     # Compute active, valid field reviews where review value checksum matches current stored value
@@ -4291,14 +4298,21 @@ async def candidate_research_view(
             elif latest_analysis.status == "SCHEMA_INVALID":
                 pipeline_status = "Analysis Failed (Schema Invalid)"
             elif latest_analysis.status == "FAILED":
-                pipeline_status = "Analysis Failed"
+                if latest_analysis.diagnostic_info and "Timeout" in latest_analysis.diagnostic_info:
+                    pipeline_status = "Analysis Incomplete (Timeout)"
+                else:
+                    pipeline_status = "Analysis Failed"
         else:
             pipeline_status = "Awaiting LLM Analysis"
 
     if current_reg and current_reg.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
         pipeline_status = "Operator Reviewed"
 
-    analysis_fields = latest_analysis.proposed_fields if (latest_analysis and latest_analysis.status == "SUCCESS" and latest_analysis.proposed_fields) else {}
+    analysis_fields = (
+        effective_analysis_for_proposals.proposed_fields
+        if (effective_analysis_for_proposals and effective_analysis_for_proposals.proposed_fields)
+        else (latest_analysis.proposed_fields if (latest_analysis and latest_analysis.status == "SUCCESS" and latest_analysis.proposed_fields) else {})
+    )
 
     return render_console_template(
         request=request,
@@ -4456,33 +4470,54 @@ async def analyze_candidate_snapshot_action(
     eff_provider = provider or "gemini"
     eff_model = model or "gemini-3.5-flash-lite"
 
-    # P1-B: Server-side Operator Authorization Preliminary Check (mark_used=False)
-    # The authoritative nonce consumption occurs inside execute_company_analysis() exactly once.
-    is_valid, max_budget, auth_err = verify_analysis_auth_token(
-        auth_token=auth_token,
-        candidate_id=candidate_id,
-        snapshot_id=target_snapshot.snapshot_id,
-        provider=eff_provider,
-        model=eff_model,
-        mark_used=False,
-    )
-    if not is_valid:
-        err_msg = f"Inference execution rejected: {auth_err}"
+    # Concurrency and duplicate browser submission guard (bounded execution)
+    import asyncio
+    global _ANALYSIS_SUBMISSION_LOCKS
+    if "_ANALYSIS_SUBMISSION_LOCKS" not in globals():
+        _ANALYSIS_SUBMISSION_LOCKS = set()
+
+    lock_key = f"{candidate_id}:{target_snapshot.snapshot_id}"
+    if lock_key in _ANALYSIS_SUBMISSION_LOCKS:
+        err_msg = "An analysis execution for this candidate snapshot is already in progress. Duplicate submission rejected."
         return RedirectResponse(
             f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    rec = execute_company_analysis(
-        snapshot=target_snapshot,
-        candidate_id=candidate_id,
-        provider_id=eff_provider,
-        model=eff_model,
-        snapshot_store=snap_store,
-        auth_token=auth_token,
-        require_auth=True,
-        max_approved_budget_usd=max_budget,
-    )
+    _ANALYSIS_SUBMISSION_LOCKS.add(lock_key)
+
+    try:
+        # P1-B: Server-side Operator Authorization Preliminary Check (mark_used=False)
+        # The authoritative nonce consumption occurs inside execute_company_analysis() exactly once.
+        is_valid, max_budget, auth_err = verify_analysis_auth_token(
+            auth_token=auth_token,
+            candidate_id=candidate_id,
+            snapshot_id=target_snapshot.snapshot_id,
+            provider=eff_provider,
+            model=eff_model,
+            mark_used=False,
+        )
+        if not is_valid:
+            err_msg = f"Inference execution rejected: {auth_err}"
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
+        # Offload blocking HTTP I/O from FastAPI event loop using asyncio.to_thread
+        rec = await asyncio.to_thread(
+            execute_company_analysis,
+            snapshot=target_snapshot,
+            candidate_id=candidate_id,
+            provider_id=eff_provider,
+            model=eff_model,
+            snapshot_store=snap_store,
+            auth_token=auth_token,
+            require_auth=True,
+            max_approved_budget_usd=max_budget,
+        )
+    finally:
+        _ANALYSIS_SUBMISSION_LOCKS.discard(lock_key)
 
     if rec.status == "NOT_CONFIGURED":
         err_msg = f"Provider '{rec.provider}' is not configured. Please configure credentials (e.g. GEMINI_API_KEY)."

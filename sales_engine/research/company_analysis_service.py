@@ -13,6 +13,7 @@ P0/P1 Hardening Features:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -23,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sales_engine.llm_gateway.config import GatewayConfig
 from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
-from sales_engine.llm_gateway.errors import LLMNotConfiguredError, LLMAuthenticationError
+from sales_engine.llm_gateway.errors import LLMNotConfiguredError, LLMAuthenticationError, LLMTimeoutError
 from sales_engine.llm_gateway.interface import LLMProviderGateway
 from sales_engine.llm_gateway.providers.openai_provider import OpenAIProvider, DEFAULT_ALLOWED_HOSTS
 from sales_engine.llm_gateway.registry import ProviderRegistry
@@ -31,6 +32,7 @@ from sales_engine.research.research_store import (
     ResearchSnapshot,
     ResearchSnapshotStore,
     CompanyAnalysisRecord,
+    AnalysisChunkRecord,
 )
 from sales_engine.research.pricing_config import (
     get_model_pricing,
@@ -740,6 +742,16 @@ def execute_company_analysis(
     # Hard architectural ceilings to prevent runaway execution
     MAX_ALLOWED_CHUNKS = 5
     MAX_TOTAL_OUTPUT_TOKENS = 12_500  # 5 calls * 2,500 max output tokens
+    SCHEMA_VERSION = "2.1.0"
+    PROMPT_VERSION = "2.1.0"
+
+    # Query existing chunk checkpoints for candidate, snapshot, and model (resumability)
+    existing_checkpoints = store.get_chunk_checkpoints(
+        candidate_id=candidate_id,
+        snapshot_id=snapshot.snapshot_id,
+        model=effective_model,
+    )
+    checkpoint_map = {cp.chunk_hash: cp for cp in existing_checkpoints}
 
     aggregated_proposals: Dict[str, Any] = {}
     total_input_tokens = 0
@@ -748,8 +760,29 @@ def execute_company_analysis(
     overall_status = "SUCCESS"
     diag_msgs: List[str] = []
     executed_chunks_count = 0
+    resumed_chunks_count = 0
+
+    # Hydrate completed checkpoints first
+    for c in chunks:
+        c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
+        cp = checkpoint_map.get(c_hash)
+        if cp and cp.status == "COMPLETED" and cp.snapshot_checksum == snapshot.content_checksum:
+            logger.info(f"Resuming analysis: chunk {c['chunk_index']} already completed (hash: {c_hash[:8]}).")
+            resumed_chunks_count += 1
+            total_input_tokens += (cp.input_tokens or 0)
+            total_output_tokens += (cp.output_tokens or 0)
+            if cp.raw_response:
+                raw_responses.append(cp.raw_response)
+            if cp.proposed_fields:
+                aggregated_proposals = merge_field_proposals(aggregated_proposals, cp.proposed_fields)
 
     for c in chunks:
+        c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
+        cp = checkpoint_map.get(c_hash)
+        # Skip if already completed with identical checksum
+        if cp and cp.status == "COMPLETED" and cp.snapshot_checksum == snapshot.content_checksum:
+            continue
+
         # Enforce provider-call ceiling
         if executed_chunks_count >= MAX_ALLOWED_CHUNKS:
             logger.warning(f"Reached maximum allowed chunk calls ({MAX_ALLOWED_CHUNKS}). Terminating analysis loop safely.")
@@ -798,8 +831,11 @@ def execute_company_analysis(
             response_schema=LEAD_REGISTER_13_FIELDS_SCHEMA,
             temperature=0.0,
             max_output_tokens=2500,
+            timeout_seconds=90.0,
         )
 
+        chunk_record_id = f"chk_{analysis_id}_{c['chunk_index']}"
+        now_chk = datetime.now(timezone.utc).isoformat()
         try:
             resp: LLMResponse = gw.generate(req)
             executed_chunks_count += 1
@@ -817,14 +853,59 @@ def execute_company_analysis(
             )
             store.save_analysis_record(rec)
             return rec
+        except LLMTimeoutError as e:
+            cat = getattr(e, "timeout_category", "REQUEST_TIMEOUT")
+            logger.error(f"LLM analysis timed out on chunk {c['chunk_index']} ({cat}): {e}")
+            overall_status = "TIMEOUT"
+            diag_msgs.append(f"Chunk {c['chunk_index']} timed out ({cat}): {e}")
+            # Persist UNCERTAIN_TIMEOUT checkpoint
+            timeout_chk = AnalysisChunkRecord(
+                chunk_record_id=chunk_record_id,
+                analysis_id=analysis_id,
+                candidate_id=candidate_id,
+                snapshot_id=snapshot.snapshot_id,
+                snapshot_checksum=snapshot.content_checksum,
+                chunk_index=c["chunk_index"],
+                total_chunks=len(chunks),
+                chunk_hash=c_hash,
+                provider=pid,
+                model=effective_model,
+                schema_version=SCHEMA_VERSION,
+                prompt_version=PROMPT_VERSION,
+                status="UNCERTAIN_TIMEOUT",
+                created_at=now_chk,
+                error_message=f"Timeout ({cat}): {e}",
+            )
+            store.save_chunk_checkpoint(timeout_chk)
+            break
         except Exception as e:
             logger.error(f"LLM analysis execution failed on chunk {c['chunk_index']}: {e}", exc_info=True)
             overall_status = "FAILED"
             diag_msgs.append(f"Chunk {c['chunk_index']} failed: {e}")
+            fail_chk = AnalysisChunkRecord(
+                chunk_record_id=chunk_record_id,
+                analysis_id=analysis_id,
+                candidate_id=candidate_id,
+                snapshot_id=snapshot.snapshot_id,
+                snapshot_checksum=snapshot.content_checksum,
+                chunk_index=c["chunk_index"],
+                total_chunks=len(chunks),
+                chunk_hash=c_hash,
+                provider=pid,
+                model=effective_model,
+                schema_version=SCHEMA_VERSION,
+                prompt_version=PROMPT_VERSION,
+                status="FAILED",
+                created_at=now_chk,
+                error_message=str(e),
+            )
+            store.save_chunk_checkpoint(fail_chk)
             break
 
-        total_input_tokens += (resp.input_tokens or 0)
-        total_output_tokens += (resp.output_tokens or 0)
+        c_inp = resp.input_tokens or 0
+        c_out = resp.output_tokens or 0
+        total_input_tokens += c_inp
+        total_output_tokens += c_out
         raw_responses.append(resp.content or "")
 
         # Check for model truncation / finish reason
@@ -834,6 +915,7 @@ def execute_company_analysis(
 
         # Parse chunk JSON
         raw_text = resp.content or ""
+        chunk_parsed: Dict[str, Any] = {}
         try:
             if resp.parsed_json:
                 chunk_parsed = resp.parsed_json
@@ -858,6 +940,39 @@ def execute_company_analysis(
         except Exception as e:
             logger.warning(f"Failed to parse chunk {c['chunk_index']} JSON: {e}")
             diag_msgs.append(f"Chunk {c['chunk_index']} schema error: {e}")
+
+        # Compute chunk cost
+        chunk_cost = calculate_cost(
+            input_tokens=c_inp,
+            output_tokens=c_out,
+            provider=pid,
+            model=effective_model,
+        )
+
+        # Save successful chunk checkpoint immediately
+        success_chk = AnalysisChunkRecord(
+            chunk_record_id=chunk_record_id,
+            analysis_id=analysis_id,
+            candidate_id=candidate_id,
+            snapshot_id=snapshot.snapshot_id,
+            snapshot_checksum=snapshot.content_checksum,
+            chunk_index=c["chunk_index"],
+            total_chunks=len(chunks),
+            chunk_hash=c_hash,
+            provider=pid,
+            model=effective_model,
+            schema_version=SCHEMA_VERSION,
+            prompt_version=PROMPT_VERSION,
+            status="COMPLETED",
+            created_at=now_chk,
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            input_tokens=c_inp,
+            output_tokens=c_out,
+            cost_estimate=chunk_cost,
+            raw_response=resp.content,
+            proposed_fields=chunk_parsed if isinstance(chunk_parsed, dict) else {},
+        )
+        store.save_chunk_checkpoint(success_chk)
 
     # Validate final 13 fields presence and nested structures
     required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
@@ -893,8 +1008,13 @@ def execute_company_analysis(
         model=effective_model,
     )
 
+    # Calculate completed chunks vs planned
+    completed_chunks_count = resumed_chunks_count + (executed_chunks_count if overall_status == "SUCCESS" else max(0, executed_chunks_count - 1))
+    analyzed_page_count = len(eligible_pages) if overall_status == "SUCCESS" else 0
+
     summary_diag = (
-        f"Analyzed {len(eligible_pages)} pages in {len(chunks)} chunk(s). "
+        f"Planned {len(chunks)} chunk(s) across {len(eligible_pages)} eligible pages. "
+        f"Completed: {completed_chunks_count}/{len(chunks)} chunks (resumed {resumed_chunks_count}). "
         f"Omitted: {len(omitted_reasons)} pages. Status: {overall_status}."
     )
     if diag_msgs:
@@ -914,7 +1034,7 @@ def execute_company_analysis(
         output_tokens=total_output_tokens,
         cost_estimate=actual_cost,
         diagnostic_info=summary_diag,
-        analyzed_pages_count=len(eligible_pages),
+        analyzed_pages_count=analyzed_page_count,
         chunks_count=len(chunks),
         omitted_pages_count=len(omitted_reasons),
         provider_calls_count=executed_chunks_count,
@@ -952,12 +1072,19 @@ def estimate_analysis_preflight(
         model=target_model,
     )
 
+    planned_chunks_count = len(chunks)
+    capped_chunks_count = min(planned_chunks_count, 5)  # MAX_ALLOWED_CHUNKS = 5
+    will_omit_chunks = planned_chunks_count > capped_chunks_count
+
     return {
         "provider": pid,
         "model": target_model,
         "eligible_pages_count": len(eligible_pages),
         "omitted_pages_count": len(omitted),
-        "chunks_count": len(chunks),
+        "chunks_count": planned_chunks_count,
+        "capped_chunks_count": capped_chunks_count,
+        "will_omit_chunks": will_omit_chunks,
+        "omitted_chunks_count": max(0, planned_chunks_count - capped_chunks_count),
         "total_context_chars": total_chars,
         "estimated_input_tokens": estimated_input_tokens,
         "estimated_output_tokens": estimated_output_tokens,

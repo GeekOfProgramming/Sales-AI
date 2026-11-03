@@ -51,6 +51,32 @@ class PageEvidence:
 
 
 @dataclass
+class AnalysisChunkRecord:
+    """Durable checkpoint record for a single analysis chunk execution."""
+    chunk_record_id: str
+    analysis_id: str
+    candidate_id: str
+    snapshot_id: str
+    snapshot_checksum: str
+    chunk_index: int
+    total_chunks: int
+    chunk_hash: str
+    provider: str
+    model: str
+    schema_version: str
+    prompt_version: str
+    status: str  # "COMPLETED", "FAILED", "UNCERTAIN_TIMEOUT"
+    created_at: str
+    completed_at: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    cost_estimate: Optional[float] = None
+    raw_response: Optional[str] = None
+    proposed_fields: Dict[str, Any] = field(default_factory=dict)
+    error_message: Optional[str] = None
+
+
+@dataclass
 class CompanyAnalysisRecord:
     """Durable record of an LLM analysis execution linked to a research snapshot."""
     analysis_id: str
@@ -171,6 +197,38 @@ class ResearchSnapshotStore:
 
                 CREATE INDEX IF NOT EXISTS idx_page_evidences_snapshot
                     ON page_evidences (snapshot_id, page_order ASC);
+
+                CREATE TABLE IF NOT EXISTS analysis_chunk_checkpoints (
+                    chunk_record_id TEXT PRIMARY KEY,
+                    analysis_id TEXT NOT NULL,
+                    candidate_id TEXT NOT NULL,
+                    snapshot_id TEXT NOT NULL,
+                    snapshot_checksum TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    total_chunks INTEGER NOT NULL,
+                    chunk_hash TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    schema_version TEXT NOT NULL,
+                    prompt_version TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    input_tokens INTEGER,
+                    output_tokens INTEGER,
+                    cost_estimate REAL,
+                    raw_response TEXT,
+                    proposed_fields_json TEXT NOT NULL,
+                    error_message TEXT,
+                    FOREIGN KEY (snapshot_id) REFERENCES research_snapshots(snapshot_id) ON DELETE CASCADE,
+                    UNIQUE(candidate_id, snapshot_id, chunk_hash, model)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_chunk_analysis
+                    ON analysis_chunk_checkpoints (analysis_id, chunk_index ASC);
+
+                CREATE INDEX IF NOT EXISTS idx_chunk_candidate_snapshot
+                    ON analysis_chunk_checkpoints (candidate_id, snapshot_id);
 
                 CREATE TABLE IF NOT EXISTS company_analysis_records (
                     analysis_id TEXT PRIMARY KEY,
@@ -485,6 +543,125 @@ class ResearchSnapshotStore:
             "combined_research_text": combined_research_text,
         }
 
+    def save_chunk_checkpoint(self, record: AnalysisChunkRecord) -> None:
+        """Persist or update an analysis chunk execution checkpoint."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO analysis_chunk_checkpoints (
+                    chunk_record_id, analysis_id, candidate_id, snapshot_id,
+                    snapshot_checksum, chunk_index, total_chunks, chunk_hash,
+                    provider, model, schema_version, prompt_version, status,
+                    created_at, completed_at, input_tokens, output_tokens,
+                    cost_estimate, raw_response, proposed_fields_json, error_message
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    record.chunk_record_id,
+                    record.analysis_id,
+                    record.candidate_id,
+                    record.snapshot_id,
+                    record.snapshot_checksum,
+                    record.chunk_index,
+                    record.total_chunks,
+                    record.chunk_hash,
+                    record.provider,
+                    record.model,
+                    record.schema_version,
+                    record.prompt_version,
+                    record.status,
+                    record.created_at,
+                    record.completed_at,
+                    record.input_tokens,
+                    record.output_tokens,
+                    record.cost_estimate,
+                    record.raw_response,
+                    json.dumps(record.proposed_fields, ensure_ascii=False),
+                    record.error_message,
+                ),
+            )
+            conn.commit()
+
+    def get_chunk_checkpoints(
+        self,
+        candidate_id: str,
+        snapshot_id: str,
+        model: Optional[str] = None
+    ) -> List[AnalysisChunkRecord]:
+        """Retrieve chunk checkpoints for candidate and snapshot, ordered by chunk_index."""
+        with self._get_connection() as conn:
+            if model:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM analysis_chunk_checkpoints
+                    WHERE candidate_id = ? AND snapshot_id = ? AND model = ?
+                    ORDER BY chunk_index ASC;
+                    """,
+                    (candidate_id, snapshot_id, model),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM analysis_chunk_checkpoints
+                    WHERE candidate_id = ? AND snapshot_id = ?
+                    ORDER BY chunk_index ASC;
+                    """,
+                    (candidate_id, snapshot_id),
+                ).fetchall()
+            return [self._row_to_chunk_record(r) for r in rows]
+
+    def get_chunk_checkpoint_by_hash(
+        self,
+        candidate_id: str,
+        snapshot_id: str,
+        chunk_hash: str,
+        model: str,
+    ) -> Optional[AnalysisChunkRecord]:
+        """Retrieve a specific chunk checkpoint by candidate, snapshot, chunk hash, and model."""
+        with self._get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM analysis_chunk_checkpoints
+                WHERE candidate_id = ? AND snapshot_id = ? AND chunk_hash = ? AND model = ?
+                LIMIT 1;
+                """,
+                (candidate_id, snapshot_id, chunk_hash, model),
+            ).fetchone()
+            if row:
+                return self._row_to_chunk_record(row)
+            return None
+
+    def _row_to_chunk_record(self, row: sqlite3.Row) -> AnalysisChunkRecord:
+        pf = {}
+        if row["proposed_fields_json"]:
+            try:
+                pf = json.loads(row["proposed_fields_json"])
+            except Exception:
+                pass
+        return AnalysisChunkRecord(
+            chunk_record_id=row["chunk_record_id"],
+            analysis_id=row["analysis_id"],
+            candidate_id=row["candidate_id"],
+            snapshot_id=row["snapshot_id"],
+            snapshot_checksum=row["snapshot_checksum"],
+            chunk_index=row["chunk_index"],
+            total_chunks=row["total_chunks"],
+            chunk_hash=row["chunk_hash"],
+            provider=row["provider"],
+            model=row["model"],
+            schema_version=row["schema_version"],
+            prompt_version=row["prompt_version"],
+            status=row["status"],
+            created_at=row["created_at"],
+            completed_at=row["completed_at"],
+            input_tokens=row["input_tokens"],
+            output_tokens=row["output_tokens"],
+            cost_estimate=row["cost_estimate"],
+            raw_response=row["raw_response"],
+            proposed_fields=pf,
+            error_message=row["error_message"],
+        )
+
     def save_analysis_record(self, record: CompanyAnalysisRecord) -> None:
         """Persist an LLM analysis record linked to a snapshot."""
         with self._get_connection() as conn:
@@ -553,6 +730,36 @@ class ResearchSnapshotStore:
                     """
                     SELECT * FROM company_analysis_records
                     WHERE candidate_id = ?
+                    ORDER BY created_at DESC LIMIT 1;
+                    """,
+                    (candidate_id,),
+                ).fetchone()
+
+            if not row:
+                return None
+            return self._row_to_analysis(row)
+
+    def get_latest_successful_analysis(
+        self,
+        candidate_id: str,
+        snapshot_id: Optional[str] = None
+    ) -> Optional[CompanyAnalysisRecord]:
+        """Retrieve the most recent successful analysis record for a candidate."""
+        with self._get_connection() as conn:
+            if snapshot_id:
+                row = conn.execute(
+                    """
+                    SELECT * FROM company_analysis_records
+                    WHERE candidate_id = ? AND snapshot_id = ? AND status = 'SUCCESS'
+                    ORDER BY created_at DESC LIMIT 1;
+                    """,
+                    (candidate_id, snapshot_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT * FROM company_analysis_records
+                    WHERE candidate_id = ? AND status = 'SUCCESS'
                     ORDER BY created_at DESC LIMIT 1;
                     """,
                     (candidate_id,),
