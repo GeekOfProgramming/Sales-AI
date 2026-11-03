@@ -3684,4 +3684,649 @@ def test_59_arbitrary_legal_identity_text_rejected_by_identity_validator():
         assert ok is True, f"Expected valid structured ID '{good_id}' to pass, but got error: {err}"
 
 
+def test_60_reviewed_field_supported_by_grounded_ai_evidence_eligible(isolated_db_paths, monkeypatch):
+    """
+    Mandatory Test 1:
+    A candidate whose reviewed core fields are supported by real crawled snapshot evidence
+    and grounded LLM proposals is research_ready and finalizes successfully.
+    """
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.research.research_store import ResearchSnapshotStore, PageEvidence, CompanyAnalysisRecord
+    from backend.sales_ui.router import validate_research_finalization, evaluate_research_readiness, compute_field_checksum
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:acme-solar.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Acme Solar Srl", domain="acme-solar.it")
+    cand_store.save_candidate(cand)
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://acme-solar.it/",
+        resolved_url="https://acme-solar.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-03T10:00:00Z",
+        title="Acme Solar", meta_description=None, content_sha256="h_acme",
+        cleaned_text="Acme Solar Srl designs commercial photovoltaic installations in Italy.",
+    )
+    snap = snap_store.create_snapshot(cid, "acme-solar.it", "Acme Solar Srl", [pe])
+
+    proposed = {
+        "company_name": {
+            "value": "Acme Solar Srl",
+            "source_url": "https://acme-solar.it/",
+            "evidence_excerpt": "Acme Solar Srl",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "official_website": {
+            "value": "https://acme-solar.it",
+            "source_url": "https://acme-solar.it/",
+            "evidence_excerpt": "https://acme-solar.it",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "business_activities": {
+            "value": "commercial photovoltaic installations",
+            "source_url": "https://acme-solar.it/",
+            "evidence_excerpt": "commercial photovoltaic installations",
+            "confidence": 0.90,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+    }
+    analysis = CompanyAnalysisRecord(
+        analysis_id="an_acme_60",
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        created_at="2026-11-03T10:05:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=150,
+        output_tokens=300,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields=proposed,
+    )
+    snap_store.save_analysis_record(analysis)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number="LR-6001",
+        company_name="Acme Solar Srl",
+        official_website="https://acme-solar.it",
+        business_activities="commercial photovoltaic installations",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://acme-solar.it/"],
+    )
+    reviews = [
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="company_name",
+            approved_value="Acme Solar Srl",
+            value_checksum=compute_field_checksum("Acme Solar Srl"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://acme-solar.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="official_website",
+            approved_value="https://acme-solar.it",
+            value_checksum=compute_field_checksum("https://acme-solar.it"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://acme-solar.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="business_activities",
+            approved_value="commercial photovoltaic installations",
+            value_checksum=compute_field_checksum("commercial photovoltaic installations"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://acme-solar.it/",
+        ),
+    ]
+    reg_store.save_record_with_reviews(rec, reviews)
+
+    field_reviews_map = reg_store.get_field_reviews(cid)
+    is_eligible, errors, checks = validate_research_finalization(
+        cand=cand,
+        reg_record=rec,
+        field_reviews=field_reviews_map,
+        latest_snapshot=snap,
+        latest_analysis=analysis,
+    )
+    assert is_eligible is True, f"Validation failed: {errors}"
+    assert checks["quarantine_clean"] is True
+
+    readiness = evaluate_research_readiness(
+        cand=cand,
+        reg_store=reg_store,
+        snap_store=snap_store,
+    )
+    assert readiness["research_status"] == "research_ready"
+    assert readiness["is_reviewed"] is True
+
+
+def test_61_ungrounded_ai_proposal_ineligible_for_finalization_and_readiness(isolated_db_paths, monkeypatch):
+    """
+    Mandatory Test 2:
+    A candidate with an ungrounded or quarantined AI proposal for a core field
+    is ineligible for finalization and is NOT research_ready.
+    Parity is preserved between explicit finalization and readiness evaluation.
+    """
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.research.research_store import ResearchSnapshotStore, PageEvidence, CompanyAnalysisRecord
+    from backend.sales_ui.router import validate_research_finalization, evaluate_research_readiness, compute_field_checksum
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:quarantined-test.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Quarantined Test Srl", domain="quarantined-test.it")
+    cand_store.save_candidate(cand)
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://quarantined-test.it/",
+        resolved_url="https://quarantined-test.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-03T10:00:00Z",
+        title="Quarantined Test", meta_description=None, content_sha256="h_qtest",
+        cleaned_text="Welcome to our website.",
+    )
+    snap = snap_store.create_snapshot(cid, "quarantined-test.it", "Quarantined Test Srl", [pe])
+
+    # business_activities was hallucinated / quarantined
+    proposed = {
+        "company_name": {
+            "value": "Quarantined Test Srl",
+            "source_url": "https://quarantined-test.it/",
+            "evidence_excerpt": "Quarantined Test Srl",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "official_website": {
+            "value": "https://quarantined-test.it",
+            "source_url": "https://quarantined-test.it/",
+            "evidence_excerpt": "https://quarantined-test.it",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "business_activities": {
+            "value": "Fabricated Aerospace Engineering",
+            "source_url": "https://hallucinated-source.com/",
+            "evidence_excerpt": "Fabricated Aerospace Engineering",
+            "confidence": 0.30,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": False,
+            "excerpt_verified": False,
+            "quarantined": True,
+            "quarantine_reason": "Source URL not present in snapshot pages.",
+        },
+    }
+    analysis = CompanyAnalysisRecord(
+        analysis_id="an_quarantine_61",
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        created_at="2026-11-03T10:05:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=150,
+        output_tokens=300,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields=proposed,
+    )
+    snap_store.save_analysis_record(analysis)
+
+    # Lead register has the ungrounded value and review directly approving the AI claim
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number="LR-6101",
+        company_name="Quarantined Test Srl",
+        official_website="https://quarantined-test.it",
+        business_activities="Fabricated Aerospace Engineering",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://quarantined-test.it/"],
+    )
+    reviews = [
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="company_name",
+            approved_value="Quarantined Test Srl",
+            value_checksum=compute_field_checksum("Quarantined Test Srl"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://quarantined-test.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="official_website",
+            approved_value="https://quarantined-test.it",
+            value_checksum=compute_field_checksum("https://quarantined-test.it"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://quarantined-test.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="business_activities",
+            approved_value="Fabricated Aerospace Engineering",
+            value_checksum=compute_field_checksum("Fabricated Aerospace Engineering"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://hallucinated-source.com/",
+        ),
+    ]
+    reg_store.save_record_with_reviews(rec, reviews)
+
+    field_reviews_map = reg_store.get_field_reviews(cid)
+    is_eligible, errors, checks = validate_research_finalization(
+        cand=cand,
+        reg_record=rec,
+        field_reviews=field_reviews_map,
+        latest_snapshot=snap,
+        latest_analysis=analysis,
+    )
+    assert is_eligible is False
+    assert checks["quarantine_clean"] is False
+    assert any("quarantined / ungrounded claim" in err for err in errors)
+
+    # Readiness evaluator MUST produce identical result (missing_evidence, not research_ready)
+    readiness = evaluate_research_readiness(
+        cand=cand,
+        reg_store=reg_store,
+        snap_store=snap_store,
+    )
+    assert readiness["research_status"] == "missing_evidence"
+    assert readiness["is_reviewed"] is False
+
+
+def test_62_independent_operator_correction_replaces_ungrounded_ai_proposal(isolated_db_paths, monkeypatch):
+    """
+    Mandatory Test 3:
+    An independently documented, operator-corrected value is NOT rejected
+    solely because an older AI proposal for that field was quarantined.
+    Both finalization and readiness evaluate as eligible / research_ready.
+    """
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.research.research_store import ResearchSnapshotStore, PageEvidence, CompanyAnalysisRecord
+    from backend.sales_ui.router import validate_research_finalization, evaluate_research_readiness, compute_field_checksum
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:correction-test.it"
+    cand = CandidateCompany(candidate_id=cid, company_name="Correction Test Srl", domain="correction-test.it")
+    cand_store.save_candidate(cand)
+
+    pe = PageEvidence(
+        snapshot_id="", evidence_id="EV_01", requested_url="https://correction-test.it/",
+        resolved_url="https://correction-test.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-03T10:00:00Z",
+        title="Correction Test", meta_description=None, content_sha256="h_corr",
+        cleaned_text="Correction Test Srl operates verified precision industrial CNC machining.",
+    )
+    snap = snap_store.create_snapshot(cid, "correction-test.it", "Correction Test Srl", [pe])
+
+    # AI proposed a quarantined value for business_activities
+    proposed = {
+        "company_name": {
+            "value": "Correction Test Srl",
+            "source_url": "https://correction-test.it/",
+            "evidence_excerpt": "Correction Test Srl",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "official_website": {
+            "value": "https://correction-test.it",
+            "source_url": "https://correction-test.it/",
+            "evidence_excerpt": "https://correction-test.it",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "business_activities": {
+            "value": "Hallucinated Spacecraft Propulsion",
+            "source_url": "https://hallucinated-source.com/",
+            "evidence_excerpt": "Hallucinated Spacecraft Propulsion",
+            "confidence": 0.20,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": False,
+            "excerpt_verified": False,
+            "quarantined": True,
+            "quarantine_reason": "Source URL not present in snapshot pages.",
+        },
+    }
+    analysis = CompanyAnalysisRecord(
+        analysis_id="an_correction_62",
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        created_at="2026-11-03T10:05:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=150,
+        output_tokens=300,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields=proposed,
+    )
+    snap_store.save_analysis_record(analysis)
+
+    # Operator explicitly rejected the ungrounded AI proposal and manually entered true business activities:
+    # "Precision industrial CNC machining"
+    corrected_activities = "Precision industrial CNC machining"
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number="LR-6201",
+        company_name="Correction Test Srl",
+        official_website="https://correction-test.it",
+        business_activities=corrected_activities,
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://correction-test.it/"],
+    )
+    reviews = [
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="company_name",
+            approved_value="Correction Test Srl",
+            value_checksum=compute_field_checksum("Correction Test Srl"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://correction-test.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="official_website",
+            approved_value="https://correction-test.it",
+            value_checksum=compute_field_checksum("https://correction-test.it"),
+            review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="llm_analysis",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=analysis.analysis_id,
+            evidence_url="https://correction-test.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid,
+            field_name="business_activities",
+            approved_value=corrected_activities,
+            value_checksum=compute_field_checksum(corrected_activities),
+            review_state="OPERATOR_CORRECTED",
+            reviewed_at="2026-11-03T10:10:00Z",
+            source_type="operator_manual",
+            snapshot_id=snap.snapshot_id,
+            analysis_id=None,
+            evidence_url="https://correction-test.it/",
+            operator_note="Manually edited via Research Review UI with snapshot evidence",
+        ),
+    ]
+    reg_store.save_record_with_reviews(rec, reviews)
+
+    field_reviews_map = reg_store.get_field_reviews(cid)
+    is_eligible, errors, checks = validate_research_finalization(
+        cand=cand,
+        reg_record=rec,
+        field_reviews=field_reviews_map,
+        latest_snapshot=snap,
+        latest_analysis=analysis,
+    )
+    assert is_eligible is True, f"Operator correction should pass finalization, but failed with: {errors}"
+    assert checks["quarantine_clean"] is True
+
+    readiness = evaluate_research_readiness(
+        cand=cand,
+        reg_store=reg_store,
+        snap_store=snap_store,
+    )
+    assert readiness["research_status"] == "research_ready"
+    assert readiness["is_reviewed"] is True
+
+
+def test_63_readiness_and_finalization_decision_parity_and_unrelated_snapshot_isolation(isolated_db_paths, monkeypatch):
+    """
+    Mandatory Tests 4, 5, 6, 7:
+    - 4: Research readiness and explicit finalization evaluate identical records to the same decision.
+    - 5: A new snapshot with an unrelated analysis does not corrupt the readiness evaluation of another candidate.
+    - 6: An unresearched candidate cannot become research_ready through snapshot or analysis leakage.
+    - 7: Zero SQLite writes occur during readiness evaluation (GET endpoint / evaluation path).
+    """
+    import sqlite3
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.research.research_store import ResearchSnapshotStore, PageEvidence, CompanyAnalysisRecord
+    from backend.sales_ui.router import validate_research_finalization, evaluate_research_readiness, compute_field_checksum
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    # Candidate A: fully reviewed and finalized
+    cid_a = "cand:domain:company-a.it"
+    cand_a = CandidateCompany(candidate_id=cid_a, company_name="Company A Srl", domain="company-a.it")
+    cand_store.save_candidate(cand_a)
+
+    pe_a = PageEvidence(
+        snapshot_id="", evidence_id="EV_A01", requested_url="https://company-a.it/",
+        resolved_url="https://company-a.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-03T10:00:00Z",
+        title="Company A", meta_description=None, content_sha256="h_a",
+        cleaned_text="Company A Srl provides industrial automation services in Italy.",
+    )
+    snap_a = snap_store.create_snapshot(cid_a, "company-a.it", "Company A Srl", [pe_a])
+
+    analysis_a = CompanyAnalysisRecord(
+        analysis_id="an_a_01",
+        candidate_id=cid_a,
+        snapshot_id=snap_a.snapshot_id,
+        created_at="2026-11-03T10:05:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=100,
+        output_tokens=200,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields={
+            "company_name": {"value": "Company A Srl", "grounded_in_snapshot": True, "quarantined": False},
+            "official_website": {"value": "https://company-a.it", "grounded_in_snapshot": True, "quarantined": False},
+            "business_activities": {"value": "industrial automation", "grounded_in_snapshot": True, "quarantined": False},
+        },
+    )
+    snap_store.save_analysis_record(analysis_a)
+
+    rec_a = LeadRegisterRecord(
+        candidate_id=cid_a,
+        record_number="LR-A01",
+        company_name="Company A Srl",
+        official_website="https://company-a.it",
+        business_activities="industrial automation",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+        evidence_urls=["https://company-a.it/"],
+    )
+    reviews_a = [
+        FieldReviewRecord(
+            candidate_id=cid_a, field_name="company_name", approved_value="Company A Srl",
+            value_checksum=compute_field_checksum("Company A Srl"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z", source_type="llm_analysis", snapshot_id=snap_a.snapshot_id,
+            analysis_id=analysis_a.analysis_id, evidence_url="https://company-a.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid_a, field_name="official_website", approved_value="https://company-a.it",
+            value_checksum=compute_field_checksum("https://company-a.it"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z", source_type="llm_analysis", snapshot_id=snap_a.snapshot_id,
+            analysis_id=analysis_a.analysis_id, evidence_url="https://company-a.it/",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid_a, field_name="business_activities", approved_value="industrial automation",
+            value_checksum=compute_field_checksum("industrial automation"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T10:10:00Z", source_type="llm_analysis", snapshot_id=snap_a.snapshot_id,
+            analysis_id=analysis_a.analysis_id, evidence_url="https://company-a.it/",
+        ),
+    ]
+    reg_store.save_record_with_reviews(rec_a, reviews_a)
+
+    # Candidate B: completely unresearched candidate
+    cid_b = "cand:domain:company-b.it"
+    cand_b = CandidateCompany(candidate_id=cid_b, company_name="Company B Srl", domain="company-b.it")
+    cand_store.save_candidate(cand_b)
+
+    # Candidate C: unrelated candidate with a new snapshot and quarantined analysis
+    cid_c = "cand:domain:company-c.it"
+    cand_c = CandidateCompany(candidate_id=cid_c, company_name="Company C Srl", domain="company-c.it")
+    cand_store.save_candidate(cand_c)
+    pe_c = PageEvidence(
+        snapshot_id="", evidence_id="EV_C01", requested_url="https://company-c.it/",
+        resolved_url="https://company-c.it/", page_type="home", http_status=200,
+        retrieval_status="FETCH_SUCCESS", retrieved_at="2026-11-03T10:20:00Z",
+        title="Company C", meta_description=None, content_sha256="h_c",
+        cleaned_text="Company C content.",
+    )
+    snap_c = snap_store.create_snapshot(cid_c, "company-c.it", "Company C Srl", [pe_c])
+    analysis_c = CompanyAnalysisRecord(
+        analysis_id="an_c_unrelated",
+        candidate_id=cid_c,
+        snapshot_id=snap_c.snapshot_id,
+        created_at="2026-11-03T10:25:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=100,
+        output_tokens=200,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields={
+            "company_name": {"value": "Company C Srl", "grounded_in_snapshot": False, "quarantined": True},
+            "official_website": {"value": "https://company-c.it", "grounded_in_snapshot": False, "quarantined": True},
+            "business_activities": {"value": "Fabricated", "grounded_in_snapshot": False, "quarantined": True},
+        },
+    )
+    snap_store.save_analysis_record(analysis_c)
+
+    # Test 7: Verify zero SQLite writes occur during readiness evaluation
+    def get_db_fingerprints():
+        with sqlite3.connect(cand_db) as conn1:
+            cand_rows = conn1.execute("SELECT count(*) FROM lead_register_records").fetchone()[0]
+            rev_rows = conn1.execute("SELECT count(*) FROM lead_register_field_reviews").fetchone()[0]
+        with sqlite3.connect(snap_db) as conn2:
+            snap_rows = conn2.execute("SELECT count(*) FROM research_snapshots").fetchone()[0]
+            an_rows = conn2.execute("SELECT count(*) FROM company_analysis_records").fetchone()[0]
+        return (cand_rows, rev_rows, snap_rows, an_rows)
+
+    fp_before = get_db_fingerprints()
+
+    # Test 4: Decision parity for Candidate A
+    is_eligible_a, errors_a, _ = validate_research_finalization(
+        cand=cand_a,
+        reg_record=rec_a,
+        field_reviews=reg_store.get_field_reviews(cid_a),
+        latest_snapshot=snap_a,
+        latest_analysis=analysis_a,
+    )
+    readiness_a = evaluate_research_readiness(cand=cand_a, reg_store=reg_store, snap_store=snap_store)
+    assert is_eligible_a is True
+    assert readiness_a["research_status"] == "research_ready"
+    assert readiness_a["is_reviewed"] is True
+
+    # Test 5: Verify Candidate C's new snapshot/analysis did NOT pollute Candidate A
+    # Candidate A's readiness is strictly snapshot-bound to snap_a and analysis_a
+    assert readiness_a["research_status"] == "research_ready"
+
+    # Test 6: Verify unresearched Candidate B cannot become research_ready through snapshot or analysis leakage
+    readiness_b = evaluate_research_readiness(cand=cand_b, reg_store=reg_store, snap_store=snap_store)
+    assert readiness_b["research_status"] == "unresearched"
+    assert readiness_b["is_reviewed"] is False
+
+    # Check zero SQLite writes
+    fp_after = get_db_fingerprints()
+    assert fp_before == fp_after, "Readiness evaluation must perform ZERO SQLite database writes!"
+
+
+
 

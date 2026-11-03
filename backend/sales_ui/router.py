@@ -511,6 +511,7 @@ def evaluate_research_readiness(
     snap_store: Optional[Any] = None,
     prefetched_reg_record: Optional[Any] = None,
     prefetched_snapshot: Optional[Any] = None,
+    prefetched_analysis: Optional[Any] = None,
     has_prefetched: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -544,6 +545,15 @@ def evaluate_research_readiness(
     elif snap_store and cid.strip():
         try:
             latest_snapshot = snap_store.get_latest_snapshot(cid.strip())
+        except Exception:
+            pass
+
+    latest_analysis = None
+    if has_prefetched:
+        latest_analysis = prefetched_analysis
+    elif snap_store and cid.strip() and latest_snapshot:
+        try:
+            latest_analysis = snap_store.get_latest_analysis(cid.strip(), snapshot_id=latest_snapshot.snapshot_id)
         except Exception:
             pass
 
@@ -589,7 +599,7 @@ def evaluate_research_readiness(
             reg_record=reg_record,
             field_reviews=field_reviews,
             latest_snapshot=latest_snapshot,
-            latest_analysis=None,
+            latest_analysis=latest_analysis,
         )
 
     if has_explicit_record and is_approved_status:
@@ -773,8 +783,20 @@ def validate_research_finalization(
         for fn in core_fields:
             f_meta = latest_analysis.proposed_fields.get(fn)
             if isinstance(f_meta, dict) and f_meta.get("quarantined"):
-                errors.append(f"Required field '{fn}' relies on a quarantined / ungrounded claim.")
-                checks["quarantine_clean"] = False
+                # If an explicit operator review exists, verify if it's an independent operator correction
+                rev = field_reviews.get(fn) if field_reviews else None
+                is_independent_correction = False
+                if rev:
+                    # Check if operator manually edited/corrected the value away from the quarantined AI proposal
+                    quarantined_val = str(f_meta.get("value") or "").strip().lower()
+                    rev_val = (rev.approved_value or "").strip().lower()
+                    if (rev.review_state == "OPERATOR_CORRECTED" or rev.source_type == "operator_manual") and (rev_val != quarantined_val):
+                        # Independently documented correction replaces the quarantined AI claim
+                        is_independent_correction = True
+
+                if not is_independent_correction:
+                    errors.append(f"Required field '{fn}' relies on a quarantined / ungrounded claim.")
+                    checks["quarantine_clean"] = False
 
     is_eligible = bool(len(errors) == 0 and all(checks.values()))
     return is_eligible, errors, checks
@@ -5482,6 +5504,7 @@ async def leads_view(
     prefetched_contacts_by_cid = {}
     prefetched_reg_records_by_cid = {}
     prefetched_snapshots_by_cid = {}
+    prefetched_analyses_by_cid = {}
     prefetched_history_cids = set()
     prefetched_supp_domains = set()
     prefetched_supp_emails = set()
@@ -5550,6 +5573,15 @@ async def leads_view(
                     cid_v = sn_r["candidate_id"]
                     if cid_v not in prefetched_snapshots_by_cid:
                         prefetched_snapshots_by_cid[cid_v] = snap_store._build_snapshot_from_row(sconn, sn_r, load_raw_html=False)
+            if _chk_table(sconn, "company_analysis_records"):
+                an_rows = sconn.execute("SELECT * FROM company_analysis_records ORDER BY created_at DESC").fetchall()
+                for an_r in an_rows:
+                    cid_v = an_r["candidate_id"]
+                    sn_id = an_r["snapshot_id"]
+                    # Strictly bind to the candidate's latest snapshot
+                    active_snap = prefetched_snapshots_by_cid.get(cid_v)
+                    if active_snap and active_snap.snapshot_id == sn_id and cid_v not in prefetched_analyses_by_cid:
+                        prefetched_analyses_by_cid[cid_v] = snap_store._row_to_analysis(an_r)
     except Exception:
         pass
 
@@ -5569,6 +5601,7 @@ async def leads_view(
         p_contacts = prefetched_contacts_by_cid.get(cid, [])
         p_reg = prefetched_reg_records_by_cid.get(cid)
         p_snap = prefetched_snapshots_by_cid.get(cid)
+        p_an = prefetched_analyses_by_cid.get(cid)
         p_has_hist = cid in prefetched_history_cids
 
         readiness_info = evaluate_candidate_readiness(
@@ -5590,6 +5623,7 @@ async def leads_view(
             snap_store=snap_store,
             prefetched_reg_record=p_reg,
             prefetched_snapshot=p_snap,
+            prefetched_analysis=p_an,
             has_prefetched=True,
         )
 
