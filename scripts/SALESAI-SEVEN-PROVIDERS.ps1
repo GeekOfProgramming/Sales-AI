@@ -8,7 +8,7 @@
 param(
     [ValidateSet(
         'StatusAll', 'ProbeAll', 'LoadAll', 'SetupAll', 'SetupOne', 'ProbeBrave',
-        'Setup', 'Probe', 'Load', 'SetupBrave', 'LoadBrave', 'StatusBrave'
+        'Setup', 'Probe', 'Load', 'SetupBrave', 'LoadBrave', 'StatusBrave', 'LoadGemini'
     )]
     [string]$Mode = 'StatusAll',
 
@@ -910,6 +910,41 @@ if ($Mode -eq 'StatusBrave') {
     }
     else {
         Write-Host ("Brave secret status: {0}" -f $statusObj.Status) -ForegroundColor Yellow
+    }
+    return
+}
+
+if ($Mode -eq 'LoadGemini') {
+    $geminiVar = 'GEMINI_API_KEY'
+    $geminiFile = Get-SecretPath $geminiVar
+
+    $existing = [Environment]::GetEnvironmentVariable($geminiVar, 'Process')
+    if ($existing -and $existing.Trim()) {
+        Write-Host ('Preserving existing process-level {0}.' -f $geminiVar) -ForegroundColor Cyan
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $geminiFile)) {
+        Write-Host ('Gemini secret file not found: {0}' -f $geminiFile) -ForegroundColor Yellow
+        return
+    }
+
+    $plain = $null
+    try {
+        $plain = Unprotect-ApiSecret $geminiVar
+        if ($plain -and $plain.Trim()) {
+            [Environment]::SetEnvironmentVariable($geminiVar, $plain, 'Process')
+            Write-Host ('Loaded into this PowerShell session: {0}' -f $geminiVar) -ForegroundColor Green
+        }
+        else {
+            Write-Host ('Failed: Decrypted secret for {0} is empty.' -f $geminiVar) -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Host ('Unable to decrypt or load: {0} ({1})' -f $geminiVar, $_.Exception.Message) -ForegroundColor Yellow
+    }
+    finally {
+        $plain = $null
     }
     return
 }

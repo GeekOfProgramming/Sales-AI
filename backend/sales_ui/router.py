@@ -787,12 +787,22 @@ def validate_research_finalization(
                 rev = field_reviews.get(fn) if field_reviews else None
                 is_independent_correction = False
                 if rev:
-                    # Check if operator manually edited/corrected the value away from the quarantined AI proposal
+                    # Check if operator independently verified or corrected the value with documented evidence
                     quarantined_val = str(f_meta.get("value") or "").strip().lower()
                     rev_val = (rev.approved_value or "").strip().lower()
+                    # 1. Independent correction (value differs from quarantined AI proposal)
                     if (rev.review_state == "OPERATOR_CORRECTED" or rev.source_type == "operator_manual") and (rev_val != quarantined_val):
-                        # Independently documented correction replaces the quarantined AI claim
                         is_independent_correction = True
+                    # 2. Independent manual verification of authoritative value with verified source URL
+                    # (e.g. official website where AI excerpt was missing but domain/URL is independently verified)
+                    elif rev.source_type == "operator_manual" and rev.evidence_url:
+                        # Must be a valid HTTP/HTTPS source and match domain if website
+                        if rev.evidence_url.startswith(("http://", "https://")):
+                            if fn == "official_website":
+                                if is_canonical_domain_match(rev_val, cand_domain):
+                                    is_independent_correction = True
+                            else:
+                                is_independent_correction = True
 
                 if not is_independent_correction:
                     errors.append(f"Required field '{fn}' relies on a quarantined / ungrounded claim.")
@@ -1068,7 +1078,11 @@ def generate_ai_brief_text(
         lines.append(f"- Legal Registration: {reg_record.legal_identity}")
     lines.append(f"- Domain / Website: {reg_record.official_website if (reg_record and reg_record.official_website and reg_record.official_website != 'Not Found') else dom}")
     lines.append(f"- Location: {reg_record.geographic_location if (reg_record and reg_record.geographic_location and reg_record.geographic_location != 'Not Found') else (f'{city}, {country}'.strip(', ') if city or country else 'Not Found')}")
-    lines.append(f"- Priority Tier: {format_company_tier_label(getattr(cand, 'company_tier', None))}")
+    tier_label = format_company_tier_label(getattr(cand, 'company_tier', None))
+    if tier_label == "Tier 1" or (reg_record and getattr(reg_record, 'priority_level', None) == "A"):
+        lines.append(f"- Priority Tier: {tier_label} (Operator Commercial Hypothesis — High Automation Fit, Not Verified Demand)")
+    else:
+        lines.append(f"- Priority Tier: {tier_label}")
     if reg_record and reg_record.priority_rationale and reg_record.priority_rationale != "Not Found":
         lines.append(f"- Strategic Fit Rationale: {reg_record.priority_rationale}")
 
@@ -1086,7 +1100,7 @@ def generate_ai_brief_text(
     lines.append("## Commercial Hypotheses vs. Verified Facts")
     lines.append(f"- BIM Maturity (Observed Signal): {getattr(cand, 'bim_maturity', 'Not Evaluated')}")
     lines.append(f"- Outsourcing Potential (Analytical Hypothesis): {getattr(cand, 'outsourcing_potential', 'Not Evaluated')}")
-    lines.append("- Note: Potential outsourcing need is an analytical hypothesis based on engineering profile, NOT an active published tender unless confirmed in notes.")
+    lines.append("- Note: Potential outsourcing need is an analytical commercial hypothesis based on engineering profile and BIM complexity, NOT an active published tender unless confirmed in notes (not independently verified purchasing demand).")
 
     lines.append("")
     lines.append("## Contact & Recipient Readiness")
@@ -1104,7 +1118,10 @@ def generate_ai_brief_text(
 
     lines.append("")
     lines.append("## Source Evidence & Traceability")
-    lines.append(f"- 13-Field Register Status: {research_info['verification_status']} (#{research_info.get('record_number') or 'Unlinked'})")
+    r_stat = research_info['verification_status']
+    if r_stat == "EXTRACTED" and research_info.get("research_status") == "partially_reviewed":
+        r_stat = "EXTRACTED (Partially Reviewed by Operator)"
+    lines.append(f"- 13-Field Register Status: {r_stat} (#{research_info.get('record_number') or 'Unlinked'})")
     if reg_record and reg_record.evidence_urls:
         lines.append(f"- Evidence URLs: {', '.join(reg_record.evidence_urls)}")
     if latest_snapshot:
@@ -3528,25 +3545,47 @@ async def lead_register_update_action(
     else:
         v_status = req_v_status
 
-    # Check for invalidation of field reviews when required core fields are edited
+    # Check for invalidation of field reviews when ANY edited field changes
     new_name = company_name.strip() if isinstance(company_name, str) else (existing.company_name or "")
     new_website = _clean_str(official_website) or existing.official_website
     new_activities = _clean_str(business_activities) or existing.business_activities
+    new_priority = priority_level.strip().upper() if isinstance(priority_level, str) else "B"
+    new_rationale = _clean_str(priority_rationale)
+    new_legal_id = _clean_str(legal_identity)
+    new_geo = _clean_str(geographic_location)
+    new_telephones = _clean_str(telephone_numbers)
+    new_person = _clean_str(responsible_person)
+    new_notes = descriptions_and_notes if isinstance(descriptions_and_notes, str) else None
+    new_jobs = _clean_str(job_advertisement_links)
+    new_other = other_links_and_references if isinstance(other_links_and_references, str) else None
+    new_emails = _clean_str(contact_email_addresses)
 
     reviews = reg_store.get_field_reviews(candidate_id)
     fields_to_invalidate = []
 
-    # Detect modifications to core required fields
-    field_updates = {
+    # Map all Lead Register fields to their (existing, new) values
+    all_field_updates = {
         "company_name": (existing.company_name, new_name),
         "official_website": (existing.official_website, new_website),
         "business_activities": (existing.business_activities, new_activities),
+        "priority_level": (existing.priority_level, new_priority),
+        "priority_rationale": (existing.priority_rationale, new_rationale),
+        "legal_identity": (existing.legal_identity, new_legal_id),
+        "geographic_location": (existing.geographic_location, new_geo),
+        "telephone_numbers": (existing.telephone_numbers, new_telephones),
+        "responsible_person": (existing.responsible_person, new_person),
+        "descriptions_and_notes": (existing.descriptions_and_notes, new_notes),
+        "job_advertisement_links": (existing.job_advertisement_links, new_jobs),
+        "other_links_and_references": (existing.other_links_and_references, new_other),
+        "contact_email_addresses": (existing.contact_email_addresses, new_emails),
     }
 
     core_field_changed = False
-    for fn, (old_val, cur_val) in field_updates.items():
+    for fn, (old_val, cur_val) in all_field_updates.items():
+        is_core = fn in ("company_name", "official_website", "business_activities")
         if (old_val or "") != (cur_val or ""):
-            core_field_changed = True
+            if is_core:
+                core_field_changed = True
         if fn in reviews:
             chk = compute_field_checksum(cur_val)
             if reviews[fn].value_checksum != chk:
@@ -3554,7 +3593,8 @@ async def lead_register_update_action(
 
     # Invariant: If a core field is modified on a reviewed/verified record (whether reviews exist or it was legacy),
     # readiness is suspended and status is demoted to EXTRACTED until re-finalized.
-    if (fields_to_invalidate or core_field_changed) and v_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+    has_core_invalidation = any(f in ("company_name", "official_website", "business_activities") for f in fields_to_invalidate)
+    if (has_core_invalidation or core_field_changed) and v_status in ("OPERATOR_REVIEWED", "VERIFIED"):
         v_status = "EXTRACTED"
 
     # Mark record as operator_edited when edited through the actual HTTP editor,
@@ -3587,7 +3627,7 @@ async def lead_register_update_action(
     reg_store.update_record_and_invalidate_reviews(
         record=updated_rec,
         fields_to_invalidate=fields_to_invalidate,
-        superseded_reason="core_field_modified_via_form",
+        superseded_reason="field_modified_via_form",
     )
 
     # Sync back to candidate_companies basic fields without disturbing historical suppression
@@ -4211,6 +4251,15 @@ async def candidate_research_view(
                 proposed_rec.contact_email_addresses = get_f_val("contact_email_addresses", proposed_rec.contact_email_addresses)
 
     field_reviews = reg_store.get_field_reviews(candidate_id)
+    # Compute active, valid field reviews where review value checksum matches current stored value
+    valid_field_reviews = {}
+    if current_reg and field_reviews:
+        for fn, rev in field_reviews.items():
+            current_f_val = getattr(current_reg, fn, None)
+            if rev.review_state in ("OPERATOR_APPROVED", "OPERATOR_CORRECTED"):
+                if rev.value_checksum == compute_field_checksum(current_f_val):
+                    valid_field_reviews[fn] = rev
+
     is_finalizable, finalization_errors, finalization_checks = validate_research_finalization(
         cand=cand,
         reg_record=current_reg,
@@ -4265,7 +4314,8 @@ async def candidate_research_view(
             "proposed_record": proposed_rec,
             "latest_analysis": latest_analysis,
             "analysis_fields": analysis_fields,
-            "field_reviews": field_reviews,
+            "field_reviews": valid_field_reviews,
+            "raw_field_reviews": field_reviews,
             "is_finalizable": is_finalizable,
             "finalization_errors": finalization_errors,
             "finalization_checks": finalization_checks,
@@ -4570,7 +4620,21 @@ async def save_candidate_research_action(
         s = str(val).strip().lower()
         return s in ("1", "true", "yes", "on")
 
-    # Reject approval of quarantined ungrounded fields
+    # Reject approval of quarantined ungrounded fields UNLESS independently manually corrected
+    form_raw_vals = {
+        "company_name": company_name,
+        "legal_identity": legal_identity,
+        "geographic_location": geographic_location,
+        "telephone_numbers": telephone_numbers,
+        "contact_email_addresses": contact_email_addresses,
+        "responsible_person": responsible_person,
+        "business_activities": business_activities,
+        "official_website": official_website,
+        "descriptions_and_notes": descriptions_and_notes,
+        "job_advertisement_links": job_advertisement_links,
+        "other_links_and_references": other_links_and_references,
+    }
+
     quarantined_rejected = []
     field_flags = [
         ("company_name", _is_checked(apply_company_name)),
@@ -4589,10 +4653,14 @@ async def save_candidate_research_action(
         if is_applied and fn in proposed_analysis_fields:
             f_obj = proposed_analysis_fields[fn]
             if isinstance(f_obj, dict) and f_obj.get("quarantined"):
-                quarantined_rejected.append(fn)
+                # If operator provides an independent manual edit, allow manual verification
+                ai_val = str(f_obj.get("value") or "").strip().lower()
+                submitted_val = str(form_raw_vals.get(fn) or "").strip().lower()
+                if not submitted_val or submitted_val == ai_val or submitted_val in ("not found", "none", "null"):
+                    quarantined_rejected.append(fn)
 
     if quarantined_rejected:
-        err_msg = f"Cannot approve ungrounded fields: {quarantined_rejected}. Fields are quarantined."
+        err_msg = f"Cannot approve ungrounded fields: {quarantined_rejected}. Fields are quarantined. To verify, provide an independent correction with valid source reference."
         return RedirectResponse(
             f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
             status_code=status.HTTP_303_SEE_OTHER,
@@ -4875,6 +4943,122 @@ async def finalize_candidate_research_action(
     msg = f"Research review explicitly finalized for '{current_reg.company_name}'. Status promoted to OPERATOR_REVIEWED (Research Ready)."
     return RedirectResponse(
         f"/sales/candidates/{candidate_id}?message={quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/candidates/{candidate_id}/verify-field")
+async def verify_candidate_field_action(
+    candidate_id: str,
+    field_name: str = Form(...),
+    verified_value: str = Form(...),
+    source_url: str = Form(...),
+    operator_note: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    Explicit Evidence-Aware Manual Field Verification Action.
+    Allows an operator to independently verify and approve a quarantined or unverified field
+    with explicit domain ownership checks, valid source URL, and full audit provenance.
+    Never approves or unquarantines the original unsupported AI claim.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.research.research_store import ResearchSnapshotStore
+
+    reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+    snap_store = ResearchSnapshotStore()
+    existing = reg_store.get_record(candidate_id)
+    if not existing:
+        existing = reg_store.create_initial_record_for_candidate(cand)
+
+    fn = field_name.strip()
+    valid_fields = {
+        "company_name", "priority_level", "priority_rationale", "legal_identity",
+        "geographic_location", "telephone_numbers", "contact_email_addresses",
+        "responsible_person", "business_activities", "official_website",
+        "descriptions_and_notes", "job_advertisement_links", "other_links_and_references"
+    }
+    if fn not in valid_fields:
+        err_msg = f"Invalid field name: '{fn}'"
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    val = verified_value.strip()
+    if not val or val.lower() in ("not found", "none", "null"):
+        err_msg = f"Cannot verify field '{fn}' with empty or 'Not Found' value."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    src = source_url.strip()
+    if not src or not src.startswith(("http://", "https://")):
+        err_msg = f"Manual verification of '{fn}' requires a valid HTTP/HTTPS source URL."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    # Domain ownership validation for official_website
+    cand_domain = cand.company_domain or cand.domain or ""
+    if fn == "official_website":
+        if not is_canonical_domain_match(val, cand_domain):
+            err_msg = f"Verified website '{val}' does not match candidate domain '{cand_domain}'."
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
+    # Prepare updated LeadRegisterRecord
+    updated_dict = existing.to_dict()
+    updated_dict[fn] = val
+    updated_dict["provenance_source"] = "operator_edited"
+    updated_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    # If source URL is not already in evidence_urls, append it
+    ev_urls = list(existing.evidence_urls or [])
+    if src not in ev_urls:
+        ev_urls.append(src)
+    updated_dict["evidence_urls"] = ev_urls
+
+    updated_rec = LeadRegisterRecord(**updated_dict)
+
+    latest_snap = snap_store.get_latest_snapshot(candidate_id)
+    chk = compute_field_checksum(val)
+    f_rev = FieldReviewRecord(
+        candidate_id=candidate_id,
+        field_name=fn,
+        approved_value=val,
+        value_checksum=chk,
+        review_state="OPERATOR_APPROVED",
+        reviewed_at=datetime.now(timezone.utc).isoformat(),
+        source_type="operator_manual",
+        snapshot_id=latest_snap.snapshot_id if latest_snap else None,
+        analysis_id=None,
+        evidence_url=src,
+        evidence_excerpt=None,
+        operator_note=operator_note.strip() if operator_note and operator_note.strip() else f"Independently verified via {src}",
+    )
+
+    reg_store.save_record_with_reviews(updated_rec, [f_rev])
+
+    # Sync candidate domain if official_website was verified
+    if fn == "official_website":
+        canon_w = canonicalize_domain(val)
+        if canon_w and not cand.company_domain:
+            cand.company_domain = canon_w
+            svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Field '{fn}' independently verified and approved by operator."
+    return RedirectResponse(
+        f"/sales/candidates/{candidate_id}/research?message={quote(msg)}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

@@ -117,6 +117,28 @@ Write-Host "  - Workbook Import:      http://127.0.0.1:8000/sales/sources       
 Write-Host "  - API Documentation:    http://127.0.0.1:8000/docs                 " -ForegroundColor White
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host ""
+# 5. Secure Automatic Gemini LLM Credential Loading (DPAPI)
+$geminiVar = "GEMINI_API_KEY"
+if ($env:GEMINI_API_KEY -and $env:GEMINI_API_KEY.Trim()) {
+    Write-Host "[INFO] GEMINI_API_KEY is already present in current process environment." -ForegroundColor Green
+} else {
+    $sevenProvidersScript = Join-Path $RepoRoot "scripts\SALESAI-SEVEN-PROVIDERS.ps1"
+    if (Test-Path -LiteralPath $sevenProvidersScript) {
+        try {
+            # Load only the Gemini credential without loading unrelated keys
+            & $sevenProvidersScript -Mode LoadGemini | Out-Null
+        } catch {
+            Write-Host "[WARN] Encountered error loading Gemini DPAPI credential: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+}
+
+if ($env:GEMINI_API_KEY -and $env:GEMINI_API_KEY.Trim()) {
+    Write-Host "[INFO] GEMINI_API_KEY is configured (ready for operator-authorized LLM research)." -ForegroundColor Green
+} else {
+    Write-Host "[NOTICE] GEMINI_API_KEY is not configured. Paid LLM analysis is disabled; local heuristics active." -ForegroundColor Gray
+}
+
 Write-Host "Starting Uvicorn server on http://127.0.0.1:8000 (Press Ctrl+C to stop)..." -ForegroundColor Green
 Write-Host ""
 

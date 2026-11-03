@@ -51,6 +51,12 @@ echo   🩺 Health Check:             http://127.0.0.1:8000/health
 echo ======================================================================
 echo.
 
+:: 4. Secure Automatic Single-Provider Credential Loading (DPAPI)
+echo [4/4] Checking secure local credentials (DPAPI)...
+if exist "scripts\SALESAI-SEVEN-PROVIDERS.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "& '.\scripts\SALESAI-SEVEN-PROVIDERS.ps1' -Mode LoadGemini; & '.\scripts\SALESAI-SEVEN-PROVIDERS.ps1' -Mode LoadBrave" >nul 2>&1
+)
+
 :: Launch main SalesAI server
 ".venv\Scripts\python.exe" -u start_server.py
 

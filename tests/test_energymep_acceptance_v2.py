@@ -4327,6 +4327,426 @@ def test_63_readiness_and_finalization_decision_parity_and_unrelated_snapshot_is
     fp_after = get_db_fingerprints()
     assert fp_before == fp_after, "Readiness evaluation must perform ZERO SQLite database writes!"
 
+# ==============================================================================
+# STC PILOT ACCEPTANCE TESTS (CAND:DOMAIN:STCPI.COM / REGISTER #290)
+# ==============================================================================
+
+def test_64_stc_quarantined_website_manual_verification_workflow(isolated_db_paths, monkeypatch):
+    """
+    STC Pilot Acceptance Test 1:
+    Independent Manual Verification of Quarantined AI Fields.
+    - AI proposes official_website which is quarantined because excerpt is not found in crawl.
+    - Operator independently reviews and verifies authoritative value 'https://stcpi.com/' with valid source URL.
+    - Original unsupported AI claim is NEVER automatically approved or unquarantined.
+    - Saves FieldReviewRecord with manual provenance ('operator_manual'), matching value checksum, and audit trail.
+    - Finalization succeeds once verified.
+    """
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from sales_engine.research.research_store import ResearchSnapshotStore, PageEvidence, CompanyAnalysisRecord
+    from backend.sales_ui.router import (
+        validate_research_finalization,
+        evaluate_research_readiness,
+        compute_field_checksum,
+        verify_candidate_field_action,
+    )
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+    monkeypatch.setenv("SALESAI_RESEARCH_CACHE_DB", snap_db)
+
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+    snap_store = ResearchSnapshotStore(db_path=snap_db)
+
+    cid = "cand:domain:stcpi.com"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="STC Group",
+        domain="stcpi.com",
+        company_domain="stcpi.com",
+    )
+    cand_store.save_candidate(cand)
+
+    pe = PageEvidence(
+        snapshot_id="",
+        evidence_id="EV_STC_01",
+        requested_url="https://stcpi.com/",
+        resolved_url="https://stcpi.com/",
+        page_type="home",
+        http_status=200,
+        retrieval_status="FETCH_SUCCESS",
+        retrieved_at="2026-11-03T11:00:00Z",
+        title="STC Group - Ingegneria e Impianti",
+        meta_description="Ingegneria termotecnica e progettazione impianti",
+        content_sha256="stc_sha256",
+        cleaned_text="STC Group progetta impianti tecnologici e ingegneria civile e industriale.",
+    )
+    snap = snap_store.create_snapshot(cid, "stcpi.com", "STC Group", [pe])
+
+    # Proposed AI fields where official_website is quarantined
+    proposed = {
+        "company_name": {
+            "value": "STC Group",
+            "source_url": "https://stcpi.com/",
+            "evidence_excerpt": "STC Group progetta impianti",
+            "confidence": 0.95,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+        "official_website": {
+            "value": "https://stcpi.com/",
+            "source_url": "https://stcpi.com/",
+            "evidence_excerpt": "https://stcpi.com/",
+            "confidence": 0.85,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": False,
+            "quarantined": True,
+            "quarantine_reason": "AI excerpt not found verbatim in snapshot text.",
+        },
+        "business_activities": {
+            "value": "Ingegneria civile, industriale e impiantistica",
+            "source_url": "https://stcpi.com/",
+            "evidence_excerpt": "impianti tecnologici e ingegneria civile",
+            "confidence": 0.90,
+            "is_hypothesis": False,
+            "grounded_in_snapshot": True,
+            "excerpt_verified": True,
+            "quarantined": False,
+        },
+    }
+    analysis = CompanyAnalysisRecord(
+        analysis_id="an_stc_290",
+        candidate_id=cid,
+        snapshot_id=snap.snapshot_id,
+        created_at="2026-11-03T11:05:00Z",
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        status="SUCCESS",
+        input_tokens=200,
+        output_tokens=400,
+        cost_estimate=0.0001,
+        analyzed_pages_count=1,
+        chunks_count=1,
+        proposed_fields=proposed,
+    )
+    snap_store.save_analysis_record(analysis)
+
+    # Initial register record #290
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number=290,
+        company_name="STC Group",
+        official_website="https://stcpi.com/",
+        business_activities="Ingegneria civile, industriale e impiantistica",
+        verification_status="EXTRACTED",
+        provenance_source="local_research_mvp",
+        evidence_urls=["https://stcpi.com/"],
+    )
+    # Save approved reviews for company_name and business_activities
+    rev_name = FieldReviewRecord(
+        candidate_id=cid,
+        field_name="company_name",
+        approved_value="STC Group",
+        value_checksum=compute_field_checksum("STC Group"),
+        review_state="OPERATOR_APPROVED",
+        reviewed_at="2026-11-03T11:10:00Z",
+        source_type="llm_analysis",
+        snapshot_id=snap.snapshot_id,
+        analysis_id=analysis.analysis_id,
+        evidence_url="https://stcpi.com/",
+    )
+    rev_act = FieldReviewRecord(
+        candidate_id=cid,
+        field_name="business_activities",
+        approved_value="Ingegneria civile, industriale e impiantistica",
+        value_checksum=compute_field_checksum("Ingegneria civile, industriale e impiantistica"),
+        review_state="OPERATOR_APPROVED",
+        reviewed_at="2026-11-03T11:10:00Z",
+        source_type="llm_analysis",
+        snapshot_id=snap.snapshot_id,
+        analysis_id=analysis.analysis_id,
+        evidence_url="https://stcpi.com/",
+    )
+    reg_store.save_record_with_reviews(rec, [rev_name, rev_act])
+
+    # 1. Before manual verification: website has no approved review, so finalization fails
+    f_reviews = reg_store.get_field_reviews(cid)
+    is_ok, errs, checks = validate_research_finalization(
+        cand=cand,
+        reg_record=rec,
+        field_reviews=f_reviews,
+        latest_snapshot=snap,
+        latest_analysis=analysis,
+    )
+    assert is_ok is False
+    assert any("official_website" in e for e in errs)
+
+    # 2. Operator performs independent manual verification of official_website
+    import asyncio
+    resp = asyncio.run(
+        verify_candidate_field_action(
+            candidate_id=cid,
+            field_name="official_website",
+            verified_value="https://stcpi.com/",
+            source_url="https://stcpi.com/",
+            operator_note="Independently verified domain ownership and active website",
+            csrf=None,
+        )
+    )
+    assert resp.status_code == 303
+
+    # 3. Verify that the FieldReviewRecord is persisted with operator_manual provenance and correct checksum
+    f_reviews_after = reg_store.get_field_reviews(cid)
+    assert "official_website" in f_reviews_after
+    web_rev = f_reviews_after["official_website"]
+    assert web_rev.source_type == "operator_manual"
+    assert web_rev.review_state == "OPERATOR_APPROVED"
+    assert web_rev.value_checksum == compute_field_checksum("https://stcpi.com/")
+    assert web_rev.evidence_url == "https://stcpi.com/"
+
+    # 4. Underlying CompanyAnalysisRecord proposed_fields['official_website']['quarantined'] remains TRUE
+    # (AI claim is never falsely unquarantined)
+    stored_an = snap_store.get_latest_analysis(cid, snapshot_id=snap.snapshot_id)
+    assert stored_an.proposed_fields["official_website"]["quarantined"] is True
+
+    # 5. Validate finalization now passes
+    updated_rec = reg_store.get_record(cid)
+    is_ok_final, errs_final, checks_final = validate_research_finalization(
+        cand=cand,
+        reg_record=updated_rec,
+        field_reviews=f_reviews_after,
+        latest_snapshot=snap,
+        latest_analysis=stored_an,
+    )
+    assert is_ok_final is True, f"Expected finalization to pass, but failed with: {errs_final}"
+    assert checks_final["quarantine_clean"] is True
 
 
+def test_65_stale_non_core_field_reviews_invalidated_on_register_edit(isolated_db_paths, monkeypatch):
+    """
+    STC Pilot Acceptance Test 2:
+    Invalidate Stale Non-Core Field Reviews.
+    - An operator modifies non-core fields (telephone, email, legal identity) via lead_register_update_action.
+    - Old field review metadata is invalidated and archived to lead_register_field_reviews_history.
+    - Unaffected reviews (e.g. core fields) are strictly preserved.
+    """
+    from sales_engine.candidates.candidate_store import CandidateCompany, CandidateStore
+    from sales_engine.leads.register_store import LeadRegisterStore
+    from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
+    from backend.sales_ui.router import lead_register_update_action, compute_field_checksum
+    from starlette.requests import Request
+
+    cand_db, snap_db = isolated_db_paths
+    monkeypatch.setenv("SALES_OUTREACH_DB", cand_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", cand_db)
+    monkeypatch.setenv("SALESAI_CANDIDATES_DB", cand_db)
+
+    cand_store = CandidateStore(db_path=cand_db)
+    reg_store = LeadRegisterStore(db_path=cand_db)
+
+    cid = "cand:domain:stcpi.com"
+    cand = CandidateCompany(candidate_id=cid, company_name="STC Group", domain="stcpi.com")
+    cand_store.save_candidate(cand)
+
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number=290,
+        company_name="STC Group",
+        official_website="https://stcpi.com/",
+        business_activities="Ingegneria civile, industriale e impiantistica",
+        legal_identity="IT09876543210",
+        telephone_numbers="+39 049 123456",
+        contact_email_addresses="development@stcpi.com",
+        verification_status="OPERATOR_REVIEWED",
+        provenance_source="operator_edited",
+    )
+    revs = [
+        FieldReviewRecord(
+            candidate_id=cid, field_name="company_name", approved_value="STC Group",
+            value_checksum=compute_field_checksum("STC Group"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T11:00:00Z", source_type="operator_manual",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid, field_name="official_website", approved_value="https://stcpi.com/",
+            value_checksum=compute_field_checksum("https://stcpi.com/"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T11:00:00Z", source_type="operator_manual",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid, field_name="business_activities", approved_value="Ingegneria civile, industriale e impiantistica",
+            value_checksum=compute_field_checksum("Ingegneria civile, industriale e impiantistica"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T11:00:00Z", source_type="operator_manual",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid, field_name="telephone_numbers", approved_value="+39 049 123456",
+            value_checksum=compute_field_checksum("+39 049 123456"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T11:00:00Z", source_type="operator_manual",
+        ),
+        FieldReviewRecord(
+            candidate_id=cid, field_name="contact_email_addresses", approved_value="development@stcpi.com",
+            value_checksum=compute_field_checksum("development@stcpi.com"), review_state="OPERATOR_APPROVED",
+            reviewed_at="2026-11-03T11:00:00Z", source_type="operator_manual",
+        ),
+    ]
+    reg_store.save_record_with_reviews(rec, revs)
+
+    # Initial state: 5 reviews exist
+    assert len(reg_store.get_field_reviews(cid)) == 5
+
+    # Edit telephone_numbers only via lead_register_update_action
+    import asyncio
+    req = Request({"type": "http", "method": "POST", "headers": []})
+    resp = asyncio.run(
+        lead_register_update_action(
+            candidate_id=cid,
+            request=req,
+            record_number="290",
+            priority_level="A",
+            priority_rationale="Strategic MEP Lead",
+            company_name="STC Group",
+            legal_identity="IT09876543210",
+            geographic_location="Padova, Italy",
+            telephone_numbers="+39 049 999999",  # CHANGED!
+            business_activities="Ingegneria civile, industriale e impiantistica",
+            official_website="https://stcpi.com/",
+            responsible_person=None,
+            descriptions_and_notes=None,
+            job_advertisement_links=None,
+            other_links_and_references=None,
+            contact_email_addresses="development@stcpi.com",  # UNCHANGED
+            verification_status="OPERATOR_REVIEWED",
+            csrf=None,
+        )
+    )
+    assert resp.status_code == 303
+
+    # Active reviews after edit: telephone_numbers review should be INVALIDATED (deleted from active)
+    active_revs = reg_store.get_field_reviews(cid)
+    assert "telephone_numbers" not in active_revs
+    # Unchanged reviews strictly preserved
+    assert "contact_email_addresses" in active_revs
+    assert "company_name" in active_revs
+    assert "official_website" in active_revs
+    assert "business_activities" in active_revs
+
+    # Historical audit record exists for telephone_numbers
+    history = reg_store.get_field_reviews_history(cid, field_name="telephone_numbers")
+    assert len(history) >= 1
+    assert history[0]["approved_value"] == "+39 049 123456"
+    assert history[0]["superseded_reason"] == "field_modified_via_form"
+
+
+def test_66_ai_brief_accuracy_and_hypothesis_labeling(isolated_db_paths, monkeypatch):
+    """
+    STC Pilot Acceptance Test 3:
+    Improve Brief Accuracy.
+    - Preserves full address/location without mangling postal codes or commas.
+    - Labels Priority A and outsourcing assumptions as operator commercial hypotheses.
+    - Distinguishes partially approved fields from raw unreviewed state.
+    """
+    from sales_engine.candidates.candidate_store import CandidateCompany
+    from sales_engine.candidates.models import CompanyTier
+    from sales_engine.leads.register_models import LeadRegisterRecord
+    from backend.sales_ui.router import generate_ai_brief_text
+
+    cid = "cand:domain:stcpi.com"
+    cand = CandidateCompany(
+        candidate_id=cid,
+        company_name="STC Group",
+        domain="stcpi.com",
+        company_domain="stcpi.com",
+        company_tier=CompanyTier.tier_1,
+        outsourcing_potential="high",
+        bim_maturity="high",
+    )
+
+    full_address = "Via Lisbona 10, 35010 Peraga di Vigonza (PD), Italia"
+    rec = LeadRegisterRecord(
+        candidate_id=cid,
+        record_number=290,
+        company_name="STC Group",
+        geographic_location=full_address,
+        official_website="https://stcpi.com/",
+        business_activities="MEP and Structural Engineering",
+        priority_level="A",
+        priority_rationale="Leading Italian MEP engineering firm",
+        verification_status="EXTRACTED",
+    )
+
+    outreach_info = {
+        "readiness_label": "Draft Ready",
+        "base_eligible": True,
+        "is_suppressed": False,
+        "is_previously_contacted": False,
+        "has_verified_recipient": True,
+        "all_workspace_recipients": [
+            {
+                "full_name": "Ing. Marco Rossi",
+                "work_email": "development@stcpi.com",
+                "email_status": "verified",
+                "is_verified": True,
+                "is_documented": True,
+                "job_title": "Director",
+            }
+        ],
+    }
+    # Test partially reviewed status
+    research_info = {
+        "research_label": "Partially Reviewed",
+        "research_status": "partially_reviewed",
+        "verification_status": "EXTRACTED",
+        "record_number": 290,
+    }
+
+    brief = generate_ai_brief_text(cand, rec, None, outreach_info, research_info)
+
+    # 1. Address is preserved verbatim without stripping postal codes or commas
+    assert full_address in brief
+
+    # 2. Priority Tier is labeled as commercial hypothesis
+    assert "Priority Tier: Tier 1 (Operator Commercial Hypothesis — High Automation Fit, Not Verified Demand)" in brief
+
+    # 3. Outsourcing potential is labeled as analytical commercial hypothesis
+    assert "Outsourcing Potential (Analytical Hypothesis): high" in brief
+    assert "NOT an active published tender unless confirmed in notes (not independently verified purchasing demand)" in brief
+
+    # 4. Status reflects partial review
+    assert "- 13-Field Register Status: EXTRACTED (Partially Reviewed by Operator) (#290)" in brief
+
+
+def test_67_single_provider_launcher_configuration():
+    """
+    STC Pilot Acceptance Test 4:
+    Permanent Gemini Startup Fix.
+    Verifies that the canonical Windows launchers and credential script
+    support single-provider loading for Gemini and Brave without loading unrelated keys.
+    """
+    import pathlib
+    repo_root = pathlib.Path(__file__).parent.parent
+
+    # 1. scripts/SALESAI-SEVEN-PROVIDERS.ps1 supports LoadGemini
+    script_p = repo_root / "scripts" / "SALESAI-SEVEN-PROVIDERS.ps1"
+    assert script_p.exists()
+    script_text = script_p.read_text(encoding="utf-8")
+    assert "'LoadGemini'" in script_text
+    assert "if ($Mode -eq 'LoadGemini')" in script_text
+    assert "GEMINI_API_KEY" in script_text
+
+    # 2. run_sales_ai.ps1 loads Gemini DPAPI credential safely
+    ps1_p = repo_root / "run_sales_ai.ps1"
+    assert ps1_p.exists()
+    ps1_text = ps1_p.read_text(encoding="utf-8")
+    assert "-Mode LoadGemini" in ps1_text
+
+    # 3. run_sales_ai.bat invokes single-provider loading safely
+    bat_p = repo_root / "run_sales_ai.bat"
+    assert bat_p.exists()
+    bat_text = bat_p.read_text(encoding="utf-8")
+    assert "-Mode LoadGemini" in bat_text
 
