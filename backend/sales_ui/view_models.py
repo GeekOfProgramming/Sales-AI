@@ -314,6 +314,17 @@ class HistoricalImportPreviewResult(BaseModel):
     multiple_plausible_domains_count: int = 0
     ambiguous_rows: List[Dict[str, Any]] = Field(default_factory=list)
     missing_domain_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    # Reimport & Sent_Emails Reconciliation metrics
+    has_sent_emails_sheet: bool = False
+    sent_emails_total: int = 0
+    sent_emails_matched: int = 0
+    sent_emails_unmatched: int = 0
+    sent_emails_already_imported: int = 0
+    sent_emails_new: int = 0
+    new_companies_count: int = 0
+    existing_companies_count: int = 0
+    company_changes_count: int = 0
+    reviewed_records_affected: int = 0
 
 
 class DraftRequestChangesUiRequest(BaseModel):

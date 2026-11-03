@@ -517,6 +517,61 @@
     </div>
   </div>
 
+  <!-- Historical Reimport & Gmail Sent-Email Reconciliation Comparison Grid -->
+  {% if preview.has_sent_emails_sheet or preview.existing_companies_count > 0 or preview.new_companies_count > 0 %}
+  <div style="margin-top: 1rem; margin-bottom: 1.25rem;">
+    <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">
+      📧 Historical Workbook Reimport &amp; Sent-Email Reconciliation Comparison
+    </h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Existing Companies</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.existing_companies_count }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">New Companies Added</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.new_companies_count > 0 %}var(--color-success, #22c55e){% else %}var(--text-primary){% endif %};">
+          {{ preview.new_companies_count }}
+        </div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Changed Comm. Statuses</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.company_changes_count > 0 %}var(--color-info, #38bdf8){% else %}var(--text-primary){% endif %};">
+          {{ preview.company_changes_count }}
+        </div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Reviewed Records Preserved</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success, #22c55e);">
+          {{ preview.reviewed_records_affected }} protected (0 downgraded)
+        </div>
+      </div>
+      {% if preview.has_sent_emails_sheet %}
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Gmail Messages Total</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.sent_emails_total }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Sent Messages Matched</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success, #22c55e);">{{ preview.sent_emails_matched }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Unmatched for Review</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.sent_emails_unmatched > 0 %}var(--color-warning, #f59e0b){% else %}var(--text-primary){% endif %};">
+          {{ preview.sent_emails_unmatched }}
+        </div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Already Imported / New</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">
+          {{ preview.sent_emails_already_imported }} / {{ preview.sent_emails_new }}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Raw Status Distribution vs Normalized Classifications Table -->
   {% if preview.status_distribution or preview.classification_counts %}
   <div style="margin-top: 1rem; margin-bottom: 1rem;">

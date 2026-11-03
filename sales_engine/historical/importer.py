@@ -19,6 +19,7 @@ import io
 import json
 import logging
 import re
+import sqlite3
 from enum import Enum
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -525,6 +526,30 @@ def normalize_outreach_status(raw_status: Optional[str]) -> Dict[str, Any]:
 
 
 @dataclass
+class SentEmailRecord:
+    message_id: str
+    thread_id: str
+    sender_account: str
+    sender_group: Optional[str]
+    from_address: str
+    to_address: str
+    recipient_emails: List[str]
+    cc: Optional[str] = None
+    bcc: Optional[str] = None
+    sent_date: Optional[str] = None
+    sent_time: Optional[str] = None
+    subject: Optional[str] = None
+    email_body: Optional[str] = None
+    body_truncated: str = "NO"
+    gmail_link: Optional[str] = None
+    source_file: str = ""
+    source_sheet: str = "Sent_Emails"
+    matched_candidate_id: Optional[str] = None
+    matched_company_name: Optional[str] = None
+    reconciliation_status: str = "unmatched"  # 'matched' | 'ambiguous' | 'unmatched'
+
+
+@dataclass
 class HistoricalRecord:
     source_file: str
     sheet_name: str
@@ -594,6 +619,11 @@ class HistoricalImportResult:
     companies_updated: int = 0
     contacts_extracted: int = 0
     duplicates_skipped: int = 0
+    sent_emails_total: int = 0
+    sent_emails_imported: int = 0
+    sent_emails_matched: int = 0
+    sent_emails_unmatched: int = 0
+    sent_emails_duplicates: int = 0
     errors: List[str] = field(default_factory=list)
 
 
@@ -692,6 +722,47 @@ class HistoricalImporter:
                 ON operator_import_decisions (source_file_hash, sheet_name, row_number)
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS historical_sent_emails (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message_id TEXT NOT NULL,
+                    thread_id TEXT NOT NULL,
+                    sender_account TEXT NOT NULL,
+                    sender_group TEXT,
+                    from_address TEXT NOT NULL,
+                    to_address TEXT NOT NULL,
+                    recipient_emails_json TEXT NOT NULL,
+                    cc TEXT,
+                    bcc TEXT,
+                    sent_date TEXT,
+                    sent_time TEXT,
+                    subject TEXT,
+                    email_body TEXT,
+                    body_truncated TEXT DEFAULT 'NO',
+                    gmail_link TEXT,
+                    source_file TEXT NOT NULL,
+                    source_sheet TEXT NOT NULL,
+                    matched_candidate_id TEXT,
+                    matched_company_name TEXT,
+                    reconciliation_status TEXT NOT NULL DEFAULT 'unmatched',
+                    imported_at TEXT NOT NULL,
+                    UNIQUE(sender_account, message_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_hist_sent_emails_matched_cid
+                ON historical_sent_emails(matched_candidate_id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_hist_sent_emails_status
+                ON historical_sent_emails(reconciliation_status)
+                """
+            )
 
     @staticmethod
     def normalize_emails(email_cell: Optional[str]) -> List[str]:
@@ -785,6 +856,7 @@ class HistoricalImporter:
             has_domain = any(canon == "domain" for canon in mapped.values())
             sname_clean = sname.strip().lower()
             is_summary_sheet = sname_clean in ("dashboard", "summary", "overview", "riepilogo", "statistiche", "metrics", "meeting")
+            is_communication_sheet = sname_clean in ("sent_emails", "sent", "sent emails", "outbox", "emails_sent")
 
             sheets_report.append({
                 "sheet_name": sname,
@@ -794,7 +866,8 @@ class HistoricalImporter:
                 "has_company_column": has_company,
                 "has_domain_column": has_domain,
                 "is_summary_sheet": is_summary_sheet,
-                "mapping_valid": (has_company or has_domain) if not is_summary_sheet else True,
+                "is_communication_sheet": is_communication_sheet,
+                "mapping_valid": (has_company or has_domain) if (not is_summary_sheet and not is_communication_sheet) else True,
             })
 
         wb.close()
@@ -972,8 +1045,11 @@ class HistoricalImporter:
             raise FileNotFoundError(f"File not found: {path}")
 
         wb = openpyxl.load_workbook(path, data_only=True)
-        # Skip Dashboard, Meeting, Summary, Overview sheets from importing as companies
-        skip_sheet_names = {"dashboard", "meeting", "summary", "overview", "riepilogo", "statistiche", "metrics"}
+        # Skip Dashboard, Meeting, Summary, Overview, and Sent_Emails communication sheets from importing as companies
+        skip_sheet_names = {
+            "dashboard", "meeting", "summary", "overview", "riepilogo", "statistiche", "metrics",
+            "sent_emails", "sent", "sent emails", "outbox", "emails_sent",
+        }
         target_sheets = [sheet_name] if sheet_name and sheet_name in wb.sheetnames else [
             s for s in wb.sheetnames if s.strip().lower() not in skip_sheet_names
         ]
@@ -998,6 +1074,110 @@ class HistoricalImporter:
                 rec = self._row_to_record(row_dict, source_file=path.name, sheet_name=s_name, row_num=row_idx)
                 if rec:
                     records.append(rec)
+        wb.close()
+        return records
+
+    def parse_sent_emails(self, file_path: Union[str, Path], sheet_name: str = "Sent_Emails") -> List[SentEmailRecord]:
+        """
+        Parses Sent_Emails worksheet into SentEmailRecord objects.
+        Preserves original fields, dates as supplied (no timezone fabrication), and body without modification.
+        """
+        if openpyxl is None:
+            raise RuntimeError("openpyxl is required to parse XLSX files")
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        wb = openpyxl.load_workbook(path, data_only=True)
+        # Find sheet case-insensitively
+        target_name = None
+        for s in wb.sheetnames:
+            if s.strip().lower() == sheet_name.strip().lower():
+                target_name = s
+                break
+
+        if not target_name:
+            wb.close()
+            return []
+
+        ws = wb[target_name]
+        headers = []
+        for cell in ws[1]:
+            headers.append(str(cell.value or "").strip().lower())
+
+        records = []
+        email_regex = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+        for row_idx, row_cells in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not any(row_cells):
+                continue
+            row_dict = {}
+            for h, val in zip(headers, row_cells):
+                if h:
+                    row_dict[h] = val
+
+            msg_id = str(row_dict.get("message id") or "").strip()
+            if not msg_id:
+                continue
+
+            thread_id = str(row_dict.get("thread id") or "").strip()
+            sender_account = str(row_dict.get("sender account") or "").strip().lower()
+            sender_group = str(row_dict.get("sender group") or "").strip() or None
+            from_addr = str(row_dict.get("from") or "").strip()
+            to_addr = str(row_dict.get("to") or "").strip()
+            raw_recips = str(row_dict.get("recipient emails") or "").strip()
+
+            # Extract distinct normalized lowercase recipient emails
+            found_recips = email_regex.findall(raw_recips) or email_regex.findall(to_addr)
+            norm_recips = []
+            seen = set()
+            for r in found_recips:
+                cl = r.strip().lower()
+                if cl and cl not in seen:
+                    seen.add(cl)
+                    norm_recips.append(cl)
+
+            # Dates and Times: preserve exactly as supplied (string or formatted), do not fabricate timezone
+            sent_date_val = row_dict.get("sent date")
+            sent_date = str(sent_date_val).strip() if sent_date_val is not None else None
+            sent_time_val = row_dict.get("sent time")
+            sent_time = str(sent_time_val).strip() if sent_time_val is not None else None
+
+            cc_val = row_dict.get("cc")
+            cc = str(cc_val).strip() if cc_val is not None else None
+            bcc_val = row_dict.get("bcc")
+            bcc = str(bcc_val).strip() if bcc_val is not None else None
+            subj_val = row_dict.get("subject")
+            subject = str(subj_val).strip() if subj_val is not None else None
+            body_val = row_dict.get("email body")
+            email_body = str(body_val) if body_val is not None else None
+            trunc_val = row_dict.get("body truncated")
+            body_truncated = str(trunc_val).strip().upper() if trunc_val is not None else "NO"
+            gmail_link_val = row_dict.get("gmail link")
+            gmail_link = str(gmail_link_val).strip() if gmail_link_val is not None else None
+
+            records.append(
+                SentEmailRecord(
+                    message_id=msg_id,
+                    thread_id=thread_id,
+                    sender_account=sender_account,
+                    sender_group=sender_group,
+                    from_address=from_addr,
+                    to_address=to_addr,
+                    recipient_emails=norm_recips,
+                    cc=cc,
+                    bcc=bcc,
+                    sent_date=sent_date,
+                    sent_time=sent_time,
+                    subject=subject,
+                    email_body=email_body,
+                    body_truncated=body_truncated,
+                    gmail_link=gmail_link,
+                    source_file=path.name,
+                    source_sheet=target_name,
+                )
+            )
+
         wb.close()
         return records
 
@@ -1743,4 +1923,274 @@ class HistoricalImporter:
                     )
 
         return result
+
+    def reconcile_sent_emails(
+        self,
+        sent_emails: List[SentEmailRecord],
+        staged_records: Optional[List[HistoricalRecord]] = None,
+    ) -> List[SentEmailRecord]:
+        """
+        Reconciles Sent_Emails messages against candidate companies in CandidateStore (and staged records if provided).
+        Strict Safety Invariant:
+        Matches ONLY by exact verified recipient address.
+        Never matches by domain-only or name-similarity.
+        Unmatched or ambiguous messages remain classified as 'unmatched' / 'ambiguous'.
+        """
+        reconciled = []
+        cand_contacts_map: Dict[str, Set[str]] = {}
+        cand_names: Dict[str, str] = {}
+
+        with self.store._get_connection() as conn:
+            # Candidate names and ID mapping
+            name_rows = conn.execute("SELECT candidate_id, company_name FROM candidate_companies").fetchall()
+            name_to_cid: Dict[str, str] = {}
+            for r in name_rows:
+                cid_str = str(r[0])
+                cname = str(r[1] or "")
+                cand_names[cid_str] = cname
+                if cname:
+                    name_to_cid[cname.strip().lower()] = cid_str
+
+            # 1. candidate_contacts
+            c_rows = conn.execute("SELECT work_email, candidate_id FROM candidate_contacts WHERE work_email IS NOT NULL").fetchall()
+            for r in c_rows:
+                em = (r[0] or "").strip().lower()
+                cid = str(r[1] or "").strip()
+                if em and cid:
+                    cand_contacts_map.setdefault(em, set()).add(cid)
+
+            # 2. historical_contacts & historical_imports
+            h_rows = conn.execute(
+                """
+                SELECT hc.email, hi.canonical_domain, hi.company_name
+                FROM historical_contacts hc
+                JOIN historical_imports hi ON hc.import_hash = hi.import_hash
+                WHERE hc.email IS NOT NULL
+                """
+            ).fetchall()
+            for r in h_rows:
+                em = (r[0] or "").strip().lower()
+                dom = str(r[1] or "").strip().lower()
+                cname = str(r[2] or "").strip().lower()
+                if em:
+                    if dom:
+                        cand_contacts_map.setdefault(em, set()).add(f"cand:domain:{dom}")
+                    elif cname and cname in name_to_cid:
+                        cand_contacts_map.setdefault(em, set()).add(name_to_cid[cname])
+
+        # 3. Incorporate staged company records if available (e.g. during pre-import inspection or import)
+        if staged_records:
+            for rec in staged_records:
+                cid = None
+                if rec.domain:
+                    canon = self.store.canonicalize_domain(rec.domain)
+                    if canon:
+                        cid = f"cand:domain:{canon}"
+                if not cid:
+                    cname_clean = (rec.company_name or "").strip().lower()
+                    cid = name_to_cid.get(cname_clean) or self.store.generate_company_id(rec.company_name, None, rec.country)
+                if cid and rec.company_name:
+                    cand_names.setdefault(cid, rec.company_name)
+                for em in rec.emails:
+                    em_clean = em.strip().lower()
+                    if em_clean and cid:
+                        cand_contacts_map.setdefault(em_clean, set()).add(cid)
+
+        for m in sent_emails:
+            matched_cids = set()
+            for recip in m.recipient_emails:
+                cids = cand_contacts_map.get(recip.lower(), set())
+                matched_cids.update(cids)
+
+            if len(matched_cids) == 1:
+                cid = list(matched_cids)[0]
+                m.matched_candidate_id = cid
+                m.matched_company_name = cand_names.get(cid)
+                m.reconciliation_status = "matched"
+            elif len(matched_cids) > 1:
+                m.matched_candidate_id = None
+                m.matched_company_name = None
+                m.reconciliation_status = "ambiguous"
+            else:
+                m.matched_candidate_id = None
+                m.matched_company_name = None
+                m.reconciliation_status = "unmatched"
+
+            reconciled.append(m)
+
+        return reconciled
+
+    def import_sent_emails(
+        self,
+        sent_emails: List[SentEmailRecord],
+    ) -> Dict[str, int]:
+        """
+        Persists Sent_Emails records idempotently into historical_sent_emails.
+        Unique key: (sender_account, message_id).
+        Does NOT automatically verify deliverability, authorize new outreach, or convert unsent drafts to sent.
+        For matched companies, marks previous outreach detected and records outreach event idempotently.
+        """
+        stats = {
+            "total": len(sent_emails),
+            "imported": 0,
+            "matched": 0,
+            "unmatched": 0,
+            "duplicates": 0,
+        }
+        reconciled = self.reconcile_sent_emails(sent_emails)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        with self.store._get_connection() as conn:
+            for m in reconciled:
+                recips_json = json.dumps(m.recipient_emails)
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO historical_sent_emails (
+                            message_id, thread_id, sender_account, sender_group,
+                            from_address, to_address, recipient_emails_json, cc, bcc,
+                            sent_date, sent_time, subject, email_body, body_truncated,
+                            gmail_link, source_file, source_sheet, matched_candidate_id,
+                            matched_company_name, reconciliation_status, imported_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            m.message_id,
+                            m.thread_id,
+                            m.sender_account,
+                            m.sender_group,
+                            m.from_address,
+                            m.to_address,
+                            recips_json,
+                            m.cc,
+                            m.bcc,
+                            m.sent_date,
+                            m.sent_time,
+                            m.subject,
+                            m.email_body,
+                            m.body_truncated,
+                            m.gmail_link,
+                            m.source_file,
+                            m.source_sheet,
+                            m.matched_candidate_id,
+                            m.matched_company_name,
+                            m.reconciliation_status,
+                            now_iso,
+                        ),
+                    )
+                    stats["imported"] += 1
+                    if m.reconciliation_status == "matched":
+                        stats["matched"] += 1
+                    else:
+                        stats["unmatched"] += 1
+                except sqlite3.IntegrityError:
+                    stats["duplicates"] += 1
+                    continue
+
+                # If matched to a company, update candidate outreach guard and record historical outreach event
+                if m.matched_candidate_id and m.reconciliation_status == "matched":
+                    cid = m.matched_candidate_id
+                    # 1. Update CandidateCompany previous outreach status
+                    conn.execute(
+                        """
+                        UPDATE candidate_companies
+                        SET cold_outreach_allowed = 0,
+                            historical_contact_status = CASE
+                                WHEN historical_contact_status IN ('replied', 'converted', 'dnc') THEN historical_contact_status
+                                ELSE 'contacted'
+                            END,
+                            last_contacted_at = COALESCE(last_contacted_at, ?)
+                        WHERE candidate_id = ?
+                        """,
+                        (m.sent_date, cid),
+                    )
+
+                    # 2. Record historical outreach event idempotently
+                    raw_hash = f"gmail:{m.sender_account}:{m.message_id}"
+                    contact_email = m.recipient_emails[0] if m.recipient_emails else m.to_address
+                    self.store.record_historical_outreach(
+                        candidate_id=cid,
+                        source_ref=f"gmail:{m.sender_account}",
+                        contact_name=m.to_address,
+                        contact_email=contact_email,
+                        contacted_at=m.sent_date,
+                        channel="gmail_sent",
+                        reply_status="contacted",
+                        notes=f"Gmail message {m.message_id} (Thread {m.thread_id}) | Subject: {m.subject or 'No Subject'}",
+                        raw_row_hash=raw_hash,
+                    )
+
+        return stats
+
+    def get_sent_emails(
+        self,
+        status: Optional[str] = None,
+        candidate_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Query historical sent emails registry."""
+        with self.store._get_connection() as conn:
+            query = "SELECT * FROM historical_sent_emails WHERE 1=1"
+            params: List[Any] = []
+            if status:
+                query += " AND reconciliation_status = ?"
+                params.append(status)
+            if candidate_id:
+                query += " AND matched_candidate_id = ?"
+                params.append(candidate_id)
+            query += " ORDER BY sent_date DESC, sent_time DESC, id DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            rows = conn.execute(query, params).fetchall()
+            results = []
+            for r in rows:
+                recips = []
+                try:
+                    recips = json.loads(r["recipient_emails_json"])
+                except Exception:
+                    pass
+                results.append({
+                    "id": r["id"],
+                    "message_id": r["message_id"],
+                    "thread_id": r["thread_id"],
+                    "sender_account": r["sender_account"],
+                    "sender_group": r["sender_group"],
+                    "from_address": r["from_address"],
+                    "to_address": r["to_address"],
+                    "recipient_emails": recips,
+                    "cc": r["cc"],
+                    "bcc": r["bcc"],
+                    "sent_date": r["sent_date"],
+                    "sent_time": r["sent_time"],
+                    "subject": r["subject"],
+                    "email_body": r["email_body"],
+                    "body_truncated": r["body_truncated"],
+                    "gmail_link": r["gmail_link"],
+                    "source_file": r["source_file"],
+                    "source_sheet": r["source_sheet"],
+                    "matched_candidate_id": r["matched_candidate_id"],
+                    "matched_company_name": r["matched_company_name"],
+                    "reconciliation_status": r["reconciliation_status"],
+                    "imported_at": r["imported_at"],
+                })
+            return results
+
+    def get_sent_emails_stats(self) -> Dict[str, Any]:
+        """Aggregate stats on historical sent emails registry."""
+        with self.store._get_connection() as conn:
+            total = conn.execute("SELECT count(*) FROM historical_sent_emails").fetchone()[0]
+            matched = conn.execute("SELECT count(*) FROM historical_sent_emails WHERE reconciliation_status = 'matched'").fetchone()[0]
+            ambiguous = conn.execute("SELECT count(*) FROM historical_sent_emails WHERE reconciliation_status = 'ambiguous'").fetchone()[0]
+            unmatched = conn.execute("SELECT count(*) FROM historical_sent_emails WHERE reconciliation_status = 'unmatched'").fetchone()[0]
+            unique_threads = conn.execute("SELECT count(DISTINCT thread_id) FROM historical_sent_emails").fetchone()[0]
+            unique_messages = conn.execute("SELECT count(DISTINCT message_id) FROM historical_sent_emails").fetchone()[0]
+            return {
+                "total": total,
+                "matched": matched,
+                "ambiguous": ambiguous,
+                "unmatched": unmatched,
+                "unique_threads": unique_threads,
+                "unique_messages": unique_messages,
+            }
 

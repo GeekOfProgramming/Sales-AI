@@ -2881,6 +2881,86 @@ async def preview_historical_import_action(
         missing_domain_count=missing_domain_count,
     )
 
+    # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
+    has_sent_emails_sheet = False
+    sent_emails_total = 0
+    sent_emails_matched = 0
+    sent_emails_unmatched = 0
+    sent_emails_already_imported = 0
+    sent_emails_new = 0
+    new_companies_count = 0
+    existing_companies_count = 0
+    company_changes_count = 0
+    reviewed_records_affected = 0
+
+    if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+        try:
+            sent_msgs = importer.parse_sent_emails(resolved)
+            if sent_msgs:
+                has_sent_emails_sheet = True
+                sent_emails_total = len(sent_msgs)
+                reconciled = importer.reconcile_sent_emails(sent_msgs, staged_records=records)
+                sent_emails_matched = sum(1 for m in reconciled if m.reconciliation_status == "matched")
+                sent_emails_unmatched = sum(1 for m in reconciled if m.reconciliation_status != "matched")
+
+                # Check how many are already imported in historical_sent_emails
+                with svcs["cand_store"]._get_connection() as c_conn:
+                    existing_mids = set(
+                        (r[0], r[1])
+                        for r in c_conn.execute("SELECT sender_account, message_id FROM historical_sent_emails").fetchall()
+                    )
+                sent_emails_already_imported = sum(1 for m in sent_msgs if (m.sender_account, m.message_id) in existing_mids)
+                sent_emails_new = sent_emails_total - sent_emails_already_imported
+        except Exception as e:
+            logger.warning(f"Error parsing Sent_Emails sheet for preview: {e}")
+
+    # Compute company reimport comparison against historical_imports and candidate_companies
+    try:
+        with svcs["cand_store"]._get_connection() as c_conn:
+            hist_domains = set(
+                r[0] for r in c_conn.execute("SELECT canonical_domain FROM historical_imports WHERE canonical_domain IS NOT NULL").fetchall()
+            )
+            hist_names = set(
+                r[0].strip().lower() for r in c_conn.execute("SELECT company_name FROM historical_imports WHERE company_name IS NOT NULL").fetchall()
+            )
+            # Map canonical_domain/company_name to raw_row_json for status change detection
+            raw_hist_rows = c_conn.execute("SELECT canonical_domain, company_name, raw_row_json FROM historical_imports").fetchall()
+            hist_raw_map = {}
+            for r in raw_hist_rows:
+                dom = r[0]
+                cname = r[1].strip().lower() if r[1] else ""
+                raw_d = json.loads(r[2]) if r[2] else {}
+                if dom:
+                    hist_raw_map[dom] = raw_d
+                if cname:
+                    hist_raw_map[cname] = raw_d
+
+            # Check OPERATOR_REVIEWED Lead Register records
+            reviewed_cids = set(
+                r[0] for r in c_conn.execute("SELECT candidate_id FROM lead_register_records WHERE verification_status = 'OPERATOR_REVIEWED'").fetchall()
+            )
+
+        for rec in records:
+            dom = svcs["cand_store"].canonicalize_domain(rec.domain) if rec.domain else None
+            cname = (rec.company_name or "").strip().lower()
+            if (dom and dom in hist_domains) or (cname in hist_names):
+                existing_companies_count += 1
+            else:
+                new_companies_count += 1
+
+            old_raw = (hist_raw_map.get(dom) if dom else None) or hist_raw_map.get(cname)
+            if old_raw:
+                old_status = old_raw.get("وضعیت ارتباط") or old_raw.get("communication_status")
+                new_status = rec.raw_outreach_status
+                if old_status != new_status:
+                    company_changes_count += 1
+
+            cid = f"cand:domain:{dom}" if dom else None
+            if cid and cid in reviewed_cids:
+                reviewed_records_affected += 1
+    except Exception as e:
+        logger.warning(f"Error computing historical comparison metrics: {e}")
+
     preview_res = HistoricalImportPreviewResult(
         file_path=str(resolved),
         file_hash=file_hash,
@@ -2912,6 +2992,16 @@ async def preview_historical_import_action(
         multiple_plausible_domains_count=multiple_plausible_domains_count,
         ambiguous_rows=ambiguous_rows,
         missing_domain_rows=missing_domain_rows,
+        has_sent_emails_sheet=has_sent_emails_sheet,
+        sent_emails_total=sent_emails_total,
+        sent_emails_matched=sent_emails_matched,
+        sent_emails_unmatched=sent_emails_unmatched,
+        sent_emails_already_imported=sent_emails_already_imported,
+        sent_emails_new=sent_emails_new,
+        new_companies_count=new_companies_count,
+        existing_companies_count=existing_companies_count,
+        company_changes_count=company_changes_count,
+        reviewed_records_affected=reviewed_records_affected,
     )
 
     # Check if request prefers JSON (e.g. from test or API client)
@@ -3198,6 +3288,22 @@ async def confirm_historical_import_action(
             staged_importer = HistoricalImporter(store=staged_store)
             result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
+            # 2b. If Sent_Emails sheet exists, import sent messages into staging store
+            sent_emails_stats = None
+            if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+                try:
+                    sent_msgs = staged_importer.parse_sent_emails(resolved)
+                    if sent_msgs:
+                        sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
+                        result.sent_emails_total = sent_emails_stats.get("total", 0)
+                        result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                        result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                        result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                        result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
+                except Exception as e:
+                    logger.error(f"Failed to import sent emails in staging: {e}")
+                    raise
+
             # 3. Promote staged store into live target ONLY if target had no concurrent writes
             with store._get_connection() as s_conn:
                 current_version = s_conn.execute("PRAGMA data_version;").fetchone()[0]
@@ -3223,8 +3329,19 @@ async def confirm_historical_import_action(
     else:
         # In-memory execution
         result = importer.import_records(records, operator_decisions=parsed_decisions)
+        if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+            sent_msgs = importer.parse_sent_emails(resolved)
+            if sent_msgs:
+                sent_emails_stats = importer.import_sent_emails(sent_msgs)
+                result.sent_emails_total = sent_emails_stats.get("total", 0)
+                result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
 
     msg = f"Import completed: {result.companies_created} new companies, {result.records_parsed} records, {result.duplicates_skipped} duplicates skipped."
+    if result.sent_emails_total > 0:
+        msg += f" Sent emails: {result.sent_emails_imported} imported ({result.sent_emails_matched} matched, {result.sent_emails_unmatched} unmatched, {result.sent_emails_duplicates} duplicates skipped)."
 
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
@@ -7029,6 +7146,12 @@ async def sent_history_view(request: Request):
     # Also fetch confirmed manual external outbound logs
     manual_logs = svcs["rev_store"].list_manual_outreach_logs(limit=100)
 
+    # Fetch historical Gmail sent emails registry and stats
+    importer = HistoricalImporter(store=svcs["cand_store"])
+    hist_sent_emails = importer.get_sent_emails(limit=300)
+    hist_sent_stats = importer.get_sent_emails_stats()
+    unmatched_sent_emails = [m for m in hist_sent_emails if m.get("reconciliation_status") != "matched"]
+
     return render_console_template(
         request=request,
         name="sent.html",
@@ -7038,6 +7161,9 @@ async def sent_history_view(request: Request):
             "sent_items": items,
             "items": items,
             "manual_logs": manual_logs,
+            "hist_sent_emails": hist_sent_emails,
+            "hist_sent_stats": hist_sent_stats,
+            "unmatched_sent_emails": unmatched_sent_emails,
             "email_send_enabled": is_email_send_enabled(),
         },
     )
