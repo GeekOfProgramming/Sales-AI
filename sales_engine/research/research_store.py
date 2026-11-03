@@ -221,7 +221,7 @@ class ResearchSnapshotStore:
                     proposed_fields_json TEXT NOT NULL,
                     error_message TEXT,
                     FOREIGN KEY (snapshot_id) REFERENCES research_snapshots(snapshot_id) ON DELETE CASCADE,
-                    UNIQUE(candidate_id, snapshot_id, chunk_hash, model)
+                    UNIQUE(candidate_id, snapshot_id, snapshot_checksum, chunk_index, chunk_hash, provider, model, schema_version, prompt_version)
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_chunk_analysis
@@ -586,28 +586,33 @@ class ResearchSnapshotStore:
         self,
         candidate_id: str,
         snapshot_id: str,
-        model: Optional[str] = None
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        schema_version: Optional[str] = None,
+        prompt_version: Optional[str] = None,
+        snapshot_checksum: Optional[str] = None,
     ) -> List[AnalysisChunkRecord]:
-        """Retrieve chunk checkpoints for candidate and snapshot, ordered by chunk_index."""
+        """Retrieve chunk checkpoints for candidate and snapshot, matching extraction contract."""
         with self._get_connection() as conn:
+            query = "SELECT * FROM analysis_chunk_checkpoints WHERE candidate_id = ? AND snapshot_id = ?"
+            params: List[Any] = [candidate_id, snapshot_id]
+            if provider:
+                query += " AND provider = ?"
+                params.append(provider)
             if model:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM analysis_chunk_checkpoints
-                    WHERE candidate_id = ? AND snapshot_id = ? AND model = ?
-                    ORDER BY chunk_index ASC;
-                    """,
-                    (candidate_id, snapshot_id, model),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    """
-                    SELECT * FROM analysis_chunk_checkpoints
-                    WHERE candidate_id = ? AND snapshot_id = ?
-                    ORDER BY chunk_index ASC;
-                    """,
-                    (candidate_id, snapshot_id),
-                ).fetchall()
+                query += " AND model = ?"
+                params.append(model)
+            if schema_version:
+                query += " AND schema_version = ?"
+                params.append(schema_version)
+            if prompt_version:
+                query += " AND prompt_version = ?"
+                params.append(prompt_version)
+            if snapshot_checksum:
+                query += " AND snapshot_checksum = ?"
+                params.append(snapshot_checksum)
+            query += " ORDER BY chunk_index ASC;"
+            rows = conn.execute(query, tuple(params)).fetchall()
             return [self._row_to_chunk_record(r) for r in rows]
 
     def get_chunk_checkpoint_by_hash(
@@ -616,17 +621,33 @@ class ResearchSnapshotStore:
         snapshot_id: str,
         chunk_hash: str,
         model: str,
+        provider: Optional[str] = None,
+        schema_version: Optional[str] = None,
+        prompt_version: Optional[str] = None,
+        snapshot_checksum: Optional[str] = None,
+        chunk_index: Optional[int] = None,
     ) -> Optional[AnalysisChunkRecord]:
-        """Retrieve a specific chunk checkpoint by candidate, snapshot, chunk hash, and model."""
+        """Retrieve a specific chunk checkpoint matching full contract identity."""
         with self._get_connection() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM analysis_chunk_checkpoints
-                WHERE candidate_id = ? AND snapshot_id = ? AND chunk_hash = ? AND model = ?
-                LIMIT 1;
-                """,
-                (candidate_id, snapshot_id, chunk_hash, model),
-            ).fetchone()
+            query = "SELECT * FROM analysis_chunk_checkpoints WHERE candidate_id = ? AND snapshot_id = ? AND chunk_hash = ? AND model = ?"
+            params: List[Any] = [candidate_id, snapshot_id, chunk_hash, model]
+            if provider:
+                query += " AND provider = ?"
+                params.append(provider)
+            if schema_version:
+                query += " AND schema_version = ?"
+                params.append(schema_version)
+            if prompt_version:
+                query += " AND prompt_version = ?"
+                params.append(prompt_version)
+            if snapshot_checksum:
+                query += " AND snapshot_checksum = ?"
+                params.append(snapshot_checksum)
+            if chunk_index is not None:
+                query += " AND chunk_index = ?"
+                params.append(chunk_index)
+            query += " ORDER BY created_at DESC LIMIT 1;"
+            row = conn.execute(query, tuple(params)).fetchone()
             if row:
                 return self._row_to_chunk_record(row)
             return None

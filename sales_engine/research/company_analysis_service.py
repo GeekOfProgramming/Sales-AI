@@ -43,6 +43,10 @@ from sales_engine.research.pricing_config import (
 
 logger = logging.getLogger(__name__)
 
+# Canonical schema and prompt versions for chunk checkpoints
+SCHEMA_VERSION = "2.1.0"
+PROMPT_VERSION = "2.1.0"
+
 # Canonical 13-field extraction schema for LLM structured output
 LEAD_REGISTER_13_FIELDS_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -745,13 +749,25 @@ def execute_company_analysis(
     SCHEMA_VERSION = "2.1.0"
     PROMPT_VERSION = "2.1.0"
 
-    # Query existing chunk checkpoints for candidate, snapshot, and model (resumability)
+    # Query existing chunk checkpoints for candidate, snapshot, provider, model, schema, and prompt (resumability)
     existing_checkpoints = store.get_chunk_checkpoints(
         candidate_id=candidate_id,
         snapshot_id=snapshot.snapshot_id,
+        provider=pid,
         model=effective_model,
+        schema_version=SCHEMA_VERSION,
+        prompt_version=PROMPT_VERSION,
+        snapshot_checksum=snapshot.content_checksum,
     )
-    checkpoint_map = {cp.chunk_hash: cp for cp in existing_checkpoints}
+    checkpoint_map = {
+        (cp.chunk_index, cp.chunk_hash): cp
+        for cp in existing_checkpoints
+        if cp.provider == pid
+        and cp.model == effective_model
+        and cp.schema_version == SCHEMA_VERSION
+        and cp.prompt_version == PROMPT_VERSION
+        and cp.snapshot_checksum == snapshot.content_checksum
+    }
 
     aggregated_proposals: Dict[str, Any] = {}
     total_input_tokens = 0
@@ -765,7 +781,7 @@ def execute_company_analysis(
     # Hydrate completed checkpoints first
     for c in chunks:
         c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
-        cp = checkpoint_map.get(c_hash)
+        cp = checkpoint_map.get((c["chunk_index"], c_hash))
         if cp and cp.status == "COMPLETED" and cp.snapshot_checksum == snapshot.content_checksum:
             logger.info(f"Resuming analysis: chunk {c['chunk_index']} already completed (hash: {c_hash[:8]}).")
             resumed_chunks_count += 1
@@ -778,8 +794,8 @@ def execute_company_analysis(
 
     for c in chunks:
         c_hash = hashlib.sha256(c["text"].encode("utf-8")).hexdigest()
-        cp = checkpoint_map.get(c_hash)
-        # Skip if already completed with identical checksum
+        cp = checkpoint_map.get((c["chunk_index"], c_hash))
+        # Skip if already completed with identical checksum and contract
         if cp and cp.status == "COMPLETED" and cp.snapshot_checksum == snapshot.content_checksum:
             continue
 
@@ -837,8 +853,8 @@ def execute_company_analysis(
         chunk_record_id = f"chk_{analysis_id}_{c['chunk_index']}"
         now_chk = datetime.now(timezone.utc).isoformat()
         try:
-            resp: LLMResponse = gw.generate(req)
             executed_chunks_count += 1
+            resp: LLMResponse = gw.generate(req)
         except LLMNotConfiguredError as e:
             rec = CompanyAnalysisRecord(
                 analysis_id=analysis_id,
@@ -908,10 +924,16 @@ def execute_company_analysis(
         total_output_tokens += c_out
         raw_responses.append(resp.content or "")
 
+        chunk_status = "COMPLETED"
+        chunk_err_msg: Optional[str] = None
+
         # Check for model truncation / finish reason
         if resp.finish_reason and resp.finish_reason.lower() in ("length", "max_tokens"):
-            overall_status = "SCHEMA_INVALID"
-            diag_msgs.append(f"Chunk {c['chunk_index']} truncated by provider (finish_reason: {resp.finish_reason}).")
+            chunk_status = "TRUNCATED"
+            chunk_err_msg = f"Chunk {c['chunk_index']} truncated by provider (finish_reason: {resp.finish_reason})."
+            if overall_status == "SUCCESS":
+                overall_status = "SCHEMA_INVALID"
+            diag_msgs.append(chunk_err_msg)
 
         # Parse chunk JSON
         raw_text = resp.content or ""
@@ -936,10 +958,30 @@ def execute_company_analysis(
                         chunk_parsed = chunk_parsed[wrapper_key]
                         break
 
-            aggregated_proposals = merge_field_proposals(aggregated_proposals, chunk_parsed)
+            # Validate per-chunk schema integrity
+            required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
+            missing_in_chunk = [
+                f for f in required_13
+                if f not in chunk_parsed
+                or not isinstance(chunk_parsed[f], dict)
+                or not all(k in chunk_parsed[f] for k in ("value", "source_url", "confidence", "is_hypothesis"))
+            ]
+            if missing_in_chunk:
+                chunk_status = "SCHEMA_INVALID"
+                chunk_err_msg = f"Missing required fields in chunk extraction: {missing_in_chunk}"
+                if overall_status == "SUCCESS":
+                    overall_status = "SCHEMA_INVALID"
+                diag_msgs.append(chunk_err_msg)
+            else:
+                # Only merge proposals from valid chunks
+                aggregated_proposals = merge_field_proposals(aggregated_proposals, chunk_parsed)
         except Exception as e:
             logger.warning(f"Failed to parse chunk {c['chunk_index']} JSON: {e}")
-            diag_msgs.append(f"Chunk {c['chunk_index']} schema error: {e}")
+            chunk_status = "SCHEMA_INVALID"
+            chunk_err_msg = f"Chunk {c['chunk_index']} JSON parse error: {e}"
+            if overall_status == "SUCCESS":
+                overall_status = "SCHEMA_INVALID"
+            diag_msgs.append(chunk_err_msg)
 
         # Compute chunk cost
         chunk_cost = calculate_cost(
@@ -949,8 +991,8 @@ def execute_company_analysis(
             model=effective_model,
         )
 
-        # Save successful chunk checkpoint immediately
-        success_chk = AnalysisChunkRecord(
+        # Persist chunk checkpoint with authoritative chunk_status (COMPLETED, TRUNCATED, or SCHEMA_INVALID)
+        chunk_chk = AnalysisChunkRecord(
             chunk_record_id=chunk_record_id,
             analysis_id=analysis_id,
             candidate_id=candidate_id,
@@ -963,7 +1005,7 @@ def execute_company_analysis(
             model=effective_model,
             schema_version=SCHEMA_VERSION,
             prompt_version=PROMPT_VERSION,
-            status="COMPLETED",
+            status=chunk_status,
             created_at=now_chk,
             completed_at=datetime.now(timezone.utc).isoformat(),
             input_tokens=c_inp,
@@ -971,8 +1013,12 @@ def execute_company_analysis(
             cost_estimate=chunk_cost,
             raw_response=resp.content,
             proposed_fields=chunk_parsed if isinstance(chunk_parsed, dict) else {},
+            error_message=chunk_err_msg,
         )
-        store.save_chunk_checkpoint(success_chk)
+        store.save_chunk_checkpoint(chunk_chk)
+
+        if chunk_status != "COMPLETED" and overall_status == "SUCCESS":
+            overall_status = chunk_status
 
     # Validate final 13 fields presence and nested structures
     required_13 = list(LEAD_REGISTER_13_FIELDS_SCHEMA["properties"].keys())
@@ -1000,6 +1046,37 @@ def execute_company_analysis(
     # Apply strict source evidence verification (P0-C)
     final_fields = verify_field_evidence_excerpts(snapshot, aggregated_proposals)
 
+    # Check for complete coverage of all planned chunks (P0-2)
+    # Re-query all valid COMPLETED checkpoints strictly matching the active execution contract
+    final_checkpoints = store.get_chunk_checkpoints(
+        candidate_id=candidate_id,
+        snapshot_id=snapshot.snapshot_id,
+        provider=pid,
+        model=effective_model,
+        schema_version=SCHEMA_VERSION,
+        prompt_version=PROMPT_VERSION,
+        snapshot_checksum=snapshot.content_checksum,
+    )
+    completed_checkpoint_indices = {
+        cp.chunk_index for cp in final_checkpoints if cp.status == "COMPLETED"
+    }
+    all_chunk_indices = {c["chunk_index"] for c in chunks}
+    completed_chunks_count = len(completed_checkpoint_indices & all_chunk_indices)
+    pending_chunks_count = len(chunks) - completed_chunks_count
+
+    if completed_chunks_count < len(chunks):
+        if overall_status == "SUCCESS":
+            overall_status = "INCOMPLETE"
+            diag_msgs.append(f"Incomplete analysis: {completed_chunks_count}/{len(chunks)} chunks completed ({pending_chunks_count} pending).")
+
+    # Calculate actual pages covered by completed chunks
+    covered_urls = set()
+    for c in chunks:
+        if c["chunk_index"] in completed_checkpoint_indices:
+            covered_urls.update(c.get("urls", []))
+    covered_pages_count = sum(1 for p in eligible_pages if (p.resolved_url in covered_urls or p.requested_url in covered_urls))
+    coverage_pct = round((covered_pages_count / len(eligible_pages) * 100.0), 1) if eligible_pages else 0.0
+
     # Calculate actual cost using authoritative pricing config
     actual_cost = calculate_cost(
         input_tokens=total_input_tokens,
@@ -1008,13 +1085,12 @@ def execute_company_analysis(
         model=effective_model,
     )
 
-    # Calculate completed chunks vs planned
-    completed_chunks_count = resumed_chunks_count + (executed_chunks_count if overall_status == "SUCCESS" else max(0, executed_chunks_count - 1))
-    analyzed_page_count = len(eligible_pages) if overall_status == "SUCCESS" else 0
+    analyzed_page_count = covered_pages_count if overall_status == "SUCCESS" else covered_pages_count
 
     summary_diag = (
         f"Planned {len(chunks)} chunk(s) across {len(eligible_pages)} eligible pages. "
-        f"Completed: {completed_chunks_count}/{len(chunks)} chunks (resumed {resumed_chunks_count}). "
+        f"Completed: {completed_chunks_count}/{len(chunks)} chunks (resumed {resumed_chunks_count}, pending {pending_chunks_count}). "
+        f"Coverage: {covered_pages_count}/{len(eligible_pages)} pages ({coverage_pct}%). "
         f"Omitted: {len(omitted_reasons)} pages. Status: {overall_status}."
     )
     if diag_msgs:

@@ -163,16 +163,16 @@
 
       <!-- Button B: Analyze Saved Snapshot with LLM (or Resume Analysis) -->
       {% if snapshot and snapshot.pages_succeeded > 0 %}
-      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm Authorized Paid LLM Analysis?\n\nProvider: {{ analysis_preflight.provider|default("gemini")|upper }}\nModel: {{ analysis_preflight.model|default("gemini-3.5-flash-lite") }}\nSnapshot: {{ snapshot.snapshot_id }}\nEligible Pages: {{ analysis_preflight.eligible_pages_count|default(snapshot.pages_succeeded) }}\nChunks: {{ analysis_preflight.chunks_count|default(1) }}\nEstimated Tokens: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} in / {{ analysis_preflight.estimated_output_tokens|default(1200) }} out\nApprox Cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }} (Billing tier: {{ analysis_preflight.billing_tier|default("Standard") }})\n\nServer Authorization Token verified.');">
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm Authorized Paid LLM Analysis?\n\nProvider: {{ analysis_preflight.provider|default("gemini")|upper }}\nModel: {{ analysis_preflight.model|default("gemini-3.5-flash-lite") }}\nSnapshot: {{ snapshot.snapshot_id }}\nEligible Pages: {{ analysis_preflight.eligible_pages_count|default(snapshot.pages_succeeded) }}\nChunks: {{ analysis_preflight.chunks_count|default(1) }}\nEstimated Tokens: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} in / {{ analysis_preflight.estimated_output_tokens|default(1200) }} out\nApprox Cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }} (Billing tier: {{ analysis_preflight.billing_tier|default("Standard") }})\n{% if chunk_stats and chunk_stats.uncertain > 0 %}\nNOTICE: {{ chunk_stats.uncertain }} chunk(s) previously timed out. Retrying an uncertain chunk may cause duplicate provider processing or billing.\n{% endif %}\nServer Authorization Token verified.');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="provider" value="gemini">
         <input type="hidden" name="model" value="gemini-3.5-flash-lite">
         <input type="hidden" name="snapshot_id" value="{{ snapshot.snapshot_id }}">
         <input type="hidden" name="auth_token" value="{{ analysis_auth_token }}">
         <input type="hidden" name="operator_confirmed" value="1">
-        {% if latest_analysis and latest_analysis.status == "FAILED" and latest_analysis.diagnostic_info and "Timeout" in latest_analysis.diagnostic_info %}
+        {% if chunk_stats and chunk_stats.can_resume %}
         <button type="submit" class="btn btn-warning" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600; background-color: #d97706; border-color: #d97706; color: #ffffff;">
-          🔄 Resume Analysis (Checkpoints Available)
+          🔄 Resume Analysis ({{ chunk_stats.completed }}/{{ chunk_stats.total }} Completed &bull; {{ chunk_stats.remaining }} Remaining)
         </button>
         {% elif latest_analysis and latest_analysis.status == "SUCCESS" %}
         <button type="submit" class="btn btn-secondary" id="btnAnalyzeLLM" style="padding: 0.55rem 1.25rem; font-weight: 600;">
@@ -207,6 +207,9 @@
       | Omitted: <strong>{{ latest_analysis.omitted_pages_count }}</strong>
       | Tokens: <strong>{{ (latest_analysis.input_tokens or 0) + (latest_analysis.output_tokens or 0) }}</strong>
       | Cost: <strong>${{ latest_analysis.cost_estimate }}</strong>
+      {% if chunk_stats and chunk_stats.total > 0 %}
+      | Progress: <strong>{{ chunk_stats.completed }} done, {{ chunk_stats.failed }} failed, {{ chunk_stats.uncertain }} uncertain, {{ chunk_stats.remaining }} remaining</strong>
+      {% endif %}
       {% else %}
       Analysis Status: <em>Awaiting operator analysis trigger</em>
       {% endif %}

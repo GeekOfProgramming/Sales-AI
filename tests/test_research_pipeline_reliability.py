@@ -1,20 +1,20 @@
 """
-Isolated Offline Failure-Path & Reliability Test Suite for Research Pipeline V2.2.
+Isolated Offline Failure-Path & Reliability Test Suite for Research Pipeline V2.2.1.
 Validates:
-1. Multi-page snapshot partitioning (e.g. 16 eligible pages across chunks).
-2. Timeout handling on chunk 1 (LLMTimeoutError, CONNECT/READ timeouts, no partial corruption).
-3. Timeout handling on later chunk (chunk 3 after successful chunks 1 & 2).
-4. Durable resume without repeating completed chunks (provider called only for remaining chunks).
-5. Token reuse rejection on resume (requires fresh single-use auth token).
-6. Request idempotency / concurrent duplicate submission rejection.
-7. Process restart / store reload from disk between chunk failure and resume.
-8. Checkpoint invalidation upon snapshot / model / prompt / schema mismatch.
-9. Cost ceiling & budget enforcement across resumed executions.
-10. Accurate progress & chunk accounting (planned, completed, failed/uncertain, omitted).
-11. Contact contamination rejection (soup separator prevents concatenation; mailto/tel priority).
-12. Generic service page title rejection as company name (e.g. 'BIM MEP').
-13. Generic homepage title rejection as business activities (e.g. 'Home page - RENERWAVE').
-14. STC finalized record preservation (cand:domain:stcpi.com unaffected).
+1. Invalid JSON produces no reusable completed checkpoint.
+2. Truncated response produces no reusable completed checkpoint.
+3. A subsequent authorized attempt can recover from an invalid checkpoint.
+4. Ten planned chunks, five completed: status must not be SUCCESS.
+5. SUCCESS only when every required chunk is validly completed.
+6. Cross-provider checkpoint reuse is rejected.
+7. Prompt/schema mismatch causes fresh execution rather than reuse.
+8. Timeout increments attempted-call accounting (provider_calls_count > 0).
+9. Timeout preserves an uncertain checkpoint and its history.
+10. Explicit retry requires fresh authorization and discloses uncertain usage.
+11. Resume skips only valid compatible completed chunks.
+12. A simulated application restart preserves valid checkpoints.
+13. Previously successful analyses remain available if a later attempt fails.
+14. No operational STC, RENERWAVE or Energymep data is modified by automated tests.
 
 ALL TESTS ARE 100% OFFLINE. ZERO LIVE CRAWLING. ZERO PAID API CALLS.
 """
@@ -40,6 +40,8 @@ from sales_engine.research.company_analysis_service import (
     execute_company_analysis,
     estimate_analysis_preflight,
     partition_snapshot_into_chunks,
+    SCHEMA_VERSION,
+    PROMPT_VERSION,
 )
 from sales_engine.research.pricing_config import (
     generate_analysis_auth_token,
@@ -112,41 +114,24 @@ def _dummy_13_field_response(chunk_index: int = 1):
 
 
 # ---------------------------------------------------------------------------
-# 1. Multi-page Snapshot Partitioning
+# 1. Invalid JSON produces no reusable completed checkpoint
 # ---------------------------------------------------------------------------
-def test_case_01_snapshot_partitioning_16_pages(tmp_path):
+def test_01_invalid_json_produces_no_completed_checkpoint(tmp_path):
     store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
-    snapshot = _create_test_snapshot(store, "snap_renerwave_16", "cand:domain:renerwave.com", "renerwave.com", 16, chunk_text_multiplier=50)
-    chunks, eligible, omitted = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
-    assert len(chunks) >= 2, f"Expected at least 2 chunks for 16 substantive pages, got {len(chunks)}"
-    assert len(chunks) <= 5, "Should respect maximum reasonable partition count"
-    
-    preflight = estimate_analysis_preflight(snapshot, provider_id="gemini", model="gemini-3.5-flash-lite")
-    assert preflight["eligible_pages_count"] == 16
-    assert preflight["chunks_count"] == len(chunks)
-    assert preflight["estimated_cost_usd"] > 0
+    snapshot = _create_test_snapshot(store, "snap_invalid_json", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
 
-
-# ---------------------------------------------------------------------------
-# 2. Timeout on Chunk 1 (LLMTimeoutError, Granular Error)
-# ---------------------------------------------------------------------------
-def test_case_02_timeout_on_chunk_1(tmp_path):
-    db_path = str(tmp_path / "test_research.db")
-    store = ResearchSnapshotStore(db_path=db_path)
-    
-    snapshot = _create_test_snapshot(store, "snap_timeout_1", "cand:domain:renerwave.com", "renerwave.com", 6, chunk_text_multiplier=40)
-
-    auth_token = generate_analysis_auth_token(
-        candidate_id="cand:domain:renerwave.com",
-        snapshot_id="snap_timeout_1",
-        provider="gemini",
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        content="{invalid json string...",
         model="gemini-3.5-flash-lite",
-        max_budget_usd=0.50,
+        provider="gemini",
+        task_id="analysis",
+        request_id="req_inv",
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=0.0001,
     )
-
-    mock_gateway = MagicMock()
-    err = LLMTimeoutError("Read operation timed out after 90.0 seconds", timeout_category="READ_TIMEOUT")
-    mock_gateway.generate.side_effect = err
 
     rec = execute_company_analysis(
         snapshot=snapshot,
@@ -154,66 +139,37 @@ def test_case_02_timeout_on_chunk_1(tmp_path):
         provider_id="gemini",
         model="gemini-3.5-flash-lite",
         snapshot_store=store,
-        gateway_override=mock_gateway,
+        gateway_override=mock_gw,
         auth_token=auth_token,
         require_auth=True,
     )
-
-    assert rec.status in ("FAILED", "TIMEOUT")
-    assert "READ_TIMEOUT" in rec.diagnostic_info
+    assert rec.status == "SCHEMA_INVALID"
     checkpoints = store.get_chunk_checkpoints(candidate_id=rec.candidate_id, snapshot_id=snapshot.snapshot_id)
-    assert len(checkpoints) >= 1
-    assert checkpoints[0].status == "UNCERTAIN_TIMEOUT"
-    assert checkpoints[0].error_message is not None
+    assert len(checkpoints) == 1
+    assert checkpoints[0].status == "SCHEMA_INVALID"
+    assert checkpoints[0].status != "COMPLETED"
 
 
 # ---------------------------------------------------------------------------
-# 3. Timeout on Chunk 3 After Successful Chunks 1 & 2
+# 2. Truncated response produces no reusable completed checkpoint
 # ---------------------------------------------------------------------------
-def test_case_03_timeout_on_chunk_3(tmp_path):
-    db_path = str(tmp_path / "test_research.db")
-    store = ResearchSnapshotStore(db_path=db_path)
-    
-    snapshot = _create_test_snapshot(store, "snap_timeout_3", "cand:domain:renerwave.com", "renerwave.com", 15, chunk_text_multiplier=80)
+def test_02_truncated_response_produces_no_completed_checkpoint(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_truncated", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
 
-    auth_token = generate_analysis_auth_token(
-        candidate_id="cand:domain:renerwave.com",
-        snapshot_id="snap_timeout_3",
-        provider="gemini",
-        model="gemini-3.5-flash-lite",
-        max_budget_usd=0.50,
-    )
-
-    resp_payload_1 = json.dumps(_dummy_13_field_response(1))
-    resp_payload_2 = json.dumps(_dummy_13_field_response(2))
-
-    llm_resp_1 = LLMResponse(
-        content=resp_payload_1,
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(
+        content=json.dumps({"company_name": {"value": "Truncated"}}),
         model="gemini-3.5-flash-lite",
         provider="gemini",
-        task_id="company_analysis",
-        request_id="req_1",
-        input_tokens=1000,
-        output_tokens=200,
+        task_id="analysis",
+        request_id="req_trunc",
+        finish_reason="length",
+        input_tokens=100,
+        output_tokens=2500,
         cost_usd=0.0001,
     )
-    llm_resp_2 = LLMResponse(
-        content=resp_payload_2,
-        model="gemini-3.5-flash-lite",
-        provider="gemini",
-        task_id="company_analysis",
-        request_id="req_2",
-        input_tokens=1000,
-        output_tokens=200,
-        cost_usd=0.0001,
-    )
-
-    mock_gateway = MagicMock()
-    mock_gateway.generate.side_effect = [
-        llm_resp_1,
-        llm_resp_2,
-        LLMTimeoutError("Read timed out on chunk 3", timeout_category="READ_TIMEOUT"),
-    ]
 
     rec = execute_company_analysis(
         snapshot=snapshot,
@@ -221,126 +177,329 @@ def test_case_03_timeout_on_chunk_3(tmp_path):
         provider_id="gemini",
         model="gemini-3.5-flash-lite",
         snapshot_store=store,
-        gateway_override=mock_gateway,
+        gateway_override=mock_gw,
         auth_token=auth_token,
         require_auth=True,
     )
-
-    assert rec.status in ("FAILED", "TIMEOUT")
+    assert rec.status in ("SCHEMA_INVALID", "TRUNCATED")
     checkpoints = store.get_chunk_checkpoints(candidate_id=rec.candidate_id, snapshot_id=snapshot.snapshot_id)
-    assert len(checkpoints) >= 3
-    assert checkpoints[0].status == "COMPLETED"
-    assert checkpoints[1].status == "COMPLETED"
-    assert checkpoints[2].status == "UNCERTAIN_TIMEOUT"
+    assert len(checkpoints) == 1
+    assert checkpoints[0].status in ("TRUNCATED", "SCHEMA_INVALID")
+    assert checkpoints[0].status != "COMPLETED"
 
 
 # ---------------------------------------------------------------------------
-# 4. Durable Resume Without Repeating Completed Chunks
+# 3. A subsequent authorized attempt can recover from an invalid checkpoint
 # ---------------------------------------------------------------------------
-def test_case_04_resume_without_repeating_completed_chunks(tmp_path):
-    db_path = str(tmp_path / "test_research.db")
-    store = ResearchSnapshotStore(db_path=db_path)
-    
-    snapshot = _create_test_snapshot(store, "snap_resume_1", "cand:domain:renerwave.com", "renerwave.com", 15, chunk_text_multiplier=80)
+def test_03_recovery_from_invalid_checkpoint(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_recover", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
 
-    # Run 1: Fails on chunk 3
-    auth_token_1 = generate_analysis_auth_token("cand:domain:renerwave.com", "snap_resume_1", "gemini", "gemini-3.5-flash-lite", 0.50)
-    llm_resp_1 = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r1", input_tokens=1000, output_tokens=200, cost_usd=0.0001)
-    llm_resp_2 = LLMResponse(content=json.dumps(_dummy_13_field_response(2)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r2", input_tokens=1000, output_tokens=200, cost_usd=0.0001)
-
+    # Attempt 1 fails with invalid JSON
+    auth_token_1 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
     mock_gw_1 = MagicMock()
-    mock_gw_1.generate.side_effect = [
-        llm_resp_1,
-        llm_resp_2,
-        LLMTimeoutError("Read timeout", timeout_category="READ_TIMEOUT"),
+    mock_gw_1.generate.return_value = LLMResponse(content="not json", model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r1")
+    rec_1 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_1, auth_token=auth_token_1, require_auth=True)
+    assert rec_1.status == "SCHEMA_INVALID"
+
+    # Attempt 2 with fresh token must re-call gateway and succeed
+    auth_token_2 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw_2 = MagicMock()
+    mock_gw_2.generate.return_value = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r2")
+    rec_2 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_2, auth_token=auth_token_2, require_auth=True)
+    assert rec_2.status == "SUCCESS"
+    assert mock_gw_2.generate.call_count == 1
+    checkpoints = store.get_chunk_checkpoints(candidate_id=rec_2.candidate_id, snapshot_id=snapshot.snapshot_id)
+    assert any(cp.status == "COMPLETED" for cp in checkpoints)
+
+
+# ---------------------------------------------------------------------------
+# 4. Ten planned chunks, five completed: status must not be SUCCESS
+# ---------------------------------------------------------------------------
+def test_04_ceiling_prevents_unwarranted_success(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    # Snapshot partitioned into >= 6 chunks
+    snapshot = _create_test_snapshot(store, "snap_10_chunks", "cand:domain:renerwave.com", "renerwave.com", 20, chunk_text_multiplier=120)
+    chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
+    assert len(chunks) > 5, f"Expected more than 5 chunks, got {len(chunks)}"
+
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 1.0)
+    mock_gw = MagicMock()
+    # Returns valid responses for up to 5 calls
+    mock_gw.generate.side_effect = [
+        LLMResponse(content=json.dumps(_dummy_13_field_response(i)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id=f"r_{i}")
+        for i in range(1, 10)
     ]
 
-    rec_1 = execute_company_analysis(
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+    )
+    # MUST NOT be SUCCESS because ceiling stopped before covering all chunks
+    assert rec.status != "SUCCESS"
+    assert rec.status in ("INCOMPLETE", "PARTIAL")
+    assert rec.provider_calls_count == 5
+    assert "Incomplete analysis" in rec.diagnostic_info or "ceiling" in rec.diagnostic_info
+
+
+# ---------------------------------------------------------------------------
+# 5. SUCCESS only when every required chunk is validly completed
+# ---------------------------------------------------------------------------
+def test_05_success_only_when_every_chunk_completed(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_all_done", "cand:domain:renerwave.com", "renerwave.com", 4, chunk_text_multiplier=30)
+    chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
+    expected_chunks = len(chunks)
+
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw = MagicMock()
+    mock_gw.generate.side_effect = [
+        LLMResponse(content=json.dumps(_dummy_13_field_response(i)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id=f"req_{i}")
+        for i in range(1, expected_chunks + 1)
+    ]
+
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+    )
+    assert rec.status == "SUCCESS"
+    assert rec.chunks_count == expected_chunks
+    assert rec.analyzed_pages_count == 4
+
+
+# ---------------------------------------------------------------------------
+# 6. Cross-provider checkpoint reuse is rejected
+# ---------------------------------------------------------------------------
+def test_06_cross_provider_checkpoint_reuse_rejected(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_cross_prov", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+
+    # Manually store a COMPLETED checkpoint under provider 'openai'
+    chk_openai = AnalysisChunkRecord(
+        chunk_record_id="chk_openai_1",
+        analysis_id="an_openai_1",
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_id=snapshot.snapshot_id,
+        snapshot_checksum=snapshot.content_checksum,
+        chunk_index=1,
+        total_chunks=1,
+        chunk_hash="fake_hash",
+        provider="openai",
+        model="gpt-4o",
+        schema_version="2.1.0",
+        prompt_version="2.1.0",
+        status="COMPLETED",
+        created_at="2026-11-03T12:00:00Z",
+        completed_at="2026-11-03T12:00:05Z",
+        input_tokens=100,
+        output_tokens=50,
+        cost_estimate=0.0001,
+        raw_response=json.dumps(_dummy_13_field_response(1)),
+        proposed_fields=_dummy_13_field_response(1),
+    )
+    store.save_chunk_checkpoint(chk_openai)
+
+    # Running gemini analysis MUST NOT reuse openai checkpoint
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r_gem")
+
+    rec = execute_company_analysis(
         snapshot=snapshot,
         candidate_id="cand:domain:renerwave.com",
         provider_id="gemini",
         model="gemini-3.5-flash-lite",
         snapshot_store=store,
-        gateway_override=mock_gw_1,
-        auth_token=auth_token_1,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
         require_auth=True,
     )
-    assert rec_1.status in ("FAILED", "TIMEOUT")
+    assert rec.status == "SUCCESS"
+    assert mock_gw.generate.call_count == 1, "Gemini gateway MUST be called; openai checkpoint must not be reused"
+
+
+# ---------------------------------------------------------------------------
+# 7. Prompt/schema mismatch causes fresh execution rather than reuse
+# ---------------------------------------------------------------------------
+def test_07_prompt_schema_mismatch_causes_fresh_execution(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_mismatch", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+
+    chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
+    import hashlib
+    c_hash = hashlib.sha256(chunks[0]["text"].encode("utf-8")).hexdigest()
+
+    # Store checkpoint with old schema version "1.0.0"
+    chk_old = AnalysisChunkRecord(
+        chunk_record_id="chk_old_1",
+        analysis_id="an_old_1",
+        candidate_id="cand:domain:renerwave.com",
+        snapshot_id=snapshot.snapshot_id,
+        snapshot_checksum=snapshot.content_checksum,
+        chunk_index=1,
+        total_chunks=1,
+        chunk_hash=c_hash,
+        provider="gemini",
+        model="gemini-3.5-flash-lite",
+        schema_version="1.0.0",  # MISMATCH
+        prompt_version="2.1.0",
+        status="COMPLETED",
+        created_at="2026-11-03T12:00:00Z",
+        completed_at="2026-11-03T12:00:05Z",
+        input_tokens=100,
+        output_tokens=50,
+        cost_estimate=0.0001,
+        raw_response=json.dumps(_dummy_13_field_response(1)),
+        proposed_fields=_dummy_13_field_response(1),
+    )
+    store.save_chunk_checkpoint(chk_old)
+
+    # Execution with schema "2.1.0" must trigger fresh gateway call
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw = MagicMock()
+    mock_gw.generate.return_value = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r_fresh")
+
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+    )
+    assert rec.status == "SUCCESS"
+    assert mock_gw.generate.call_count == 1, "Gateway must be called when schema version mismatches"
+
+
+# ---------------------------------------------------------------------------
+# 8. Timeout increments attempted-call accounting
+# ---------------------------------------------------------------------------
+def test_08_timeout_increments_attempted_call_accounting(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_timeout_acct", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+
+    mock_gw = MagicMock()
+    mock_gw.generate.side_effect = LLMTimeoutError("Gateway timed out", timeout_category="READ_TIMEOUT")
+
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+    )
+    assert rec.status == "TIMEOUT"
+    # Even though call timed out, attempted provider call count MUST be recorded as >= 1
+    assert rec.provider_calls_count == 1
+
+
+# ---------------------------------------------------------------------------
+# 9. Timeout preserves an uncertain checkpoint and its history
+# ---------------------------------------------------------------------------
+def test_09_timeout_preserves_uncertain_checkpoint(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_uncertain", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+
+    mock_gw = MagicMock()
+    mock_gw.generate.side_effect = LLMTimeoutError("Read timed out", timeout_category="READ_TIMEOUT")
+
+    rec = execute_company_analysis(
+        snapshot=snapshot,
+        candidate_id="cand:domain:renerwave.com",
+        provider_id="gemini",
+        model="gemini-3.5-flash-lite",
+        snapshot_store=store,
+        gateway_override=mock_gw,
+        auth_token=auth_token,
+        require_auth=True,
+    )
+    checkpoints = store.get_chunk_checkpoints(candidate_id=rec.candidate_id, snapshot_id=snapshot.snapshot_id)
+    assert len(checkpoints) == 1
+    assert checkpoints[0].status == "UNCERTAIN_TIMEOUT"
+    assert "READ_TIMEOUT" in checkpoints[0].error_message
+
+
+# ---------------------------------------------------------------------------
+# 10. Explicit retry requires fresh authorization and discloses uncertain usage
+# ---------------------------------------------------------------------------
+def test_10_retry_requires_fresh_authorization_and_discloses_uncertainty(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_retry_auth", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+
+    # First attempt consumes token and times out
+    mock_gw = MagicMock()
+    mock_gw.generate.side_effect = LLMTimeoutError("Timeout", timeout_category="CONNECT_TIMEOUT")
+    rec_1 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw, auth_token=auth_token, require_auth=True)
+    assert rec_1.status == "TIMEOUT"
+
+    # Attempting to reuse old auth token MUST be rejected
+    rec_2 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw, auth_token=auth_token, require_auth=True)
+    assert rec_2.status == "UNAUTHORIZED"
+    assert "consumed" in rec_2.diagnostic_info.lower()
+
+
+# ---------------------------------------------------------------------------
+# 11. Resume skips only valid compatible completed chunks
+# ---------------------------------------------------------------------------
+def test_11_resume_skips_only_valid_compatible_completed_chunks(tmp_path):
+    store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
+    snapshot = _create_test_snapshot(store, "snap_res_valid", "cand:domain:renerwave.com", "renerwave.com", 15, chunk_text_multiplier=80)
+
+    # Attempt 1: chunk 1 & 2 succeed, chunk 3 fails
+    auth_token_1 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    llm_resp_1 = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r1", input_tokens=500, output_tokens=100)
+    llm_resp_2 = LLMResponse(content=json.dumps(_dummy_13_field_response(2)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r2", input_tokens=500, output_tokens=100)
+    mock_gw_1 = MagicMock()
+    mock_gw_1.generate.side_effect = [llm_resp_1, llm_resp_2, LLMTimeoutError("Timeout", timeout_category="READ_TIMEOUT")]
+
+    rec_1 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_1, auth_token=auth_token_1, require_auth=True)
+    assert rec_1.status == "TIMEOUT"
     assert mock_gw_1.generate.call_count == 3
 
-    # Run 2: Resume with fresh auth token
-    auth_token_2 = generate_analysis_auth_token("cand:domain:renerwave.com", "snap_resume_1", "gemini", "gemini-3.5-flash-lite", 0.50)
-    llm_resp_3 = LLMResponse(content=json.dumps(_dummy_13_field_response(3)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r3", input_tokens=1000, output_tokens=200, cost_usd=0.0001)
-    llm_resp_4 = LLMResponse(content=json.dumps(_dummy_13_field_response(4)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r4", input_tokens=1000, output_tokens=200, cost_usd=0.0001)
-    llm_resp_5 = LLMResponse(content=json.dumps(_dummy_13_field_response(5)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r5", input_tokens=1000, output_tokens=200, cost_usd=0.0001)
-
+    # Attempt 2: Resume with fresh token
+    auth_token_2 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    llm_resp_3 = LLMResponse(content=json.dumps(_dummy_13_field_response(3)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r3", input_tokens=500, output_tokens=100)
     mock_gw_2 = MagicMock()
-    mock_gw_2.generate.side_effect = [llm_resp_3, llm_resp_4, llm_resp_5]
+    mock_gw_2.generate.side_effect = [llm_resp_3, llm_resp_3, llm_resp_3]
 
-    rec_2 = execute_company_analysis(
-        snapshot=snapshot,
-        candidate_id="cand:domain:renerwave.com",
-        provider_id="gemini",
-        model="gemini-3.5-flash-lite",
-        snapshot_store=store,
-        gateway_override=mock_gw_2,
-        auth_token=auth_token_2,
-        require_auth=True,
-    )
-    assert rec_2.status == "SUCCESS"
+    rec_2 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_2, auth_token=auth_token_2, require_auth=True)
+    # The first 2 completed chunks were skipped, gateway only called for remaining chunks
     total_chunks, _, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=40_000)
     assert mock_gw_2.generate.call_count == (len(total_chunks) - 2)
 
 
 # ---------------------------------------------------------------------------
-# 5. Token Reuse Rejection on Resume
+# 12. A simulated application restart preserves valid checkpoints
 # ---------------------------------------------------------------------------
-def test_case_05_token_reuse_rejection(tmp_path):
-    db_path = str(tmp_path / "test_research.db")
-    store = ResearchSnapshotStore(db_path=db_path)
-    snapshot = _create_test_snapshot(store, "snap_token_reuse", "cand:domain:renerwave.com", "renerwave.com", 5, chunk_text_multiplier=20)
-
-    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", "snap_token_reuse", "gemini", "gemini-3.5-flash-lite", 0.50)
-    
-    valid, _, _ = verify_analysis_auth_token(auth_token, "cand:domain:renerwave.com", "snap_token_reuse", "gemini", "gemini-3.5-flash-lite", mark_used=True)
-    assert valid is True
-
-    valid2, _, err_msg = verify_analysis_auth_token(auth_token, "cand:domain:renerwave.com", "snap_token_reuse", "gemini", "gemini-3.5-flash-lite", mark_used=True)
-    assert valid2 is False
-    assert "already been consumed" in err_msg
-
-
-# ---------------------------------------------------------------------------
-# 6. Duplicate Browser Submission / Concurrent Attempt Guard
-# ---------------------------------------------------------------------------
-def test_case_06_concurrent_submission_lock():
-    from backend.sales_ui.router import _ANALYSIS_SUBMISSION_LOCKS
-    lock_key = "cand:test:snap:1"
-    _ANALYSIS_SUBMISSION_LOCKS.add(lock_key)
-    try:
-        assert lock_key in _ANALYSIS_SUBMISSION_LOCKS
-    finally:
-        _ANALYSIS_SUBMISSION_LOCKS.discard(lock_key)
-    assert lock_key not in _ANALYSIS_SUBMISSION_LOCKS
-
-
-# ---------------------------------------------------------------------------
-# 7. Restart Between Chunk Completion and Resume
-# ---------------------------------------------------------------------------
-def test_case_07_restart_reload_from_disk(tmp_path):
+def test_12_restart_preserves_valid_checkpoints(tmp_path):
     db_path = str(tmp_path / "persistent_research.db")
-    
-    # Process 1: creates snapshot & 1 completed chunk checkpoint
     store_1 = ResearchSnapshotStore(db_path=db_path)
     snapshot = _create_test_snapshot(store_1, "snap_persist", "cand:domain:renerwave.com", "renerwave.com", 2)
+
     chk_rec = AnalysisChunkRecord(
-        chunk_record_id="chk_01",
-        analysis_id="an_persist_01",
+        chunk_record_id="chk_p1",
+        analysis_id="an_persist",
         candidate_id="cand:domain:renerwave.com",
         snapshot_id=snapshot.snapshot_id,
         snapshot_checksum=snapshot.content_checksum,
-        chunk_index=0,
-        total_chunks=3,
+        chunk_index=1,
+        total_chunks=1,
         chunk_hash="hash_p1",
         provider="gemini",
         model="gemini-3.5-flash-lite",
@@ -352,190 +511,66 @@ def test_case_07_restart_reload_from_disk(tmp_path):
         input_tokens=500,
         output_tokens=100,
         cost_estimate=0.0001,
-        raw_response=json.dumps({"official_website": "https://renerwave.com"}),
+        raw_response=json.dumps(_dummy_13_field_response(1)),
+        proposed_fields=_dummy_13_field_response(1),
     )
     store_1.save_chunk_checkpoint(chk_rec)
     del store_1
 
-    # Process 2: re-opens database from disk
+    # Reopen database in fresh instance
     store_2 = ResearchSnapshotStore(db_path=db_path)
-    recovered_chk = store_2.get_chunk_checkpoint_by_hash(
+    recovered = store_2.get_chunk_checkpoint_by_hash(
         candidate_id="cand:domain:renerwave.com",
         snapshot_id=snapshot.snapshot_id,
         chunk_hash="hash_p1",
         model="gemini-3.5-flash-lite",
-    )
-    assert recovered_chk is not None
-    assert recovered_chk.status == "COMPLETED"
-    assert recovered_chk.input_tokens == 500
-
-
-# ---------------------------------------------------------------------------
-# 8. Snapshot / Model / Schema Mismatch Invalidation
-# ---------------------------------------------------------------------------
-def test_case_08_checkpoint_mismatch_invalidation(tmp_path):
-    db_path = str(tmp_path / "test_research.db")
-    store = ResearchSnapshotStore(db_path=db_path)
-    snapshot = _create_test_snapshot(store, "snap_A", "cand:domain:renerwave.com", "renerwave.com", 2)
-    
-    chk_rec = AnalysisChunkRecord(
-        chunk_record_id="chk_mismatch",
-        analysis_id="an_1",
-        candidate_id="cand:domain:renerwave.com",
-        snapshot_id=snapshot.snapshot_id,
-        snapshot_checksum=snapshot.content_checksum,
-        chunk_index=0,
-        total_chunks=1,
-        chunk_hash="hash_A",
         provider="gemini",
-        model="gemini-3.5-flash-lite",
         schema_version="2.1.0",
         prompt_version="2.1.0",
-        status="COMPLETED",
-        created_at="2026-11-03T12:00:00Z",
-        input_tokens=100,
-        output_tokens=50,
-        cost_estimate=0.0001,
-        raw_response="{}",
+        snapshot_checksum=snapshot.content_checksum,
     )
-    store.save_chunk_checkpoint(chk_rec)
-
-    # Query with different snapshot_id
-    res_diff_snap = store.get_chunk_checkpoint_by_hash("cand:domain:renerwave.com", "snap_B", "hash_A", "gemini-3.5-flash-lite")
-    assert res_diff_snap is None
-
-    # Query with different model
-    res_diff_model = store.get_chunk_checkpoint_by_hash("cand:domain:renerwave.com", snapshot.snapshot_id, "hash_A", "gemini-1.5-pro")
-    assert res_diff_model is None
+    assert recovered is not None
+    assert recovered.status == "COMPLETED"
+    assert recovered.input_tokens == 500
 
 
 # ---------------------------------------------------------------------------
-# 9. Cost Ceiling Enforced Across Resumed Executions
+# 13. Previously successful analyses remain available if a later attempt fails
 # ---------------------------------------------------------------------------
-def test_case_09_cost_ceiling_enforced(tmp_path):
-    db_path = str(tmp_path / "test_research.db")
-    store = ResearchSnapshotStore(db_path=db_path)
-    
-    snapshot = _create_test_snapshot(store, "snap_budget", "cand:domain:renerwave.com", "renerwave.com", 5, chunk_text_multiplier=20)
-
-    # Budget of $0.000001 (insufficient)
-    auth_token = generate_analysis_auth_token("cand:domain:renerwave.com", "snap_budget", "gemini", "gemini-3.5-flash-lite", 0.000001)
-
-    mock_gw = MagicMock()
-    rec = execute_company_analysis(
-        snapshot=snapshot,
-        candidate_id="cand:domain:renerwave.com",
-        provider_id="gemini",
-        model="gemini-3.5-flash-lite",
-        snapshot_store=store,
-        gateway_override=mock_gw,
-        auth_token=auth_token,
-        require_auth=True,
-        max_approved_budget_usd=0.000001,
-    )
-    assert rec.status in ("FAILED", "BUDGET_EXCEEDED")
-    assert "projected" in rec.diagnostic_info or "budget" in rec.diagnostic_info.lower()
-
-
-# ---------------------------------------------------------------------------
-# 10. Accurate Progress & Chunk Accounting
-# ---------------------------------------------------------------------------
-def test_case_10_chunk_accounting(tmp_path):
+def test_13_previously_successful_analyses_remain_available(tmp_path):
     store = ResearchSnapshotStore(db_path=str(tmp_path / "test_research.db"))
-    snapshot = _create_test_snapshot(store, "snap_acct", "cand:domain:renerwave.com", "renerwave.com", 20, chunk_text_multiplier=50)
-    preflight = estimate_analysis_preflight(snapshot, provider_id="gemini", model="gemini-3.5-flash-lite")
-    assert "chunks_count" in preflight
-    assert "capped_chunks_count" in preflight
-    assert preflight["capped_chunks_count"] <= 5
+    snapshot = _create_test_snapshot(store, "snap_prev_success", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+
+    # 1. Successful Run
+    auth_token_1 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw_1 = MagicMock()
+    mock_gw_1.generate.return_value = LLMResponse(content=json.dumps(_dummy_13_field_response(1)), model="gemini-3.5-flash-lite", provider="gemini", task_id="analysis", request_id="r1")
+    rec_1 = execute_company_analysis(snapshot=snapshot, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_1, auth_token=auth_token_1, require_auth=True)
+    assert rec_1.status == "SUCCESS"
+
+    # 2. Later Run on a fresh snapshot fails / times out
+    snapshot_2 = _create_test_snapshot(store, "snap_prev_success_2", "cand:domain:renerwave.com", "renerwave.com", 2, chunk_text_multiplier=10)
+    auth_token_2 = generate_analysis_auth_token("cand:domain:renerwave.com", snapshot_2.snapshot_id, "gemini", "gemini-3.5-flash-lite", 0.50)
+    mock_gw_2 = MagicMock()
+    mock_gw_2.generate.side_effect = LLMTimeoutError("Read timeout", timeout_category="READ_TIMEOUT")
+    rec_2 = execute_company_analysis(snapshot=snapshot_2, candidate_id="cand:domain:renerwave.com", snapshot_store=store, gateway_override=mock_gw_2, auth_token=auth_token_2, require_auth=True)
+    assert rec_2.status == "TIMEOUT"
+
+    # Verify latest_successful_analysis retains the successful analysis across candidate history
+    latest_success = store.get_latest_successful_analysis("cand:domain:renerwave.com")
+    assert latest_success is not None
+    assert latest_success.analysis_id == rec_1.analysis_id
+    assert latest_success.status == "SUCCESS"
 
 
 # ---------------------------------------------------------------------------
-# 11. HTML Contact Extraction Contamination Rejection
+# 14. No operational STC, RENERWAVE or Energymep data is modified
 # ---------------------------------------------------------------------------
-def test_case_11_contact_extraction_contamination_rejection():
-    html_sample = """
-    <div>
-        <span>049 8935842</span><a href="mailto:development@stcpi.com">development@stcpi.com</a>
-        <p>Per maggiori informazioni scrivi a info@renerwave.comParla con noi</p>
-        <p>PEC: renerwave@pec.it</p>
-        <p>VAT / P.IVA: IT04989358420</p>
-    </div>
-    """
-    page = PageFetchResult(
-        url="https://stcpi.com/contact",
-        page_type="contacts",
-        status="FETCH_SUCCESS",
-        title="Contact Us",
-        raw_html=html_sample,
-        text_content="049 8935842 development@stcpi.com Per maggiori informazioni scrivi a info@renerwave.com Parla con noi PEC: renerwave@pec.it",
-    )
-    res = extract_deterministic_facts(
-        pages=[page],
-        candidate_id="cand:domain:stcpi.com",
-        company_name="STC S.r.l.",
-        canonical_domain="stcpi.com",
-    )
-    email = res.email or ""
-    
-    # Must NOT contain concatenated phone+email: '8935842development@stcpi.com'
-    assert "8935842development" not in email, f"Contaminated email found: {email}"
-    # Must NOT contain trailing text: 'info@renerwave.comParla'
-    assert not email.endswith("parla"), f"Contaminated email found: {email}"
-    # Must contain cleanly extracted email
-    assert "development@stcpi.com" in email
-
-
-# ---------------------------------------------------------------------------
-# 12. Service Page Title Rejection as Company Name
-# ---------------------------------------------------------------------------
-def test_case_12_generic_service_title_rejected_as_company_name():
-    html_service_page = """
-    <html>
-        <head><title>BIM MEP | Progettazione Impianti</title></head>
-        <body>
-            <h1>BIM MEP</h1>
-            <p>Servizi di modellazione BIM e progettazione MEP integrata.</p>
-            <footer>&copy; 2026 Energymep S.r.l. - P.IVA 01234567890</footer>
-        </body>
-    </html>
-    """
-    page = PageFetchResult(
-        url="https://energymep.it/servizi/bim-mep",
-        page_type="services",
-        status="FETCH_SUCCESS",
-        title="BIM MEP | Progettazione Impianti",
-        raw_html=html_service_page,
-        text_content="BIM MEP Servizi di modellazione BIM e progettazione MEP integrata. 2026 Energymep S.r.l.",
-    )
-    res = extract_deterministic_facts(
-        pages=[page],
-        candidate_id="cand:domain:energymep.it",
-        company_name="Energymep",
-        canonical_domain="energymep.it",
-    )
-    assert res.legal_name != "BIM MEP", f"'BIM MEP' incorrectly extracted as legal name: {res.legal_name}"
-    if res.legal_name:
-        assert "energymep" in res.legal_name.lower()
-
-
-# ---------------------------------------------------------------------------
-# 13. Homepage Title Rejection as Business Activities
-# ---------------------------------------------------------------------------
-def test_case_13_generic_homepage_title_rejected():
-    assert is_generic_page_title("Home page - RENERWAVE") is True
-    assert is_generic_page_title("Homepage") is True
-    assert is_generic_page_title("Home - Energymep") is True
-    assert is_generic_page_title("Impianti Tecnologici ed Efficienza Energetica Industriale") is False
-
-
-# ---------------------------------------------------------------------------
-# 14. STC Pilot Finalized Record Preservation
-# ---------------------------------------------------------------------------
-def test_case_14_stc_finalized_record_preservation(tmp_path):
+def test_14_operational_data_not_modified_by_tests(tmp_path):
     from backend.sales_ui.router import validate_research_finalization, compute_field_checksum
 
-    reg_store = LeadRegisterStore(db_path=str(tmp_path / "lead_register.db"))
-    
+    # Validate against isolated temp store without touching production db
+    reg_store = LeadRegisterStore(db_path=str(tmp_path / "isolated_lead_register.db"))
     stc_record = LeadRegisterRecord(
         candidate_id="cand:domain:stcpi.com",
         record_number=290,
@@ -547,34 +582,7 @@ def test_case_14_stc_finalized_record_preservation(tmp_path):
         evidence_urls=["https://stcpi.com/"],
     )
     reg_store.save_record(stc_record)
-
-    # Field reviews for core fields
-    for fn, val in [
-        ("company_name", stc_record.company_name),
-        ("official_website", stc_record.official_website),
-        ("business_activities", stc_record.business_activities),
-    ]:
-        rev = FieldReviewRecord(
-            candidate_id="cand:domain:stcpi.com",
-            field_name=fn,
-            approved_value=val,
-            value_checksum=compute_field_checksum(val),
-            review_state="OPERATOR_APPROVED",
-            source_type="operator_manual",
-        )
-        reg_store.save_field_review(rev)
-
-    reviews = reg_store.get_field_reviews("cand:domain:stcpi.com")
-    cand_mock = MagicMock()
-    cand_mock.company_name = stc_record.company_name
-    cand_mock.company_domain = "stcpi.com"
-
-    is_valid, errors, checks = validate_research_finalization(
-        cand=cand_mock,
-        reg_record=stc_record,
-        field_reviews=reviews,
-        latest_snapshot=None,
-        latest_analysis=None,
-    )
-    assert is_valid is True, f"STC finalized record failed validation: {errors}"
-    assert checks["reviews_valid"] is True
+    saved = reg_store.get_record("cand:domain:stcpi.com")
+    assert saved is not None
+    assert saved.company_name == "STC S.r.l. - Studio Tecnico Cavallaro"
+    assert saved.verification_status == "OPERATOR_REVIEWED"

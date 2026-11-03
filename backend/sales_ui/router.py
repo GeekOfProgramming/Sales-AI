@@ -4297,6 +4297,10 @@ async def candidate_research_view(
                 pipeline_status = "Provider Not Configured"
             elif latest_analysis.status == "SCHEMA_INVALID":
                 pipeline_status = "Analysis Failed (Schema Invalid)"
+            elif latest_analysis.status == "TIMEOUT":
+                pipeline_status = "Analysis Incomplete (Timeout)"
+            elif latest_analysis.status in ("INCOMPLETE", "PARTIAL"):
+                pipeline_status = "Analysis Incomplete (Ceiling / Partial Coverage)"
             elif latest_analysis.status == "FAILED":
                 if latest_analysis.diagnostic_info and "Timeout" in latest_analysis.diagnostic_info:
                     pipeline_status = "Analysis Incomplete (Timeout)"
@@ -4313,6 +4317,30 @@ async def candidate_research_view(
         if (effective_analysis_for_proposals and effective_analysis_for_proposals.proposed_fields)
         else (latest_analysis.proposed_fields if (latest_analysis and latest_analysis.status == "SUCCESS" and latest_analysis.proposed_fields) else {})
     )
+
+    # Query chunk stats for latest analysis if present
+    chunk_stats = {"completed": 0, "failed": 0, "uncertain": 0, "remaining": 0, "total": 0, "can_resume": False}
+    if latest_snapshot and latest_analysis:
+        all_checkpoints = snap_store.get_chunk_checkpoints(
+            candidate_id=candidate_id,
+            snapshot_id=latest_snapshot.snapshot_id,
+            provider=latest_analysis.provider,
+            model=latest_analysis.model,
+            snapshot_checksum=latest_snapshot.content_checksum,
+        )
+        total_p = latest_analysis.chunks_count or (analysis_preflight.get("chunks_count", 0) if analysis_preflight else 0)
+        c_done = sum(1 for cp in all_checkpoints if cp.status == "COMPLETED")
+        c_fail = sum(1 for cp in all_checkpoints if cp.status in ("FAILED", "SCHEMA_INVALID", "TRUNCATED"))
+        c_unc = sum(1 for cp in all_checkpoints if cp.status == "UNCERTAIN_TIMEOUT")
+        c_rem = max(0, total_p - c_done)
+        chunk_stats = {
+            "completed": c_done,
+            "failed": c_fail,
+            "uncertain": c_unc,
+            "remaining": c_rem,
+            "total": total_p,
+            "can_resume": (c_done > 0 and c_rem > 0 and latest_analysis.status != "SUCCESS"),
+        }
 
     return render_console_template(
         request=request,
@@ -4336,6 +4364,7 @@ async def candidate_research_view(
             "analysis_preflight": analysis_preflight,
             "analysis_auth_token": analysis_auth_token,
             "pipeline_status": pipeline_status,
+            "chunk_stats": chunk_stats,
             "message": message,
             "error": error,
         },
