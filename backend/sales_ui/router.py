@@ -7407,7 +7407,10 @@ async def leads_view(
 # 6. DRAFTS REVIEW QUEUE & DETAIL
 # ---------------------------------------------------------------------------
 @router.get("/drafts", response_class=HTMLResponse)
-async def draft_review_queue_view(request: Request, status_filter: Optional[str] = Query(None)):
+async def draft_review_queue_view(
+    request: Request,
+    status_filter: Optional[str] = Query(None, alias="status"),
+):
     svcs = get_console_services()
     rev_store = svcs["rev_store"]
     filters = {}
@@ -7421,7 +7424,25 @@ async def draft_review_queue_view(request: Request, status_filter: Optional[str]
         is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=d.recipient_email)
         cand_id = d.lead_id.replace("domain:", "")
         c = svcs["cand_store"].get_by_domain(cand_id)
+        if not c and hasattr(d, "candidate_id") and d.candidate_id:
+            c = svcs["cand_store"].get_by_id(d.candidate_id)
         comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
+        resolved_cid = getattr(c, "candidate_id", None) or getattr(d, "candidate_id", None) or cand_id
+
+        # Determine recipient verification status
+        recip_verif_status = "unverified"
+        if c and d.contact_id:
+            try:
+                ct = svcs["cand_store"].get_contact_by_id(d.contact_id)
+                if ct:
+                    recip_verif_status = ct.email_status
+            except Exception:
+                pass
+
+        # Determine source context
+        src_context = getattr(d, "service_used", None) or "Manual Staged"
+        if c and getattr(c, "source_refs", None):
+            src_context = f"{c.source_refs[0]} ({src_context})"
 
         cards.append(
             DraftReviewCard(
@@ -7430,7 +7451,10 @@ async def draft_review_queue_view(request: Request, status_filter: Optional[str]
                 lead_id=d.lead_id,
                 contact_id=d.contact_id,
                 company_name=comp_name,
-                company_domain=cand_id,
+                company_domain=getattr(c, "company_domain", None) or cand_id,
+                candidate_id=resolved_cid,
+                recipient_verification_status=recip_verif_status,
+                source_context=src_context,
                 recipient_name=d.recipient_name,
                 recipient_title=d.recipient_title,
                 recipient_email=d.recipient_email,
@@ -7451,6 +7475,7 @@ async def draft_review_queue_view(request: Request, status_filter: Optional[str]
                 approved_at=d.approved_at,
                 sent_at=d.sent_at,
                 is_suppressed=is_supp,
+                is_previously_contacted=bool(getattr(c, "previous_outreach_detected", False) or (c and getattr(c, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc"))),
                 can_approve=(d.approval_status in ("pending_review", "changes_requested") and d.send_status != "sent"),
                 can_edit=(d.send_status != "sent"),
                 can_reject=(d.send_status != "sent"),
@@ -7884,7 +7909,25 @@ async def approved_queue_view(request: Request):
         is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=d.recipient_email)
         cand_id = d.lead_id.replace("domain:", "")
         c = svcs["cand_store"].get_by_domain(cand_id)
+        if not c and hasattr(d, "candidate_id") and d.candidate_id:
+            c = svcs["cand_store"].get_by_id(d.candidate_id)
         comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
+        resolved_cid = getattr(c, "candidate_id", None) or getattr(d, "candidate_id", None) or cand_id
+
+        # Determine recipient verification status
+        recip_verif_status = "unverified"
+        if c and d.contact_id:
+            try:
+                ct = svcs["cand_store"].get_contact_by_id(d.contact_id)
+                if ct:
+                    recip_verif_status = ct.email_status
+            except Exception:
+                pass
+
+        # Determine source context
+        src_context = getattr(d, "service_used", None) or "Manual Staged"
+        if c and getattr(c, "source_refs", None):
+            src_context = f"{c.source_refs[0]} ({src_context})"
 
         cards.append(
             DraftReviewCard(
@@ -7893,7 +7936,10 @@ async def approved_queue_view(request: Request):
                 lead_id=d.lead_id,
                 contact_id=d.contact_id,
                 company_name=comp_name,
-                company_domain=cand_id,
+                company_domain=getattr(c, "company_domain", None) or cand_id,
+                candidate_id=resolved_cid,
+                recipient_verification_status=recip_verif_status,
+                source_context=src_context,
                 recipient_name=d.recipient_name,
                 recipient_title=d.recipient_title,
                 recipient_email=d.recipient_email,
@@ -7914,6 +7960,7 @@ async def approved_queue_view(request: Request):
                 approved_at=d.approved_at,
                 sent_at=d.sent_at,
                 is_suppressed=is_supp,
+                is_previously_contacted=bool(getattr(c, "previous_outreach_detected", False) or (c and getattr(c, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc"))),
                 can_approve=False,
                 can_edit=True,
                 can_reject=True,

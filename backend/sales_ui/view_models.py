@@ -114,6 +114,9 @@ class DraftReviewCard(BaseModel):
     contact_id: str
     company_name: str
     company_domain: Optional[str] = None
+    candidate_id: Optional[str] = None
+    recipient_verification_status: Optional[str] = None
+    source_context: Optional[str] = None
     recipient_name: str
     recipient_title: Optional[str] = None
     recipient_email: str

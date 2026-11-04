@@ -269,10 +269,10 @@
             {% endif %}
             
             {% if l.is_previously_contacted %}
-            <span class="badge badge-previously-contacted" style="font-size: 0.68rem; margin-left: 0.25rem;">Previously Contacted</span>
+            <span class="badge badge-previously-contacted" style="font-size: 0.68rem; margin-left: 0.25rem;">⏱️ Previously Contacted</span>
             {% endif %}
             {% if l.is_suppressed %}
-            <span class="badge badge-danger" style="font-size: 0.68rem; margin-left: 0.25rem;">Suppressed</span>
+            <span class="badge badge-danger" style="font-size: 0.68rem; margin-left: 0.25rem;">🛑 Suppressed / DNC</span>
             {% endif %}
             
             <div style="font-size: 0.75rem; margin-top: 0.2rem;">
@@ -368,6 +368,7 @@
                 {% endif %}
 
                 <!-- Standard Workspace & Pipeline Navigation -->
+                <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Review Company Research and 13 fields">Research</a>
                 <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Open Company Workspace">Workspace</a>
 
                 {% if l.effective_readiness == 'draft_ready' %}

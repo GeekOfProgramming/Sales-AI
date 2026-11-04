@@ -8,9 +8,11 @@
     <h1 class="page-title">Draft Review Queue</h1>
     <p class="page-subtitle">Human-in-the-loop review of generated outreach emails before approval and sending.</p>
   </div>
-  <div style="display: flex; gap: 0.5rem;">
-    <a href="/sales/drafts?status=pending_review" class="btn btn-secondary btn-sm {% if status_filter == 'pending_review' or not status_filter %}active{% endif %}">Pending Review</a>
-    <a href="/sales/drafts?status=approved" class="btn btn-secondary btn-sm {% if status_filter == 'approved' %}active{% endif %}">Approved</a>
+  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    <a href="/sales/drafts?status=pending_review" class="btn btn-secondary btn-sm {% if status_filter == 'pending_review' or not status_filter %}active{% endif %}">⏳ Pending Review</a>
+    <a href="/sales/drafts?status=changes_requested" class="btn btn-secondary btn-sm {% if status_filter == 'changes_requested' %}active{% endif %}">✏️ Changes Requested</a>
+    <a href="/sales/drafts?status=approved" class="btn btn-secondary btn-sm {% if status_filter == 'approved' %}active{% endif %}">✅ Approved</a>
+    <a href="/sales/drafts?status=rejected" class="btn btn-secondary btn-sm {% if status_filter == 'rejected' %}active{% endif %}">❌ Rejected</a>
     <a href="/sales/drafts?status=all" class="btn btn-secondary btn-sm {% if status_filter == 'all' %}active{% endif %}">All Drafts</a>
   </div>
 </div>
@@ -20,12 +22,32 @@
   <div class="draft-card" id="draft-{{ d.draft_id }}">
     <div class="draft-header">
       <div>
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
-          <h2 style="font-size: 1.15rem; font-weight: 700;">{{ d.company_name }}</h2>
-          <span class="badge {% if d.approval_status == 'approved' %}badge-success{% elif d.approval_status == 'rejected' %}badge-danger{% else %}badge-warning{% endif %}">
-            {{ d.approval_status }}
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
+          {% if d.candidate_id %}
+          <h2 style="font-size: 1.15rem; font-weight: 700; margin: 0;">
+            <a href="/sales/candidates/{{ d.candidate_id }}?tab=outreach#section-outreach" style="color: var(--border-focus); text-decoration: none;" title="Open Candidate Workspace">
+              {{ d.company_name }} ↗
+            </a>
+          </h2>
+          {% else %}
+          <h2 style="font-size: 1.15rem; font-weight: 700; margin: 0;">{{ d.company_name }}</h2>
+          {% endif %}
+          <span class="badge {% if d.approval_status == 'approved' %}badge-success{% elif d.approval_status == 'rejected' %}badge-danger{% elif d.approval_status == 'changes_requested' %}badge-info{% else %}badge-warning{% endif %}">
+            {% if d.approval_status == 'pending_review' %}⏳ Pending Review
+            {% elif d.approval_status == 'changes_requested' %}✏️ Changes Requested
+            {% elif d.approval_status == 'approved' %}✅ Approved
+            {% elif d.approval_status == 'rejected' %}❌ Rejected
+            {% else %}{{ d.approval_status }}
+            {% endif %}
           </span>
           <span class="badge badge-info">Revision r{{ d.revision }}</span>
+          {% if d.recipient_verification_status == 'verified' %}
+          <span class="badge badge-success" title="Recipient verified with public evidence">✓ Recipient Verified</span>
+          {% elif d.recipient_verification_status == 'likely' %}
+          <span class="badge badge-warning" title="Recipient email likely but unconfirmed">⚠️ Recipient Likely</span>
+          {% else %}
+          <span class="badge badge-secondary" title="Recipient verification pending">Recipient {{ d.recipient_verification_status or 'Unverified' }}</span>
+          {% endif %}
           {% if d.send_status == 'sent' %}
           <span class="badge badge-success">Sent (Immutable)</span>
           {% endif %}
@@ -36,13 +58,22 @@
           <span class="badge badge-previously-contacted">Previously Contacted</span>
           {% endif %}
         </div>
-        <p style="font-size: 0.85rem; color: var(--text-secondary);">
-          To: <strong>{{ d.recipient_name }}</strong> &lt;{{ d.recipient_email }}&gt; &bull; 
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.2rem;">
+          To: <strong>{{ d.recipient_name }}</strong> &lt;{{ d.recipient_email }}&gt; {% if d.recipient_title %}({{ d.recipient_title }}){% endif %} &bull; 
           From: {{ d.sender_name or 'System' }} &lt;{{ d.sender_email or 'configured sender' }}&gt;
         </p>
+        {% if d.source_context %}
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">
+          Source: <em>{{ d.source_context }}</em>
+        </p>
+        {% endif %}
       </div>
-      <div>
-        <a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-secondary btn-sm">Full Screen Detail ↗</a>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        {% if d.candidate_id %}
+        <a href="/sales/candidates/{{ d.candidate_id }}/research" class="btn btn-secondary btn-sm" title="Review candidate 13 fields and research evidence">Research ↗</a>
+        <a href="/sales/candidates/{{ d.candidate_id }}" class="btn btn-secondary btn-sm" title="Inspect full company profile">Workspace ↗</a>
+        {% endif %}
+        <a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-primary btn-sm">Full Detail ↗</a>
       </div>
     </div>
 
@@ -91,6 +122,17 @@
         <!-- Edit Button -->
         {% if d.can_edit %}
         <a href="/sales/drafts/{{ d.draft_id }}#edit" class="btn btn-secondary btn-sm">✏️ Edit Revision</a>
+        {% endif %}
+
+        <!-- Request Changes Button -->
+        {% if d.can_request_changes %}
+        <form method="POST" action="/sales/drafts/{{ d.draft_id }}/request-changes" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="revision" value="{{ d.revision }}">
+          <input type="hidden" name="reviewer" value="local_operator">
+          <input type="hidden" name="note" value="Changes requested by operator review.">
+          <button type="submit" class="btn btn-secondary btn-sm" title="Mark draft as changes requested">✏️ Request Changes</button>
+        </form>
         {% endif %}
 
         <!-- Reject Button -->

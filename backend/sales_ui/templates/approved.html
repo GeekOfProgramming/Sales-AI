@@ -6,13 +6,18 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Approved Drafts (Awaiting Send)</h1>
-    <p class="page-subtitle">Human-approved outreach emails ready for explicit live transmission through Phase 9.</p>
+    <p class="page-subtitle">Human-approved outreach emails ready for explicit live transmission through Phase 9 Send Gate.</p>
+  </div>
+  <div style="display: flex; gap: 0.5rem;">
+    <a href="/sales/drafts?status=pending_review" class="btn btn-secondary btn-sm">Review Queue</a>
+    <a href="/sales/leads" class="btn btn-secondary btn-sm">Qualified Leads</a>
   </div>
 </div>
 
 <div class="card">
   <div class="card-title">
     <span>Approved Queue ({{ drafts|length }})</span>
+    <span class="badge badge-success">Human Approved</span>
   </div>
   {% if drafts %}
   <div class="table-responsive">
@@ -20,21 +25,45 @@
       <thead>
         <tr>
           <th>Company</th>
-          <th>Recipient</th>
+          <th>Recipient &amp; Verification</th>
           <th>Subject</th>
+          <th>Source Context</th>
           <th>Revision</th>
           <th>Approved At</th>
           <th>Reviewer</th>
-          <th>Status</th>
-          <th>Action</th>
+          <th>Send Eligibility</th>
+          <th style="text-align: right;">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for d in drafts %}
         <tr>
-          <td><strong>{{ d.company_name }}</strong></td>
-          <td>{{ d.recipient_email }}</td>
+          <td>
+            {% if d.candidate_id %}
+            <a href="/sales/candidates/{{ d.candidate_id }}?tab=outreach#section-outreach" style="font-weight: 700; color: var(--border-focus); text-decoration: none;">
+              {{ d.company_name }} ↗
+            </a>
+            {% else %}
+            <strong>{{ d.company_name }}</strong>
+            {% endif %}
+          </td>
+          <td>
+            <div><strong>{{ d.recipient_name }}</strong></div>
+            <code>{{ d.recipient_email }}</code>
+            <div style="margin-top: 0.2rem;">
+              {% if d.recipient_verification_status == 'verified' %}
+                <span class="badge badge-success" style="font-size: 0.68rem;">✓ Verified</span>
+              {% elif d.recipient_verification_status == 'likely' %}
+                <span class="badge badge-warning" style="font-size: 0.68rem;">⚠️ Likely</span>
+              {% else %}
+                <span class="badge badge-secondary" style="font-size: 0.68rem;">{{ d.recipient_verification_status or 'Unverified' }}</span>
+              {% endif %}
+            </div>
+          </td>
           <td>{{ d.subject }}</td>
+          <td>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">{{ d.source_context or 'Manual Staged' }}</span>
+          </td>
           <td><span class="badge badge-info">r{{ d.revision }}</span></td>
           <td>{{ d.approved_at[:19] if d.approved_at else 'Approved' }}</td>
           <td>{{ d.reviewer or 'operator' }}</td>
@@ -42,13 +71,14 @@
             {% if d.is_suppressed %}
             <span class="badge badge-danger">Suppressed</span>
             {% elif not email_send_enabled %}
-            <span class="badge badge-warning">Server Disabled</span>
+            <span class="badge badge-warning">Server Disabled (Safe Offline)</span>
             {% else %}
             <span class="badge badge-success">Eligible to Send</span>
             {% endif %}
           </td>
-          <td>
-            <div style="display: flex; gap: 0.35rem;">
+          <td style="text-align: right; white-space: nowrap;">
+            <div style="display: inline-flex; gap: 0.35rem; align-items: center;">
+              <a href="/sales/drafts/{{ d.draft_id }}" class="btn btn-secondary btn-sm" title="View full draft inspection">Inspect ↗</a>
               <form method="POST" action="/sales/drafts/{{ d.draft_id }}/dry-run" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="hidden" name="revision" value="{{ d.revision }}">
@@ -62,7 +92,7 @@
                 Send...
               </button>
               {% else %}
-              <button type="button" class="btn btn-secondary btn-sm" disabled>Send</button>
+              <button type="button" class="btn btn-secondary btn-sm" disabled title="Sending is blocked or disabled on server">Send (Locked)</button>
               {% endif %}
             </div>
           </td>

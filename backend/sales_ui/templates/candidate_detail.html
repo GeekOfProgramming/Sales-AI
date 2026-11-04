@@ -170,23 +170,14 @@
     <div style="width: 220px;">
       <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Decision</label>
       <select name="decision" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;" required>
-        {% if is_previously_contacted %}
-          <option value="finalize_historical" selected>📬 Finalize Historical Outreach</option>
-          <option value="approve">✅ Approve Lead</option>
-          <option value="reject">❌ Reject Candidate</option>
-          <option value="duplicate">🔄 Mark Duplicate</option>
-          <option value="needs_research">🔍 Needs Research</option>
-          <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
-          <option value="needs_correction">✏️ Needs Correction</option>
-        {% else %}
-          <option value="approve">✅ Approve Lead</option>
-          <option value="reject">❌ Reject Candidate</option>
-          <option value="duplicate">🔄 Mark Duplicate</option>
-          <option value="needs_research">🔍 Needs Research</option>
-          <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
-          <option value="needs_correction">✏️ Needs Correction</option>
-          <option value="finalize_historical">📬 Finalize Historical Outreach</option>
-        {% endif %}
+        <option value="" disabled selected>-- Select decision --</option>
+        <option value="approve">✅ Approve Lead</option>
+        <option value="reject">❌ Reject Candidate</option>
+        <option value="duplicate">🔄 Mark Duplicate</option>
+        <option value="needs_research">🔍 Needs Research</option>
+        <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
+        <option value="needs_correction">✏️ Needs Correction</option>
+        <option value="finalize_historical">📬 Finalize Historical Outreach</option>
       </select>
     </div>
     <div style="flex: 2; min-width: 260px;">
