@@ -3308,6 +3308,15 @@ async def confirm_historical_import_action(
                     logger.error(f"Failed to import sent emails in staging: {e}")
                     raise
 
+                # 2c. If Meeting sheet exists, import meeting activity records into staging store
+                try:
+                    meetings = staged_importer.parse_meeting_activities(resolved)
+                    if meetings:
+                        staged_importer.import_meeting_activities(meetings, staged_records=records)
+                except Exception as e:
+                    logger.error(f"Failed to import meeting activities in staging: {e}")
+                    raise
+
             # 3. Promote staged store into live target ONLY if target had no concurrent writes
             with store._get_connection() as s_conn:
                 current_version = s_conn.execute("PRAGMA data_version;").fetchone()[0]

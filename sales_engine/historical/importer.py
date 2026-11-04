@@ -42,7 +42,7 @@ from sales_engine.candidates.models import (
     OpportunityType,
     RelationshipType,
 )
-from sales_engine.candidates.candidate_store import CandidateStore
+from sales_engine.candidates.candidate_store import CandidateStore, normalize_company_name
 
 logger = logging.getLogger(__name__)
 
@@ -526,6 +526,43 @@ def normalize_outreach_status(raw_status: Optional[str]) -> Dict[str, Any]:
 
 
 @dataclass
+class MeetingRecord:
+    company_name: str
+    domain: Optional[str]
+    status: Optional[str] = None
+    sender: Optional[str] = None
+    contact_date: Optional[str] = None
+    follow_up_date: Optional[str] = None
+    reply_date: Optional[str] = None
+    follow_up_notes: Optional[str] = None
+    origin_sheet: Optional[str] = None
+    notes: Optional[str] = None
+    emails: List[str] = field(default_factory=list)
+    contact_name: Optional[str] = None
+    phone_numbers: Optional[str] = None
+    raw_location: Optional[str] = None
+    business_topic: Optional[str] = None
+    job_link: Optional[str] = None
+    other_links: Optional[str] = None
+    raw_row: Dict[str, Any] = field(default_factory=dict)
+    source_file: str = ""
+    source_sheet: str = "Meeting"
+    matched_candidate_id: Optional[str] = None
+    matched_company_name: Optional[str] = None
+    reconciliation_status: str = "unmatched"  # 'matched' | 'unmatched'
+
+    def compute_hash(self) -> str:
+        c_name = self.company_name.strip().lower() if self.company_name else ""
+        c_dom = self.domain.strip().lower() if self.domain else ""
+        c_date = self.contact_date or ""
+        r_date = self.reply_date or ""
+        f_date = self.follow_up_date or ""
+        f_notes = (self.follow_up_notes or "").strip().lower()
+        ident_str = f"meeting:{c_name}:{c_dom}:{c_date}:{r_date}:{f_date}:{f_notes}"
+        return hashlib.sha256(ident_str.encode("utf-8")).hexdigest()[:16]
+
+
+@dataclass
 class SentEmailRecord:
     message_id: str
     thread_id: str
@@ -606,7 +643,19 @@ class HistoricalRecord:
         act_flag = "1" if self.has_active_conversation else "0"
         wrong_flag = "1" if self.is_wrong_email else "0"
         p_sender = (self.sender or "").strip().lower()
-        ident_str = f"{c_name}:{c_dom}:{emails_str}:{c_date}:{f_date}:{r_date}:{r_status}:{resp_name}:{resp_email}:{resp_role}:{dnc_flag}:{act_flag}:{wrong_flag}:{p_sender}"
+        # Expanded mutable descriptive fields
+        c_notes = (self.notes or "").strip().lower()
+        c_phones = (self.phone_numbers or "").strip().lower()
+        c_topic = (self.business_topic or "").strip().lower()
+        c_job = (self.job_link or "").strip().lower()
+        c_other = (self.other_links or "").strip().lower()
+        c_fnotes = (self.follow_up_notes or "").strip().lower()
+        c_rawloc = (self.raw_location or "").strip().lower()
+        ident_str = (
+            f"{c_name}:{c_dom}:{emails_str}:{c_date}:{f_date}:{r_date}:{r_status}:"
+            f"{resp_name}:{resp_email}:{resp_role}:{dnc_flag}:{act_flag}:{wrong_flag}:{p_sender}:"
+            f"{c_notes}:{c_phones}:{c_topic}:{c_job}:{c_other}:{c_fnotes}:{c_rawloc}"
+        )
         return hashlib.sha256(ident_str.encode("utf-8")).hexdigest()[:16]
 
 
@@ -632,8 +681,9 @@ class HistoricalImporter:
     Importer for historical CSV/XLSX data with strict idempotency and outreach guards.
     """
 
-    def __init__(self, store: CandidateStore):
-        self.store = store
+    def __init__(self, store: Optional[CandidateStore] = None, file_path: Optional[str] = None):
+        self.store = store or CandidateStore()
+        self.file_path = file_path
         self._init_tables()
 
     def _init_tables(self) -> None:
@@ -761,6 +811,35 @@ class HistoricalImporter:
                 """
                 CREATE INDEX IF NOT EXISTS idx_hist_sent_emails_status
                 ON historical_sent_emails(reconciliation_status)
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS historical_meeting_activities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    activity_hash TEXT NOT NULL UNIQUE,
+                    company_name TEXT NOT NULL,
+                    canonical_domain TEXT,
+                    status TEXT,
+                    sender TEXT,
+                    contact_date TEXT,
+                    follow_up_date TEXT,
+                    reply_date TEXT,
+                    follow_up_notes TEXT,
+                    origin_sheet TEXT,
+                    notes TEXT,
+                    matched_candidate_id TEXT,
+                    matched_company_name TEXT,
+                    source_file TEXT NOT NULL,
+                    source_sheet TEXT NOT NULL DEFAULT 'Meeting',
+                    imported_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_hist_meeting_matched_cid
+                ON historical_meeting_activities(matched_candidate_id)
                 """
             )
 
@@ -1173,6 +1252,115 @@ class HistoricalImporter:
                     email_body=email_body,
                     body_truncated=body_truncated,
                     gmail_link=gmail_link,
+                    source_file=path.name,
+                    source_sheet=target_name,
+                )
+            )
+
+        wb.close()
+        return records
+
+    def parse_meeting_activities(self, file_path: Union[str, Path], sheet_name: str = "Meeting") -> List[MeetingRecord]:
+        """
+        Parses Meeting worksheet into MeetingRecord objects.
+        Meeting sheet captures 5 company activity events with notes, follow-up notes, origin sheet, etc.
+        """
+        if openpyxl is None:
+            raise RuntimeError("openpyxl is required to parse XLSX files")
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        wb = openpyxl.load_workbook(path, data_only=True)
+        target_name = None
+        for s in wb.sheetnames:
+            if s.strip().lower() == sheet_name.strip().lower():
+                target_name = s
+                break
+
+        if not target_name:
+            wb.close()
+            return []
+
+        ws = wb[target_name]
+        headers = []
+        for cell in ws[1]:
+            headers.append(str(cell.value or "").strip())
+
+        records = []
+        for row_idx, row_cells in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            if not any(row_cells):
+                continue
+            row_dict = {}
+            for h, val in zip(headers, row_cells):
+                if h:
+                    row_dict[h] = val
+
+            # Normalize lookup keys
+            norm_dict = {}
+            for k, v in row_dict.items():
+                clean_k = str(k).strip()
+                norm_dict[clean_k] = v
+                norm_dict[clean_k.lower()] = v
+                p_norm = normalize_persian_text(clean_k)
+                norm_dict[p_norm] = v
+
+            cname = (
+                norm_dict.get(normalize_persian_text("نام و عنوان"))
+                or norm_dict.get("نام و عنوان")
+                or norm_dict.get("company")
+                or norm_dict.get("company_name")
+            )
+            if not cname or not str(cname).strip():
+                continue
+            company_name = str(cname).strip()
+
+            raw_web = (
+                norm_dict.get(normalize_persian_text("وبسایت رسمی"))
+                or norm_dict.get(normalize_persian_text("وب‌سایت رسمی"))
+                or norm_dict.get("website")
+                or norm_dict.get("domain")
+            )
+            web_info = parse_multiline_website_cell(raw_web, company_name=company_name)
+            domain = web_info.get("primary_domain")
+
+            status = norm_dict.get(normalize_persian_text("وضعیت ارتباط")) or norm_dict.get("status")
+            sender = norm_dict.get(normalize_persian_text("ارسال کننده")) or norm_dict.get("sender")
+            c_date = norm_dict.get(normalize_persian_text("تاریخ ارسال ایمیل")) or norm_dict.get("contact_date")
+            f_date = norm_dict.get(normalize_persian_text("تاریخ پیگیری")) or norm_dict.get("follow_up_date")
+            r_date = norm_dict.get(normalize_persian_text("تاریخ پاسخدهی")) or norm_dict.get("reply_date")
+            f_notes = norm_dict.get(normalize_persian_text("یادداشتهای پیگیری")) or norm_dict.get("یادداشت‌های پیگیری") or norm_dict.get("follow_up_notes")
+            origin = norm_dict.get(normalize_persian_text("شیت مبدا")) or norm_dict.get("شیت مبدأ") or norm_dict.get("origin_sheet")
+            notes = norm_dict.get(normalize_persian_text("توضیحات و یادداشتها")) or norm_dict.get("توضیحات و یادداشت‌ها") or norm_dict.get("notes")
+            c_name_person = norm_dict.get(normalize_persian_text("شخص مسئول / رابط")) or norm_dict.get("contact_name")
+            phone = norm_dict.get(normalize_persian_text("شمارههای تماس")) or norm_dict.get("شماره‌های تماس") or norm_dict.get("phone_numbers")
+            raw_loc = norm_dict.get(normalize_persian_text("موقعیت جغرافیایی")) or norm_dict.get("location")
+            topic = norm_dict.get(normalize_persian_text("موضوع کاری")) or norm_dict.get("topic")
+            job_link = norm_dict.get(normalize_persian_text("لینک آگهی کار")) or norm_dict.get("job_link")
+            other_links = norm_dict.get(normalize_persian_text("سایر لینکها و راههای ارتباطی")) or norm_dict.get("سایر لینک‌ها و راه‌های ارتباطی") or norm_dict.get("other_links")
+            raw_emails = norm_dict.get(normalize_persian_text("ایمیلهای ارتباطی")) or norm_dict.get("ایمیل‌های ارتباطی") or norm_dict.get("emails")
+            emails = self.normalize_emails(str(raw_emails)) if raw_emails else []
+
+            records.append(
+                MeetingRecord(
+                    company_name=company_name,
+                    domain=domain,
+                    status=str(status).strip() if status is not None else None,
+                    sender=str(sender).strip() if sender is not None else None,
+                    contact_date=str(c_date).strip() if c_date is not None else None,
+                    follow_up_date=str(f_date).strip() if f_date is not None else None,
+                    reply_date=str(r_date).strip() if r_date is not None else None,
+                    follow_up_notes=str(f_notes).strip() if f_notes is not None else None,
+                    origin_sheet=str(origin).strip() if origin is not None else None,
+                    notes=str(notes).strip() if notes is not None else None,
+                    emails=emails,
+                    contact_name=str(c_name_person).strip() if c_name_person is not None else None,
+                    phone_numbers=str(phone).strip() if phone is not None else None,
+                    raw_location=str(raw_loc).strip() if raw_loc is not None else None,
+                    business_topic=str(topic).strip() if topic is not None else None,
+                    job_link=str(job_link).strip() if job_link is not None else None,
+                    other_links=str(other_links).strip() if other_links is not None else None,
+                    raw_row={k: str(v) for k, v in row_dict.items() if v is not None},
                     source_file=path.name,
                     source_sheet=target_name,
                 )
@@ -2193,4 +2381,219 @@ class HistoricalImporter:
                 "unique_threads": unique_threads,
                 "unique_messages": unique_messages,
             }
+
+    def reconcile_meeting_activities(
+        self,
+        meetings: List[MeetingRecord],
+        staged_records: Optional[List[HistoricalRecord]] = None,
+    ) -> List[MeetingRecord]:
+        """
+        Reconciles Meeting worksheet records against existing candidate companies.
+        Safety Invariant:
+        Matches existing candidates by canonical domain or normalized company name.
+        Does NOT create duplicate company entities.
+        """
+        reconciled = []
+        domain_to_cid: Dict[str, str] = {}
+        name_to_cid: Dict[str, str] = {}
+        cand_names: Dict[str, str] = {}
+
+        with self.store._get_connection() as conn:
+            rows = conn.execute("SELECT candidate_id, company_name, company_domain FROM candidate_companies").fetchall()
+            for r in rows:
+                cid = str(r[0])
+                cname = str(r[1] or "")
+                cdom = str(r[2] or "").strip().lower()
+                cand_names[cid] = cname
+                if cdom:
+                    domain_to_cid[cdom] = cid
+                if cname:
+                    name_to_cid[cname.strip().lower()] = cid
+                    name_to_cid[normalize_company_name(cname)] = cid
+
+        if staged_records:
+            for rec in staged_records:
+                cid = None
+                if rec.domain:
+                    canon = self.store.canonicalize_domain(rec.domain)
+                    if canon:
+                        cid = f"cand:domain:{canon}"
+                        domain_to_cid[canon] = cid
+                if not cid and rec.company_name:
+                    cname_clean = rec.company_name.strip().lower()
+                    cid = name_to_cid.get(cname_clean) or self.store.generate_company_id(rec.company_name, None, rec.country)
+                    name_to_cid[cname_clean] = cid
+                    name_to_cid[normalize_company_name(rec.company_name)] = cid
+                if cid and rec.company_name:
+                    cand_names.setdefault(cid, rec.company_name)
+
+        for m in meetings:
+            matched_cid = None
+            if m.domain:
+                canon = self.store.canonicalize_domain(m.domain)
+                if canon:
+                    matched_cid = domain_to_cid.get(canon)
+            if not matched_cid and m.company_name:
+                clean_name = m.company_name.strip().lower()
+                norm_name = normalize_company_name(m.company_name)
+                matched_cid = name_to_cid.get(clean_name) or name_to_cid.get(norm_name)
+                if not matched_cid:
+                    # Try partial prefix match
+                    for ex_norm, ex_cid in name_to_cid.items():
+                        if ex_norm and (ex_norm in norm_name or norm_name in ex_norm):
+                            matched_cid = ex_cid
+                            break
+
+            if matched_cid:
+                m.matched_candidate_id = matched_cid
+                m.matched_company_name = cand_names.get(matched_cid, m.company_name)
+                m.reconciliation_status = "matched"
+            else:
+                m.matched_candidate_id = None
+                m.matched_company_name = None
+                m.reconciliation_status = "unmatched"
+
+            reconciled.append(m)
+
+        return reconciled
+
+    def import_meeting_activities(
+        self,
+        meetings: List[MeetingRecord],
+        staged_records: Optional[List[HistoricalRecord]] = None,
+    ) -> Dict[str, int]:
+        """
+        Persists Meeting records into historical_meeting_activities idempotently,
+        and records meeting outreach events for matched candidates without creating
+        duplicate candidate company entities.
+        """
+        stats = {
+            "total": len(meetings),
+            "imported": 0,
+            "matched": 0,
+            "unmatched": 0,
+            "duplicates": 0,
+        }
+        reconciled = self.reconcile_meeting_activities(meetings, staged_records=staged_records)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        with self.store._get_connection() as conn:
+            for m in reconciled:
+                act_hash = m.compute_hash()
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO historical_meeting_activities (
+                            activity_hash, company_name, canonical_domain, status, sender,
+                            contact_date, follow_up_date, reply_date, follow_up_notes,
+                            origin_sheet, notes, matched_candidate_id, matched_company_name,
+                            source_file, source_sheet, imported_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            act_hash,
+                            m.company_name,
+                            self.store.canonicalize_domain(m.domain) if m.domain else None,
+                            m.status,
+                            m.sender,
+                            m.contact_date,
+                            m.follow_up_date,
+                            m.reply_date,
+                            m.follow_up_notes,
+                            m.origin_sheet,
+                            m.notes,
+                            m.matched_candidate_id,
+                            m.matched_company_name,
+                            m.source_file,
+                            m.source_sheet,
+                            now_iso,
+                        ),
+                    )
+                    stats["imported"] += 1
+                    if m.reconciliation_status == "matched":
+                        stats["matched"] += 1
+                    else:
+                        stats["unmatched"] += 1
+                except sqlite3.IntegrityError:
+                    stats["duplicates"] += 1
+                    continue
+
+                if m.matched_candidate_id and m.reconciliation_status == "matched":
+                    cid = m.matched_candidate_id
+                    # Record outreach event for meeting
+                    meet_status = "completed" if m.reply_date else "scheduled"
+                    contact_email = m.emails[0] if m.emails else None
+                    self.store.record_historical_outreach(
+                        candidate_id=cid,
+                        source_ref=f"meeting:{m.source_file}:{m.origin_sheet or 'Meeting'}",
+                        contact_name=m.contact_name or m.company_name,
+                        contact_email=contact_email,
+                        contacted_at=m.contact_date,
+                        channel="meeting",
+                        reply_status=m.status,
+                        reply_at=m.reply_date,
+                        notes=f"Meeting activity from {m.origin_sheet or 'Meeting'}: {m.follow_up_notes or m.notes or ''}",
+                        raw_row_hash=act_hash,
+                        follow_up_at=m.follow_up_date,
+                        meeting_status=meet_status,
+                        opportunity_status="active",
+                    )
+                    # Update candidate company status to replied / active conversation
+                    conn.execute(
+                        """
+                        UPDATE candidate_companies
+                        SET cold_outreach_allowed = 0,
+                            active_conversation = 1,
+                            historical_contact_status = CASE
+                                WHEN historical_contact_status IN ('replied', 'converted', 'dnc') THEN historical_contact_status
+                                ELSE 'replied'
+                            END,
+                            reply_status = COALESCE(reply_status, ?),
+                            last_contacted_at = COALESCE(last_contacted_at, ?)
+                        WHERE candidate_id = ?
+                        """,
+                        (m.status, m.contact_date, cid),
+                    )
+
+        return stats
+
+    def get_meeting_activities(
+        self,
+        candidate_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Query historical meeting activities registry."""
+        with self.store._get_connection() as conn:
+            query = "SELECT * FROM historical_meeting_activities WHERE 1=1"
+            params: List[Any] = []
+            if candidate_id:
+                query += " AND matched_candidate_id = ?"
+                params.append(candidate_id)
+            query += " ORDER BY contact_date DESC, id DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            rows = conn.execute(query, params).fetchall()
+            results = []
+            for r in rows:
+                results.append({
+                    "id": r["id"],
+                    "activity_hash": r["activity_hash"],
+                    "company_name": r["company_name"],
+                    "canonical_domain": r["canonical_domain"],
+                    "status": r["status"],
+                    "sender": r["sender"],
+                    "contact_date": r["contact_date"],
+                    "follow_up_date": r["follow_up_date"],
+                    "reply_date": r["reply_date"],
+                    "follow_up_notes": r["follow_up_notes"],
+                    "origin_sheet": r["origin_sheet"],
+                    "notes": r["notes"],
+                    "matched_candidate_id": r["matched_candidate_id"],
+                    "matched_company_name": r["matched_company_name"],
+                    "source_file": r["source_file"],
+                    "source_sheet": r["source_sheet"],
+                    "imported_at": r["imported_at"],
+                })
+            return results
 
