@@ -509,6 +509,9 @@ def get_console_services():
         engine=engine,
     )
 
+    from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
+    exclusion_store = ExcludedCompaniesStore(db_path=cand_store.db_path)
+
     return {
         "cand_store": cand_store,
         "registry": registry,
@@ -519,6 +522,7 @@ def get_console_services():
         "rev_store": rev_store,
         "approval_svc": approval_svc,
         "suppression_svc": suppression_svc,
+        "exclusion_store": exclusion_store,
         "orchestrator": orchestrator,
         "audit_svc": audit_svc,
         "dash_svc": dash_svc,
@@ -4059,6 +4063,21 @@ async def candidates_list_view(
     except Exception:
         pass
 
+    # Query active exclusions
+    excl_cids = {}
+    excl_domains = {}
+    try:
+        with store._get_connection() as conn:
+            r_has = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='excluded_companies' LIMIT 1").fetchone()
+            if r_has:
+                for r in conn.execute("SELECT candidate_id, canonical_domain, exclusion_reason FROM excluded_companies WHERE exclusion_status = 'ACTIVE'").fetchall():
+                    if r[0]:
+                        excl_cids[r[0]] = r[2]
+                    if r[1]:
+                        excl_domains[r[1].lower()] = r[2]
+    except Exception:
+        pass
+
     # Also check external research cache if available
     res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
     if res_cache_path.exists():
@@ -4086,11 +4105,22 @@ async def candidates_list_view(
         has_snap = cid in snap_cids
         lr_stat = lr_map.get(cid)
 
+        is_excl = False
+        excl_reason = None
+        if cid in excl_cids:
+            is_excl = True
+            excl_reason = excl_cids[cid]
+        elif dom and dom in excl_domains:
+            is_excl = True
+            excl_reason = excl_domains[dom]
+
         state = project_candidate_lifecycle(
             cand=c,
             has_snapshot=has_snap,
             lead_register_status=lr_stat,
             is_suppressed_domain=is_supp,
+            is_excluded=is_excl,
+            exclusion_reason=excl_reason,
         )
 
         # Queue membership filter
@@ -4346,6 +4376,18 @@ async def candidate_detail_view(
     is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand_domain)
     is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or bool(hist_outreach)
 
+    # Check Excluded Companies Registry
+    excl_store = svcs["exclusion_store"]
+    exclusion_record = excl_store.get_active_exclusion(
+        candidate_id=candidate_id,
+        company_domain=cand_domain,
+        company_name=cand_name,
+    )
+    is_excluded = exclusion_record is not None
+    exclusion_audit_events = excl_store.get_audit_history(exclusion_record.registry_id) if exclusion_record else []
+    if not exclusion_audit_events:
+        exclusion_audit_events = excl_store.get_audit_history_for_candidate(candidate_id)
+
     raw_bim = cand.bim_maturity
     bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
 
@@ -4416,8 +4458,8 @@ async def candidate_detail_view(
         reg_store=reg_store,
     )
 
-    company_outreach_eligible = readiness_info["base_eligible"] and not readiness_info["is_suppressed"] and not readiness_info["is_previously_contacted"]
-    can_generate_draft = readiness_info["can_generate_draft"]
+    company_outreach_eligible = readiness_info["base_eligible"] and not readiness_info["is_suppressed"] and not readiness_info["is_previously_contacted"] and not is_excluded
+    can_generate_draft = readiness_info["can_generate_draft"] and not is_excluded
     has_verified_recipient = readiness_info["has_verified_recipient"]
 
     # All workspace contacts (verified, documented, unverified)
@@ -4496,6 +4538,9 @@ async def candidate_detail_view(
             "ai_brief_text": ai_brief_text,
             "is_suppressed": is_supp,
             "is_previously_contacted": is_contacted,
+            "is_excluded": is_excluded,
+            "exclusion_record": exclusion_record,
+            "exclusion_audit_events": exclusion_audit_events,
             "message": message,
             "error": error,
         },
@@ -4525,6 +4570,15 @@ async def candidate_research_view(
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot research candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     domain = cand.company_domain
     if not domain:
@@ -4755,6 +4809,15 @@ async def crawl_candidate_website_action(
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot research candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
     domain = cand.company_domain
     if not domain:
         return RedirectResponse(
@@ -4942,6 +5005,15 @@ async def research_candidate_action(candidate_id: str, csrf: None = Depends(vali
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot research candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     domain = cand.company_domain
     if not domain:
@@ -5615,6 +5687,13 @@ async def qualify_candidate_action(candidate_id: str, csrf: None = Depends(valid
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot qualify candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(f"/sales/candidates/{candidate_id}?error={quote(err_msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
     obs = svcs["cand_store"].get_observations_for_company(candidate_id)
     ev = svcs["cand_store"].get_evidence(candidate_id)
     qual = svcs["classifier"].classify_company(cand, observations=obs, evidence=ev)
@@ -5811,7 +5890,233 @@ async def candidate_lifecycle_action(
     return RedirectResponse(f"/sales/candidates/{candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/candidates/{candidate_id}/exclude")
+async def exclude_candidate_action(
+    candidate_id: str,
+    reason: str = Form("MANUAL_EXCLUSION"),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Exclude company from active sales pipeline.
+    Preserves all existing CandidateCompany data, Lead Register records, research, and outreach history.
+    Prohibits cold outreach drafts.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
 
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "Unnamed Company")
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    aliases = getattr(cand, "aliases", []) or []
+
+    note_text = notes.strip() if notes and notes.strip() else f"Excluded by operator ({reason})"
+
+    svcs["exclusion_store"].exclude_company(
+        company_name=cname,
+        exclusion_reason=reason,
+        candidate_id=candidate_id,
+        canonical_domain=cdom,
+        known_aliases=aliases,
+        operator_note=note_text,
+        operator="operator",
+        provenance_source="sales_console_candidate",
+    )
+
+    cand.cold_outreach_allowed = False
+    now_iso = datetime.now(timezone.utc).isoformat()
+    audit_note = f"Operator Exclusion ({reason}): {note_text}"
+    if audit_note not in cand.qualification_reasons:
+        cand.qualification_reasons.append(audit_note)
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    cand.manual_review_notes = note_text
+    svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{cname}' successfully EXCLUDED from active prospecting ({reason})."
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/candidates/{candidate_id}/restore")
+async def restore_candidate_action(
+    candidate_id: str,
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Reversibly restore an excluded company to consideration.
+    Does NOT automatically qualify or enable cold outreach.
+    Preserves DNC and historical communication restrictions.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    note_text = notes.strip() if notes and notes.strip() else "Restored by operator"
+
+    rec = svcs["exclusion_store"].restore_company(
+        registry_id_or_candidate_id=candidate_id,
+        operator_note=note_text,
+        operator="operator",
+    )
+
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "Unnamed Company")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    audit_note = f"Operator Restored: {note_text}"
+    if audit_note not in cand.qualification_reasons:
+        cand.qualification_reasons.append(audit_note)
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    cand.manual_review_notes = note_text
+
+    # Outreach safety: do not automatically enable cold outreach if suppressed or contacted
+    is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand.company_domain)
+    is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(cand, "previous_outreach_detected", False)
+    if is_supp or is_contacted:
+        cand.cold_outreach_allowed = False
+
+    svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{cname}' RESTORED from exclusion. Returned to review pipeline with safety guards enforced."
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/excluded-companies", response_class=HTMLResponse)
+async def excluded_companies_view(
+    request: Request,
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query("ALL"),
+    reason: Optional[str] = Query("ALL"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1),
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """
+    HV-01: Excluded Companies Registry page.
+    Displays excluded entities with search, filtering, pagination, and restoration controls.
+    """
+    svcs = get_console_services()
+    excl_store = svcs["exclusion_store"]
+
+    offset = (page - 1) * page_size
+    items, total = excl_store.list_exclusions(
+        status_filter=status,
+        reason_filter=reason,
+        query=q,
+        limit=page_size,
+        offset=offset,
+    )
+
+    has_next = (offset + page_size) < total
+
+    return render_console_template(
+        request=request,
+        name="excluded_companies.html",
+        context={
+            "request": request,
+            "active_tab": "excluded",
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": has_next,
+            "query": q,
+            "status_filter": status,
+            "reason_filter": reason,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.post("/excluded-companies/{registry_id}/restore")
+async def restore_excluded_company_action(
+    registry_id: str,
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Restore company from Excluded Companies Registry page.
+    """
+    svcs = get_console_services()
+    excl_store = svcs["exclusion_store"]
+
+    note_text = notes.strip() if notes and notes.strip() else "Restored by operator via registry page"
+    rec = excl_store.restore_company(
+        registry_id_or_candidate_id=registry_id,
+        operator_note=note_text,
+        operator="operator",
+    )
+    if not rec:
+        raise HTTPException(status_code=404, detail="Exclusion record not found")
+
+    # If linked to candidate, also update candidate object
+    if rec.candidate_id:
+        cand = svcs["cand_store"].get_by_id(rec.candidate_id)
+        if cand:
+            is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand.company_domain)
+            is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(cand, "previous_outreach_detected", False)
+            if is_supp or is_contacted:
+                cand.cold_outreach_allowed = False
+            now_iso = datetime.now(timezone.utc).isoformat()
+            audit_note = f"Operator Restored: {note_text}"
+            if audit_note not in cand.qualification_reasons:
+                cand.qualification_reasons.append(audit_note)
+            cand.manual_reviewed_at = now_iso
+            cand.manual_reviewed_by = "operator"
+            cand.manual_review_notes = note_text
+            svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{rec.company_name}' RESTORED from exclusion."
+    return RedirectResponse(f"/sales/excluded-companies?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/excluded-companies/{registry_id}/re-exclude")
+async def re_exclude_company_action(
+    registry_id: str,
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Re-exclude previously restored company from Excluded Companies Registry page.
+    """
+    svcs = get_console_services()
+    excl_store = svcs["exclusion_store"]
+
+    rec = excl_store.get_exclusion_by_id(registry_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Exclusion record not found")
+
+    note_text = notes.strip() if notes and notes.strip() else f"Re-excluded by operator ({rec.exclusion_reason.value})"
+    excl_store.exclude_company(
+        company_name=rec.company_name,
+        exclusion_reason=rec.exclusion_reason,
+        candidate_id=rec.candidate_id,
+        canonical_domain=rec.canonical_domain,
+        known_aliases=rec.known_aliases,
+        operator_note=note_text,
+        operator="operator",
+        provenance_source="excluded_companies_page",
+    )
+
+    if rec.candidate_id:
+        cand = svcs["cand_store"].get_by_id(rec.candidate_id)
+        if cand:
+            cand.cold_outreach_allowed = False
+            now_iso = datetime.now(timezone.utc).isoformat()
+            audit_note = f"Operator Re-Exclusion: {note_text}"
+            if audit_note not in cand.qualification_reasons:
+                cand.qualification_reasons.append(audit_note)
+            cand.manual_reviewed_at = now_iso
+            cand.manual_reviewed_by = "operator"
+            cand.manual_review_notes = note_text
+            svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{rec.company_name}' successfully RE-EXCLUDED."
+    return RedirectResponse(f"/sales/excluded-companies?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # P10_5-ADV-022 / P10_5-FINAL-001..009: Phase 8 Outreach Generation Delegation
@@ -5833,6 +6138,13 @@ async def generate_candidate_draft_action(
     cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
 
     # BLOCKER 2: Authoritative Qualification & Safety Guards
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cand_domain, company_name=getattr(cand, "company_name", None)):
+        err_msg = "Candidate is currently excluded from active prospecting; cold draft blocked."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={urllib.parse.quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
     if not is_candidate_outreach_eligible(cand):
         disc_status = getattr(cand, "discovery_status", "")
         if hasattr(disc_status, "value"):
@@ -6389,6 +6701,12 @@ async def leads_view(
             continue
 
         cid = getattr(c, "candidate_id", None) or ""
+        cdom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
+        cname = getattr(c, "company_name", None) or getattr(c, "name", "")
+
+        # Excluded companies must not appear in Qualified Leads
+        if svcs["exclusion_store"].is_company_excluded(candidate_id=cid, company_domain=cdom, company_name=cname):
+            continue
         p_contacts = prefetched_contacts_by_cid.get(cid, [])
         p_reg = prefetched_reg_records_by_cid.get(cid)
         p_snap = prefetched_snapshots_by_cid.get(cid)

@@ -95,6 +95,44 @@ class DiscoveryEngineV2:
             company = self.store.get_by_id(company_id)
 
         if not company:
+            # Check if this company is in the Excluded Companies Registry
+            is_excl = False
+            excl_reason = None
+            try:
+                with self.store._get_connection() as conn:
+                    r_has = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='excluded_companies' LIMIT 1").fetchone()
+                    if r_has:
+                        if canon_domain:
+                            r_excl = conn.execute(
+                                "SELECT exclusion_reason FROM excluded_companies WHERE canonical_domain = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                                (canon_domain,)
+                            ).fetchone()
+                            if r_excl:
+                                is_excl = True
+                                excl_reason = r_excl[0]
+                        if not is_excl and company_id:
+                            r_excl2 = conn.execute(
+                                "SELECT exclusion_reason FROM excluded_companies WHERE candidate_id = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                                (company_id,)
+                            ).fetchone()
+                            if r_excl2:
+                                is_excl = True
+                                excl_reason = r_excl2[0]
+                        if not is_excl and company_name:
+                            r_excl3 = conn.execute(
+                                "SELECT exclusion_reason FROM excluded_companies WHERE LOWER(company_name) = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                                (company_name.strip().lower(),)
+                            ).fetchone()
+                            if r_excl3:
+                                is_excl = True
+                                excl_reason = r_excl3[0]
+            except Exception:
+                pass
+
+            init_status = DiscoveryStatus.rejected if is_excl else DiscoveryStatus.discovered
+            init_outcome = QualificationOutcome.reject if is_excl else None
+            init_notes = f"Auto-classified as rejected: matching active exclusion ({excl_reason})" if is_excl else None
+
             company = CandidateCompany(
                 company_id=company_id,
                 name=company_name,
@@ -102,7 +140,10 @@ class DiscoveryEngineV2:
                 country=country or extracted_data.get("country"),
                 city=city or extracted_data.get("city"),
                 discovery_sources=[source_name],
-                status=DiscoveryStatus.discovered,
+                status=init_status,
+                qualification_outcome=init_outcome,
+                manual_review_notes=init_notes,
+                cold_outreach_allowed=not is_excl,
             )
 
         # Update metadata/aliases

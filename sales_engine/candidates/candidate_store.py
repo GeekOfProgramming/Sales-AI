@@ -465,6 +465,46 @@ class CandidateStore:
 
         # Create new CandidateCompany
         cid = self._generate_candidate_id(canonical_dom, company_name, country)
+
+        # Check Excluded Companies Registry: if newly discovered company is already excluded,
+        # ensure it starts in rejected/suppressed status and cold outreach is prohibited.
+        is_excl = False
+        excl_reason = None
+        try:
+            with self._get_connection() as conn:
+                r_has = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='excluded_companies' LIMIT 1").fetchone()
+                if r_has:
+                    if canonical_dom:
+                        r_excl = conn.execute(
+                            "SELECT exclusion_reason FROM excluded_companies WHERE canonical_domain = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                            (canonical_dom,)
+                        ).fetchone()
+                        if r_excl:
+                            is_excl = True
+                            excl_reason = r_excl[0]
+                    if not is_excl and cid:
+                        r_excl2 = conn.execute(
+                            "SELECT exclusion_reason FROM excluded_companies WHERE candidate_id = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                            (cid,)
+                        ).fetchone()
+                        if r_excl2:
+                            is_excl = True
+                            excl_reason = r_excl2[0]
+                    if not is_excl and company_name:
+                        r_excl3 = conn.execute(
+                            "SELECT exclusion_reason FROM excluded_companies WHERE LOWER(company_name) = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                            (company_name.strip().lower(),)
+                        ).fetchone()
+                        if r_excl3:
+                            is_excl = True
+                            excl_reason = r_excl3[0]
+        except Exception:
+            pass
+
+        init_status = DiscoveryStatus.rejected if is_excl else DiscoveryStatus.new
+        init_outcome = QualificationOutcome.reject if is_excl else None
+        init_notes = f"Auto-classified as rejected: matching active exclusion ({excl_reason})" if is_excl else None
+
         new_cand = CandidateCompany(
             candidate_id=cid,
             company_name=company_name.strip(),
@@ -476,6 +516,10 @@ class CandidateStore:
             source_refs=[source_id] if source_id else [],
             aliases=[company_name.strip()],
             domain_history=[canonical_dom] if canonical_dom else [],
+            discovery_status=init_status,
+            qualification_outcome=init_outcome,
+            manual_review_notes=init_notes,
+            cold_outreach_allowed=not is_excl,
             first_seen_at=now,
             last_seen_at=now,
         )
