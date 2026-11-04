@@ -77,6 +77,7 @@ def project_candidate_lifecycle(
     6. Active Work (subqueues: Needs Verification, Needs Research, New).
     """
     cid = getattr(cand, "candidate_id", None) or getattr(cand, "company_id", None) or ""
+    dom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None) or ""
     cname = getattr(cand, "company_name", None) or getattr(cand, "name", "") or "Unnamed Company"
     
     # 1. Extract raw dimensional signals
@@ -93,20 +94,22 @@ def project_candidate_lifecycle(
     prev_outreach = bool(getattr(cand, "previous_outreach_detected", False) or hist_status in ("contacted", "replied", "converted", "dnc"))
     is_suppressed = bool(getattr(cand, "suppressed", False) or is_suppressed_domain)
 
-    # 2. Check explicitly reopened status (highest priority for operator attention)
-    is_reopened = manual_dec in ("REOPENED", "NEEDS_CORRECTION")
-
-    # 3. Check historical finalized vs historical review pending
-    # A historical company is finalized ONLY if explicitly marked HISTORICAL_FINALIZED.
-    # Note: Historical records take precedence over general known_company duplicate flag.
-    is_historical_finalized = prev_outreach and (manual_dec in ("HISTORICAL_FINALIZED", "FINALIZED_HISTORICAL"))
-    is_historical_pending = prev_outreach and not is_historical_finalized and not is_reopened
-
-    # 4. Check suppression / rejected / watchlist / duplicate
+    # 2. Check suppression / rejected / watchlist / duplicate (ABSOLUTE SAFETY PRECEDENCE)
     is_rejected = qual_outcome == "reject" or disc_status == "rejected" or manual_dec == "REJECTED"
     is_watchlist = disc_status == "watchlist" or qual_outcome == "watchlist"
     is_duplicate = (disc_status == "known_company" or qual_outcome == "known_company" or manual_dec == "DUPLICATE") and not prev_outreach
     is_supp_or_rej = bool(is_suppressed or is_rejected or is_watchlist or is_duplicate)
+
+    # 3. Check explicitly reopened status
+    # If a company is suppressed/rejected/watchlist/duplicate, it CANNOT be placed in Active Work queue
+    # for cold outreach. It stays suppressed/protected even if reopened for data correction.
+    is_reopened = manual_dec in ("REOPENED", "NEEDS_CORRECTION")
+
+    # 4. Check historical finalized vs historical review pending
+    # A historical company is finalized ONLY if explicitly marked HISTORICAL_FINALIZED.
+    # Note: Historical records take precedence over general known_company duplicate flag.
+    is_historical_finalized = prev_outreach and (manual_dec in ("HISTORICAL_FINALIZED", "FINALIZED_HISTORICAL"))
+    is_historical_pending = prev_outreach and not is_historical_finalized and not is_reopened
 
     # 5. Check ICP qualification
     # An ICP-qualified company has qualification_outcome in ('qualified', 'qualified_for_enrichment')
@@ -122,8 +125,28 @@ def project_candidate_lifecycle(
     )
 
     # 6. Determine Primary Queue & Actionable Next Step
-    if is_reopened:
-        # Re-enters Active Work queue under Needs Correction
+    # DNC / Suppression / Rejection ALWAYS takes precedence over active work or outreach eligibility.
+    if is_supp_or_rej:
+        p_queue = CandidateQueueType.SUPPRESSED_REJECTED
+        sub_queue = None
+        is_active = False
+        if is_suppressed:
+            if is_reopened:
+                next_step = "Suppressed / Do Not Contact — protected from outreach (reopened for metadata correction only)"
+            else:
+                next_step = "Suppressed / Do Not Contact — protected from outreach"
+            next_url = f"/sales/do-not-contact"
+        elif is_watchlist:
+            next_step = "Watchlisted for observation — paused from active pipeline"
+            next_url = f"/sales/watchlist"
+        elif is_duplicate:
+            next_step = "Duplicate candidate — merged into known company profile"
+            next_url = f"/sales/candidates/{cid}"
+        else:
+            next_step = "Rejected — candidate does not fit ICP criteria"
+            next_url = f"/sales/candidates/{cid}"
+    elif is_reopened:
+        # Re-enters Active Work queue under Needs Correction (only if NOT suppressed/rejected)
         p_queue = CandidateQueueType.ACTIVE
         sub_queue = CandidateQueueType.NEEDS_CORRECTION
         is_active = True
@@ -141,29 +164,15 @@ def project_candidate_lifecycle(
         is_active = False
         next_step = "Historical outreach detected — review past messages & finalize reconciliation"
         next_url = f"/sales/candidates/{cid}"
-    elif is_supp_or_rej:
-        p_queue = CandidateQueueType.SUPPRESSED_REJECTED
-        sub_queue = None
-        is_active = False
-        if is_suppressed:
-            next_step = "Suppressed / Do Not Contact — protected from outreach"
-            next_url = f"/sales/do-not-contact"
-        elif is_watchlist:
-            next_step = "Watchlisted for observation — paused from active pipeline"
-            next_url = f"/sales/watchlist"
-        elif is_duplicate:
-            next_step = "Duplicate candidate — merged into known company profile"
-            next_url = f"/sales/candidates/{cid}"
-        else:
-            next_step = "Rejected — candidate does not fit ICP criteria"
-            next_url = f"/sales/candidates/{cid}"
     elif is_qualified:
         # Triage complete; moves to Qualified Leads pipeline even if contact verification is pending
         p_queue = CandidateQueueType.QUALIFIED
         sub_queue = None
         is_active = False
         next_step = "ICP-qualified — verify contact liaison in Qualified Leads"
-        next_url = f"/sales/leads?q={cid}"
+        # Deep link with clean domain or candidate_id
+        target_param = dom if dom else cid
+        next_url = f"/sales/leads?q={target_param}"
     else:
         # Active Work queue: new or unfinished candidates
         p_queue = CandidateQueueType.ACTIVE

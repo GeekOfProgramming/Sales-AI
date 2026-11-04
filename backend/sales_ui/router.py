@@ -4123,8 +4123,10 @@ async def candidates_list_view(
     for c, state in matched_candidates:
         c_country = getattr(c, "country", None) or ""
         c_city = getattr(c, "city", None) or ""
-        c_tier = str(getattr(c, "company_tier", None) or "").lower()
-        c_status = str(getattr(c, "discovery_status", None) or "").lower()
+        raw_tier = getattr(c, "company_tier", None)
+        c_tier = raw_tier.value.lower() if hasattr(raw_tier, "value") else str(raw_tier or "").lower()
+        raw_status = getattr(c, "discovery_status", None)
+        c_status = raw_status.value.lower() if hasattr(raw_status, "value") else str(raw_status or "").lower()
         c_name = getattr(c, "company_name", None) or getattr(c, "name", "") or ""
         c_domain = getattr(c, "company_domain", None) or getattr(c, "domain", "") or ""
 
@@ -5769,17 +5771,35 @@ async def candidate_lifecycle_action(
 
     if action_clean in ("reopen", "reopened"):
         cand.manual_review_decision = "REOPENED"
-        cand.discovery_status = DiscoveryStatus.new
+        # Preserve original discovery_status if candidate was already qualified or researched
+        if not getattr(cand, "discovery_status", None):
+            cand.discovery_status = DiscoveryStatus.new
         cand.cold_outreach_allowed = False
         msg = f"Candidate '{cand.name}' explicitly REOPENED for correction in Active Work."
     elif action_clean in ("needs_correction", "correction"):
         cand.manual_review_decision = "NEEDS_CORRECTION"
-        cand.discovery_status = DiscoveryStatus.new
+        if not getattr(cand, "discovery_status", None):
+            cand.discovery_status = DiscoveryStatus.new
         cand.cold_outreach_allowed = False
         msg = f"Candidate '{cand.name}' marked as NEEDS CORRECTION in Active Work."
     elif action_clean in ("finalize_historical", "historical_finalized"):
+        # SAFETY GUARD: Candidate MUST have genuine historical communication evidence to finalize historical
+        hist_records = svcs["cand_store"].get_historical_outreach_for_candidate(candidate_id)
+        has_hist_evidence = (
+            bool(hist_records)
+            or cand.historical_contact_status in ("contacted", "replied", "converted", "dnc")
+            or getattr(cand, "previous_outreach_detected", False)
+        )
+        if not has_hist_evidence:
+            err_msg = "Cannot finalize historical outreach: Candidate has no recorded historical communication evidence."
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
         cand.manual_review_decision = "HISTORICAL_FINALIZED"
         cand.cold_outreach_allowed = False
+        # Invariant: Do not overwrite qualification outcome or original discovery status
         msg = f"Candidate '{cand.name}' historical outreach FINALIZED and archived."
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported lifecycle action '{action}'")
