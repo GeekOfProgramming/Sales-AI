@@ -13,38 +13,38 @@
   </div>
 </div>
 
-<!-- Primary Metric Cards Grid -->
+<!-- Primary Metric Cards Grid: UI-02 Actionable Workflow Counters -->
 <div class="metrics-grid">
-  <div class="metric-card">
-    <span class="metric-label">New Candidates</span>
-    <span class="metric-value">{{ summary.new_candidates }}</span>
-    <span class="metric-subtext">Awaiting initial discovery review</span>
-  </div>
-  <div class="metric-card">
+  <a href="/sales/candidates?queue=active" class="metric-card metric-card-link" title="View Active Work Candidates">
+    <span class="metric-label">Active Candidates</span>
+    <span class="metric-value">{{ summary.active_candidates }}</span>
+    <span class="metric-subtext">Actionable pipeline candidates</span>
+  </a>
+  <a href="/sales/candidates?queue=needs_research" class="metric-card metric-card-link" title="View Candidates Needing Research">
     <span class="metric-label">Needs Research</span>
-    <span class="metric-value">{{ summary.needs_research }}</span>
-    <span class="metric-subtext">Assigned to research queue</span>
-  </div>
-  <div class="metric-card">
-    <span class="metric-label">Watchlist</span>
-    <span class="metric-value">{{ summary.watchlist }}</span>
-    <span class="metric-subtext">Monitored for new hiring/signals</span>
-  </div>
-  <div class="metric-card">
+    <span class="metric-value" style="color:#f59e0b;">{{ summary.needs_research }}</span>
+    <span class="metric-subtext">Awaiting company/web research</span>
+  </a>
+  <a href="/sales/candidates?queue=needs_verification" class="metric-card metric-card-link" title="View Candidates Needing Verification">
+    <span class="metric-label">Needs Verification</span>
+    <span class="metric-value" style="color:#38bdf8;">{{ summary.needs_verification }}</span>
+    <span class="metric-subtext">Awaiting operator verification</span>
+  </a>
+  <a href="/sales/candidates?queue=historical_pending" class="metric-card metric-card-link" title="View Historical Outreach Review Pending">
+    <span class="metric-label">Historical Review Pending</span>
+    <span class="metric-value" style="color:#eab308;">{{ summary.historical_pending }}</span>
+    <span class="metric-subtext">Prior outreach awaiting review</span>
+  </a>
+  <a href="/sales/leads" class="metric-card metric-card-link" title="View Qualified Leads Workspace">
     <span class="metric-label">Qualified Leads</span>
-    <span class="metric-value">{{ summary.qualified_leads }}</span>
+    <span class="metric-value" style="color:#10b981;">{{ summary.qualified_leads }}</span>
     <span class="metric-subtext">Passed automated ICP qualification</span>
-  </div>
-  <div class="metric-card">
-    <span class="metric-label">Historical Outreach Contacts</span>
-    <span class="metric-value">{{ summary.contacts_found }}</span>
-    <span class="metric-subtext">{{ summary.usable_contacts }} non-bounced emails</span>
-  </div>
-  <div class="metric-card">
-    <span class="metric-label">Drafts Pending Review</span>
+  </a>
+  <a href="/sales/drafts" class="metric-card metric-card-link" title="View Draft Review Queue">
+    <span class="metric-label">Pending Draft Review</span>
     <span class="metric-value" style="color:#f59e0b;">{{ summary.drafts_pending_review }}</span>
-    <span class="metric-subtext">Requires human approval</span>
-  </div>
+    <span class="metric-subtext">Drafts requiring human approval</span>
+  </a>
   <div class="metric-card">
     <span class="metric-label">Approved (Not Sent)</span>
     <span class="metric-value" style="color:#38bdf8;">{{ summary.approved_not_sent }}</span>
@@ -61,9 +61,9 @@
     <span class="metric-subtext">Protected from contact</span>
   </div>
   <div class="metric-card">
-    <span class="metric-label">Historical Companies</span>
-    <span class="metric-value">{{ summary.historical_known_companies }}</span>
-    <span class="metric-subtext">Prior contact / known companies</span>
+    <span class="metric-label">Historical Outreach Contacts</span>
+    <span class="metric-value">{{ summary.contacts_found }}</span>
+    <span class="metric-subtext">{{ summary.usable_contacts }} non-bounced emails</span>
   </div>
 </div>
 

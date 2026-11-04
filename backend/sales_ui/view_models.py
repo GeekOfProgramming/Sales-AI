@@ -20,6 +20,10 @@ class DashboardSummary(BaseModel):
     sent_this_week: int = 0
     suppressed: int = 0
     historical_known_companies: int = 0
+    # UI-02 Actionable Workflow Counters
+    active_candidates: int = 0
+    needs_verification: int = 0
+    historical_pending: int = 0
     # Phase 11 placeholders
     historical_positive_replies: Optional[int] = None
     historical_meetings: Optional[int] = None

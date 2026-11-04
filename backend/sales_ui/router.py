@@ -606,10 +606,84 @@ async def validate_csrf(request: Request):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
 
 
+def _get_navigation_badge_counts() -> Dict[str, int]:
+    """
+    Computes real pending work counts for top-level navigation badges:
+    - candidates: Active work candidates needing triage / processing
+    - human_verification: Candidates with research snapshots/proposals needing human verification
+    - drafts: Drafts pending operator review
+    - replies: Active conversations waiting on us / needs review (only if inbox_store present)
+    Zero expensive queries: queries are simple fast index lookups or cached counts.
+    """
+    counts = {
+        "candidates": 0,
+        "human_verification": 0,
+        "drafts": 0,
+        "replies": 0,
+    }
+    try:
+        svcs = get_console_services()
+        cand_store = svcs.get("cand_store")
+        rev_store = svcs.get("rev_store")
+        inbox_store = svcs.get("inbox_store")
+
+        if cand_store and hasattr(cand_store, "_get_connection"):
+            with cand_store._get_connection() as conn:
+                # Active candidates: discovery_status in ('new', 'needs_research', 'researching') and not suppressed/rejected
+                r_cand = conn.execute("""
+                    SELECT COUNT(*) FROM candidate_companies
+                    WHERE (discovery_status IN ('new', 'needs_research', 'researching')
+                           OR qualification_outcome = 'research_more'
+                           OR manual_review_decision = 'REOPENED')
+                      AND (qualification_outcome IS NULL OR qualification_outcome NOT IN ('reject', 'suppressed', 'watchlist'))
+                """).fetchone()
+                if r_cand:
+                    counts["candidates"] = r_cand[0]
+
+                # Human verification: records in lead_register_records with status in ('Unverified', 'EXTRACTED')
+                r_has_lr = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone()
+                if r_has_lr:
+                    r_hv = conn.execute("""
+                        SELECT COUNT(*) FROM lead_register_records
+                        WHERE verification_status IN ('Unverified', 'EXTRACTED')
+                    """).fetchone()
+                    if r_hv:
+                        counts["human_verification"] = r_hv[0]
+
+        if rev_store and hasattr(rev_store, "_get_connection"):
+            with rev_store._get_connection() as conn:
+                r_draft = conn.execute("""
+                    SELECT COUNT(*) FROM drafts d1
+                    WHERE d1.revision = (
+                        SELECT MAX(d2.revision) FROM drafts d2 WHERE d2.draft_id = d1.draft_id
+                    )
+                    AND d1.approval_status = 'pending_review'
+                    AND d1.send_status != 'sent'
+                """).fetchone()
+                if r_draft:
+                    counts["drafts"] = r_draft[0]
+
+        if inbox_store and hasattr(inbox_store, "_get_connection"):
+            with inbox_store._get_connection() as conn:
+                r_has_conv = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversations' LIMIT 1").fetchone()
+                if r_has_conv:
+                    r_rep = conn.execute("""
+                        SELECT COUNT(*) FROM conversations
+                        WHERE status IN ('waiting_on_us', 'needs_review')
+                    """).fetchone()
+                    if r_rep:
+                        counts["replies"] = r_rep[0]
+    except Exception:
+        pass
+    return counts
+
+
 def render_console_template(request: Request, name: str, context: Dict[str, Any]) -> HTMLResponse:
     """Renders Jinja2 template ensuring CSRF token is provided in context and cookie."""
     csrf_token = get_or_create_csrf_token(request)
     context["csrf_token"] = csrf_token
+    if "nav_badges" not in context:
+        context["nav_badges"] = _get_navigation_badge_counts()
     resp = templates.TemplateResponse(request=request, name=name, context=context)
     if request.cookies.get(CSRF_COOKIE_NAME) != csrf_token:
         resp.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
