@@ -701,19 +701,19 @@ tr:hover .sticky-col-right {
                             </div>
                         </td>
 
-                        <!-- Actions (Workspace, Snapshot, Edit) -->
+                        <!-- Actions (Review Research, Workspace, Edit) -->
                         <td style="text-align: right;">
                             <div class="action-btn-group">
+                                <a href="/sales/candidates/{{ rec.candidate_id }}/research" 
+                                   class="btn-xs btn-xs-primary" title="Primary Field-Level Verification & Research Review" style="font-weight: 600;">
+                                    Review Research
+                                </a>
                                 <a href="/sales/candidates/{{ rec.candidate_id }}" 
                                    class="btn-xs" title="Open Unified Company Workspace">
                                     Workspace
                                 </a>
-                                <a href="/sales/candidates/{{ rec.candidate_id }}/research" 
-                                   class="btn-xs" title="View Research Snapshot" style="color: var(--border-focus, #38bdf8);">
-                                    Snapshot
-                                </a>
                                 <a href="/sales/register/{{ rec.candidate_id }}" 
-                                   class="btn-xs btn-xs-primary" title="Edit 13 Fields">
+                                   class="btn-xs" title="Edit 13 Fields">
                                     Edit
                                 </a>
                             </div>
@@ -875,12 +875,16 @@ tr:hover .sticky-col-right {
                         <!-- Sticky Actions Column -->
                         <td class="sticky-col-right" style="text-align: right;">
                             <div class="action-btn-group">
+                                <a href="/sales/candidates/{{ rec.candidate_id }}/research" 
+                                   class="btn-xs btn-xs-primary" title="Primary Field-Level Verification & Research Review" style="font-weight: 600;">
+                                    Review Research
+                                </a>
                                 <a href="/sales/candidates/{{ rec.candidate_id }}" 
                                    class="btn-xs" title="Workspace">
                                     Workspace
                                 </a>
                                 <a href="/sales/register/{{ rec.candidate_id }}" 
-                                   class="btn-xs btn-xs-primary" title="Edit 13 Fields">
+                                   class="btn-xs" title="Edit 13 Fields">
                                     Edit
                                 </a>
                             </div>

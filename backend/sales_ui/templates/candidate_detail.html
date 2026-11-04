@@ -647,15 +647,19 @@
 <div id="section-register" class="workspace-section" style="display: none;">
   {% if lead_record %}
   <div class="card" style="border-left: 4px solid #10b981; margin-bottom: 1.25rem;">
-    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
       <span>Linked 13-Field Lead Register Record #{{ lead_record.record_number }}</span>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
         <span class="badge badge-success">{{ lead_record.verification_status }}</span>
-        <a href="/sales/register/{{ lead_record.candidate_id }}" class="btn btn-secondary btn-sm">✏️ Edit 13-Field Record</a>
+        <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary btn-sm" title="Field-level verification, evidence inspection and corrections">🔬 Review in Research Review</a>
+        <a href="/sales/register/{{ lead_record.candidate_id }}" class="btn btn-secondary btn-sm" title="Direct raw register record form">✏️ Raw Register Edit</a>
       </div>
     </div>
     <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
       Authoritative association confirmed for candidate ID <code>{{ lead_record.candidate_id }}</code>. Provenance: <strong>{{ lead_record.provenance_source }}</strong>.
+      {% if lead_record.provenance_source == 'research_lead_excel' or 'excel' in lead_record.provenance_source|lower %}
+        <span class="badge badge-info" style="margin-left: 0.35rem; font-size: 0.72rem;">📊 Source: Research Excel</span>
+      {% endif %}
     </p>
     
     <!-- 13 Standard Schema Fields Grid -->
@@ -667,19 +671,139 @@
         </tr>
       </thead>
       <tbody>
-        <tr><td style="font-weight: 600;">1. Row / Record Number</td><td>{{ lead_record.record_number }}</td></tr>
-        <tr><td style="font-weight: 600;">2. Company Priority</td><td><span class="badge badge-{% if lead_record.priority_level == 'A' %}success{% elif lead_record.priority_level == 'B' %}info{% else %}secondary{% endif %}">Priority {{ lead_record.priority_level }}</span></td></tr>
-        <tr><td style="font-weight: 600;">3. Priority Rationale</td><td>{{ lead_record.priority_rationale or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">4. Company Name &amp; Legal Identity</td><td><strong>{{ lead_record.company_name }}</strong>{% if lead_record.legal_identity and lead_record.legal_identity != 'Not Found' %} ({{ lead_record.legal_identity }}){% endif %}</td></tr>
-        <tr><td style="font-weight: 600;">5. Geographic Location</td><td>{{ lead_record.geographic_location or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">6. Telephone Numbers</td><td>{{ lead_record.telephone_numbers or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">7. Business Activities / Services</td><td>{{ lead_record.business_activities or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">8. Official Website</td><td>{% if lead_record.official_website and lead_record.official_website != 'Not Found' %}<a href="{{ lead_record.official_website }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ lead_record.official_website }} ↗</a>{% else %}Not Found{% endif %}</td></tr>
-        <tr><td style="font-weight: 600;">9. Responsible Person / Contact</td><td>{{ lead_record.responsible_person or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">10. Descriptions &amp; Operator Notes</td><td>{{ lead_record.descriptions_and_notes or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">11. Job Advertisement Links</td><td>{{ lead_record.job_advertisement_links or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">12. Other Links / Projects / References</td><td>{{ lead_record.other_links_and_references or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">13. Contact Email Addresses</td><td><code>{{ lead_record.contact_email_addresses or 'Not Found' }}</code></td></tr>
+        <tr><td style="font-weight: 600;">1. Row / Record Number</td><td>{{ lead_record.record_number or 'Unassigned' }}</td></tr>
+        <tr>
+          <td style="font-weight: 600;">2. Company Priority</td>
+          <td>
+            <span class="badge badge-{% if lead_record.priority_level == 'A' %}success{% elif lead_record.priority_level == 'B' %}info{% else %}secondary{% endif %}">
+              {% if lead_record.provenance_source == 'research_lead_excel' or 'excel' in lead_record.provenance_source|lower %}Suggested Priority {{ lead_record.priority_level }}{% else %}Priority {{ lead_record.priority_level }}{% endif %}
+            </span>
+            {% if lead_record.provenance_source == 'research_lead_excel' or 'excel' in lead_record.provenance_source|lower %}
+              <span style="font-size: 0.72rem; color: var(--text-muted); margin-left: 0.35rem;">(Imported suggestion &bull; Not verified qualification)</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">3. Priority Rationale</td>
+          <td>
+            {% if lead_record.priority_rationale and lead_record.priority_rationale != 'Not Found' %}
+              {{ lead_record.priority_rationale }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found / Unstated</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">4. Company Name &amp; Legal Identity</td>
+          <td>
+            <strong>{{ lead_record.company_name }}</strong>
+            {% if lead_record.legal_identity and lead_record.legal_identity != 'Not Found' %}
+              <span style="color: var(--text-secondary);">({{ lead_record.legal_identity }})</span>
+            {% else %}
+              <span class="text-subtle" style="font-style: italic; margin-left: 0.35rem;">(Legal identity unverified)</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">5. Geographic Location</td>
+          <td>
+            {% if lead_record.geographic_location and lead_record.geographic_location != 'Not Found' %}
+              {{ lead_record.geographic_location }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">6. Telephone Numbers</td>
+          <td>
+            {% if lead_record.telephone_numbers and lead_record.telephone_numbers != 'Not Found' %}
+              {{ lead_record.telephone_numbers }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">7. Business Activities / Services</td>
+          <td>
+            {% if lead_record.business_activities and lead_record.business_activities != 'Not Found' %}
+              {{ lead_record.business_activities }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">8. Official Website</td>
+          <td>
+            {% if lead_record.official_website and lead_record.official_website != 'Not Found' %}
+              <a href="{{ lead_record.official_website if lead_record.official_website.startswith('http') else 'https://' ~ lead_record.official_website }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ lead_record.official_website }} ↗</a>
+            {% else %}
+              <span class="badge badge-warning" style="font-size: 0.72rem;">Unverified website</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">9. Responsible Person / Contact</td>
+          <td>
+            {% if lead_record.responsible_person and lead_record.responsible_person != 'Not Found' %}
+              {{ lead_record.responsible_person }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">10. Descriptions &amp; Operator Notes</td>
+          <td>
+            {% if lead_record.descriptions_and_notes and lead_record.descriptions_and_notes != 'Not Found' %}
+              <div style="white-space: pre-wrap;">{{ lead_record.descriptions_and_notes }}</div>
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">11. Job Advertisement Links</td>
+          <td>
+            {% if lead_record.job_advertisement_links and lead_record.job_advertisement_links != 'Not Found' %}
+              {% for jlink in lead_record.job_advertisement_links.split(',') %}
+                {% set clink = jlink.strip() %}
+                {% if clink %}
+                  <div><a href="{{ clink if clink.startswith('http') else 'https://' ~ clink }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ clink }} ↗</a></div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">12. Other Links / Projects / References</td>
+          <td>
+            {% if lead_record.other_links_and_references and lead_record.other_links_and_references != 'Not Found' %}
+              {% for olink in lead_record.other_links_and_references.split(',') %}
+                {% set colink = olink.strip() %}
+                {% if colink %}
+                  <div><a href="{{ colink if colink.startswith('http') else 'https://' ~ colink }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ colink }} ↗</a></div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">13. Contact Email Addresses</td>
+          <td>
+            {% if lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
+              <code>{{ lead_record.contact_email_addresses }}</code>
+            {% else %}
+              <span class="badge badge-secondary" style="font-size: 0.72rem;">No verified email</span>
+            {% endif %}
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
