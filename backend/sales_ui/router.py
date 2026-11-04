@@ -2876,15 +2876,23 @@ async def preview_historical_import_action(
             if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
                 unmapped_columns_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
 
+    is_lead_res = importer.is_lead_research_workbook(resolved)
+
     # Evaluate Readiness with authoritative shared function
-    readiness_status, readiness_reasons = evaluate_import_readiness(
-        records=records,
-        unmapped_columns_count=unmapped_columns_count,
-        domain_collisions_count=domain_collisions_count,
-        distinct_canonical_domains=distinct_canonical_domains,
-        multiple_plausible_domains_count=multiple_plausible_domains_count,
-        missing_domain_count=missing_domain_count,
-    )
+    if is_lead_res:
+        # Lead Research workbooks automatically match verified domains and route unverified companies
+        # to 'Needs Research' candidates with zero outreach; they do not block on missing domains.
+        readiness_status = "READY"
+        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
+    else:
+        readiness_status, readiness_reasons = evaluate_import_readiness(
+            records=records,
+            unmapped_columns_count=unmapped_columns_count,
+            domain_collisions_count=domain_collisions_count,
+            distinct_canonical_domains=distinct_canonical_domains,
+            multiple_plausible_domains_count=multiple_plausible_domains_count,
+            missing_domain_count=missing_domain_count,
+        )
 
     # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
     has_sent_emails_sheet = False
@@ -2967,7 +2975,6 @@ async def preview_historical_import_action(
         logger.warning(f"Error computing historical comparison metrics: {e}")
 
     # HV-02.5: Detect if uploaded/specified workbook is the 13-column pyBIM Lead Research workbook
-    is_lead_res = importer.is_lead_research_workbook(resolved)
     lead_res_analysis = {}
     if is_lead_res:
         from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
@@ -3017,6 +3024,8 @@ async def preview_historical_import_action(
         reviewed_records_affected=reviewed_records_affected,
         is_lead_research=is_lead_res,
         new_candidate_proposals=lead_res_analysis.get("new_candidate_proposals", 0),
+        new_candidates_with_domain=lead_res_analysis.get("new_candidates_with_domain", 0),
+        new_candidates_without_domain=lead_res_analysis.get("new_candidates_without_domain", 0),
         existing_candidate_matches=lead_res_analysis.get("existing_candidate_matches", 0),
         ambiguous_unresolved_count=lead_res_analysis.get("ambiguous_unresolved_count", 0),
         excluded_dnc_count=lead_res_analysis.get("excluded_dnc_count", 0),
@@ -3145,15 +3154,21 @@ async def confirm_historical_import_action(
         multiple_plausible_domains_count = inspection.get("multiple_plausible_domains_count", 0)
         missing_domain_count = inspection.get("missing_domain_count", 0)
 
+    is_lead_res = importer.is_lead_research_workbook(resolved)
+
     # Server-side validation gate parity with Preview
-    readiness_status, readiness_reasons = evaluate_import_readiness(
-        records=records,
-        unmapped_columns_count=unmapped_count,
-        domain_collisions_count=domain_collisions_count,
-        distinct_canonical_domains=distinct_canonical_domains,
-        multiple_plausible_domains_count=multiple_plausible_domains_count,
-        missing_domain_count=missing_domain_count,
-    )
+    if is_lead_res:
+        readiness_status = "READY"
+        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
+    else:
+        readiness_status, readiness_reasons = evaluate_import_readiness(
+            records=records,
+            unmapped_columns_count=unmapped_count,
+            domain_collisions_count=domain_collisions_count,
+            distinct_canonical_domains=distinct_canonical_domains,
+            multiple_plausible_domains_count=multiple_plausible_domains_count,
+            missing_domain_count=missing_domain_count,
+        )
 
     # Parse and rigorously validate operator decisions if supplied
     parsed_decisions = []
@@ -3359,7 +3374,10 @@ async def confirm_historical_import_action(
                 # 2. Execute import on staging store
                 staged_store = CandidateStore(staging_path)
                 staged_importer = HistoricalImporter(store=staged_store)
-                result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
+                if is_lead_res:
+                    result = staged_importer.import_lead_research_records(records, source_file_name=resolved.name)
+                else:
+                    result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
                 # 2b. If Sent_Emails sheet exists, import sent messages into staging store
                 sent_emails_stats = None
@@ -3425,13 +3443,16 @@ async def confirm_historical_import_action(
                     # Specific ordering: parent tables before child tables
                     table_priority = {
                         "candidate_companies": 1,
-                        "historical_imports": 2,
-                        "historical_contacts": 3,
-                        "historical_company_links": 4,
-                        "historical_sent_emails": 5,
-                        "historical_meeting_activities": 6,
-                        "historical_outreach_events": 7,
-                        "operator_import_decisions": 8,
+                        "lead_register_records": 2,
+                        "discovery_observations": 3,
+                        "candidate_contacts": 4,
+                        "historical_imports": 5,
+                        "historical_contacts": 6,
+                        "historical_company_links": 7,
+                        "historical_sent_emails": 8,
+                        "historical_meeting_activities": 9,
+                        "historical_outreach_events": 10,
+                        "operator_import_decisions": 11,
                     }
                     sorted_tables = sorted(stg_tables, key=lambda t: table_priority.get(t, 99))
 

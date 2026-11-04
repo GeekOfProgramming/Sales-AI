@@ -332,6 +332,8 @@ class HistoricalImportPreviewResult(BaseModel):
     # HV-02.5 Lead Research 13-column workbook preview fields
     is_lead_research: bool = False
     new_candidate_proposals: int = 0
+    new_candidates_with_domain: int = 0
+    new_candidates_without_domain: int = 0
     existing_candidate_matches: int = 0
     ambiguous_unresolved_count: int = 0
     excluded_dnc_count: int = 0

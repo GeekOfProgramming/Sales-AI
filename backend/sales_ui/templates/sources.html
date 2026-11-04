@@ -526,7 +526,12 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
       <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
         <div style="color: var(--text-secondary); font-size: 0.75rem;">New Candidate Proposals</div>
-        <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success, #22c55e);">{{ preview.new_candidate_proposals }}</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success, #22c55e);">
+          {{ preview.new_candidate_proposals }}
+          <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-secondary);">
+            ({{ preview.new_candidates_with_domain }} verified web / {{ preview.new_candidates_without_domain }} unverified web)
+          </span>
+        </div>
       </div>
       <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
         <div style="color: var(--text-secondary); font-size: 0.75rem;">Existing Candidate Matches</div>

@@ -89,10 +89,10 @@ def test_01_existing_company_matching_does_not_create_duplicates(disposable_rese
     assert analysis["rows_parsed"] == 83
     # Exactly 1 existing candidate matched (Arcadis)
     assert analysis["existing_candidate_matches"] == 1
-    # 9 new candidate proposals (from the 10 verified domains)
-    assert analysis["new_candidate_proposals"] == 9
-    # 73 unverified/missing domain rows flagged as ambiguous
-    assert analysis["ambiguous_unresolved_count"] == 73
+    # 82 new candidate proposals (10-1 = 9 with verified domains + 73 without verified domain)
+    assert analysis["new_candidate_proposals"] == 82
+    assert analysis["new_candidates_with_domain"] == 9
+    assert analysis["new_candidates_without_domain"] == 73
 
 
 def test_02_research_import_preserves_existing_verified_and_operator_reviewed_data(disposable_research_env):
@@ -179,8 +179,9 @@ def test_03_preview_does_not_mutate_authoritative_database(disposable_research_e
     pdata = response.json()
     assert pdata["is_lead_research"] is True
     assert pdata["rows_detected"] == 83
-    assert pdata["new_candidate_proposals"] == 10
-    assert pdata["ambiguous_unresolved_count"] == 73
+    assert pdata["new_candidate_proposals"] == 83
+    assert pdata["new_candidates_with_domain"] == 10
+    assert pdata["new_candidates_without_domain"] == 73
 
     # Verify database was NOT mutated
     conn = sqlite3.connect(str(db_file))

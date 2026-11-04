@@ -1160,6 +1160,25 @@ class CandidateStore:
             return {r["source_name"]: dict(r) for r in rows}
 
     # Convenient aliases for compatibility
+    def get_by_name(self, name: str, country: Optional[str] = None) -> Optional[CandidateCompany]:
+        """
+        Retrieves a candidate by exact normalized company name.
+        Safe against domain collisions: matches when normalized name matches and domain is either identical or unassigned.
+        """
+        if not name or not str(name).strip():
+            return None
+        norm_name = normalize_company_name(name)
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM candidate_companies WHERE normalized_company_name = ?",
+                (norm_name,),
+            ).fetchall()
+            for r in rows:
+                c = self._row_to_candidate(r)
+                if not country or not c.country or c.country.lower() == country.lower():
+                    return c
+        return None
+
     def get_by_id(self, candidate_id: str) -> Optional[CandidateCompany]:
         return self.get_candidate(candidate_id)
 

@@ -1226,6 +1226,8 @@ class HistoricalImporter:
 
         rows_parsed = len(records)
         new_proposals = 0
+        new_candidates_with_domain = 0
+        new_candidates_without_domain = 0
         existing_matches = 0
         ambiguous_unresolved = 0
         excluded_dnc = 0
@@ -1244,11 +1246,22 @@ class HistoricalImporter:
 
         proposals_detail = []
         for r in records:
-            cname = r.company_name
+            cname = (r.company_name or "").strip()
             raw_dom = r.domain
             dom = self.store.canonicalize_domain(raw_dom) if raw_dom else None
 
-            # 1. Respect Excluded Companies Registry
+            # 1. Genuinely ambiguous identity check
+            if not cname or len(cname) < 2 or cname.lower() in ("none", "null", "unknown", "تأیید نشد", "#n/a"):
+                ambiguous_unresolved += 1
+                proposals_detail.append({
+                    "company_name": cname,
+                    "domain": dom,
+                    "status": "AMBIGUOUS_UNRESOLVED",
+                    "reason": "Missing or invalid company name identity; quarantined for operator review",
+                })
+                continue
+
+            # 2. Respect Excluded Companies Registry
             if excl_store.is_company_excluded(company_domain=dom, company_name=cname):
                 excluded_dnc += 1
                 proposals_detail.append({
@@ -1259,46 +1272,49 @@ class HistoricalImporter:
                 })
                 continue
 
-            # 2. Ambiguous or missing-domain: require review, do NOT guess or merge solely by name
-            if not dom:
-                ambiguous_unresolved += 1
-                proposals_detail.append({
-                    "company_name": cname,
-                    "domain": None,
-                    "status": "AMBIGUOUS_UNRESOLVED",
-                    "reason": "Unverified or missing official website domain; requires manual review",
-                })
-                continue
+            # 3. Match candidate:
+            # - First by verified canonical domain if present
+            # - Second by exact normalized company name
+            existing = None
+            if dom:
+                existing = self.store.get_by_domain(dom)
+            if not existing:
+                existing = self.store.get_by_name(cname, country=r.country)
 
-            # 3. Match candidate strictly by verified canonical domain
-            existing = self.store.get_by_domain(dom)
-            cid = f"cand:domain:{dom}"
             if existing:
+                cid = existing.candidate_id
                 existing_matches += 1
-                # If existing is already operator reviewed, do not propose overwriting
                 is_reviewed = cid in reviewed_cids
                 if not is_reviewed:
                     proposed_research_updates += 1
                 proposals_detail.append({
                     "company_name": cname,
-                    "candidate_id": existing.candidate_id,
+                    "candidate_id": cid,
                     "domain": dom,
                     "status": "EXISTING_MATCH",
                     "operator_reviewed": is_reviewed,
                 })
             else:
+                cid = self.store.generate_company_id(cname, dom, r.country or "it")
                 new_proposals += 1
+                if dom:
+                    new_candidates_with_domain += 1
+                else:
+                    new_candidates_without_domain += 1
                 proposed_research_updates += 1
                 proposals_detail.append({
                     "company_name": cname,
                     "candidate_id": cid,
                     "domain": dom,
                     "status": "NEW_PROPOSAL",
+                    "has_verified_domain": bool(dom),
                 })
 
         return {
             "rows_parsed": rows_parsed,
             "new_candidate_proposals": new_proposals,
+            "new_candidates_with_domain": new_candidates_with_domain,
+            "new_candidates_without_domain": new_candidates_without_domain,
             "existing_candidate_matches": existing_matches,
             "ambiguous_unresolved_count": ambiguous_unresolved,
             "excluded_dnc_count": excluded_dnc,
@@ -1306,6 +1322,186 @@ class HistoricalImporter:
             "proposed_research_updates": proposed_research_updates,
             "proposals_detail": proposals_detail,
         }
+
+    def import_lead_research_records(
+        self,
+        records: List[HistoricalRecord],
+        source_file_name: str = "pyBIM_Lead_Research.xlsx",
+    ) -> HistoricalImportResult:
+        """
+        HV-02.6: Automatic Research Candidate Import.
+        - Matches existing candidates using reliable canonical domain or exact company identity.
+        - Creates new Candidates with Needs Research status when no reliable match exists.
+        - Never invents or assigns an unverified domain (leaves company_domain=None).
+        - Attaches all original research data as LeadRegisterRecord + DiscoveryObservation provenance.
+        - Preserves operator-reviewed data, historical emails, DNC, and exclusions.
+        - Separate from historical email import: ZERO fabricated outreach events.
+        - Strictly idempotent.
+        """
+        from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
+        from sales_engine.candidates.models import (
+            CandidateCompany,
+            CompanyTier,
+            DiscoveryStatus,
+            QualificationOutcome,
+            DiscoveryObservation,
+        )
+        from sales_engine.leads.register_store import LeadRegisterStore
+        from sales_engine.leads.register_models import LeadRegisterRecord
+
+        excl_store = ExcludedCompaniesStore(self.store.db_path)
+        reg_store = LeadRegisterStore(self.store.db_path)
+        reg_store._init_db()
+
+        result = HistoricalImportResult(total_rows_read=len(records))
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Query operator-reviewed records and existing verified contacts
+        reviewed_cids = set()
+        with self.store._get_connection() as conn:
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone():
+                reviewed_cids = set(
+                    r[0] for r in conn.execute(
+                        "SELECT candidate_id FROM lead_register_records WHERE verification_status = 'OPERATOR_REVIEWED'"
+                    ).fetchall()
+                )
+
+        for rec in records:
+            result.records_parsed += 1
+            cname = (rec.company_name or "").strip()
+            raw_dom = rec.domain
+            dom = self.store.canonicalize_domain(raw_dom) if raw_dom else None
+
+            # 1. Genuinely ambiguous check
+            if not cname or len(cname) < 2 or cname.lower() in ("none", "null", "unknown", "تأیید نشد", "#n/a"):
+                result.duplicates_skipped += 1
+                continue
+
+            # 2. Check Excluded Companies Registry
+            if excl_store.is_company_excluded(company_domain=dom, company_name=cname):
+                result.duplicates_skipped += 1
+                continue
+
+            # 3. Match existing candidate or determine candidate_id
+            existing = None
+            if dom:
+                existing = self.store.get_by_domain(dom)
+            if not existing:
+                existing = self.store.get_by_name(cname, country=rec.country)
+
+            is_new = False
+            if existing:
+                cid = existing.candidate_id
+                company = existing
+                if dom and not company.company_domain:
+                    company.company_domain = dom
+                if rec.country and not company.country:
+                    company.country = rec.country
+                if rec.city and not company.city:
+                    company.city = rec.city
+                if cname not in company.aliases:
+                    company.aliases.append(cname)
+                if "research_lead_excel" not in company.source_refs:
+                    company.source_refs.append("research_lead_excel")
+                result.companies_updated += 1
+            else:
+                is_new = True
+                cid = self.store.generate_company_id(cname, dom, rec.country or "it")
+                tier_val = (
+                    CompanyTier.tier_1 if rec.tier_hint == "A"
+                    else (CompanyTier.tier_2 if rec.tier_hint == "B"
+                          else (CompanyTier.tier_3 if rec.tier_hint == "C" else CompanyTier.unknown))
+                )
+                company = CandidateCompany(
+                    candidate_id=cid,
+                    company_name=cname,
+                    normalized_company_name=normalize_company_name(cname),
+                    company_domain=dom,  # Never invent domain: None if unverified
+                    country=rec.country or "Italy",
+                    city=rec.city,
+                    company_tier=tier_val,
+                    tier_evidence=[rec.priority_reason] if rec.priority_reason else [],
+                    discovery_status=DiscoveryStatus.researching,  # Needs Research status
+                    qualification_outcome=QualificationOutcome.research_more,
+                    source_refs=["research_lead_excel"],
+                    aliases=[cname],
+                    domain_history=[dom] if dom else [],
+                    first_seen_at=now_iso,
+                    last_seen_at=now_iso,
+                    historical_contact_status="uncontacted",
+                    cold_outreach_allowed=True,
+                )
+                result.companies_created += 1
+
+            self.store.save_candidate(company)
+
+            # 4. Attach original research data as LeadRegisterRecord without overwriting OPERATOR_REVIEWED records
+            if cid not in reviewed_cids:
+                # Format emails string safely
+                emails_str = ",".join(sorted(rec.emails)) if rec.emails else None
+                phone_str = rec.phone_numbers if (rec.phone_numbers and "تأیید نشد" not in rec.phone_numbers) else None
+                contact_str = rec.contact_name if (rec.contact_name and "تأیید نشد" not in rec.contact_name) else None
+                job_link_str = rec.job_link if (rec.job_link and "موجود نیست" not in rec.job_link and "تأیید نشد" not in rec.job_link) else None
+                other_links_str = rec.other_links if (rec.other_links and "تأیید نشد" not in rec.other_links) else None
+                official_web_str = (f"https://{dom}" if dom else None) or rec.source_url
+
+                reg_rec = LeadRegisterRecord(
+                    candidate_id=cid,
+                    priority_level=rec.tier_hint or "B",
+                    priority_rationale=rec.priority_reason,
+                    company_name=cname,
+                    geographic_location=rec.raw_location or rec.city,
+                    telephone_numbers=phone_str,
+                    business_activities=rec.business_topic,
+                    official_website=official_web_str,
+                    responsible_person=contact_str,
+                    descriptions_and_notes=rec.notes,
+                    job_advertisement_links=job_link_str,
+                    other_links_and_references=other_links_str,
+                    contact_email_addresses=emails_str,
+                    provenance_source="research_excel_import",
+                    verification_status="Unverified",
+                )
+                reg_store.save_record(reg_rec)
+
+            # 5. Attach original row payload as DiscoveryObservation for provenance
+            obs_id = f"obs:research:{hashlib.sha256(f'{cid}:{rec.row_number}:{cname}'.encode()).hexdigest()[:16]}"
+            observation = DiscoveryObservation(
+                observation_id=obs_id,
+                candidate_id=cid,
+                source_id="research_lead_excel",
+                source_name=source_file_name,
+                source_type="excel_lead_research",
+                observed_company_name=cname,
+                observed_domain=dom,
+                country=rec.country or "Italy",
+                city=rec.city,
+                observation_type="lead_research_row",
+                raw_title=rec.business_topic,
+                raw_snippet=rec.notes,
+                raw_payload=rec.raw_row or {},
+                confidence=1.0 if dom else 0.8,
+            )
+            self.store.add_observation(observation)
+
+            # 6. Save unverified contacts if email was extracted (without verifying them)
+            if rec.emails:
+                for em in rec.emails:
+                    clean_em = em.strip().lower()
+                    if clean_em and "@" in clean_em and "تأیید نشد" not in clean_em:
+                        contact_data = {
+                            "contact_id": f"contact:{clean_em}",
+                            "work_email": clean_em,
+                            "full_name": rec.contact_name if (rec.contact_name and "تأیید نشد" not in rec.contact_name) else "Research Contact",
+                            "job_title": rec.contact_role or rec.business_topic or "Unverified Contact",
+                            "email_status": "unverified",
+                            "email_confidence": 30,
+                            "provider": "research_excel",
+                        }
+                        self.store.save_contact(contact_data, candidate_id=cid)
+                        result.contacts_extracted += 1
+
+        return result
 
     def parse_sent_emails(self, file_path: Union[str, Path], sheet_name: str = "Sent_Emails") -> List[SentEmailRecord]:
         """
