@@ -12,31 +12,31 @@
 
 <!-- Queue Views Navigation Pills -->
 <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; overflow-x: auto; padding-bottom: 0.35rem; align-items: center; border-bottom: 2px solid var(--border-color);">
-  <a href="/sales/candidates?queue=active{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'active' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+  <a href="/sales/candidates?queue=active{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'active' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
     <span>⚡ Active Work</span>
     <span class="badge {% if current_queue == 'active' %}badge-light{% else %}badge-info{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('active', 0) }}</span>
   </a>
-  <a href="/sales/candidates?queue=new{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'new' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+  <a href="/sales/candidates?queue=new{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'new' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
     <span>🌱 New</span>
     <span class="badge {% if current_queue == 'new' %}badge-light{% else %}badge-info{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('new', 0) }}</span>
   </a>
-  <a href="/sales/candidates?queue=needs_research{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'needs_research' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+  <a href="/sales/candidates?queue=needs_research{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'needs_research' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
     <span>🔬 Needs Research</span>
     <span class="badge {% if current_queue == 'needs_research' %}badge-light{% else %}badge-warning{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('needs_research', 0) }}</span>
   </a>
-  <a href="/sales/candidates?queue=needs_verification{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'needs_verification' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+  <a href="/sales/candidates?queue=needs_verification{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'needs_verification' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
     <span>📑 Needs Verification</span>
     <span class="badge {% if current_queue == 'needs_verification' %}badge-light{% else %}badge-warning{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('needs_verification', 0) }}</span>
   </a>
-  <a href="/sales/candidates?queue=needs_correction{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'needs_correction' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+  <a href="/sales/candidates?queue=needs_correction{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'needs_correction' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
     <span>🔄 Needs Correction / Reopened</span>
     <span class="badge {% if current_queue == 'needs_correction' %}badge-light{% else %}badge-danger{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('needs_correction', 0) }}</span>
   </a>
-  <a href="/sales/candidates?queue=historical_pending{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'historical_pending' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+  <a href="/sales/candidates?queue=historical_pending{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'historical_pending' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
     <span>📬 Historical Review Pending</span>
     <span class="badge {% if current_queue == 'historical_pending' %}badge-light{% else %}badge-secondary{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('historical_pending', 0) }}</span>
   </a>
-  <a href="/sales/candidates?queue=all{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'all' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem; margin-left: auto;">
+  <a href="/sales/candidates?queue=all{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}{% if source %}&source={{ source }}{% endif %}{% if outreach %}&outreach={{ outreach }}{% endif %}" class="btn {% if current_queue == 'all' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem; margin-left: auto;">
     <span>🗂️ All Companies / Archived</span>
     <span class="badge {% if current_queue == 'all' %}badge-light{% else %}badge-muted{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('all', 0) }}</span>
   </a>
@@ -69,14 +69,14 @@
   </div>
 </details>
 
-<!-- Filters Bar -->
+<!-- Filters Bar (UI-03 Enhanced Controls) -->
 <div class="card" style="padding: 1rem;">
   <form method="GET" action="/sales/candidates" class="form-inline">
     <input type="hidden" name="queue" value="{{ current_queue or 'active' }}">
     <div style="flex: 1; min-width: 200px;">
-      <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Search company or domain...">
+      <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Search company name, domain, ID...">
     </div>
-    <div style="width: 170px;">
+    <div style="width: 150px;">
       <select name="status" class="form-control">
         <option value="">All Statuses</option>
         <option value="new" {% if status == 'new' %}selected{% endif %}>New</option>
@@ -88,7 +88,7 @@
         <option value="rejected" {% if status == 'rejected' %}selected{% endif %}>Rejected</option>
       </select>
     </div>
-    <div style="width: 140px;">
+    <div style="width: 125px;">
       <select name="tier" class="form-control">
         <option value="">All Tiers</option>
         <option value="tier_1" {% if tier == 'tier_1' %}selected{% endif %}>Tier 1</option>
@@ -96,10 +96,23 @@
         <option value="tier_3" {% if tier == 'tier_3' %}selected{% endif %}>Tier 3</option>
       </select>
     </div>
-    <div style="width: 110px;">
+    <div style="width: 155px;">
+      <select name="outreach" class="form-control" title="Filter by Outreach Status & Restrictions">
+        <option value="">All Outreach States</option>
+        <option value="locked" {% if outreach == 'locked' %}selected{% endif %}>🔒 Outreach Locked</option>
+        <option value="allowed" {% if outreach == 'allowed' %}selected{% endif %}>✅ Outreach Eligible</option>
+        <option value="contacted" {% if outreach == 'contacted' %}selected{% endif %}>⏱️ Previously Contacted</option>
+        <option value="suppressed" {% if outreach == 'suppressed' %}selected{% endif %}>🛑 Suppressed / DNC</option>
+        <option value="excluded" {% if outreach == 'excluded' %}selected{% endif %}>🚫 Excluded Company</option>
+      </select>
+    </div>
+    <div style="width: 140px;">
+      <input type="text" name="source" value="{{ source or '' }}" class="form-control" placeholder="Source origin...">
+    </div>
+    <div style="width: 95px;">
       <input type="text" name="country" value="{{ country or '' }}" class="form-control" placeholder="Country">
     </div>
-    <div style="width: 110px;">
+    <div style="width: 95px;">
       <input type="text" name="city" value="{{ city or '' }}" class="form-control" placeholder="City">
     </div>
     <button type="submit" class="btn btn-secondary">Filter</button>
@@ -135,12 +148,12 @@
         <thead>
           <tr>
             <th style="width: 35px; text-align: center;">&check;</th>
-            <th>Company Name</th>
-            <th>Official Domain</th>
-            <th>Country / Market</th>
-            <th>Priority / Fit</th>
-            <th>Research Status</th>
-            <th>Contact Availability</th>
+            <th>Company &amp; Candidate ID</th>
+            <th>Official Website</th>
+            <th>Location</th>
+            <th>Tier &amp; Source</th>
+            <th>Queue &amp; Verification</th>
+            <th>Outreach Status</th>
             <th>Actionable Next Step</th>
             <th style="text-align: right; min-width: 140px;">Next Action</th>
           </tr>
@@ -152,59 +165,86 @@
               <input type="checkbox" name="candidate_ids" value="{{ c.candidate_id }}">
             </td>
             <td>
-              <a href="/sales/candidates/{{ c.candidate_id }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none;">
+              <a href="/sales/candidates/{{ c.candidate_id }}?return_queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}&source={{ source or '' }}&outreach={{ outreach or '' }}&page={{ page }}" style="font-weight: 700; color: var(--border-focus); text-decoration: none; font-size: 0.9rem;">
                 {{ c.company_name }}
               </a>
-              {% if c.is_previously_contacted %}
-              <span class="badge badge-previously-contacted" title="Contacted previously" style="font-size: 0.7rem; margin-left: 0.25rem;">Previously Contacted</span>
-              {% endif %}
-              {% if c.is_suppressed %}
-              <span class="badge badge-danger" style="font-size: 0.7rem; margin-left: 0.25rem;">Suppressed</span>
-              {% endif %}
-              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">
-                BIM: {{ c.bim_maturity }}
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem; font-family: monospace;">
+                ID: {{ c.candidate_id }}
               </div>
             </td>
             <td>
               {% if c.domain %}
-                <code>{{ c.domain }}</code>
+                <div style="display: flex; align-items: center; gap: 0.35rem;">
+                  <code style="font-size: 0.8rem;">{{ c.domain }}</code>
+                  <a href="https://{{ c.domain }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); font-size: 0.75rem;" title="Open site in new tab">↗</a>
+                </div>
               {% else %}
-                <span style="color: var(--text-muted);">N/A</span>
+                <span class="badge badge-secondary" style="font-size: 0.72rem; color: var(--text-muted); background: rgba(148, 163, 184, 0.1);">Unverified website</span>
               {% endif %}
             </td>
-            <td>{{ c.country or 'Not Verified' }}</td>
             <td>
-              <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-                <span class="badge {% if c.tier == 'tier_1' %}badge-primary{% elif c.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}">
+              {% if c.city or c.country %}
+                <div style="font-size: 0.82rem; font-weight: 500;">
+                  {% if c.city %}{{ c.city }}{% endif %}{% if c.city and c.country %}, {% endif %}{% if c.country %}{{ c.country }}{% endif %}
+                </div>
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.78rem;">Location Unspecified</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="badge {% if c.tier == 'tier_1' %}badge-primary{% elif c.tier == 'tier_2' %}badge-info{% else %}badge-muted{% endif %}" style="align-self: flex-start;">
                   {{ c.tier or 'Unassigned' }}
                 </span>
-                {% if c.fit %}
-                <span class="badge {% if c.fit == 'high' %}badge-success{% elif c.fit == 'medium' %}badge-warning{% else %}badge-muted{% endif %}" title="Fit">
-                  Fit: {{ c.fit }}
+                {% if c.primary_source %}
+                <span style="font-size: 0.7rem; color: var(--text-muted);" title="Source: {{ c.primary_source }}">
+                  Src: {{ c.primary_source }}
                 </span>
                 {% endif %}
               </div>
             </td>
             <td>
-              {% if c.has_research_snapshot %}
-                <a href="/sales/candidates/{{ c.candidate_id }}/research" style="text-decoration: none;">
-                  <span class="badge badge-success" title="Snapshot ID: {{ c.snapshot_id }}">🔬 Researched</span>
-                </a>
-              {% else %}
-                <span class="badge badge-muted">Not Researched</span>
-              {% endif %}
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <!-- Queue / Subqueue -->
+                <span class="badge {% if c.lifecycle_subqueue == 'needs_research' or c.lifecycle_queue == 'needs_research' %}badge-warning{% elif c.lifecycle_subqueue == 'needs_verification' %}badge-info{% elif c.lifecycle_subqueue == 'new' %}badge-primary{% elif c.lifecycle_queue == 'historical_pending' %}badge-secondary{% else %}badge-muted{% endif %}" style="align-self: flex-start; font-size: 0.7rem;">
+                  {% if c.lifecycle_subqueue == 'needs_research' %}🔬 Needs Research
+                  {% elif c.lifecycle_subqueue == 'needs_verification' %}📑 Needs Verification
+                  {% elif c.lifecycle_subqueue == 'new' %}🌱 New
+                  {% elif c.lifecycle_subqueue == 'needs_correction' %}🔄 Needs Correction
+                  {% elif c.lifecycle_queue == 'historical_pending' %}📬 Historical Pending
+                  {% elif c.lifecycle_queue == 'qualified' %}✅ Qualified
+                  {% else %}{{ c.lifecycle_queue|upper }}{% endif %}
+                </span>
+                <!-- Verification status -->
+                {% if c.verification_status == 'OPERATOR_REVIEWED' or c.verification_status == 'VERIFIED' %}
+                  <span class="badge badge-success" style="font-size: 0.68rem; align-self: flex-start;">Verified Record</span>
+                {% elif c.verification_status == 'EXTRACTED' or c.verification_status == 'Unverified' %}
+                  <span class="badge badge-warning" style="font-size: 0.68rem; align-self: flex-start;">Unverified Data</span>
+                {% elif c.has_research_snapshot %}
+                  <span class="badge badge-info" style="font-size: 0.68rem; align-self: flex-start;">Snapshot Captured</span>
+                {% else %}
+                  <span style="font-size: 0.68rem; color: var(--text-muted);">No Research Snapshot</span>
+                {% endif %}
+              </div>
             </td>
             <td>
-              {% if c.contact_count > 0 %}
-                <span style="font-size: 0.8rem; font-weight: 600;">
-                  {{ c.contact_count }} {% if c.contact_count == 1 %}contact{% else %}contacts{% endif %}
-                </span>
-                {% if c.verified_contact_count > 0 %}
-                  <span class="badge badge-success" style="font-size: 0.68rem; margin-left: 0.2rem;">{{ c.verified_contact_count }} verified</span>
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <!-- Outreach restriction flags -->
+                {% if c.is_excluded %}
+                  <span class="badge badge-danger" style="font-size: 0.7rem; align-self: flex-start;" title="Excluded: {{ c.exclusion_reason or 'Operator Exclusion' }}">🚫 Excluded</span>
+                {% elif c.is_suppressed %}
+                  <span class="badge badge-danger" style="font-size: 0.7rem; align-self: flex-start;">🛑 Suppressed / DNC</span>
+                {% elif not c.cold_outreach_allowed %}
+                  <span class="badge badge-warning" style="font-size: 0.7rem; align-self: flex-start;" title="Cold outreach locked pending human review">🔒 Outreach Locked</span>
+                {% else %}
+                  <span class="badge badge-success" style="font-size: 0.7rem; align-self: flex-start;">✅ Outreach Eligible</span>
                 {% endif %}
-              {% else %}
-                <span style="color: var(--text-muted); font-size: 0.8rem;">None recorded</span>
-              {% endif %}
+
+                <!-- Historical communication status -->
+                {% if c.is_previously_contacted %}
+                  <span class="badge badge-previously-contacted" style="font-size: 0.68rem; align-self: flex-start;" title="Previously contacted in historical outreach">⏱️ Contacted</span>
+                {% endif %}
+              </div>
             </td>
             <td>
               <div style="font-size: 0.78rem; color: var(--text-primary); line-height: 1.35;">
@@ -218,7 +258,7 @@
               </div>
             </td>
             <td style="text-align: right; white-space: nowrap;">
-              <a href="/sales/candidates/{{ c.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
+              <a href="/sales/candidates/{{ c.candidate_id }}?return_queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}&source={{ source or '' }}&outreach={{ outreach or '' }}&page={{ page }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
               <a href="/sales/candidates/{{ c.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="Review Research Snapshot">Research</a>
             </td>
           </tr>
@@ -233,10 +273,10 @@
     <span>Showing {{ candidates|length }} of {{ total }} results</span>
     <div class="pagination-controls">
       {% if page > 1 %}
-      <a href="?page={{ page - 1 }}&queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}" class="btn btn-secondary btn-sm">Previous</a>
+      <a href="?page={{ page - 1 }}&queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}&source={{ source or '' }}&outreach={{ outreach or '' }}" class="btn btn-secondary btn-sm">Previous</a>
       {% endif %}
       {% if has_next %}
-      <a href="?page={{ page + 1 }}&queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}" class="btn btn-secondary btn-sm">Next</a>
+      <a href="?page={{ page + 1 }}&queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}&source={{ source or '' }}&outreach={{ outreach or '' }}" class="btn btn-secondary btn-sm">Next</a>
       {% endif %}
     </div>
   </div>

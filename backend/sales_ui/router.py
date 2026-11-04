@@ -4263,6 +4263,8 @@ async def candidates_list_view(
     tier: Optional[str] = Query(None),
     country: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    outreach: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     message: Optional[str] = None,
@@ -4293,25 +4295,42 @@ async def candidates_list_view(
 
     try:
         with store._get_connection() as conn:
-            snap_rows = conn.execute("SELECT candidate_id, snapshot_id FROM research_snapshots").fetchall()
-            for r in snap_rows:
-                snap_cids.add(r[0])
-                if r[0] not in snapshot_map:
-                    snapshot_map[r[0]] = r[1]
+            # Check research_snapshots table
+            try:
+                snap_rows = conn.execute("SELECT candidate_id, snapshot_id FROM research_snapshots").fetchall()
+                for r in snap_rows:
+                    snap_cids.add(r[0])
+                    if r[0] not in snapshot_map:
+                        snapshot_map[r[0]] = r[1]
+            except Exception:
+                pass
 
-            lr_rows = conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall()
-            for r in lr_rows:
-                lr_map[r[0]] = r[1]
+            # Check lead_register_records table
+            try:
+                lr_rows = conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall()
+                for r in lr_rows:
+                    lr_map[r[0]] = r[1]
+            except Exception:
+                pass
 
-            cur = conn.cursor()
-            cur.execute("SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts GROUP BY candidate_id")
-            for cr in cur.fetchall():
-                contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+            # Check candidate_contacts table
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts GROUP BY candidate_id")
+                for cr in cur.fetchall():
+                    contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+            except Exception:
+                pass
 
-            cur.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL")
-            for sr in cur.fetchall():
-                if sr[0]:
-                    supp_domains.add(sr[0].strip().lower())
+            # Check suppression_list table
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL")
+                for sr in cur.fetchall():
+                    if sr[0]:
+                        supp_domains.add(sr[0].strip().lower())
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -4420,9 +4439,32 @@ async def candidates_list_view(
             continue
         if status and c_status != status.strip().lower():
             continue
-        if q:
-            q_lower = q.strip().lower()
-            if q_lower not in c_name.lower() and q_lower not in c_domain.lower():
+        disc_sources = getattr(c, "source_refs", []) or []
+        primary_src = disc_sources[0] if disc_sources else None
+
+        # Excluded check
+        cand_is_excl = cid in excl_cids or (dom and dom in excl_domains)
+        cand_excl_reason = excl_cids.get(cid) or (excl_domains.get(dom) if dom else None)
+        cand_cold_allowed = bool(getattr(c, "cold_outreach_allowed", True))
+        cand_verif_status = lr_map.get(cid)
+
+        # Filters: source, outreach
+        if source:
+            s_low = source.strip().lower()
+            if not any(s_low in str(s).lower() for s in disc_sources):
+                continue
+
+        if outreach:
+            o_low = outreach.strip().lower()
+            if o_low == "locked" and cand_cold_allowed:
+                continue
+            elif o_low == "allowed" and not cand_cold_allowed:
+                continue
+            elif o_low == "excluded" and not cand_is_excl:
+                continue
+            elif o_low == "suppressed" and not is_supp:
+                continue
+            elif o_low == "contacted" and not (c.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(c, "previous_outreach_detected", False)):
                 continue
 
         filtered.append((c, state))
@@ -4447,6 +4489,13 @@ async def candidates_list_view(
         c_stats = contact_map.get(cid, (0, 0))
 
         disc_sources = getattr(c, "source_refs", []) or []
+        primary_src = disc_sources[0] if disc_sources else None
+
+        cand_is_excl = bool(cid in excl_cids or (dom and dom in excl_domains))
+        cand_excl_reason = excl_cids.get(cid) or (excl_domains.get(dom) if dom else None)
+        cand_cold_allowed = bool(getattr(c, "cold_outreach_allowed", True))
+        cand_verif_status = lr_map.get(cid)
+        subq_val = state.active_subqueue.value if (state.active_subqueue and hasattr(state.active_subqueue, "value")) else (str(state.active_subqueue) if state.active_subqueue else None)
 
         candidates.append(
             CandidateListItem(
@@ -4470,8 +4519,14 @@ async def candidates_list_view(
                 contact_count=c_stats[0],
                 verified_contact_count=c_stats[1],
                 lifecycle_queue=state.primary_queue.value if hasattr(state.primary_queue, "value") else str(state.primary_queue),
+                lifecycle_subqueue=subq_val,
                 actionable_next_step=state.actionable_next_step,
                 recommended_action_url=state.recommended_action_url,
+                cold_outreach_allowed=cand_cold_allowed,
+                is_excluded=cand_is_excl,
+                exclusion_reason=cand_excl_reason,
+                verification_status=cand_verif_status,
+                primary_source=primary_src,
             )
         )
 
@@ -4492,6 +4547,8 @@ async def candidates_list_view(
             "tier": tier,
             "country": country,
             "city": city,
+            "source": source,
+            "outreach": outreach,
             "current_queue": active_queue,
             "queue_counts": queue_counts,
             "email_send_enabled": is_email_send_enabled(),
@@ -4608,6 +4665,15 @@ async def candidate_detail_view(
     request: Request,
     message: Optional[str] = None,
     error: Optional[str] = None,
+    return_queue: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    tier: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    outreach: Optional[str] = Query(None),
+    page: Optional[int] = Query(None),
 ):
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
@@ -4660,6 +4726,8 @@ async def candidate_detail_view(
         status=cand.discovery_status,
         is_previously_contacted=is_contacted,
         is_suppressed=is_supp,
+        is_excluded=is_excluded,
+        cold_outreach_allowed=bool(getattr(cand, "cold_outreach_allowed", True)),
     )
 
     timeline_events = svcs["timeline_svc"].get_company_timeline(candidate_id)
@@ -4793,6 +4861,17 @@ async def candidate_detail_view(
             "is_excluded": is_excluded,
             "exclusion_record": exclusion_record,
             "exclusion_audit_events": exclusion_audit_events,
+            "return_params": {
+                "queue": return_queue or "active",
+                "q": q or "",
+                "status": status or "",
+                "tier": tier or "",
+                "country": country or "",
+                "city": city or "",
+                "source": source or "",
+                "outreach": outreach or "",
+                "page": page or 1,
+            },
             "message": message,
             "error": error,
         },

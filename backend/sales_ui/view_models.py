@@ -69,8 +69,15 @@ class CandidateListItem(BaseModel):
     verified_contact_count: int = 0
     # Lifecycle Work Queue fields
     lifecycle_queue: str = "active"  # active, new, needs_research, needs_verification, needs_correction, historical_pending, all
+    lifecycle_subqueue: Optional[str] = None
     actionable_next_step: Optional[str] = None
     recommended_action_url: Optional[str] = None
+    # UI-03 Clear Outreach & Verification status fields
+    cold_outreach_allowed: bool = True
+    is_excluded: bool = False
+    exclusion_reason: Optional[str] = None
+    verification_status: Optional[str] = None  # OPERATOR_REVIEWED, EXTRACTED, Unverified, etc.
+    primary_source: Optional[str] = None
 
 
 class CandidateDetailView(BaseModel):

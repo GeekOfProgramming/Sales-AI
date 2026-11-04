@@ -46,7 +46,7 @@
     </p>
   </div>
   <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-    <a href="/sales/candidates" class="btn btn-secondary">← Back to Candidates</a>
+    <a href="/sales/candidates?queue={{ return_params.queue if return_params else 'active' }}&q={{ return_params.q if return_params else '' }}&status={{ return_params.status if return_params else '' }}&tier={{ return_params.tier if return_params else '' }}&country={{ return_params.country if return_params else '' }}&city={{ return_params.city if return_params else '' }}&source={{ return_params.source if return_params else '' }}&outreach={{ return_params.outreach if return_params else '' }}&page={{ return_params.page if return_params else 1 }}" class="btn btn-secondary">← Back to Candidates</a>
     <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary" title="Review researched 13-field proposals or run explicit crawler">🔬 Research Review</a>
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
