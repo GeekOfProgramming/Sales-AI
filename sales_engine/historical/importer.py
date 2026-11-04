@@ -1184,6 +1184,129 @@ class HistoricalImporter:
         wb.close()
         return records
 
+    def is_lead_research_workbook(self, file_path: Union[str, Path]) -> bool:
+        """
+        Detects if an Excel file matches the 13-column pyBIM Lead Research format
+        based on exact or normalized header content.
+        """
+        if openpyxl is None:
+            return False
+        path = Path(file_path)
+        if not path.exists() or path.suffix.lower() not in (".xlsx", ".xlsm"):
+            return False
+        try:
+            wb = openpyxl.load_workbook(path, data_only=True)
+            for sname in wb.sheetnames:
+                ws = wb[sname]
+                headers = [normalize_persian_text(c.value) for c in ws[1] if c.value is not None]
+                has_tier = any("سطح شرکت" in h for h in headers)
+                has_reason = any("دلیل" in h for h in headers)
+                has_job = any("آگهی کار" in h or "اگهی کار" in h for h in headers)
+                if has_tier and has_reason and has_job:
+                    wb.close()
+                    return True
+            wb.close()
+        except Exception:
+            return False
+        return False
+
+    def preview_lead_research_import(
+        self,
+        records: List[HistoricalRecord],
+        excl_store: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        Analyzes 13-column Lead Research records against existing Candidates, Exclusions, and Research.
+        Returns match counts, proposals, and previews with ZERO mutations.
+        """
+        from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
+
+        if excl_store is None:
+            excl_store = ExcludedCompaniesStore(self.store.db_path)
+
+        rows_parsed = len(records)
+        new_proposals = 0
+        existing_matches = 0
+        ambiguous_unresolved = 0
+        excluded_dnc = 0
+        skipped_invalid = 0
+        proposed_research_updates = 0
+
+        # Query existing verified contacts and operator-reviewed records
+        reviewed_cids = set()
+        with self.store._get_connection() as conn:
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone():
+                reviewed_cids = set(
+                    r[0] for r in conn.execute(
+                        "SELECT candidate_id FROM lead_register_records WHERE verification_status = 'OPERATOR_REVIEWED'"
+                    ).fetchall()
+                )
+
+        proposals_detail = []
+        for r in records:
+            cname = r.company_name
+            raw_dom = r.domain
+            dom = self.store.canonicalize_domain(raw_dom) if raw_dom else None
+
+            # 1. Respect Excluded Companies Registry
+            if excl_store.is_company_excluded(company_domain=dom, company_name=cname):
+                excluded_dnc += 1
+                proposals_detail.append({
+                    "company_name": cname,
+                    "domain": dom,
+                    "status": "EXCLUDED",
+                    "reason": "Active exclusion in Excluded Companies Registry",
+                })
+                continue
+
+            # 2. Ambiguous or missing-domain: require review, do NOT guess or merge solely by name
+            if not dom:
+                ambiguous_unresolved += 1
+                proposals_detail.append({
+                    "company_name": cname,
+                    "domain": None,
+                    "status": "AMBIGUOUS_UNRESOLVED",
+                    "reason": "Unverified or missing official website domain; requires manual review",
+                })
+                continue
+
+            # 3. Match candidate strictly by verified canonical domain
+            existing = self.store.get_by_domain(dom)
+            cid = f"cand:domain:{dom}"
+            if existing:
+                existing_matches += 1
+                # If existing is already operator reviewed, do not propose overwriting
+                is_reviewed = cid in reviewed_cids
+                if not is_reviewed:
+                    proposed_research_updates += 1
+                proposals_detail.append({
+                    "company_name": cname,
+                    "candidate_id": existing.candidate_id,
+                    "domain": dom,
+                    "status": "EXISTING_MATCH",
+                    "operator_reviewed": is_reviewed,
+                })
+            else:
+                new_proposals += 1
+                proposed_research_updates += 1
+                proposals_detail.append({
+                    "company_name": cname,
+                    "candidate_id": cid,
+                    "domain": dom,
+                    "status": "NEW_PROPOSAL",
+                })
+
+        return {
+            "rows_parsed": rows_parsed,
+            "new_candidate_proposals": new_proposals,
+            "existing_candidate_matches": existing_matches,
+            "ambiguous_unresolved_count": ambiguous_unresolved,
+            "excluded_dnc_count": excluded_dnc,
+            "skipped_invalid_count": skipped_invalid,
+            "proposed_research_updates": proposed_research_updates,
+            "proposals_detail": proposals_detail,
+        }
+
     def parse_sent_emails(self, file_path: Union[str, Path], sheet_name: str = "Sent_Emails") -> List[SentEmailRecord]:
         """
         Parses Sent_Emails worksheet into SentEmailRecord objects.

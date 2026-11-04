@@ -2966,6 +2966,14 @@ async def preview_historical_import_action(
     except Exception as e:
         logger.warning(f"Error computing historical comparison metrics: {e}")
 
+    # HV-02.5: Detect if uploaded/specified workbook is the 13-column pyBIM Lead Research workbook
+    is_lead_res = importer.is_lead_research_workbook(resolved)
+    lead_res_analysis = {}
+    if is_lead_res:
+        from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
+        excl_store = ExcludedCompaniesStore(svcs["cand_store"].db_path)
+        lead_res_analysis = importer.preview_lead_research_import(records, excl_store=excl_store)
+
     preview_res = HistoricalImportPreviewResult(
         file_path=str(resolved),
         file_hash=file_hash,
@@ -3007,6 +3015,13 @@ async def preview_historical_import_action(
         existing_companies_count=existing_companies_count,
         company_changes_count=company_changes_count,
         reviewed_records_affected=reviewed_records_affected,
+        is_lead_research=is_lead_res,
+        new_candidate_proposals=lead_res_analysis.get("new_candidate_proposals", 0),
+        existing_candidate_matches=lead_res_analysis.get("existing_candidate_matches", 0),
+        ambiguous_unresolved_count=lead_res_analysis.get("ambiguous_unresolved_count", 0),
+        excluded_dnc_count=lead_res_analysis.get("excluded_dnc_count", 0),
+        skipped_invalid_count=lead_res_analysis.get("skipped_invalid_count", 0),
+        proposed_research_updates=lead_res_analysis.get("proposed_research_updates", 0),
     )
 
     # Check if request prefers JSON (e.g. from test or API client)

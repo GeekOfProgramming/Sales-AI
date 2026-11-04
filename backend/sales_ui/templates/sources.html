@@ -517,6 +517,45 @@
     </div>
   </div>
 
+  <!-- HV-02.5 Lead Research 13-Column Import Preview Breakdown -->
+  {% if preview.is_lead_research %}
+  <div style="margin-top: 1rem; margin-bottom: 1.25rem;">
+    <h4 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">
+      🔬 pyBIM Lead Research Preview (13-Column Candidates Workflow)
+    </h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; font-size: 0.85rem;">
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">New Candidate Proposals</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-success, #22c55e);">{{ preview.new_candidate_proposals }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Existing Candidate Matches</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.existing_candidate_matches }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Ambiguous / Unresolved</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.ambiguous_unresolved_count > 0 %}var(--color-warning, #f59e0b){% else %}var(--text-primary){% endif %};">
+          {{ preview.ambiguous_unresolved_count }}
+        </div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Proposed Research Updates</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--color-info, #38bdf8);">{{ preview.proposed_research_updates }}</div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Excluded / DNC Matches</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: {% if preview.excluded_dnc_count > 0 %}var(--color-danger, #ef4444){% else %}var(--text-primary){% endif %};">
+          {{ preview.excluded_dnc_count }}
+        </div>
+      </div>
+      <div style="background: var(--bg-card); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <div style="color: var(--text-secondary); font-size: 0.75rem;">Skipped / Invalid Rows</div>
+        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">{{ preview.skipped_invalid_count }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Historical Reimport & Gmail Sent-Email Reconciliation Comparison Grid -->
   {% if preview.has_sent_emails_sheet or preview.existing_companies_count > 0 or preview.new_companies_count > 0 %}
   <div style="margin-top: 1rem; margin-bottom: 1.25rem;">
