@@ -190,7 +190,7 @@ def test_01_admin_pages_distinction_and_links(disposable_ui07_env):
     resp = client.get("/sales/do-not-contact")
     assert resp.status_code == 200
     html = resp.text
-    assert "Statutory &amp; Policy Suppression Barrier (Zero Direct Send)" in html or "Statutory & Policy Suppression Barrier" in html
+    assert "Statutory &amp; Policy Suppression Barrier" in html or "Statutory & Policy Suppression Barrier" in html
     assert "optout@suppressedfirm.de" in html
     assert 'href="/sales/candidates?q=suppressedfirm.de"' in html
     assert "suppressedfirm.de ↗" in html
@@ -200,7 +200,7 @@ def test_01_admin_pages_distinction_and_links(disposable_ui07_env):
     resp = client.get("/sales/watchlist")
     assert resp.status_code == 200
     html = resp.text
-    assert "Signal Monitoring Queue (Zero Direct Send)" in html
+    assert "Signal Monitoring Queue" in html
     assert "Future BIM Studio ↗" in html
     assert 'href="/sales/candidates/cand_ui07_watch"' in html
     assert 'href="/sales/candidates/cand_ui07_watch/research"' in html
@@ -243,9 +243,9 @@ def test_03_settings_safety_invariants_and_secrets_masking(disposable_ui07_env):
     html = resp.text
 
     # Offline Send Gate Invariant
-    assert "Outbound Cold Send Gate: OFFLINE / DISABLED (EMAIL_SEND_ENABLED=false)" in html
+    assert "Outbound Cold Send Gate: DISABLED (EMAIL_SEND_ENABLED=false)" in html
     assert "SENDING DISABLED" in html
-    assert "0 Outbound Network Calls when Disabled" in html
+    assert "0 Outbound Email Sends when Disabled" in html
 
     # Secret masking: Never leak the actual environment secret values
     assert "mock_brave_key_should_be_masked" not in html
@@ -254,7 +254,5 @@ def test_03_settings_safety_invariants_and_secrets_masking(disposable_ui07_env):
 
     # Search Budget & Boundaries
     assert "Search Budget &amp; Operational Boundaries" in html or "Search Budget & Operational Boundaries" in html
-    assert "Max 20 Pages / Domain" in html
-    assert "60 Seconds / Run" in html
-    assert "$0.50 Max Budget / Analysis" in html
+    assert "Not verified / Consult configuration" in html
     assert "Fail-Closed Gate" in html

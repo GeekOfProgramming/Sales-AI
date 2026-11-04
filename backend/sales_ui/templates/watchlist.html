@@ -14,10 +14,10 @@
 <div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; background: var(--bg-surface); border-left: 4px solid var(--color-warning, #f59e0b); display: flex; align-items: flex-start; gap: 1rem;">
   <div style="font-size: 1.5rem; line-height: 1;">👁️</div>
   <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45;">
-    <strong style="color: var(--text-primary); font-size: 0.9rem;">Signal Monitoring Queue (Zero Direct Send):</strong>
+    <strong style="color: var(--text-primary); font-size: 0.9rem;">Signal Monitoring Queue:</strong>
     <p style="margin: 0.35rem 0 0 0;">
-      Watchlist candidates are high-potential companies where active buying intent or BIM adoption is currently inconclusive.
-      These records remain in an observational state and are strictly barred from cold outreach until operator qualification or research confirms verified intent.
+      Watchlist candidates are companies monitored for future hiring, tendering, or BIM adoption signals.
+      These records remain in an observational queue pending operator qualification or research updates; sending eligibility is governed by candidate outreach qualification and suppression rules.
     </p>
   </div>
 </div>
@@ -25,7 +25,7 @@
 <div class="card">
   <div class="card-title">
     <span>Monitored Candidates ({{ items|length }})</span>
-    <span class="badge badge-warning">Zero Direct Send</span>
+    <span class="badge badge-warning">Signal Monitoring</span>
   </div>
   {% if items %}
   <div class="table-responsive">
