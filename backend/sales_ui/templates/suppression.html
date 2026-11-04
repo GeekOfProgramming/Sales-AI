@@ -10,6 +10,19 @@
   </div>
 </div>
 
+<!-- Legal / Policy Compliance Banner -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; background: var(--bg-surface); border-left: 4px solid var(--color-danger, #ef4444); display: flex; align-items: flex-start; gap: 1rem;">
+  <div style="font-size: 1.5rem; line-height: 1;">🛑</div>
+  <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45;">
+    <strong style="color: var(--color-danger, #ef4444); font-size: 0.9rem;">Statutory &amp; Policy Suppression Barrier (Zero Direct Send):</strong>
+    <p style="margin: 0.35rem 0 0 0;">
+      Entries in this registry represent strict hard blocks (unsubscribes, opt-outs, complaints, or explicit operator DNC directives). 
+      The outbound email gateway permanently refuses to send to any address or domain matching this list, regardless of qualification, research status, or approval state.
+      <em>For reversible commercial qualification decisions, use the <a href="/sales/excluded-companies" style="text-decoration: underline;">Excluded Companies Registry</a> instead.</em>
+    </p>
+  </div>
+</div>
+
 <!-- Add Suppression Form (Explicit Scope: email vs domain) -->
 <div class="card">
   <div class="card-title">
@@ -64,7 +77,13 @@
         {% for s in items %}
         <tr>
           <td><strong>{{ s.email }}</strong></td>
-          <td><code>{{ s.company_domain or 'N/A' }}</code></td>
+          <td>
+            {% if s.company_domain and s.company_domain != 'N/A' %}
+              <a href="/sales/candidates?q={{ s.company_domain }}" title="Filter candidates by this domain" style="font-family: monospace; text-decoration: underline;">{{ s.company_domain }} ↗</a>
+            {% else %}
+              <code>{{ s.company_domain or 'N/A' }}</code>
+            {% endif %}
+          </td>
           <td><span class="badge badge-danger">{{ s.reason }}</span></td>
           <td>{{ s.source }}</td>
           <td>{{ s.created_at[:19] }}</td>
