@@ -1275,11 +1275,40 @@ class HistoricalImporter:
             # 3. Match candidate:
             # - First by verified canonical domain if present
             # - Second by exact normalized company name
+            # - Safety checks:
+            #     a) If matching solely by name and multiple candidates match, treat as ambiguous.
+            #     b) If matching solely by name and row domain conflicts with candidate domain, treat as ambiguous.
+            #     c) Never overwrite an existing verified domain based on an uncertain match.
             existing = None
+            is_ambiguous_identity = False
+            ambiguous_reason = None
+
             if dom:
                 existing = self.store.get_by_domain(dom)
+
             if not existing:
-                existing = self.store.get_by_name(cname, country=r.country)
+                matches = self.store.find_by_name(cname, country=r.country) if hasattr(self.store, "find_by_name") else []
+                if len(matches) > 1:
+                    is_ambiguous_identity = True
+                    ambiguous_reason = f"Multiple existing candidates ({len(matches)}) match normalized company name '{cname}'; quarantined for operator review"
+                elif len(matches) == 1:
+                    cand_match = matches[0]
+                    # Check domain conflict: if row has a domain and candidate has a different domain
+                    if dom and cand_match.company_domain and cand_match.company_domain != dom:
+                        is_ambiguous_identity = True
+                        ambiguous_reason = f"Domain conflict: row domain '{dom}' conflicts with existing candidate domain '{cand_match.company_domain}' for '{cname}'"
+                    else:
+                        existing = cand_match
+
+            if is_ambiguous_identity:
+                ambiguous_unresolved += 1
+                proposals_detail.append({
+                    "company_name": cname,
+                    "domain": dom,
+                    "status": "AMBIGUOUS_UNRESOLVED",
+                    "reason": ambiguous_reason,
+                })
+                continue
 
             if existing:
                 cid = existing.candidate_id
@@ -1384,15 +1413,32 @@ class HistoricalImporter:
 
             # 3. Match existing candidate or determine candidate_id
             existing = None
+            is_ambiguous_identity = False
+
             if dom:
                 existing = self.store.get_by_domain(dom)
+
             if not existing:
-                existing = self.store.get_by_name(cname, country=rec.country)
+                matches = self.store.find_by_name(cname, country=rec.country) if hasattr(self.store, "find_by_name") else []
+                if len(matches) > 1:
+                    is_ambiguous_identity = True
+                elif len(matches) == 1:
+                    cand_match = matches[0]
+                    if dom and cand_match.company_domain and cand_match.company_domain != dom:
+                        is_ambiguous_identity = True
+                    else:
+                        existing = cand_match
+
+            if is_ambiguous_identity:
+                # Quarantined for operator review: consistent with preview
+                result.duplicates_skipped += 1
+                continue
 
             is_new = False
             if existing:
                 cid = existing.candidate_id
                 company = existing
+                # Never overwrite an existing verified domain based on an uncertain match
                 if dom and not company.company_domain:
                     company.company_domain = dom
                 if rec.country and not company.country:
@@ -1429,7 +1475,7 @@ class HistoricalImporter:
                     first_seen_at=now_iso,
                     last_seen_at=now_iso,
                     historical_contact_status="uncontacted",
-                    cold_outreach_allowed=True,
+                    cold_outreach_allowed=False,
                 )
                 result.companies_created += 1
 

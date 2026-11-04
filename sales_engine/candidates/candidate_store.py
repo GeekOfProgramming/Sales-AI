@@ -1163,21 +1163,32 @@ class CandidateStore:
     def get_by_name(self, name: str, country: Optional[str] = None) -> Optional[CandidateCompany]:
         """
         Retrieves a candidate by exact normalized company name.
-        Safe against domain collisions: matches when normalized name matches and domain is either identical or unassigned.
+        Safe against domain collisions and ambiguous multiple matches:
+        - If multiple candidates match the normalized name, returns None (ambiguous identity).
+        """
+        matches = self.find_by_name(name, country=country)
+        if len(matches) == 1:
+            return matches[0]
+        return None
+
+    def find_by_name(self, name: str, country: Optional[str] = None) -> List[CandidateCompany]:
+        """
+        Finds all candidates matching the exact normalized company name and optional country.
         """
         if not name or not str(name).strip():
-            return None
+            return []
         norm_name = normalize_company_name(name)
         with self._get_connection() as conn:
             rows = conn.execute(
                 "SELECT * FROM candidate_companies WHERE normalized_company_name = ?",
                 (norm_name,),
             ).fetchall()
+            candidates = []
             for r in rows:
                 c = self._row_to_candidate(r)
                 if not country or not c.country or c.country.lower() == country.lower():
-                    return c
-        return None
+                    candidates.append(c)
+            return candidates
 
     def get_by_id(self, candidate_id: str) -> Optional[CandidateCompany]:
         return self.get_candidate(candidate_id)
