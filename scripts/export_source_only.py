@@ -64,7 +64,10 @@ def build_source_export(repo_root: Path, output_zip: Path) -> str:
             sha256.update(chunk)
 
     digest = sha256.hexdigest()
+    sidecar_file = Path(str(output_zip) + ".sha256")
+    sidecar_file.write_text(digest, encoding="utf-8")
     print(f"Export created: {output_zip} ({included_count} files, SHA-256: {digest})")
+    print(f"SHA-256 sidecar written: {sidecar_file}")
     return digest
 
 

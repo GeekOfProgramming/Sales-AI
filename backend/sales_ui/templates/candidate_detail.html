@@ -12,6 +12,9 @@
   <div>
     <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
       <h1 class="page-title" style="margin-bottom: 0;">{{ clean_display_title }}</h1>
+      {% if is_excluded %}
+        <span class="badge badge-danger">🚫 EXCLUDED ({{ exclusion_record.exclusion_reason.value if exclusion_record else 'Excluded' }})</span>
+      {% endif %}
       {% if is_suppressed %}
         <span class="badge badge-danger">🚫 Suppressed / DNC</span>
       {% elif is_previously_contacted %}
@@ -50,7 +53,15 @@
       <button type="submit" class="btn btn-secondary" onclick="return confirm('Launch explicit bounded company research crawling?');" title="Explicitly crawl and snapshot canonical domain">🔍 Research Again</button>
     </form>
     <button type="button" class="btn btn-warning" onclick="document.getElementById('watch-modal').classList.add('active')">👁️ Watchlist</button>
-    <button type="button" class="btn btn-danger" onclick="document.getElementById('dnc-modal').classList.add('active')">🚫 DNC / Suppress</button>
+    {% if is_excluded %}
+      <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/restore" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-success" onclick="return confirm('Restore this company to consideration in the active pipeline?');" title="Restore company from Excluded Companies Registry">🔄 Restore Company</button>
+      </form>
+    {% else %}
+      <button type="button" class="btn btn-danger" onclick="document.getElementById('exclude-modal').classList.add('active')" title="Exclude company from active sales prospecting">🚫 Exclude Company</button>
+    {% endif %}
+    <button type="button" class="btn btn-danger" onclick="document.getElementById('dnc-modal').classList.add('active')">🛑 DNC / Suppress</button>
   </div>
 </div>
 
@@ -193,7 +204,58 @@
 <!-- ========================================================================= -->
 <div id="section-overview" class="workspace-section">
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; margin-bottom: 1.25rem;">
-    <!-- Core Profile & Provenance -->
+    <!-- Exclusion Status & Audit Banner (HV-01) -->
+  {% if is_excluded or exclusion_record %}
+  <div class="card" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.04); margin-bottom: 1.25rem;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>🚫 Excluded Companies Registry Record</span>
+      {% if is_excluded %}
+        <span class="badge badge-danger">Status: ACTIVE EXCLUSION</span>
+      {% else %}
+        <span class="badge badge-secondary">Status: RESTORED</span>
+      {% endif %}
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; font-size: 0.85rem; margin-top: 0.5rem;">
+      <div><strong>Reason:</strong> <span class="badge badge-danger">{{ exclusion_record.exclusion_reason.value if exclusion_record else 'N/A' }}</span></div>
+      <div><strong>Operator Note:</strong> {{ exclusion_record.operator_note if exclusion_record else '-' }}</div>
+      <div><strong>Last Updated:</strong> {{ exclusion_record.updated_at[:19] if exclusion_record else '-' }}</div>
+      <div><strong>Updated By:</strong> {{ exclusion_record.last_updated_by if exclusion_record else 'operator' }}</div>
+    </div>
+    {% if exclusion_audit_events %}
+    <details style="margin-top: 0.75rem;">
+      <summary style="cursor: pointer; font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">
+        📜 Exclusion Audit Trail ({{ exclusion_audit_events|length }} Events)
+      </summary>
+      <div style="margin-top: 0.5rem; font-size: 0.78rem;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Reason</th>
+              <th>Note</th>
+              <th>Actor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ev in exclusion_audit_events %}
+            <tr>
+              <td>{{ ev.created_at[:19] }}</td>
+              <td><span class="badge {% if ev.action == 'EXCLUDED' %}badge-danger{% elif ev.action == 'RESTORED' %}badge-success{% else %}badge-info{% endif %}">{{ ev.action }}</span></td>
+              <td>{{ ev.new_reason or '-' }}</td>
+              <td>{{ ev.operator_note or '-' }}</td>
+              <td>{{ ev.actor }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Core Profile & Provenance -->
     <div class="card" style="margin-bottom: 0;">
       <div class="card-title">
         <span>Company Profile &amp; Location</span>
@@ -1111,6 +1173,40 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('dnc-modal').classList.remove('active')">Cancel</button>
         <button type="submit" class="btn btn-danger">Confirm Suppression</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Exclude Company Modal (HV-01) -->
+<div id="exclude-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 class="modal-title">Exclude Company from Pipeline</h3>
+    </div>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/exclude">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem;">Mark this company as unsuitable or irrelevant for sales prospecting. Data is preserved, but the company leaves active work queues and cannot be drafted.</p>
+        <div class="form-group">
+          <label class="form-label">Exclusion Reason</label>
+          <select name="reason" class="form-control" required>
+            <option value="NOT_TARGET">NOT_TARGET — Not an architectural/engineering target</option>
+            <option value="SOFTWARE_VENDOR">SOFTWARE_VENDOR — Software/SaaS vendor (e.g. CAD/BIM vendor)</option>
+            <option value="WRONG_COMPANY">WRONG_COMPANY — Wrong entity, unrelated industry</option>
+            <option value="DUPLICATE">DUPLICATE — Duplicate entry or alternate branch</option>
+            <option value="INVALID_DOMAIN">INVALID_DOMAIN — Dead, parked, or invalid domain</option>
+            <option value="MANUAL_EXCLUSION">MANUAL_EXCLUSION — Operator manual exclusion</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Operator Note</label>
+          <input type="text" name="notes" class="form-control" placeholder="Context or rationale for excluding this company...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('exclude-modal').classList.remove('active')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Confirm Exclusion</button>
       </div>
     </form>
   </div>

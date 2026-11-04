@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Excluded Companies Registry | Email Led{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Excluded Companies Registry</h1>
+    <p class="page-subtitle">Permanent, reversible registry of companies excluded from active sales prospecting. Excluded companies do not enter active work queues or receive cold outreach.</p>
+  </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card" style="padding: 1rem; margin-bottom: 1.25rem;">
+  <form method="GET" action="/sales/excluded-companies" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
+    <div style="flex: 2; min-width: 220px;">
+      <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Search company, domain, or notes...">
+    </div>
+    <div style="width: 160px;">
+      <select name="status" class="form-control">
+        <option value="ALL" {% if status_filter == 'ALL' or not status_filter %}selected{% endif %}>All Statuses</option>
+        <option value="ACTIVE" {% if status_filter == 'ACTIVE' %}selected{% endif %}>Active Exclusion</option>
+        <option value="RESTORED" {% if status_filter == 'RESTORED' %}selected{% endif %}>Restored</option>
+      </select>
+    </div>
+    <div style="width: 200px;">
+      <select name="reason" class="form-control">
+        <option value="ALL" {% if reason_filter == 'ALL' or not reason_filter %}selected{% endif %}>All Reasons</option>
+        <option value="NOT_TARGET" {% if reason_filter == 'NOT_TARGET' %}selected{% endif %}>NOT_TARGET</option>
+        <option value="SOFTWARE_VENDOR" {% if reason_filter == 'SOFTWARE_VENDOR' %}selected{% endif %}>SOFTWARE_VENDOR</option>
+        <option value="WRONG_COMPANY" {% if reason_filter == 'WRONG_COMPANY' %}selected{% endif %}>WRONG_COMPANY</option>
+        <option value="DUPLICATE" {% if reason_filter == 'DUPLICATE' %}selected{% endif %}>DUPLICATE</option>
+        <option value="INVALID_DOMAIN" {% if reason_filter == 'INVALID_DOMAIN' %}selected{% endif %}>INVALID_DOMAIN</option>
+        <option value="MANUAL_EXCLUSION" {% if reason_filter == 'MANUAL_EXCLUSION' %}selected{% endif %}>MANUAL_EXCLUSION</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Filter</button>
+    <a href="/sales/excluded-companies" class="btn btn-secondary">Reset</a>
+  </form>
+</div>
+
+<!-- Excluded Companies List Table -->
+<div class="card">
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Excluded Entities ({{ total }})</span>
+    <span style="font-size: 0.8rem; color: var(--text-muted);">Page {{ page }}</span>
+  </div>
+  {% if items %}
+  <div class="table-responsive">
+    <table class="data-table" style="font-size: 0.85rem;">
+      <thead>
+        <tr>
+          <th>Company Name</th>
+          <th>Domain</th>
+          <th>Reason</th>
+          <th>Operator Note</th>
+          <th>Status</th>
+          <th>Updated At</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in items %}
+        <tr>
+          <td>
+            <strong>{{ r.company_name }}</strong>
+            {% if r.candidate_id %}
+              <br><small style="color: var(--text-muted);"><code>{{ r.candidate_id }}</code></small>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.canonical_domain %}
+              <code>{{ r.canonical_domain }}</code>
+            {% else %}
+              <span style="color: var(--text-muted);">-</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge badge-danger">{{ r.exclusion_reason.value }}</span>
+          </td>
+          <td style="max-width: 250px;">
+            {{ r.operator_note or '-' }}
+          </td>
+          <td>
+            {% if r.exclusion_status.value == 'ACTIVE' %}
+              <span class="badge badge-danger">ACTIVE</span>
+            {% else %}
+              <span class="badge badge-secondary">RESTORED</span>
+            {% endif %}
+          </td>
+          <td>{{ r.updated_at[:19] }}</td>
+          <td>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              {% if r.candidate_id %}
+                <a href="/sales/candidates/{{ r.candidate_id }}" class="btn btn-secondary btn-sm" title="View company in Candidate Workspace">View</a>
+              {% endif %}
+              {% if r.exclusion_status.value == 'ACTIVE' %}
+                <form method="POST" action="/sales/excluded-companies/{{ r.registry_id }}/restore" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Restore {{ r.company_name }} to consideration?');" title="Reversibly restore company to pipeline">Restore</button>
+                </form>
+              {% else %}
+                <form method="POST" action="/sales/excluded-companies/{{ r.registry_id }}/re-exclude" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Re-exclude {{ r.company_name }}?');" title="Re-exclude company from pipeline">Exclude</button>
+                </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination Controls -->
+  {% if total > page_size %}
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+    <div>
+      Showing {{ (page - 1) * page_size + 1 }} to {{ [page * page_size, total]|min }} of {{ total }} records
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      {% if page > 1 %}
+        <a href="/sales/excluded-companies?page={{ page - 1 }}&q={{ query or '' }}&status={{ status_filter or 'ALL' }}&reason={{ reason_filter or 'ALL' }}" class="btn btn-secondary btn-sm">← Previous</a>
+      {% endif %}
+      {% if has_next %}
+        <a href="/sales/excluded-companies?page={{ page + 1 }}&q={{ query or '' }}&status={{ status_filter or 'ALL' }}&reason={{ reason_filter or 'ALL' }}" class="btn btn-secondary btn-sm">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No companies currently match the exclusion filters.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

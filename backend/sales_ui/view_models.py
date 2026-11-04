@@ -329,6 +329,16 @@ class HistoricalImportPreviewResult(BaseModel):
     existing_companies_count: int = 0
     company_changes_count: int = 0
     reviewed_records_affected: int = 0
+    # HV-02.5 Lead Research 13-column workbook preview fields
+    is_lead_research: bool = False
+    new_candidate_proposals: int = 0
+    new_candidates_with_domain: int = 0
+    new_candidates_without_domain: int = 0
+    existing_candidate_matches: int = 0
+    ambiguous_unresolved_count: int = 0
+    excluded_dnc_count: int = 0
+    skipped_invalid_count: int = 0
+    proposed_research_updates: int = 0
 
 
 class DraftRequestChangesUiRequest(BaseModel):

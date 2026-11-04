@@ -509,6 +509,9 @@ def get_console_services():
         engine=engine,
     )
 
+    from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
+    exclusion_store = ExcludedCompaniesStore(db_path=cand_store.db_path)
+
     return {
         "cand_store": cand_store,
         "registry": registry,
@@ -519,6 +522,7 @@ def get_console_services():
         "rev_store": rev_store,
         "approval_svc": approval_svc,
         "suppression_svc": suppression_svc,
+        "exclusion_store": exclusion_store,
         "orchestrator": orchestrator,
         "audit_svc": audit_svc,
         "dash_svc": dash_svc,
@@ -2782,9 +2786,10 @@ async def preview_historical_import_action(
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format (CSV/XLSX only)")
 
-    # Stable preview token
+    # Stable preview token signed with get_preview_signing_secret()
     token_payload = f"{str(resolved)}:{file_hash}:{sheet_name or ''}"
-    preview_token = hmac.new(b"salesai_preview_salt", token_payload.encode(), hashlib.sha256).hexdigest()
+    signing_secret = get_preview_signing_secret()
+    preview_token = hmac.new(signing_secret, token_payload.encode(), hashlib.sha256).hexdigest()
 
     unique_comps = set(r.domain or r.company_name for r in records)
     total_contacts = sum(len(r.emails) for r in records)
@@ -2871,15 +2876,23 @@ async def preview_historical_import_action(
             if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
                 unmapped_columns_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
 
+    is_lead_res = importer.is_lead_research_workbook(resolved)
+
     # Evaluate Readiness with authoritative shared function
-    readiness_status, readiness_reasons = evaluate_import_readiness(
-        records=records,
-        unmapped_columns_count=unmapped_columns_count,
-        domain_collisions_count=domain_collisions_count,
-        distinct_canonical_domains=distinct_canonical_domains,
-        multiple_plausible_domains_count=multiple_plausible_domains_count,
-        missing_domain_count=missing_domain_count,
-    )
+    if is_lead_res:
+        # Lead Research workbooks automatically match verified domains and route unverified companies
+        # to 'Needs Research' candidates with zero outreach; they do not block on missing domains.
+        readiness_status = "READY"
+        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
+    else:
+        readiness_status, readiness_reasons = evaluate_import_readiness(
+            records=records,
+            unmapped_columns_count=unmapped_columns_count,
+            domain_collisions_count=domain_collisions_count,
+            distinct_canonical_domains=distinct_canonical_domains,
+            multiple_plausible_domains_count=multiple_plausible_domains_count,
+            missing_domain_count=missing_domain_count,
+        )
 
     # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
     has_sent_emails_sheet = False
@@ -2961,6 +2974,13 @@ async def preview_historical_import_action(
     except Exception as e:
         logger.warning(f"Error computing historical comparison metrics: {e}")
 
+    # HV-02.5: Detect if uploaded/specified workbook is the 13-column pyBIM Lead Research workbook
+    lead_res_analysis = {}
+    if is_lead_res:
+        from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
+        excl_store = ExcludedCompaniesStore(svcs["cand_store"].db_path)
+        lead_res_analysis = importer.preview_lead_research_import(records, excl_store=excl_store)
+
     preview_res = HistoricalImportPreviewResult(
         file_path=str(resolved),
         file_hash=file_hash,
@@ -3002,6 +3022,15 @@ async def preview_historical_import_action(
         existing_companies_count=existing_companies_count,
         company_changes_count=company_changes_count,
         reviewed_records_affected=reviewed_records_affected,
+        is_lead_research=is_lead_res,
+        new_candidate_proposals=lead_res_analysis.get("new_candidate_proposals", 0),
+        new_candidates_with_domain=lead_res_analysis.get("new_candidates_with_domain", 0),
+        new_candidates_without_domain=lead_res_analysis.get("new_candidates_without_domain", 0),
+        existing_candidate_matches=lead_res_analysis.get("existing_candidate_matches", 0),
+        ambiguous_unresolved_count=lead_res_analysis.get("ambiguous_unresolved_count", 0),
+        excluded_dnc_count=lead_res_analysis.get("excluded_dnc_count", 0),
+        skipped_invalid_count=lead_res_analysis.get("skipped_invalid_count", 0),
+        proposed_research_updates=lead_res_analysis.get("proposed_research_updates", 0),
     )
 
     # Check if request prefers JSON (e.g. from test or API client)
@@ -3023,7 +3052,54 @@ async def preview_historical_import_action(
     )
 
 
-# P10_5-ADV-010 / ADV-011: Confirm and Execute Historical Import
+# Cryptographically secure, persistently managed preview signing secret
+def get_preview_signing_secret() -> bytes:
+    """
+    Returns the HMAC key used to sign and verify historical import preview tokens.
+    Prioritizes the PREVIEW_SIGNING_SECRET environment variable.
+    If absent, securely generates a persistent 32-byte secret in the local data directory
+    with restricted file permissions (fail closed against insecure defaults).
+    Never uses a hardcoded or publicly known fallback salt.
+    """
+    env_secret = os.getenv("PREVIEW_SIGNING_SECRET")
+    if env_secret and env_secret.strip():
+        return env_secret.strip().encode("utf-8")
+
+    secret_file = Path("data/.preview_signing_key")
+    if secret_file.exists():
+        try:
+            stored = secret_file.read_bytes().strip()
+            if stored and len(stored) >= 32:
+                return stored
+        except Exception as e:
+            logger.warning(f"Failed to read existing preview signing key file: {e}")
+
+    try:
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        new_secret = secrets.token_hex(32).encode("utf-8")
+        secret_file.write_bytes(new_secret)
+        # On POSIX systems set strict file permissions
+        try:
+            os.chmod(str(secret_file), 0o600)
+        except Exception:
+            pass
+        return new_secret
+    except Exception as e:
+        logger.error(f"Failed to persist preview signing key: {e}")
+        # Fail closed: generate an in-memory session key so no static public salt is ever used
+        return secrets.token_hex(32).encode("utf-8")
+
+
+class _PreviewSigningSecretBytes(bytes):
+    """Subclass of bytes providing dynamic resolution while passing isinstance(key, (bytes, bytearray))."""
+    def __new__(cls):
+        val = get_preview_signing_secret()
+        return super().__new__(cls, val)
+
+def _get_preview_secret_bytes() -> bytes:
+    return _PreviewSigningSecretBytes()
+
+PREVIEW_SIGNING_SECRET = _get_preview_secret_bytes()
 @router.post("/import/historical/confirm")
 @router.post("/sources/import-history/confirm")
 @router.post("/sources/historical/confirm")
@@ -3050,7 +3126,8 @@ async def confirm_historical_import_action(
 
     # Token verification
     expected_payload = f"{str(resolved)}:{effective_hash}:{sheet_name or ''}"
-    expected_token = hmac.new(b"salesai_preview_salt", expected_payload.encode(), hashlib.sha256).hexdigest()
+    signing_secret = get_preview_signing_secret()
+    expected_token = hmac.new(signing_secret, expected_payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(preview_token, expected_token):
         raise HTTPException(status_code=400, detail="Invalid preview confirmation token.")
 
@@ -3077,15 +3154,21 @@ async def confirm_historical_import_action(
         multiple_plausible_domains_count = inspection.get("multiple_plausible_domains_count", 0)
         missing_domain_count = inspection.get("missing_domain_count", 0)
 
+    is_lead_res = importer.is_lead_research_workbook(resolved)
+
     # Server-side validation gate parity with Preview
-    readiness_status, readiness_reasons = evaluate_import_readiness(
-        records=records,
-        unmapped_columns_count=unmapped_count,
-        domain_collisions_count=domain_collisions_count,
-        distinct_canonical_domains=distinct_canonical_domains,
-        multiple_plausible_domains_count=multiple_plausible_domains_count,
-        missing_domain_count=missing_domain_count,
-    )
+    if is_lead_res:
+        readiness_status = "READY"
+        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
+    else:
+        readiness_status, readiness_reasons = evaluate_import_readiness(
+            records=records,
+            unmapped_columns_count=unmapped_count,
+            domain_collisions_count=domain_collisions_count,
+            distinct_canonical_domains=distinct_canonical_domains,
+            multiple_plausible_domains_count=multiple_plausible_domains_count,
+            missing_domain_count=missing_domain_count,
+        )
 
     # Parse and rigorously validate operator decisions if supplied
     parsed_decisions = []
@@ -3274,45 +3357,144 @@ async def confirm_historical_import_action(
         staging_path = staging_clone.name
         staging_clone.close()
         try:
-            # 1. Capture initial data_version and online backup source into staging clone
-            with store._get_connection() as src_conn:
-                initial_version = src_conn.execute("PRAGMA data_version;").fetchone()[0]
+            # 1. Maintain a persistent check connection on the live database to reliably detect external writes via PRAGMA data_version
+            target_check_conn = sqlite3.connect(store.db_path)
+            target_check_conn.row_factory = sqlite3.Row
+            try:
+                target_check_conn.execute("PRAGMA busy_timeout = 5000;")
+                initial_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
+
+                # Online backup live database into staging clone
                 clone_conn = sqlite3.connect(staging_path)
                 try:
-                    src_conn.backup(clone_conn)
+                    target_check_conn.backup(clone_conn)
                 finally:
                     clone_conn.close()
 
-            # 2. Execute import on staging store
-            staged_store = CandidateStore(staging_path)
-            staged_importer = HistoricalImporter(store=staged_store)
-            result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
+                # 2. Execute import on staging store
+                staged_store = CandidateStore(staging_path)
+                staged_importer = HistoricalImporter(store=staged_store)
+                if is_lead_res:
+                    result = staged_importer.import_lead_research_records(records, source_file_name=resolved.name)
+                else:
+                    result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
-            # 2b. If Sent_Emails sheet exists, import sent messages into staging store
-            sent_emails_stats = None
-            if resolved.suffix.lower() in (".xlsx", ".xlsm"):
-                try:
-                    sent_msgs = staged_importer.parse_sent_emails(resolved)
-                    if sent_msgs:
-                        sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
-                        result.sent_emails_total = sent_emails_stats.get("total", 0)
-                        result.sent_emails_imported = sent_emails_stats.get("imported", 0)
-                        result.sent_emails_matched = sent_emails_stats.get("matched", 0)
-                        result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
-                        result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
-                except Exception as e:
-                    logger.error(f"Failed to import sent emails in staging: {e}")
-                    raise
+                # 2b. If Sent_Emails sheet exists, import sent messages into staging store
+                sent_emails_stats = None
+                if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+                    try:
+                        sent_msgs = staged_importer.parse_sent_emails(resolved)
+                        if sent_msgs:
+                            sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
+                            result.sent_emails_total = sent_emails_stats.get("total", 0)
+                            result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                            result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                            result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                            result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
+                    except Exception as e:
+                        logger.error(f"Failed to import sent emails in staging: {e}")
+                        raise
 
-            # 3. Promote staged store into live target ONLY if target had no concurrent writes
-            with store._get_connection() as s_conn:
-                current_version = s_conn.execute("PRAGMA data_version;").fetchone()[0]
+                    # 2c. If Meeting sheet exists, import meeting activity records into staging store
+                    try:
+                        meetings = staged_importer.parse_meeting_activities(resolved)
+                        if meetings:
+                            staged_importer.import_meeting_activities(meetings, staged_records=records)
+                    except Exception as e:
+                        logger.error(f"Failed to import meeting activities in staging: {e}")
+                        raise
+
+                # Verify staging clone integrity before promoting
+                with staged_store._get_connection() as s_check:
+                    quick_chk = s_check.execute("PRAGMA quick_check;").fetchone()
+                    if not quick_chk or quick_chk[0] != "ok":
+                        raise RuntimeError(f"Staged database integrity check failed: {quick_chk[0] if quick_chk else 'no response'}")
+
+                # 3. Check for concurrent modification on live database before acquiring lock
+                current_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
                 if current_version != initial_version:
                     raise RuntimeError(
                         f"Concurrent database modification detected during staging (version changed from {initial_version} to {current_version}). Promotion aborted to prevent silent data loss."
                     )
-                with staged_store._get_connection() as c_conn:
-                    c_conn.backup(s_conn)
+
+                # Acquire exclusive transaction lock on target connection to prevent concurrent writes during promotion
+                # SQLite ATTACH strategy ensures atomic, transactional table-level promotion
+                target_check_conn.execute("ATTACH DATABASE ? AS staging;", (staging_path,))
+                target_check_conn.execute("BEGIN IMMEDIATE;")
+                try:
+                    # Double-check data_version under lock
+                    lock_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
+                    if lock_version != initial_version:
+                        raise RuntimeError(
+                            f"Concurrent database modification detected when locking target database ({initial_version} vs {lock_version}). Promotion aborted."
+                        )
+
+                    # Discover all user tables present in staging and promote them transactionally into main
+                    # Using row-identity-aware UPSERT (ON CONFLICT(pk) DO UPDATE ...)
+                    # 1. Preserves existing primary keys (including autoincrement ids copied during online backup).
+                    # 2. Avoids DELETE + INSERT side effects of INSERT OR REPLACE that trigger ON DELETE CASCADE or foreign-key violations.
+                    # 3. Avoids silent data loss of INSERT OR IGNORE, ensuring updated attributes in staging are applied.
+                    # 4. Ensures repeated Preview -> Confirm imports are completely idempotent with no duplicate rows created.
+                    stg_tables = [
+                        r[0] for r in target_check_conn.execute(
+                            "SELECT name FROM staging.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+                        ).fetchall()
+                    ]
+                    # Specific ordering: parent tables before child tables
+                    table_priority = {
+                        "candidate_companies": 1,
+                        "lead_register_records": 2,
+                        "discovery_observations": 3,
+                        "candidate_contacts": 4,
+                        "historical_imports": 5,
+                        "historical_contacts": 6,
+                        "historical_company_links": 7,
+                        "historical_sent_emails": 8,
+                        "historical_meeting_activities": 9,
+                        "historical_outreach_events": 10,
+                        "operator_import_decisions": 11,
+                    }
+                    sorted_tables = sorted(stg_tables, key=lambda t: table_priority.get(t, 99))
+
+                    for tbl in sorted_tables:
+                        cols = [r[1] for r in target_check_conn.execute(f"PRAGMA staging.table_info({tbl});").fetchall()]
+                        cols_str = ", ".join(f'"{c}"' for c in cols)
+                        pk_cols = [r[1] for r in target_check_conn.execute(f"PRAGMA main.table_info({tbl});").fetchall() if r[5] > 0]
+
+                        if pk_cols:
+                            pk_str = ", ".join(f'"{c}"' for c in pk_cols)
+                            non_pk_cols = [c for c in cols if c not in pk_cols]
+                            if non_pk_cols:
+                                update_clause = ", ".join(f'"{c}" = excluded."{c}"' for c in non_pk_cols)
+                                sql = f'INSERT INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}" WHERE true ON CONFLICT({pk_str}) DO UPDATE SET {update_clause};'
+                            else:
+                                sql = f'INSERT INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}" WHERE true ON CONFLICT({pk_str}) DO NOTHING;'
+                            target_check_conn.execute(sql)
+                        else:
+                            # Fallback for tables without primary key: insert genuinely new rows only
+                            target_check_conn.execute(
+                                f'INSERT INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}" EXCEPT SELECT {cols_str} FROM main."{tbl}";'
+                            )
+
+                    # Post-promotion verification
+                    fk_chk = target_check_conn.execute("PRAGMA foreign_key_check;").fetchall()
+                    if fk_chk:
+                        raise RuntimeError(f"Foreign key violations detected after promotion: {fk_chk}")
+                    post_chk = target_check_conn.execute("PRAGMA quick_check;").fetchone()
+                    if not post_chk or post_chk[0] != "ok":
+                        raise RuntimeError(f"Post-promotion integrity check failed: {post_chk[0] if post_chk else 'no response'}")
+
+                    target_check_conn.commit()
+                except Exception:
+                    target_check_conn.rollback()
+                    raise
+                finally:
+                    try:
+                        target_check_conn.execute("DETACH DATABASE staging;")
+                    except Exception:
+                        pass
+            finally:
+                target_check_conn.close()
 
         except Exception as e:
             logger.error(f"Historical import transaction rolled back due to error: {e}")
@@ -4059,6 +4241,21 @@ async def candidates_list_view(
     except Exception:
         pass
 
+    # Query active exclusions
+    excl_cids = {}
+    excl_domains = {}
+    try:
+        with store._get_connection() as conn:
+            r_has = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='excluded_companies' LIMIT 1").fetchone()
+            if r_has:
+                for r in conn.execute("SELECT candidate_id, canonical_domain, exclusion_reason FROM excluded_companies WHERE exclusion_status = 'ACTIVE'").fetchall():
+                    if r[0]:
+                        excl_cids[r[0]] = r[2]
+                    if r[1]:
+                        excl_domains[r[1].lower()] = r[2]
+    except Exception:
+        pass
+
     # Also check external research cache if available
     res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
     if res_cache_path.exists():
@@ -4086,11 +4283,22 @@ async def candidates_list_view(
         has_snap = cid in snap_cids
         lr_stat = lr_map.get(cid)
 
+        is_excl = False
+        excl_reason = None
+        if cid in excl_cids:
+            is_excl = True
+            excl_reason = excl_cids[cid]
+        elif dom and dom in excl_domains:
+            is_excl = True
+            excl_reason = excl_domains[dom]
+
         state = project_candidate_lifecycle(
             cand=c,
             has_snapshot=has_snap,
             lead_register_status=lr_stat,
             is_suppressed_domain=is_supp,
+            is_excluded=is_excl,
+            exclusion_reason=excl_reason,
         )
 
         # Queue membership filter
@@ -4346,6 +4554,18 @@ async def candidate_detail_view(
     is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand_domain)
     is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or bool(hist_outreach)
 
+    # Check Excluded Companies Registry
+    excl_store = svcs["exclusion_store"]
+    exclusion_record = excl_store.get_active_exclusion(
+        candidate_id=candidate_id,
+        company_domain=cand_domain,
+        company_name=cand_name,
+    )
+    is_excluded = exclusion_record is not None
+    exclusion_audit_events = excl_store.get_audit_history(exclusion_record.registry_id) if exclusion_record else []
+    if not exclusion_audit_events:
+        exclusion_audit_events = excl_store.get_audit_history_for_candidate(candidate_id)
+
     raw_bim = cand.bim_maturity
     bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
 
@@ -4416,8 +4636,8 @@ async def candidate_detail_view(
         reg_store=reg_store,
     )
 
-    company_outreach_eligible = readiness_info["base_eligible"] and not readiness_info["is_suppressed"] and not readiness_info["is_previously_contacted"]
-    can_generate_draft = readiness_info["can_generate_draft"]
+    company_outreach_eligible = readiness_info["base_eligible"] and not readiness_info["is_suppressed"] and not readiness_info["is_previously_contacted"] and not is_excluded
+    can_generate_draft = readiness_info["can_generate_draft"] and not is_excluded
     has_verified_recipient = readiness_info["has_verified_recipient"]
 
     # All workspace contacts (verified, documented, unverified)
@@ -4496,6 +4716,9 @@ async def candidate_detail_view(
             "ai_brief_text": ai_brief_text,
             "is_suppressed": is_supp,
             "is_previously_contacted": is_contacted,
+            "is_excluded": is_excluded,
+            "exclusion_record": exclusion_record,
+            "exclusion_audit_events": exclusion_audit_events,
             "message": message,
             "error": error,
         },
@@ -4525,6 +4748,15 @@ async def candidate_research_view(
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot research candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     domain = cand.company_domain
     if not domain:
@@ -4755,6 +4987,15 @@ async def crawl_candidate_website_action(
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot research candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
     domain = cand.company_domain
     if not domain:
         return RedirectResponse(
@@ -4942,6 +5183,15 @@ async def research_candidate_action(candidate_id: str, csrf: None = Depends(vali
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot research candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     domain = cand.company_domain
     if not domain:
@@ -5615,6 +5865,13 @@ async def qualify_candidate_action(candidate_id: str, csrf: None = Depends(valid
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cdom, company_name=cname):
+        err_msg = "Cannot qualify candidate: Company is currently in the Excluded Companies Registry."
+        return RedirectResponse(f"/sales/candidates/{candidate_id}?error={quote(err_msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
     obs = svcs["cand_store"].get_observations_for_company(candidate_id)
     ev = svcs["cand_store"].get_evidence(candidate_id)
     qual = svcs["classifier"].classify_company(cand, observations=obs, evidence=ev)
@@ -5811,7 +6068,233 @@ async def candidate_lifecycle_action(
     return RedirectResponse(f"/sales/candidates/{candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/candidates/{candidate_id}/exclude")
+async def exclude_candidate_action(
+    candidate_id: str,
+    reason: str = Form("MANUAL_EXCLUSION"),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Exclude company from active sales pipeline.
+    Preserves all existing CandidateCompany data, Lead Register records, research, and outreach history.
+    Prohibits cold outreach drafts.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
 
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "Unnamed Company")
+    cdom = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    aliases = getattr(cand, "aliases", []) or []
+
+    note_text = notes.strip() if notes and notes.strip() else f"Excluded by operator ({reason})"
+
+    svcs["exclusion_store"].exclude_company(
+        company_name=cname,
+        exclusion_reason=reason,
+        candidate_id=candidate_id,
+        canonical_domain=cdom,
+        known_aliases=aliases,
+        operator_note=note_text,
+        operator="operator",
+        provenance_source="sales_console_candidate",
+    )
+
+    cand.cold_outreach_allowed = False
+    now_iso = datetime.now(timezone.utc).isoformat()
+    audit_note = f"Operator Exclusion ({reason}): {note_text}"
+    if audit_note not in cand.qualification_reasons:
+        cand.qualification_reasons.append(audit_note)
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    cand.manual_review_notes = note_text
+    svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{cname}' successfully EXCLUDED from active prospecting ({reason})."
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/candidates/{candidate_id}/restore")
+async def restore_candidate_action(
+    candidate_id: str,
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Reversibly restore an excluded company to consideration.
+    Does NOT automatically qualify or enable cold outreach.
+    Preserves DNC and historical communication restrictions.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    note_text = notes.strip() if notes and notes.strip() else "Restored by operator"
+
+    rec = svcs["exclusion_store"].restore_company(
+        registry_id_or_candidate_id=candidate_id,
+        operator_note=note_text,
+        operator="operator",
+    )
+
+    cname = getattr(cand, "company_name", None) or getattr(cand, "name", "Unnamed Company")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    audit_note = f"Operator Restored: {note_text}"
+    if audit_note not in cand.qualification_reasons:
+        cand.qualification_reasons.append(audit_note)
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    cand.manual_review_notes = note_text
+
+    # Outreach safety: do not automatically enable cold outreach if suppressed or contacted
+    is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand.company_domain)
+    is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(cand, "previous_outreach_detected", False)
+    if is_supp or is_contacted:
+        cand.cold_outreach_allowed = False
+
+    svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{cname}' RESTORED from exclusion. Returned to review pipeline with safety guards enforced."
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/excluded-companies", response_class=HTMLResponse)
+async def excluded_companies_view(
+    request: Request,
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query("ALL"),
+    reason: Optional[str] = Query("ALL"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1),
+    message: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """
+    HV-01: Excluded Companies Registry page.
+    Displays excluded entities with search, filtering, pagination, and restoration controls.
+    """
+    svcs = get_console_services()
+    excl_store = svcs["exclusion_store"]
+
+    offset = (page - 1) * page_size
+    items, total = excl_store.list_exclusions(
+        status_filter=status,
+        reason_filter=reason,
+        query=q,
+        limit=page_size,
+        offset=offset,
+    )
+
+    has_next = (offset + page_size) < total
+
+    return render_console_template(
+        request=request,
+        name="excluded_companies.html",
+        context={
+            "request": request,
+            "active_tab": "excluded",
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": has_next,
+            "query": q,
+            "status_filter": status,
+            "reason_filter": reason,
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.post("/excluded-companies/{registry_id}/restore")
+async def restore_excluded_company_action(
+    registry_id: str,
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Restore company from Excluded Companies Registry page.
+    """
+    svcs = get_console_services()
+    excl_store = svcs["exclusion_store"]
+
+    note_text = notes.strip() if notes and notes.strip() else "Restored by operator via registry page"
+    rec = excl_store.restore_company(
+        registry_id_or_candidate_id=registry_id,
+        operator_note=note_text,
+        operator="operator",
+    )
+    if not rec:
+        raise HTTPException(status_code=404, detail="Exclusion record not found")
+
+    # If linked to candidate, also update candidate object
+    if rec.candidate_id:
+        cand = svcs["cand_store"].get_by_id(rec.candidate_id)
+        if cand:
+            is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=cand.company_domain)
+            is_contacted = cand.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(cand, "previous_outreach_detected", False)
+            if is_supp or is_contacted:
+                cand.cold_outreach_allowed = False
+            now_iso = datetime.now(timezone.utc).isoformat()
+            audit_note = f"Operator Restored: {note_text}"
+            if audit_note not in cand.qualification_reasons:
+                cand.qualification_reasons.append(audit_note)
+            cand.manual_reviewed_at = now_iso
+            cand.manual_reviewed_by = "operator"
+            cand.manual_review_notes = note_text
+            svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{rec.company_name}' RESTORED from exclusion."
+    return RedirectResponse(f"/sales/excluded-companies?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/excluded-companies/{registry_id}/re-exclude")
+async def re_exclude_company_action(
+    registry_id: str,
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    HV-01: Re-exclude previously restored company from Excluded Companies Registry page.
+    """
+    svcs = get_console_services()
+    excl_store = svcs["exclusion_store"]
+
+    rec = excl_store.get_exclusion_by_id(registry_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Exclusion record not found")
+
+    note_text = notes.strip() if notes and notes.strip() else f"Re-excluded by operator ({rec.exclusion_reason.value})"
+    excl_store.exclude_company(
+        company_name=rec.company_name,
+        exclusion_reason=rec.exclusion_reason,
+        candidate_id=rec.candidate_id,
+        canonical_domain=rec.canonical_domain,
+        known_aliases=rec.known_aliases,
+        operator_note=note_text,
+        operator="operator",
+        provenance_source="excluded_companies_page",
+    )
+
+    if rec.candidate_id:
+        cand = svcs["cand_store"].get_by_id(rec.candidate_id)
+        if cand:
+            cand.cold_outreach_allowed = False
+            now_iso = datetime.now(timezone.utc).isoformat()
+            audit_note = f"Operator Re-Exclusion: {note_text}"
+            if audit_note not in cand.qualification_reasons:
+                cand.qualification_reasons.append(audit_note)
+            cand.manual_reviewed_at = now_iso
+            cand.manual_reviewed_by = "operator"
+            cand.manual_review_notes = note_text
+            svcs["cand_store"].save_candidate(cand)
+
+    msg = f"Company '{rec.company_name}' successfully RE-EXCLUDED."
+    return RedirectResponse(f"/sales/excluded-companies?message={quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # P10_5-ADV-022 / P10_5-FINAL-001..009: Phase 8 Outreach Generation Delegation
@@ -5833,6 +6316,13 @@ async def generate_candidate_draft_action(
     cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
 
     # BLOCKER 2: Authoritative Qualification & Safety Guards
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cand_domain, company_name=getattr(cand, "company_name", None)):
+        err_msg = "Candidate is currently excluded from active prospecting; cold draft blocked."
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error={urllib.parse.quote(err_msg)}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
     if not is_candidate_outreach_eligible(cand):
         disc_status = getattr(cand, "discovery_status", "")
         if hasattr(disc_status, "value"):
@@ -6389,6 +6879,12 @@ async def leads_view(
             continue
 
         cid = getattr(c, "candidate_id", None) or ""
+        cdom = getattr(c, "company_domain", None) or getattr(c, "domain", None)
+        cname = getattr(c, "company_name", None) or getattr(c, "name", "")
+
+        # Excluded companies must not appear in Qualified Leads
+        if svcs["exclusion_store"].is_company_excluded(candidate_id=cid, company_domain=cdom, company_name=cname):
+            continue
         p_contacts = prefetched_contacts_by_cid.get(cid, [])
         p_reg = prefetched_reg_records_by_cid.get(cid)
         p_snap = prefetched_snapshots_by_cid.get(cid)

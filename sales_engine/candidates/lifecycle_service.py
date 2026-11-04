@@ -65,12 +65,15 @@ def project_candidate_lifecycle(
     has_snapshot: bool = False,
     lead_register_status: Optional[str] = None,
     is_suppressed_domain: bool = False,
+    is_excluded: bool = False,
+    exclusion_reason: Optional[str] = None,
 ) -> CandidateLifecycleState:
     """
     Computes the authoritative lifecycle projection for a single candidate company.
     Enforces strict precedence:
-    1. Reopened / Needs Correction -> enters Active Work directly.
-    2. Suppressed / Rejected / Watchlist / Duplicate -> separated from default work queues.
+    0. Excluded Companies Registry -> immediately removed from Active Work and Qualified Leads; placed in SUPPRESSED_REJECTED.
+    1. Suppressed / Rejected / Watchlist / Duplicate -> separated from default work queues.
+    2. Reopened / Needs Correction -> enters Active Work directly (only if not excluded/suppressed/rejected).
     3. Finalized Historical -> excluded from default Candidates list; visible in All Companies / Sent History.
     4. Historical Review Pending -> historical contact awaiting operator review/finalization.
     5. Qualified Lead -> moves to Qualified Leads pipeline.
@@ -94,14 +97,14 @@ def project_candidate_lifecycle(
     prev_outreach = bool(getattr(cand, "previous_outreach_detected", False) or hist_status in ("contacted", "replied", "converted", "dnc"))
     is_suppressed = bool(getattr(cand, "suppressed", False) or is_suppressed_domain)
 
-    # 2. Check suppression / rejected / watchlist / duplicate (ABSOLUTE SAFETY PRECEDENCE)
+    # 2. Check exclusion / suppression / rejected / watchlist / duplicate (ABSOLUTE SAFETY PRECEDENCE)
     is_rejected = qual_outcome == "reject" or disc_status == "rejected" or manual_dec == "REJECTED"
     is_watchlist = disc_status == "watchlist" or qual_outcome == "watchlist"
     is_duplicate = (disc_status == "known_company" or qual_outcome == "known_company" or manual_dec == "DUPLICATE") and not prev_outreach
-    is_supp_or_rej = bool(is_suppressed or is_rejected or is_watchlist or is_duplicate)
+    is_supp_or_rej = bool(is_excluded or is_suppressed or is_rejected or is_watchlist or is_duplicate)
 
     # 3. Check explicitly reopened status
-    # If a company is suppressed/rejected/watchlist/duplicate, it CANNOT be placed in Active Work queue
+    # If a company is excluded/suppressed/rejected/watchlist/duplicate, it CANNOT be placed in Active Work queue
     # for cold outreach. It stays suppressed/protected even if reopened for data correction.
     is_reopened = manual_dec in ("REOPENED", "NEEDS_CORRECTION")
 
@@ -113,7 +116,7 @@ def project_candidate_lifecycle(
 
     # 5. Check ICP qualification
     # An ICP-qualified company has qualification_outcome in ('qualified', 'qualified_for_enrichment')
-    # or discovery_status in ('qualified', 'qualified_for_enrichment') AND is not rejected/suppressed.
+    # or discovery_status in ('qualified', 'qualified_for_enrichment') AND is not rejected/suppressed/excluded.
     is_qualified = (
         not is_supp_or_rej
         and not is_reopened
@@ -125,12 +128,16 @@ def project_candidate_lifecycle(
     )
 
     # 6. Determine Primary Queue & Actionable Next Step
-    # DNC / Suppression / Rejection ALWAYS takes precedence over active work or outreach eligibility.
+    # Exclusion / DNC / Suppression / Rejection ALWAYS takes precedence over active work or outreach eligibility.
     if is_supp_or_rej:
         p_queue = CandidateQueueType.SUPPRESSED_REJECTED
         sub_queue = None
         is_active = False
-        if is_suppressed:
+        if is_excluded:
+            reason_lbl = exclusion_reason or "Operator Excluded"
+            next_step = f"Excluded from pipeline ({reason_lbl}) — protected from outreach"
+            next_url = f"/sales/excluded-companies"
+        elif is_suppressed:
             if is_reopened:
                 next_step = "Suppressed / Do Not Contact — protected from outreach (reopened for metadata correction only)"
             else:
@@ -225,6 +232,8 @@ class CandidateLifecycleService:
         has_snap = False
         lr_stat = None
         is_supp = False
+        is_excl = False
+        excl_reason = None
 
         def _has_table(conn, tbl: str) -> bool:
             r = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (tbl,)).fetchone()
@@ -247,11 +256,30 @@ class CandidateLifecycleService:
                 supp_row = conn.execute("SELECT 1 FROM suppression_list WHERE company_domain = ? LIMIT 1", (cand.company_domain.lower(),)).fetchone()
                 is_supp = bool(supp_row)
 
+            # Check excluded_companies
+            if _has_table(conn, "excluded_companies"):
+                # Check by candidate_id
+                excl_row = conn.execute(
+                    "SELECT exclusion_reason FROM excluded_companies WHERE candidate_id = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                    (candidate_id,)
+                ).fetchone()
+                # Check by canonical_domain if available
+                if not excl_row and getattr(cand, "company_domain", None):
+                    excl_row = conn.execute(
+                        "SELECT exclusion_reason FROM excluded_companies WHERE canonical_domain = ? AND exclusion_status = 'ACTIVE' LIMIT 1",
+                        (cand.company_domain.lower(),)
+                    ).fetchone()
+                if excl_row:
+                    is_excl = True
+                    excl_reason = excl_row[0]
+
         return project_candidate_lifecycle(
             cand=cand,
             has_snapshot=has_snap,
             lead_register_status=lr_stat,
             is_suppressed_domain=is_supp,
+            is_excluded=is_excl,
+            exclusion_reason=excl_reason,
         )
 
     def compute_queue_counts(self) -> Dict[str, int]:
@@ -263,6 +291,8 @@ class CandidateLifecycleService:
         snap_cids = set()
         lr_map = {}
         supp_domains = set()
+        excl_cids = {}
+        excl_domains = {}
 
         def _has_table(conn, tbl: str) -> bool:
             r = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (tbl,)).fetchone()
@@ -275,6 +305,12 @@ class CandidateLifecycleService:
                 lr_map = dict(conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall())
             if _has_table(conn, "suppression_list"):
                 supp_domains = set(r[0].lower() for r in conn.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL").fetchall())
+            if _has_table(conn, "excluded_companies"):
+                for r in conn.execute("SELECT candidate_id, canonical_domain, exclusion_reason FROM excluded_companies WHERE exclusion_status = 'ACTIVE'").fetchall():
+                    if r[0]:
+                        excl_cids[r[0]] = r[2]
+                    if r[1]:
+                        excl_domains[r[1].lower()] = r[2]
 
         counts = {
             "active": 0,
@@ -296,11 +332,23 @@ class CandidateLifecycleService:
             has_snap = cid in snap_cids
             lr_stat = lr_map.get(cid)
 
+            # Exclusion status
+            is_excl = False
+            excl_reason = None
+            if cid in excl_cids:
+                is_excl = True
+                excl_reason = excl_cids[cid]
+            elif dom and dom.lower() in excl_domains:
+                is_excl = True
+                excl_reason = excl_domains[dom.lower()]
+
             state = project_candidate_lifecycle(
                 cand=c,
                 has_snapshot=has_snap,
                 lead_register_status=lr_stat,
                 is_suppressed_domain=is_supp,
+                is_excluded=is_excl,
+                exclusion_reason=excl_reason,
             )
 
             if state.is_active_work:
