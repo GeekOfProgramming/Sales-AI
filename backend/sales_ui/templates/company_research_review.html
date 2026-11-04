@@ -127,18 +127,26 @@
 {% endwith %}
 
 <div class="page-header" style="margin-bottom: 1.5rem;">
-  <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
     <div>
       <h1 class="page-title">Company Research &amp; Enrichment Review</h1>
       <p class="page-subtitle">
         Candidate: <strong style="color: var(--text-primary);">{{ research.company_name if research else candidate.company_name }}</strong> |
-        Domain: <code>{{ research.canonical_domain if research else candidate.company_domain }}</code> |
+        Domain: <code>{{ research.canonical_domain if research else (candidate.company_domain or 'Unverified website') }}</code> |
         Candidate ID: <code>{{ candidate.candidate_id }}</code>
+        {% if current_record and (current_record.provenance_source == 'research_lead_excel' or 'excel' in current_record.provenance_source|lower) %}
+          <span class="badge badge-info" style="margin-left: 0.5rem; font-size: 0.75rem;">📊 Source: Research Excel</span>
+        {% elif candidate.source_refs and ('research_lead_excel' in candidate.source_refs or 'excel' in (candidate.source_refs|join(' '))|lower) %}
+          <span class="badge badge-info" style="margin-left: 0.5rem; font-size: 0.75rem;">📊 Source: Research Excel</span>
+        {% endif %}
       </p>
     </div>
-    <div style="display: flex; gap: 0.5rem;">
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
       <a href="/sales/candidates/{{ candidate.candidate_id }}" class="btn btn-secondary">&larr; Back to Candidate</a>
-      <a href="/sales/register" class="btn btn-secondary">Lead Register</a>
+      <a href="/sales/register" class="btn btn-secondary">13-Field Register</a>
+      {% if current_record %}
+      <a href="/sales/register/{{ candidate.candidate_id }}" class="btn btn-secondary" title="View direct 13-field record editor">✏️ Edit 13-Field Record</a>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -483,6 +491,9 @@
               </td>
               <td>
                 <span class="badge badge-secondary">{{ current_record.priority_level if current_record else 'Unassigned' }}</span>
+                {% if current_record and (current_record.provenance_source == 'research_lead_excel' or 'excel' in current_record.provenance_source|lower) %}
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">(Imported Suggested Priority &bull; Not Verified)</div>
+                {% endif %}
                 <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.25rem;">{{ current_record.priority_rationale if current_record else 'None' }}</div>
               </td>
               <td>
@@ -802,7 +813,15 @@
                   {% endif %}
                 {% endif %}
               </td>
-              <td><a href="{{ current_record.official_website if current_record else proposed_record.official_website }}" target="_blank" rel="noopener">{{ current_record.official_website if current_record else proposed_record.official_website }}</a></td>
+              <td>
+                {% if current_record and current_record.official_website and current_record.official_website != 'Not Found' %}
+                  <a href="{{ current_record.official_website if current_record.official_website.startswith('http') else 'https://' ~ current_record.official_website }}" target="_blank" rel="noopener">{{ current_record.official_website }} ↗</a>
+                {% elif proposed_record and proposed_record.official_website and proposed_record.official_website != 'Not Found' %}
+                  <a href="{{ proposed_record.official_website if proposed_record.official_website.startswith('http') else 'https://' ~ proposed_record.official_website }}" target="_blank" rel="noopener">{{ proposed_record.official_website }} ↗</a>
+                {% else %}
+                  <span class="badge badge-warning" style="font-size: 0.72rem;">Unverified website</span>
+                {% endif %}
+              </td>
               <td>
                 <input type="text" name="official_website" class="form-control" value="{{ proposed_record.official_website }}">
                 {% if f_meta %}
@@ -890,7 +909,16 @@
                 {% endif %}
               </td>
               <td style="font-size: 0.82rem;">
-                {{ current_record.job_advertisement_links if current_record else 'Not Found' }}
+                {% if current_record and current_record.job_advertisement_links and current_record.job_advertisement_links != 'Not Found' %}
+                  {% for jurl in current_record.job_advertisement_links.split(',') %}
+                    {% set cur_url = jurl.strip() %}
+                    {% if cur_url %}
+                      <div><a href="{{ cur_url if cur_url.startswith('http') else 'https://' ~ cur_url }}" target="_blank" rel="noopener" style="color: var(--border-focus);">{{ cur_url }} ↗</a></div>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-subtle" style="font-style: italic;">Not Found</span>
+                {% endif %}
                 {% if is_suspect_job_advertisement %}
                   <div style="color: #b45309; font-size: 0.78rem; margin-top: 4px; font-weight: 500;">
                     ⚠️ Link appears to be a general news/CSRD or blog article rather than an active career/job advertisement. Review recommended before sign-off.
@@ -940,7 +968,18 @@
                   {% endif %}
                 {% endif %}
               </td>
-              <td style="font-size: 0.82rem;">{{ current_record.other_links_and_references if current_record else 'Not Found' }}</td>
+              <td style="font-size: 0.82rem;">
+                {% if current_record and current_record.other_links_and_references and current_record.other_links_and_references != 'Not Found' %}
+                  {% for ourl in current_record.other_links_and_references.split(',') %}
+                    {% set cur_url = ourl.strip() %}
+                    {% if cur_url %}
+                      <div><a href="{{ cur_url if cur_url.startswith('http') else 'https://' ~ cur_url }}" target="_blank" rel="noopener" style="color: var(--border-focus);">{{ cur_url }} ↗</a></div>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-subtle" style="font-style: italic;">Not Found</span>
+                {% endif %}
+              </td>
               <td>
                 <input type="text" name="other_links_and_references" class="form-control" value="{{ proposed_record.other_links_and_references }}">
                 {% if f_meta %}

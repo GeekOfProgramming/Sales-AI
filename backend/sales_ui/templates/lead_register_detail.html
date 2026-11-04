@@ -12,21 +12,24 @@
     <h1 class="page-title">Lead Record #{{ record.record_number or 'New' }} — {{ record.company_name }}</h1>
     <p class="page-subtitle">Candidate ID: <code>{{ record.candidate_id }}</code> | Provenance: <strong>{{ record.provenance_source }}</strong> ({{ record.verification_status }})</p>
   </div>
-  <div style="display: flex; gap: 0.5rem;">
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
     <a href="/sales/register" class="btn btn-secondary">← Back to 13-Field Register</a>
-    <a href="/sales/candidates/{{ record.candidate_id }}/research" class="btn btn-secondary" style="color: var(--border-focus);">🔬 Research Snapshot</a>
+    <a href="/sales/candidates/{{ record.candidate_id }}/research" class="btn btn-primary" title="Primary Field-Level Verification & Research Review">🔬 Research Review</a>
     <a href="/sales/candidates/{{ record.candidate_id }}" class="btn btn-secondary">Candidate Overview</a>
   </div>
 </div>
 
 <!-- Operator Guidance Alert -->
 <div class="card" style="border-left: 4px solid #10b981; margin-bottom: 1.5rem;">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-    <span style="font-weight: 600; color: var(--text-primary); font-size: 1rem;">📝 Persistent 13-Field pyBIM Workbook Schema</span>
-    <span class="badge badge-success">Durable Local Persistence</span>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+    <span style="font-weight: 600; color: var(--text-primary); font-size: 1rem;">📝 Direct 13-Field Register Record</span>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <span class="badge badge-success">Durable Local Persistence</span>
+      <a href="/sales/candidates/{{ record.candidate_id }}/research" class="btn btn-primary btn-sm" style="font-size: 0.78rem;">🔬 Field-Level Verification in Research Review →</a>
+    </div>
   </div>
   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem;">
-    All changes made in this form are persisted to the authoritative SQLite database. Multiline notes, multiple links, telephone numbers, and source-language text (Italian, German, English, etc.) are strictly preserved.
+    This form directly edits the stored 13-field record. For comparative analysis of crawler/LLM proposed values, evidence citation checks, and field-level operator approval, use the <strong>Research Review</strong> workflow.
   </p>
   <div style="font-size: 0.8rem; color: var(--text-muted);">
     Missing or unverified fields should remain <code>Not Found</code> or <code>Unverified</code> rather than manufactured.

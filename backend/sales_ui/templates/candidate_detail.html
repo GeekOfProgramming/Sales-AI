@@ -46,7 +46,7 @@
     </p>
   </div>
   <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-    <a href="/sales/candidates" class="btn btn-secondary">← Back to Candidates</a>
+    <a href="/sales/candidates?queue={{ return_params.queue if return_params else 'active' }}&q={{ return_params.q if return_params else '' }}&status={{ return_params.status if return_params else '' }}&tier={{ return_params.tier if return_params else '' }}&country={{ return_params.country if return_params else '' }}&city={{ return_params.city if return_params else '' }}&source={{ return_params.source if return_params else '' }}&outreach={{ return_params.outreach if return_params else '' }}&page={{ return_params.page if return_params else 1 }}" class="btn btn-secondary">← Back to Candidates</a>
     <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary" title="Review researched 13-field proposals or run explicit crawler">🔬 Research Review</a>
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -152,14 +152,25 @@
     <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
       <span>Operator Review Decision (Human-in-the-Loop)</span>
       <span class="badge badge-success" style="font-size: 0.72rem;">Manual Decision Authority</span>
+      {% if is_previously_contacted %}
+        <span class="badge badge-info" style="font-size: 0.72rem; background: #8b5cf6;">📬 Historical Outreach Detected</span>
+      {% endif %}
     </div>
     <span style="font-size: 0.8rem; color: var(--text-muted);">Current Qualification: <strong>{{ detail.candidate.status }}</strong></span>
   </div>
+
+  {% if is_previously_contacted %}
+  <div style="font-size: 0.8rem; color: #7c3aed; background: rgba(139, 92, 246, 0.08); border-left: 3px solid #8b5cf6; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; border-radius: 4px;">
+    <strong>📬 Historical Outreach Finalization:</strong> Selecting <em>Finalize Historical Outreach</em> archives this company from Active Work into historical registry, permanently locks automated cold outreach, and preserves all verified communication, email archives, and meeting evidence.
+  </div>
+  {% endif %}
+
   <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/review" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div style="width: 200px;">
+    <div style="width: 220px;">
       <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Decision</label>
       <select name="decision" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;" required>
+        <option value="" disabled selected>-- Select decision --</option>
         <option value="approve">✅ Approve Lead</option>
         <option value="reject">❌ Reject Candidate</option>
         <option value="duplicate">🔄 Mark Duplicate</option>
@@ -195,7 +206,7 @@
     👥 4. Contacts &amp; Verification <span class="badge badge-secondary" style="margin-left: 4px;">{{ contacts|length }}</span>
   </button>
   <button type="button" id="tab-btn-outreach" class="btn btn-secondary" onclick="switchWorkspaceTab('outreach')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
-    ✉️ 5. Outreach &amp; History {% if company_drafts or manual_logs or detail.historical_outreach %}<span class="badge badge-info" style="margin-left: 4px;">{{ (company_drafts|length) + (manual_logs|length) + (detail.historical_outreach|length) }}</span>{% endif %}
+    ✉️ 5. Outreach &amp; History {% if company_drafts or manual_logs or detail.historical_outreach or hist_sent_emails or hist_meetings %}<span class="badge badge-info" style="margin-left: 4px;">{{ (company_drafts|length) + (manual_logs|length) + (detail.historical_outreach|length) + (hist_sent_emails|length) + (hist_meetings|length) }}</span>{% endif %}
   </button>
 </div>
 
@@ -647,15 +658,19 @@
 <div id="section-register" class="workspace-section" style="display: none;">
   {% if lead_record %}
   <div class="card" style="border-left: 4px solid #10b981; margin-bottom: 1.25rem;">
-    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
       <span>Linked 13-Field Lead Register Record #{{ lead_record.record_number }}</span>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
         <span class="badge badge-success">{{ lead_record.verification_status }}</span>
-        <a href="/sales/register/{{ lead_record.candidate_id }}" class="btn btn-secondary btn-sm">✏️ Edit 13-Field Record</a>
+        <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary btn-sm" title="Field-level verification, evidence inspection and corrections">🔬 Review in Research Review</a>
+        <a href="/sales/register/{{ lead_record.candidate_id }}" class="btn btn-secondary btn-sm" title="Direct raw register record form">✏️ Raw Register Edit</a>
       </div>
     </div>
     <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
       Authoritative association confirmed for candidate ID <code>{{ lead_record.candidate_id }}</code>. Provenance: <strong>{{ lead_record.provenance_source }}</strong>.
+      {% if lead_record.provenance_source == 'research_lead_excel' or 'excel' in lead_record.provenance_source|lower %}
+        <span class="badge badge-info" style="margin-left: 0.35rem; font-size: 0.72rem;">📊 Source: Research Excel</span>
+      {% endif %}
     </p>
     
     <!-- 13 Standard Schema Fields Grid -->
@@ -667,19 +682,139 @@
         </tr>
       </thead>
       <tbody>
-        <tr><td style="font-weight: 600;">1. Row / Record Number</td><td>{{ lead_record.record_number }}</td></tr>
-        <tr><td style="font-weight: 600;">2. Company Priority</td><td><span class="badge badge-{% if lead_record.priority_level == 'A' %}success{% elif lead_record.priority_level == 'B' %}info{% else %}secondary{% endif %}">Priority {{ lead_record.priority_level }}</span></td></tr>
-        <tr><td style="font-weight: 600;">3. Priority Rationale</td><td>{{ lead_record.priority_rationale or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">4. Company Name &amp; Legal Identity</td><td><strong>{{ lead_record.company_name }}</strong>{% if lead_record.legal_identity and lead_record.legal_identity != 'Not Found' %} ({{ lead_record.legal_identity }}){% endif %}</td></tr>
-        <tr><td style="font-weight: 600;">5. Geographic Location</td><td>{{ lead_record.geographic_location or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">6. Telephone Numbers</td><td>{{ lead_record.telephone_numbers or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">7. Business Activities / Services</td><td>{{ lead_record.business_activities or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">8. Official Website</td><td>{% if lead_record.official_website and lead_record.official_website != 'Not Found' %}<a href="{{ lead_record.official_website }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ lead_record.official_website }} ↗</a>{% else %}Not Found{% endif %}</td></tr>
-        <tr><td style="font-weight: 600;">9. Responsible Person / Contact</td><td>{{ lead_record.responsible_person or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">10. Descriptions &amp; Operator Notes</td><td>{{ lead_record.descriptions_and_notes or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">11. Job Advertisement Links</td><td>{{ lead_record.job_advertisement_links or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">12. Other Links / Projects / References</td><td>{{ lead_record.other_links_and_references or 'Not Found' }}</td></tr>
-        <tr><td style="font-weight: 600;">13. Contact Email Addresses</td><td><code>{{ lead_record.contact_email_addresses or 'Not Found' }}</code></td></tr>
+        <tr><td style="font-weight: 600;">1. Row / Record Number</td><td>{{ lead_record.record_number or 'Unassigned' }}</td></tr>
+        <tr>
+          <td style="font-weight: 600;">2. Company Priority</td>
+          <td>
+            <span class="badge badge-{% if lead_record.priority_level == 'A' %}success{% elif lead_record.priority_level == 'B' %}info{% else %}secondary{% endif %}">
+              {% if lead_record.provenance_source == 'research_lead_excel' or 'excel' in lead_record.provenance_source|lower %}Suggested Priority {{ lead_record.priority_level }}{% else %}Priority {{ lead_record.priority_level }}{% endif %}
+            </span>
+            {% if lead_record.provenance_source == 'research_lead_excel' or 'excel' in lead_record.provenance_source|lower %}
+              <span style="font-size: 0.72rem; color: var(--text-muted); margin-left: 0.35rem;">(Imported suggestion &bull; Not verified qualification)</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">3. Priority Rationale</td>
+          <td>
+            {% if lead_record.priority_rationale and lead_record.priority_rationale != 'Not Found' %}
+              {{ lead_record.priority_rationale }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found / Unstated</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">4. Company Name &amp; Legal Identity</td>
+          <td>
+            <strong>{{ lead_record.company_name }}</strong>
+            {% if lead_record.legal_identity and lead_record.legal_identity != 'Not Found' %}
+              <span style="color: var(--text-secondary);">({{ lead_record.legal_identity }})</span>
+            {% else %}
+              <span class="text-subtle" style="font-style: italic; margin-left: 0.35rem;">(Legal identity unverified)</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">5. Geographic Location</td>
+          <td>
+            {% if lead_record.geographic_location and lead_record.geographic_location != 'Not Found' %}
+              {{ lead_record.geographic_location }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">6. Telephone Numbers</td>
+          <td>
+            {% if lead_record.telephone_numbers and lead_record.telephone_numbers != 'Not Found' %}
+              {{ lead_record.telephone_numbers }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">7. Business Activities / Services</td>
+          <td>
+            {% if lead_record.business_activities and lead_record.business_activities != 'Not Found' %}
+              {{ lead_record.business_activities }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">8. Official Website</td>
+          <td>
+            {% if lead_record.official_website and lead_record.official_website != 'Not Found' %}
+              <a href="{{ lead_record.official_website if lead_record.official_website.startswith('http') else 'https://' ~ lead_record.official_website }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ lead_record.official_website }} ↗</a>
+            {% else %}
+              <span class="badge badge-warning" style="font-size: 0.72rem;">Unverified website</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">9. Responsible Person / Contact</td>
+          <td>
+            {% if lead_record.responsible_person and lead_record.responsible_person != 'Not Found' %}
+              {{ lead_record.responsible_person }}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">10. Descriptions &amp; Operator Notes</td>
+          <td>
+            {% if lead_record.descriptions_and_notes and lead_record.descriptions_and_notes != 'Not Found' %}
+              <div style="white-space: pre-wrap;">{{ lead_record.descriptions_and_notes }}</div>
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">11. Job Advertisement Links</td>
+          <td>
+            {% if lead_record.job_advertisement_links and lead_record.job_advertisement_links != 'Not Found' %}
+              {% for jlink in lead_record.job_advertisement_links.split(',') %}
+                {% set clink = jlink.strip() %}
+                {% if clink %}
+                  <div><a href="{{ clink if clink.startswith('http') else 'https://' ~ clink }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ clink }} ↗</a></div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">12. Other Links / Projects / References</td>
+          <td>
+            {% if lead_record.other_links_and_references and lead_record.other_links_and_references != 'Not Found' %}
+              {% for olink in lead_record.other_links_and_references.split(',') %}
+                {% set colink = olink.strip() %}
+                {% if colink %}
+                  <div><a href="{{ colink if colink.startswith('http') else 'https://' ~ colink }}" target="_blank" rel="noopener noreferrer" style="color:var(--border-focus);">{{ colink }} ↗</a></div>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <span class="text-subtle" style="font-style: italic;">Not Found</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600;">13. Contact Email Addresses</td>
+          <td>
+            {% if lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
+              <code>{{ lead_record.contact_email_addresses }}</code>
+            {% else %}
+              <span class="badge badge-secondary" style="font-size: 0.72rem;">No verified email</span>
+            {% endif %}
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -853,11 +988,163 @@
     </div>
   </div>
 
-  <!-- Generated & Review Drafts -->
+  <!-- 1. Imported Historical Sent Emails (Gmail Archive) -->
   <div class="card" style="margin-bottom: 1.25rem;">
     <div class="card-title">
-      <span>Associated Outreach Drafts ({{ company_drafts|length }})</span>
-      <span class="badge badge-info">Review Store</span>
+      <span>1. Imported Historical Sent Emails (Gmail Archive)</span>
+      <span class="badge badge-secondary">{{ hist_sent_emails|length }} Recorded</span>
+    </div>
+    {% if hist_sent_emails %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Sent Date</th>
+            <th>Sent Time</th>
+            <th>Sender Account</th>
+            <th>Recipient Address</th>
+            <th>Subject</th>
+            <th>Reconciliation</th>
+            <th>Gmail Archive</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for em in hist_sent_emails %}
+          <tr>
+            <td>{{ em.sent_date or '-' }}</td>
+            <td>{{ em.sent_time or '-' }}</td>
+            <td><code>{{ em.sender_account or '-' }}</code></td>
+            <td><strong>{{ em.to_address }}</strong></td>
+            <td>{{ em.subject or '-' }}</td>
+            <td>
+              {% if em.reconciliation_status == 'matched' %}
+                <span class="badge badge-success">matched</span>
+              {% elif em.reconciliation_status == 'ambiguous' %}
+                <span class="badge badge-warning">ambiguous</span>
+              {% else %}
+                <span class="badge badge-secondary">{{ em.reconciliation_status or 'unmatched' }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if em.gmail_link %}
+                <a href="{{ em.gmail_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;">Gmail ↗</a>
+              {% else %}
+                <span style="color: var(--text-muted);">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No imported historical sent emails matched to this candidate.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 2. Historical Outreach & Prior Communication Events -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>2. Historical Communications &amp; Reply Tracking</span>
+      <span class="badge badge-historical">{{ detail.historical_outreach|length }} Events</span>
+    </div>
+    {% if detail.historical_outreach %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Contact Name</th>
+            <th>Email</th>
+            <th>Channel</th>
+            <th>Contact Date</th>
+            <th>Reply Status</th>
+            <th>Meeting Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in detail.historical_outreach %}
+          <tr>
+            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
+            <td><code>{{ h.recipient_email }}</code></td>
+            <td>{{ h.channel or 'email' }}</td>
+            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
+            <td>
+              {% if h.reply_status and h.reply_status != 'no_reply' %}
+                <span class="badge badge-success">{{ h.reply_status }}</span>
+              {% else %}
+                <span class="badge badge-secondary">no_reply</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if h.meeting_status and h.meeting_status != 'none' %}
+                <span class="badge badge-primary">{{ h.meeting_status }}</span>
+              {% else %}
+                <span style="color: var(--text-muted);">None</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No prior historical outreach events recorded for this company (First Contact Safe).</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 3. Historical Meeting Activities (Calendar & Meeting Records) -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>3. Historical Meeting Activities &amp; Follow-ups</span>
+      <span class="badge badge-info">{{ hist_meetings|length }} Activities</span>
+    </div>
+    {% if hist_meetings %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Contact Date</th>
+            <th>Sender</th>
+            <th>Follow-up Date</th>
+            <th>Reply Date</th>
+            <th>Status / Outcome</th>
+            <th>Meeting Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in hist_meetings %}
+          <tr>
+            <td>{{ m.contact_date or '-' }}</td>
+            <td><code>{{ m.sender or '-' }}</code></td>
+            <td>{{ m.follow_up_date or '-' }}</td>
+            <td>{{ m.reply_date or '-' }}</td>
+            <td>
+              <span class="badge badge-primary">{{ m.status or 'Recorded' }}</span>
+            </td>
+            <td style="max-width: 250px;">
+              {{ m.notes or m.follow_up_notes or '-' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No historical meeting activities recorded for this company.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 4. Associated Application Outreach Drafts -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>4. Native Outreach Drafts ({{ company_drafts|length }})</span>
+      <span class="badge badge-info">Staged in Review Store</span>
     </div>
     {% if company_drafts %}
     <div class="table-responsive">
@@ -908,15 +1195,15 @@
     </div>
     {% else %}
     <div class="empty-state">
-      <p class="empty-state-text">No outreach drafts created for this company yet.</p>
+      <p class="empty-state-text">No native outreach drafts created for this company yet.</p>
     </div>
     {% endif %}
   </div>
 
-  <!-- Confirmed Manual External Dispatches -->
+  <!-- 5. Confirmed Manual External Dispatches -->
   <div class="card" style="margin-bottom: 1.25rem;">
     <div class="card-title">
-      <span>Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
+      <span>5. Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
       <span class="badge badge-info">Operator Hand-Off</span>
     </div>
     {% if manual_logs %}
@@ -951,46 +1238,6 @@
     {% else %}
     <div class="empty-state">
       <p class="empty-state-text">No manual external outbound dispatches recorded for this candidate.</p>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- Historical Outreach & Prior Communications -->
-  <div class="card" style="margin-bottom: 1.25rem;">
-    <div class="card-title">
-      <span>Historical Communications &amp; Prior Contacts</span>
-      <span class="badge badge-historical">Historical Registry</span>
-    </div>
-    {% if detail.historical_outreach %}
-    <div class="table-responsive">
-      <table class="data-table" style="font-size: 0.85rem;">
-        <thead>
-          <tr>
-            <th>Contact Name</th>
-            <th>Email</th>
-            <th>Channel</th>
-            <th>Contact Date</th>
-            <th>Reply Status</th>
-            <th>Meeting</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for h in detail.historical_outreach %}
-          <tr>
-            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
-            <td><code>{{ h.recipient_email }}</code></td>
-            <td>{{ h.channel or 'email' }}</td>
-            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
-            <td><span class="badge badge-info">{{ h.reply_status or 'no_reply' }}</span></td>
-            <td>{{ h.meeting_status or 'none' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="empty-state">
-      <p class="empty-state-text">No prior historical outreach recorded for this company (First Contact Safe).</p>
     </div>
     {% endif %}
   </div>
@@ -1255,8 +1502,15 @@ function populateVerifyModal(contactId, fullName, email) {
   }
 }
 
-// Support direct hash navigation, e.g. #research, #register, #contacts, #outreach, #manual-draft
+// Support direct hash navigation or query param tab, e.g. ?tab=outreach or #outreach, #section-outreach, #manual-draft
 document.addEventListener('DOMContentLoaded', function() {
+  var targetTab = null;
+  var urlParams = new URLSearchParams(window.location.search);
+  var tabParam = urlParams.get('tab');
+  if (tabParam) {
+    targetTab = tabParam.toLowerCase();
+  }
+
   if (window.location.hash) {
     var rawHash = window.location.hash.substring(1).toLowerCase();
     if (rawHash === 'manual-draft') {
@@ -1265,10 +1519,15 @@ document.addEventListener('DOMContentLoaded', function() {
       if (draftEl) draftEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    var validTabs = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
-    if (validTabs.indexOf(rawHash) !== -1) {
-      switchWorkspaceTab(rawHash);
+    if (rawHash.startsWith('section-')) {
+      rawHash = rawHash.replace('section-', '');
     }
+    targetTab = rawHash;
+  }
+
+  var validTabs = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
+  if (targetTab && validTabs.indexOf(targetTab) !== -1) {
+    switchWorkspaceTab(targetTab);
   }
 });
 </script>

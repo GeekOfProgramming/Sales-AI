@@ -15,37 +15,65 @@
       </a>
     </div>
 
-    <!-- Operational Workflow Navigation: 5 Logical CRM Groups -->
+    <!-- Operational Workflow Navigation: 5 Logical CRM Groups (UI-02) -->
     <nav class="nav-bar-unified" aria-label="Main Navigation">
+      <!-- 1. Overview -->
       <div class="nav-group">
+        <span class="nav-group-label">Overview</span>
         <a href="/sales/dashboard" class="nav-link {% if active_tab == 'dashboard' %}active{% endif %}">📊 Dashboard</a>
       </div>
 
       <span class="nav-divider"></span>
+      <!-- 2. Discovery & Companies -->
       <div class="nav-group">
-        <span class="nav-group-label">Intelligence</span>
-        <a href="/sales/discovery" class="nav-link {% if active_tab in ('discoveries', 'discovery') %}active{% endif %}">Discovery Runs</a>
-        <a href="/sales/sources" class="nav-link {% if active_tab == 'sources' %}active{% endif %}">Sources</a>
-        <a href="/sales/candidates" class="nav-link {% if active_tab == 'candidates' %}active{% endif %}">Candidates</a>
+        <span class="nav-group-label">Discovery &amp; Companies</span>
+        <a href="/sales/discovery" class="nav-link {% if active_tab in ('discoveries', 'discovery') %}active{% endif %}">Discovery</a>
+        <a href="/sales/sources" class="nav-link {% if active_tab == 'sources' %}active{% endif %}">Sources &amp; Imports</a>
+        <a href="/sales/candidates" class="nav-link {% if active_tab == 'candidates' %}active{% endif %}">
+          <span>Candidates</span>
+          {% if nav_badges and nav_badges.get('candidates', 0) > 0 %}
+          <span class="nav-badge" title="{{ nav_badges.candidates }} active candidates">{{ nav_badges.candidates }}</span>
+          {% endif %}
+        </a>
+        <a href="/sales/candidates?queue=all" class="nav-link">All Companies</a>
       </div>
 
       <span class="nav-divider"></span>
+      <!-- 3. Research & Qualification -->
       <div class="nav-group">
-        <span class="nav-group-label">Lead Pipeline</span>
-        <a href="/sales/register" class="nav-link {% if active_tab == 'register' %}active{% endif %}">13-Field Register</a>
+        <span class="nav-group-label">Research &amp; Qualification</span>
+        <a href="/sales/register" class="nav-link {% if active_tab == 'register' %}active{% endif %}">Research / 13-Field Register</a>
+        <a href="/sales/candidates?queue=needs_verification" class="nav-link">
+          <span>Human Verification</span>
+          {% if nav_badges and nav_badges.get('human_verification', 0) > 0 %}
+          <span class="nav-badge nav-badge-warning" title="{{ nav_badges.human_verification }} records awaiting verification">{{ nav_badges.human_verification }}</span>
+          {% endif %}
+        </a>
         <a href="/sales/leads" class="nav-link {% if active_tab == 'leads' %}active{% endif %}">Qualified Leads</a>
       </div>
 
       <span class="nav-divider"></span>
+      <!-- 4. Outreach -->
       <div class="nav-group">
         <span class="nav-group-label">Outreach</span>
-        <a href="/sales/drafts" class="nav-link {% if active_tab == 'drafts' %}active{% endif %}">Draft Review</a>
+        <a href="/sales/drafts" class="nav-link {% if active_tab == 'drafts' %}active{% endif %}">
+          <span>Draft Review</span>
+          {% if nav_badges and nav_badges.get('drafts', 0) > 0 %}
+          <span class="nav-badge nav-badge-warning" title="{{ nav_badges.drafts }} drafts awaiting review">{{ nav_badges.drafts }}</span>
+          {% endif %}
+        </a>
         <a href="/sales/approved" class="nav-link {% if active_tab == 'approved' %}active{% endif %}">Approved</a>
-        <a href="/sales/sent" class="nav-link {% if active_tab == 'sent' %}active{% endif %}">Sent</a>
-        <a href="/sales/replies" class="nav-link {% if active_tab == 'replies' %}active{% endif %}">Replies</a>
+        <a href="/sales/sent" class="nav-link {% if active_tab == 'sent' %}active{% endif %}">Sent &amp; History</a>
+        <a href="/sales/replies" class="nav-link {% if active_tab == 'replies' %}active{% endif %}">
+          <span>Replies</span>
+          {% if nav_badges and nav_badges.get('replies', 0) > 0 %}
+          <span class="nav-badge nav-badge-info" title="{{ nav_badges.replies }} replies needing attention">{{ nav_badges.replies }}</span>
+          {% endif %}
+        </a>
       </div>
 
       <span class="nav-divider"></span>
+      <!-- 5. Administration -->
       <div class="nav-group">
         <span class="nav-group-label">Administration</span>
         <a href="/sales/excluded-companies" class="nav-link {% if active_tab == 'excluded' %}active{% endif %}">Excluded Companies</a>

@@ -10,6 +10,30 @@
   </div>
 </div>
 
+<!-- Send Gate Offline Status Banner -->
+{% if not email_send_enabled %}
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; background: var(--bg-surface); border-left: 4px solid var(--color-warning, #f59e0b); display: flex; align-items: flex-start; gap: 1rem;">
+  <div style="font-size: 1.5rem; line-height: 1;">🔒</div>
+  <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45;">
+    <strong style="color: var(--text-primary); font-size: 0.9rem;">Outbound Cold Send Gate: DISABLED (EMAIL_SEND_ENABLED=false)</strong>
+    <p style="margin: 0.35rem 0 0 0;">
+      The outbound email sending pathway is disabled. Approval queues, drafts, and human verification operate in dry-run/preview mode. 
+      (Note: Disabling the email pathway does not inhibit separate read-only research, crawling, or discovery network calls where configured.)
+    </p>
+  </div>
+</div>
+{% else %}
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; background: var(--bg-surface); border-left: 4px solid var(--color-danger, #ef4444); display: flex; align-items: flex-start; gap: 1rem;">
+  <div style="font-size: 1.5rem; line-height: 1;">⚠️</div>
+  <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45;">
+    <strong style="color: var(--color-danger, #ef4444); font-size: 0.9rem;">Outbound Cold Send Gate: ENABLED (EMAIL_SEND_ENABLED=true)</strong>
+    <p style="margin: 0.35rem 0 0 0;">
+      The outbound email sending pathway is enabled. Sending does not occur automatically: each message still requires explicit operator approval, human verification, and suppression clearance in Phase 9.
+    </p>
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
   <div class="card-title">
     <span>System Information</span>
@@ -22,8 +46,8 @@
     <div><strong>Console URL:</strong> <code>http://{{ bind_address or '127.0.0.1:8000' }}/sales</code></div>
     <div><strong>Database File:</strong> <code>{{ db_path }}</code></div>
     <div><strong>Email Sending Status:</strong> 
-      <span class="badge {% if email_send_enabled %}badge-success{% else %}badge-warning{% endif %}">
-        {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED' }}
+      <span class="badge {% if email_send_enabled %}badge-danger{% else %}badge-warning{% endif %}">
+        {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED (Dry Run Only)' }}
       </span>
     </div>
     <div><strong>Research Storage:</strong> 
@@ -31,18 +55,46 @@
         {{ 'Available (SQLite Snapshots)' if research_storage_available else 'Unavailable' }}
       </span>
     </div>
-    <div><strong>Brave Search API Key:</strong> 
-      <span class="badge {% if brave_configured %}badge-success{% else %}badge-muted{% endif %}">
-        {{ 'Configured' if brave_configured else 'Not Configured' }}
-      </span>
-    </div>
+    <div><strong>Direct SQLite Access:</strong> <span class="badge badge-primary">Internal Only (No Direct Frontend Writes)</span></div>
   </div>
 </div>
 
 <div class="card">
   <div class="card-title">
+    <span>API Credentials & Provider Configuration (Secrets Masked)</span>
+    <span class="badge badge-info">Zero Secret Leakage</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Brave Search API Key:</strong> 
+      <span class="badge {% if brave_configured %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Configured (Masked)' if brave_configured else 'Not Configured' }}
+      </span>
+    </div>
+    <div><strong>Resend API Key:</strong> 
+      <span class="badge {% if resend_configured %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Configured (Masked)' if resend_configured else 'Not Configured' }}
+      </span>
+    </div>
+    <div><strong>Google Sheets API:</strong> 
+      <span class="badge {% if sheets_configured %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Configured (Masked)' if sheets_configured else 'Not Configured' }}
+      </span>
+    </div>
+    <div><strong>SMTP Credentials:</strong> 
+      <span class="badge {% if smtp_configured %}badge-success{% else %}badge-muted{% endif %}">
+        {{ 'Configured (Masked)' if smtp_configured else 'Not Configured' }}
+      </span>
+    </div>
+  </div>
+  <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem; margin-bottom: 0;">
+    🔒 <strong>Security Policy:</strong> API tokens, SMTP passwords, and signing keys are never exposed in UI templates, logs, or client-side JavaScript.
+  </p>
+</div>
+
+<div class="card">
+  <div class="card-title">
     <span>Sending Gateway Configuration (Phase 9)</span>
-    <span class="badge {% if email_send_enabled %}badge-success{% else %}badge-warning{% endif %}">
+    <span class="badge {% if email_send_enabled %}badge-danger{% else %}badge-warning{% endif %}">
       {{ 'SENDING ENABLED' if email_send_enabled else 'SENDING DISABLED' }}
     </span>
   </div>
@@ -52,10 +104,25 @@
     <div><strong>SMTP Configured:</strong> <span class="badge {% if smtp_configured %}badge-success{% else %}badge-muted{% endif %}">{{ 'Configured' if smtp_configured else 'Not configured' }}</span></div>
     <div><strong>Trusted Sender Email:</strong> <code>{{ trusted_sender_email or 'Not configured' }}</code></div>
     <div><strong>Sender Display Name:</strong> <code>{{ trusted_sender_name or 'Not configured' }}</code></div>
-    <div><strong>Dry Run Invariant:</strong> <code>0 Provider / Network Calls</code></div>
+    <div><strong>Email Pathway Invariant:</strong> <code>0 Outbound Email Sends when Disabled</code></div>
   </div>
-  <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">
-    🔒 Security Policy: Credentials, SMTP passwords, and API tokens are never exposed in the UI or rendered into HTML/JS payloads.
+</div>
+
+<div class="card">
+  <div class="card-title">
+    <span>Search Budget &amp; Operational Boundaries</span>
+    <span class="badge badge-muted">Config Reference</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
+    <div><strong>Crawl Page Budget:</strong> <span class="badge badge-secondary">Not verified / Consult configuration</span></div>
+    <div><strong>Total Crawl Timeout:</strong> <span class="badge badge-secondary">Not verified / Consult configuration</span></div>
+    <div><strong>Crawl Byte Limit:</strong> <span class="badge badge-secondary">Not verified / Consult configuration</span></div>
+    <div><strong>Discovery Batch Cap:</strong> <span class="badge badge-secondary">Not verified / Consult configuration</span></div>
+    <div><strong>LLM Prompt Analysis Cap:</strong> <span class="badge badge-secondary">Not verified / Consult configuration</span></div>
+    <div><strong>Fail-Closed Gate:</strong> <span class="badge badge-info">Active in Research Analysis</span></div>
+  </div>
+  <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem; margin-bottom: 0;">
+    ℹ️ Active crawler, discovery, and LLM budget policies are defined in runtime code and environment settings (e.g. <code>CrawlBudget</code>, discovery profiles). Numbers are not verified as static live singletons.
   </p>
 </div>
 
@@ -78,7 +145,7 @@
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
     <div><strong>Google Sheets API:</strong> <span class="badge badge-muted">{{ 'Configured' if sheets_configured else 'Not configured' }}</span></div>
     <div><strong>Phase 7 Workbook Export:</strong> <span class="badge badge-success">Available</span></div>
-    <div><strong>Direct SQLite Access:</strong> <span class="badge badge-primary">Internal Only (No Direct Frontend Writes)</span></div>
+    <div><strong>13-Field Register Export:</strong> <span class="badge badge-success">Available (.xlsx / .csv)</span></div>
   </div>
 </div>
 {% endblock %}

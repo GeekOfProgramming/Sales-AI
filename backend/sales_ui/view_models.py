@@ -20,6 +20,10 @@ class DashboardSummary(BaseModel):
     sent_this_week: int = 0
     suppressed: int = 0
     historical_known_companies: int = 0
+    # UI-02 Actionable Workflow Counters
+    active_candidates: int = 0
+    needs_verification: int = 0
+    historical_pending: int = 0
     # Phase 11 placeholders
     historical_positive_replies: Optional[int] = None
     historical_meetings: Optional[int] = None
@@ -65,8 +69,15 @@ class CandidateListItem(BaseModel):
     verified_contact_count: int = 0
     # Lifecycle Work Queue fields
     lifecycle_queue: str = "active"  # active, new, needs_research, needs_verification, needs_correction, historical_pending, all
+    lifecycle_subqueue: Optional[str] = None
     actionable_next_step: Optional[str] = None
     recommended_action_url: Optional[str] = None
+    # UI-03 Clear Outreach & Verification status fields
+    cold_outreach_allowed: bool = True
+    is_excluded: bool = False
+    exclusion_reason: Optional[str] = None
+    verification_status: Optional[str] = None  # OPERATOR_REVIEWED, EXTRACTED, Unverified, etc.
+    primary_source: Optional[str] = None
 
 
 class CandidateDetailView(BaseModel):
@@ -103,6 +114,9 @@ class DraftReviewCard(BaseModel):
     contact_id: str
     company_name: str
     company_domain: Optional[str] = None
+    candidate_id: Optional[str] = None
+    recipient_verification_status: Optional[str] = None
+    source_context: Optional[str] = None
     recipient_name: str
     recipient_title: Optional[str] = None
     recipient_email: str

@@ -10,6 +10,19 @@
   </div>
 </div>
 
+<!-- Administration Policy Distinction Banner -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.25rem; background: var(--bg-surface); border-left: 4px solid var(--primary); display: flex; align-items: flex-start; gap: 1rem;">
+  <div style="font-size: 1.5rem; line-height: 1;">ℹ️</div>
+  <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.45;">
+    <strong style="color: var(--text-primary); font-size: 0.9rem;">Administration Policy Distinction:</strong>
+    <ul style="margin: 0.35rem 0 0 1.25rem; padding: 0;">
+      <li><strong>Business Exclusion (This Registry):</strong> Reversible commercial decisions (e.g. software vendors, non-target trades, duplicates). Restoring a business exclusion only removes this commercial exclusion tag; it does not and cannot override or remove any independent Do Not Contact / suppression restriction.</li>
+      <li><strong>Do Not Contact / Suppression (Phase 9):</strong> Statutory/policy hard blocks (opt-outs, spam complaints, competitor exclusions). Enforces an independent, authoritative zero-send barrier.</li>
+      <li><strong>Candidate Watchlist:</strong> Observational monitoring state for prospective companies where active buying signals or engagement timing are currently pending.</li>
+    </ul>
+  </div>
+</div>
+
 <!-- Filters Bar -->
 <div class="card" style="padding: 1rem; margin-bottom: 1.25rem;">
   <form method="GET" action="/sales/excluded-companies" class="form-inline" style="gap: 0.75rem; flex-wrap: wrap;">
@@ -63,9 +76,11 @@
         {% for r in items %}
         <tr>
           <td>
-            <strong>{{ r.company_name }}</strong>
             {% if r.candidate_id %}
+              <a href="/sales/candidates/{{ r.candidate_id }}" style="font-weight: 600; text-decoration: underline;" title="Open Candidate Workspace">{{ r.company_name }} ↗</a>
               <br><small style="color: var(--text-muted);"><code>{{ r.candidate_id }}</code></small>
+            {% else %}
+              <strong>{{ r.company_name }}</strong>
             {% endif %}
           </td>
           <td>
@@ -92,7 +107,7 @@
           <td>
             <div style="display: flex; gap: 0.4rem; align-items: center;">
               {% if r.candidate_id %}
-                <a href="/sales/candidates/{{ r.candidate_id }}" class="btn btn-secondary btn-sm" title="View company in Candidate Workspace">View</a>
+                <a href="/sales/candidates/{{ r.candidate_id }}" class="btn btn-secondary btn-sm" title="View company in Candidate Workspace">Workspace ↗</a>
               {% endif %}
               {% if r.exclusion_status.value == 'ACTIVE' %}
                 <form method="POST" action="/sales/excluded-companies/{{ r.registry_id }}/restore" style="display:inline;">

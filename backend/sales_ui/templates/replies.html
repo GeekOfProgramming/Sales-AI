@@ -89,7 +89,15 @@
       <tbody>
         {% for c in conversations %}
         <tr>
-          <td><strong>{{ c.company_name or 'Independent / Unlinked' }}</strong></td>
+          <td>
+            {% if c.company_id %}
+            <a href="/sales/candidates/{{ c.company_id }}?tab=outreach#section-outreach" style="font-weight: 600; color: var(--border-focus); text-decoration: none;">
+              {{ c.company_name or c.company_id }} ↗
+            </a>
+            {% else %}
+            <strong>{{ c.company_name or 'Independent / Unlinked' }}</strong>
+            {% endif %}
+          </td>
           <td>
             <span>{{ c.respondent_name or c.respondent_email or 'Contact' }}</span>
             {% if c.is_colleague %}
@@ -154,7 +162,15 @@
       <tbody>
         {% for r in responses %}
         <tr>
-          <td><strong>{{ r.company_name or 'N/A' }}</strong></td>
+          <td>
+            {% if r.candidate_id %}
+            <a href="/sales/candidates/{{ r.candidate_id }}?tab=outreach#section-outreach" style="font-weight: 600; color: var(--border-focus); text-decoration: none;">
+              {{ r.company_name or r.candidate_id }} ↗
+            </a>
+            {% else %}
+            <strong>{{ r.company_name or 'N/A' }}</strong>
+            {% endif %}
+          </td>
           <td>{{ r.respondent_name or r.contact_name or 'Contact' }}</td>
           <td>{{ r.respondent_role or 'N/A' }}</td>
           <td><code>{{ r.recipient_email or r.contact_email or 'N/A' }}</code></td>

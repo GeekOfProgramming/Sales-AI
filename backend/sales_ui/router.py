@@ -606,10 +606,84 @@ async def validate_csrf(request: Request):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
 
 
+def _get_navigation_badge_counts() -> Dict[str, int]:
+    """
+    Computes real pending work counts for top-level navigation badges:
+    - candidates: Active work candidates needing triage / processing
+    - human_verification: Candidates with research snapshots/proposals needing human verification
+    - drafts: Drafts pending operator review
+    - replies: Active conversations waiting on us / needs review (only if inbox_store present)
+    Zero expensive queries: queries are simple fast index lookups or cached counts.
+    """
+    counts = {
+        "candidates": 0,
+        "human_verification": 0,
+        "drafts": 0,
+        "replies": 0,
+    }
+    try:
+        svcs = get_console_services()
+        cand_store = svcs.get("cand_store")
+        rev_store = svcs.get("rev_store")
+        inbox_store = svcs.get("inbox_store")
+
+        if cand_store and hasattr(cand_store, "_get_connection"):
+            with cand_store._get_connection() as conn:
+                # Active candidates: discovery_status in ('new', 'needs_research', 'researching') and not suppressed/rejected
+                r_cand = conn.execute("""
+                    SELECT COUNT(*) FROM candidate_companies
+                    WHERE (discovery_status IN ('new', 'needs_research', 'researching')
+                           OR qualification_outcome = 'research_more'
+                           OR manual_review_decision = 'REOPENED')
+                      AND (qualification_outcome IS NULL OR qualification_outcome NOT IN ('reject', 'suppressed', 'watchlist'))
+                """).fetchone()
+                if r_cand:
+                    counts["candidates"] = r_cand[0]
+
+                # Human verification: records in lead_register_records with status in ('Unverified', 'EXTRACTED')
+                r_has_lr = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone()
+                if r_has_lr:
+                    r_hv = conn.execute("""
+                        SELECT COUNT(*) FROM lead_register_records
+                        WHERE verification_status IN ('Unverified', 'EXTRACTED')
+                    """).fetchone()
+                    if r_hv:
+                        counts["human_verification"] = r_hv[0]
+
+        if rev_store and hasattr(rev_store, "_get_connection"):
+            with rev_store._get_connection() as conn:
+                r_draft = conn.execute("""
+                    SELECT COUNT(*) FROM drafts d1
+                    WHERE d1.revision = (
+                        SELECT MAX(d2.revision) FROM drafts d2 WHERE d2.draft_id = d1.draft_id
+                    )
+                    AND d1.approval_status = 'pending_review'
+                    AND d1.send_status != 'sent'
+                """).fetchone()
+                if r_draft:
+                    counts["drafts"] = r_draft[0]
+
+        if inbox_store and hasattr(inbox_store, "_get_connection"):
+            with inbox_store._get_connection() as conn:
+                r_has_conv = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='conversations' LIMIT 1").fetchone()
+                if r_has_conv:
+                    r_rep = conn.execute("""
+                        SELECT COUNT(*) FROM conversations
+                        WHERE status IN ('waiting_on_us', 'needs_review')
+                    """).fetchone()
+                    if r_rep:
+                        counts["replies"] = r_rep[0]
+    except Exception:
+        pass
+    return counts
+
+
 def render_console_template(request: Request, name: str, context: Dict[str, Any]) -> HTMLResponse:
     """Renders Jinja2 template ensuring CSRF token is provided in context and cookie."""
     csrf_token = get_or_create_csrf_token(request)
     context["csrf_token"] = csrf_token
+    if "nav_badges" not in context:
+        context["nav_badges"] = _get_navigation_badge_counts()
     resp = templates.TemplateResponse(request=request, name=name, context=context)
     if request.cookies.get(CSRF_COOKIE_NAME) != csrf_token:
         resp.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
@@ -4189,6 +4263,8 @@ async def candidates_list_view(
     tier: Optional[str] = Query(None),
     country: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    outreach: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     message: Optional[str] = None,
@@ -4219,25 +4295,42 @@ async def candidates_list_view(
 
     try:
         with store._get_connection() as conn:
-            snap_rows = conn.execute("SELECT candidate_id, snapshot_id FROM research_snapshots").fetchall()
-            for r in snap_rows:
-                snap_cids.add(r[0])
-                if r[0] not in snapshot_map:
-                    snapshot_map[r[0]] = r[1]
+            # Check research_snapshots table
+            try:
+                snap_rows = conn.execute("SELECT candidate_id, snapshot_id FROM research_snapshots").fetchall()
+                for r in snap_rows:
+                    snap_cids.add(r[0])
+                    if r[0] not in snapshot_map:
+                        snapshot_map[r[0]] = r[1]
+            except Exception:
+                pass
 
-            lr_rows = conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall()
-            for r in lr_rows:
-                lr_map[r[0]] = r[1]
+            # Check lead_register_records table
+            try:
+                lr_rows = conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall()
+                for r in lr_rows:
+                    lr_map[r[0]] = r[1]
+            except Exception:
+                pass
 
-            cur = conn.cursor()
-            cur.execute("SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts GROUP BY candidate_id")
-            for cr in cur.fetchall():
-                contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+            # Check candidate_contacts table
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts GROUP BY candidate_id")
+                for cr in cur.fetchall():
+                    contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+            except Exception:
+                pass
 
-            cur.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL")
-            for sr in cur.fetchall():
-                if sr[0]:
-                    supp_domains.add(sr[0].strip().lower())
+            # Check suppression_list table
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL")
+                for sr in cur.fetchall():
+                    if sr[0]:
+                        supp_domains.add(sr[0].strip().lower())
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -4346,9 +4439,32 @@ async def candidates_list_view(
             continue
         if status and c_status != status.strip().lower():
             continue
-        if q:
-            q_lower = q.strip().lower()
-            if q_lower not in c_name.lower() and q_lower not in c_domain.lower():
+        disc_sources = getattr(c, "source_refs", []) or []
+        primary_src = disc_sources[0] if disc_sources else None
+
+        # Excluded check
+        cand_is_excl = cid in excl_cids or (dom and dom in excl_domains)
+        cand_excl_reason = excl_cids.get(cid) or (excl_domains.get(dom) if dom else None)
+        cand_cold_allowed = bool(getattr(c, "cold_outreach_allowed", True))
+        cand_verif_status = lr_map.get(cid)
+
+        # Filters: source, outreach
+        if source:
+            s_low = source.strip().lower()
+            if not any(s_low in str(s).lower() for s in disc_sources):
+                continue
+
+        if outreach:
+            o_low = outreach.strip().lower()
+            if o_low == "locked" and cand_cold_allowed:
+                continue
+            elif o_low == "allowed" and not cand_cold_allowed:
+                continue
+            elif o_low == "excluded" and not cand_is_excl:
+                continue
+            elif o_low == "suppressed" and not is_supp:
+                continue
+            elif o_low == "contacted" and not (c.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(c, "previous_outreach_detected", False)):
                 continue
 
         filtered.append((c, state))
@@ -4373,6 +4489,13 @@ async def candidates_list_view(
         c_stats = contact_map.get(cid, (0, 0))
 
         disc_sources = getattr(c, "source_refs", []) or []
+        primary_src = disc_sources[0] if disc_sources else None
+
+        cand_is_excl = bool(cid in excl_cids or (dom and dom in excl_domains))
+        cand_excl_reason = excl_cids.get(cid) or (excl_domains.get(dom) if dom else None)
+        cand_cold_allowed = bool(getattr(c, "cold_outreach_allowed", True))
+        cand_verif_status = lr_map.get(cid)
+        subq_val = state.active_subqueue.value if (state.active_subqueue and hasattr(state.active_subqueue, "value")) else (str(state.active_subqueue) if state.active_subqueue else None)
 
         candidates.append(
             CandidateListItem(
@@ -4396,8 +4519,14 @@ async def candidates_list_view(
                 contact_count=c_stats[0],
                 verified_contact_count=c_stats[1],
                 lifecycle_queue=state.primary_queue.value if hasattr(state.primary_queue, "value") else str(state.primary_queue),
+                lifecycle_subqueue=subq_val,
                 actionable_next_step=state.actionable_next_step,
                 recommended_action_url=state.recommended_action_url,
+                cold_outreach_allowed=cand_cold_allowed,
+                is_excluded=cand_is_excl,
+                exclusion_reason=cand_excl_reason,
+                verification_status=cand_verif_status,
+                primary_source=primary_src,
             )
         )
 
@@ -4418,6 +4547,8 @@ async def candidates_list_view(
             "tier": tier,
             "country": country,
             "city": city,
+            "source": source,
+            "outreach": outreach,
             "current_queue": active_queue,
             "queue_counts": queue_counts,
             "email_send_enabled": is_email_send_enabled(),
@@ -4534,6 +4665,15 @@ async def candidate_detail_view(
     request: Request,
     message: Optional[str] = None,
     error: Optional[str] = None,
+    return_queue: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    tier: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    outreach: Optional[str] = Query(None),
+    page: Optional[int] = Query(None),
 ):
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
@@ -4586,6 +4726,8 @@ async def candidate_detail_view(
         status=cand.discovery_status,
         is_previously_contacted=is_contacted,
         is_suppressed=is_supp,
+        is_excluded=is_excluded,
+        cold_outreach_allowed=bool(getattr(cand, "cold_outreach_allowed", True)),
     )
 
     timeline_events = svcs["timeline_svc"].get_company_timeline(candidate_id)
@@ -4667,6 +4809,16 @@ async def candidate_detail_view(
         limit=50
     )
 
+    # Fetch imported historical sent emails and meeting activities for this candidate
+    hist_sent_emails: List[Dict[str, Any]] = []
+    hist_meetings: List[Dict[str, Any]] = []
+    try:
+        hist_importer = HistoricalImporter(store=svcs["cand_store"])
+        hist_sent_emails = hist_importer.get_sent_emails(candidate_id=candidate_id, limit=100)
+        hist_meetings = hist_importer.get_meeting_activities(candidate_id=candidate_id, limit=100)
+    except Exception:
+        pass
+
     # Verification state summaries
     verified_contacts = [c for c in contacts_view if c.get("email_status") == "verified"]
     likely_contacts = [c for c in contacts_view if c.get("email_status") == "likely"]
@@ -4704,6 +4856,8 @@ async def candidate_detail_view(
             "historical_snapshots": historical_snapshots,
             "company_drafts": company_drafts,
             "manual_logs": candidate_manual_logs,
+            "hist_sent_emails": hist_sent_emails,
+            "hist_meetings": hist_meetings,
             "email_send_enabled": is_email_send_enabled(),
             "company_outreach_eligible": company_outreach_eligible,
             "has_verified_or_documented_recipient": has_verified_recipient,
@@ -4719,6 +4873,17 @@ async def candidate_detail_view(
             "is_excluded": is_excluded,
             "exclusion_record": exclusion_record,
             "exclusion_audit_events": exclusion_audit_events,
+            "return_params": {
+                "queue": return_queue or "active",
+                "q": q or "",
+                "status": status or "",
+                "tier": tier or "",
+                "country": country or "",
+                "city": city or "",
+                "source": source or "",
+                "outreach": outreach or "",
+                "page": page or 1,
+            },
             "message": message,
             "error": error,
         },
@@ -7242,7 +7407,10 @@ async def leads_view(
 # 6. DRAFTS REVIEW QUEUE & DETAIL
 # ---------------------------------------------------------------------------
 @router.get("/drafts", response_class=HTMLResponse)
-async def draft_review_queue_view(request: Request, status_filter: Optional[str] = Query(None)):
+async def draft_review_queue_view(
+    request: Request,
+    status_filter: Optional[str] = Query(None, alias="status"),
+):
     svcs = get_console_services()
     rev_store = svcs["rev_store"]
     filters = {}
@@ -7256,7 +7424,25 @@ async def draft_review_queue_view(request: Request, status_filter: Optional[str]
         is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=d.recipient_email)
         cand_id = d.lead_id.replace("domain:", "")
         c = svcs["cand_store"].get_by_domain(cand_id)
+        if not c and hasattr(d, "candidate_id") and d.candidate_id:
+            c = svcs["cand_store"].get_by_id(d.candidate_id)
         comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
+        resolved_cid = getattr(c, "candidate_id", None) or getattr(d, "candidate_id", None) or cand_id
+
+        # Determine recipient verification status
+        recip_verif_status = "unverified"
+        if c and d.contact_id:
+            try:
+                ct = svcs["cand_store"].get_contact_by_id(d.contact_id)
+                if ct:
+                    recip_verif_status = ct.email_status
+            except Exception:
+                pass
+
+        # Determine source context
+        src_context = getattr(d, "service_used", None) or "Manual Staged"
+        if c and getattr(c, "source_refs", None):
+            src_context = f"{c.source_refs[0]} ({src_context})"
 
         cards.append(
             DraftReviewCard(
@@ -7265,7 +7451,10 @@ async def draft_review_queue_view(request: Request, status_filter: Optional[str]
                 lead_id=d.lead_id,
                 contact_id=d.contact_id,
                 company_name=comp_name,
-                company_domain=cand_id,
+                company_domain=getattr(c, "company_domain", None) or cand_id,
+                candidate_id=resolved_cid,
+                recipient_verification_status=recip_verif_status,
+                source_context=src_context,
                 recipient_name=d.recipient_name,
                 recipient_title=d.recipient_title,
                 recipient_email=d.recipient_email,
@@ -7286,6 +7475,7 @@ async def draft_review_queue_view(request: Request, status_filter: Optional[str]
                 approved_at=d.approved_at,
                 sent_at=d.sent_at,
                 is_suppressed=is_supp,
+                is_previously_contacted=bool(getattr(c, "previous_outreach_detected", False) or (c and getattr(c, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc"))),
                 can_approve=(d.approval_status in ("pending_review", "changes_requested") and d.send_status != "sent"),
                 can_edit=(d.send_status != "sent"),
                 can_reject=(d.send_status != "sent"),
@@ -7719,7 +7909,25 @@ async def approved_queue_view(request: Request):
         is_supp = check_authoritative_suppression(svcs["suppression_svc"], email=d.recipient_email)
         cand_id = d.lead_id.replace("domain:", "")
         c = svcs["cand_store"].get_by_domain(cand_id)
+        if not c and hasattr(d, "candidate_id") and d.candidate_id:
+            c = svcs["cand_store"].get_by_id(d.candidate_id)
         comp_name = getattr(c, "company_name", getattr(c, "name", cand_id)) if c else cand_id
+        resolved_cid = getattr(c, "candidate_id", None) or getattr(d, "candidate_id", None) or cand_id
+
+        # Determine recipient verification status
+        recip_verif_status = "unverified"
+        if c and d.contact_id:
+            try:
+                ct = svcs["cand_store"].get_contact_by_id(d.contact_id)
+                if ct:
+                    recip_verif_status = ct.email_status
+            except Exception:
+                pass
+
+        # Determine source context
+        src_context = getattr(d, "service_used", None) or "Manual Staged"
+        if c and getattr(c, "source_refs", None):
+            src_context = f"{c.source_refs[0]} ({src_context})"
 
         cards.append(
             DraftReviewCard(
@@ -7728,7 +7936,10 @@ async def approved_queue_view(request: Request):
                 lead_id=d.lead_id,
                 contact_id=d.contact_id,
                 company_name=comp_name,
-                company_domain=cand_id,
+                company_domain=getattr(c, "company_domain", None) or cand_id,
+                candidate_id=resolved_cid,
+                recipient_verification_status=recip_verif_status,
+                source_context=src_context,
                 recipient_name=d.recipient_name,
                 recipient_title=d.recipient_title,
                 recipient_email=d.recipient_email,
@@ -7749,6 +7960,7 @@ async def approved_queue_view(request: Request):
                 approved_at=d.approved_at,
                 sent_at=d.sent_at,
                 is_suppressed=is_supp,
+                is_previously_contacted=bool(getattr(c, "previous_outreach_detected", False) or (c and getattr(c, "historical_contact_status", None) in ("contacted", "replied", "converted", "dnc"))),
                 can_approve=False,
                 can_edit=True,
                 can_reject=True,
@@ -7998,6 +8210,7 @@ async def replies_view(
 
         conversations.append({
             "conversation_id": c.conversation_id,
+            "company_id": c.company_id,
             "company_name": comp_name,
             "respondent_name": resp_name,
             "respondent_email": resp_email,
@@ -8028,14 +8241,15 @@ async def replies_view(
                     positive_count += 1
 
                 responses.append({
+                    "candidate_id": r["candidate_id"],
                     "company_name": r["company_name"] or r["candidate_id"],
-                    "recipient_email": r["recipient_email"] or r["contact_email"],
-                    "respondent_name": r["respondent_name"] or r["contact_name"],
-                    "respondent_role": r["respondent_role"],
+                    "recipient_email": r["contact_email"] if "contact_email" in r.keys() else (r["recipient_email"] if "recipient_email" in r.keys() else "N/A"),
+                    "respondent_name": r["respondent_name"] if ("respondent_name" in r.keys() and r["respondent_name"]) else (r["contact_name"] if "contact_name" in r.keys() else "Contact"),
+                    "respondent_role": r["respondent_role"] if "respondent_role" in r.keys() else "N/A",
                     "reply_status": stat,
-                    "reply_at": r["reply_at"] or "N/A",
-                    "meeting_status": r["meeting_status"] or "No meeting",
-                    "notes": r["notes"] or "",
+                    "reply_at": r["reply_at"] if "reply_at" in r.keys() else "N/A",
+                    "meeting_status": r["meeting_status"] if ("meeting_status" in r.keys() and r["meeting_status"]) else "No meeting",
+                    "notes": r["notes"] if "notes" in r.keys() else "",
                 })
     except Exception:
         pass

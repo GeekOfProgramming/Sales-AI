@@ -386,15 +386,38 @@
 <div id="section-import" style="display: none;">
 {% if preview %}<div id="preview-staged-flag" style="display:none;"></div>{% endif %}
 
+<!-- Intake Channels Architecture Overview -->
+<div class="card" style="padding: 1rem 1.25rem; margin-bottom: 1.5rem; background: var(--bg-surface); border-left: 4px solid var(--primary);">
+  <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-primary);">
+    📥 Safe Data Intake Channels &amp; Import Provenance
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+    All external data enters the system through structured intake channels with strict Preview &rarr; Confirm isolation. No import operation sends emails or triggers uncontrolled background processes.
+  </p>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.75rem; font-size: 0.82rem;">
+    <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <strong style="color: var(--text-primary);">1. Live Discovery Sources</strong>
+      <div style="color: var(--text-muted); margin-top: 0.2rem;">Web crawlers, registries, and search engines. Generates candidate proposals requiring operator qualification.</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <strong style="color: var(--text-primary);">2. Historical Outreach &amp; Gmail</strong>
+      <div style="color: var(--text-muted); margin-top: 0.2rem;">Historical outreach spreadsheets and Gmail logs. Preserves past contact history with mandatory collision checks.</div>
+    </div>
+    <div style="background: var(--bg-card); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+      <strong style="color: var(--text-primary);">3. pyBIM 13-Column Lead Research</strong>
+      <div style="color: var(--text-muted); margin-top: 0.2rem;">Structured 13-column research workbooks. Safely matches existing records or drafts new research candidates with zero outreach authorization.</div>
+    </div>
+  </div>
+</div>
 
 <!-- Historical Spreadsheet Import (Preview -> Confirm Workflow) -->
 <div class="card">
   <div class="card-title">
-    <span>Import Historical Spreadsheet</span>
+    <span>Import Historical Spreadsheet or Research Workbook</span>
     <span class="badge badge-muted">Preview → Confirm Workflow</span>
   </div>
   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
-    Import historical outreach, company lists, or past contacts with root restriction, deduplication, and safety guards. Preview parsing results before executing authoritative writes.
+    Import historical outreach, company lists, or 13-column pyBIM research workbooks with root restriction, deduplication, and safety guards. Preview parsing results before executing authoritative writes.
   </p>
   <form method="POST" action="/sales/sources/import-history/preview" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 1rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

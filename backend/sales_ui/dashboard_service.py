@@ -18,39 +18,30 @@ class DashboardService:
 
     def get_summary(self) -> DashboardSummary:
         """Aggregate operational metrics across CandidateStore and ReviewStore."""
+        from sales_engine.candidates.lifecycle_service import CandidateLifecycleService
+
         summary = DashboardSummary()
 
-        # 1. Candidate Store metrics
+        # 1. Authoritative Candidate Lifecycle Queue Metrics (UI-02 workflow counters)
+        try:
+            lifecycle_svc = CandidateLifecycleService(self.candidate_store)
+            q_counts = lifecycle_svc.compute_queue_counts()
+            summary.active_candidates = q_counts.get("active", 0)
+            summary.needs_research = q_counts.get("needs_research", 0)
+            summary.needs_verification = q_counts.get("needs_verification", 0)
+            summary.historical_pending = q_counts.get("historical_pending", 0)
+            summary.qualified_leads = q_counts.get("qualified", 0)
+            summary.new_candidates = q_counts.get("new", 0)
+        except Exception:
+            pass
+
+        # 2. Candidate Store metrics
         try:
             with self.candidate_store._get_connection() as conn:
-                # new_candidates
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM candidate_companies WHERE discovery_status = 'new'"
-                ).fetchone()
-                if row:
-                    summary.new_candidates = row[0]
-
-                # needs_research
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM candidate_companies WHERE discovery_status = 'needs_research'"
-                ).fetchone()
-                if row:
-                    summary.needs_research = row[0]
-
                 # watchlist
                 row = conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()
                 if row:
                     summary.watchlist = row[0]
-
-                # qualified_leads: unified definition with router.is_candidate_qualified_lead
-                row = conn.execute(
-                    """SELECT COUNT(*) FROM candidate_companies 
-                       WHERE (qualification_outcome IN ('qualified', 'qualified_for_enrichment') 
-                              OR discovery_status IN ('qualified', 'qualified_for_enrichment'))
-                         AND (qualification_outcome IS NULL OR qualification_outcome NOT IN ('reject', 'suppressed', 'watchlist'))"""
-                ).fetchone()
-                if row:
-                    summary.qualified_leads = row[0]
 
                 # historical_known_companies
                 row = conn.execute(
