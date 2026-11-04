@@ -236,6 +236,101 @@ def is_suspect_job_advertisement_url(url_str: Optional[str]) -> bool:
             return True
     return False
 
+
+def is_safe_and_valid_evidence_reference(
+    source_url: str,
+    source_classification: str,
+    candidate_domain: str,
+    field_name: str,
+) -> Tuple[bool, str]:
+    """
+    Validates manual evidence reference URLs with SSRF protections and domain checks.
+    - Scheme: http or https only.
+    - Length: maximum 2048 chars.
+    - Host: valid, resolvable syntax, no localhost, no loopback, no private IPs.
+    - Source classification:
+        * 'official_website': requires canonical domain matching with candidate_domain.
+        * 'independent_external': legitimate authoritative external URLs (e.g. registry, LinkedIn, press).
+          Note: official_website field itself cannot point to an external source.
+    """
+    import ipaddress
+    if not source_url or not isinstance(source_url, str):
+        return False, "Manual verification requires a valid source URL."
+    clean_url = source_url.strip()
+    if len(clean_url) > 2048:
+        return False, "Source URL exceeds maximum allowed length of 2048 characters."
+    if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+        return False, "Source URL must use http:// or https:// scheme."
+    try:
+        parsed = urlparse(clean_url)
+    except Exception as e:
+        return False, f"Malformed Source URL: {e}"
+    if parsed.scheme.lower() not in ("http", "https"):
+        return False, "Source URL must use http:// or https:// scheme."
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        return False, "Source URL must contain a valid domain host."
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        return False, f"Local/loopback evidence URL host '{host}' is not permitted."
+    if host.endswith(".local") or host.endswith(".internal") or host.endswith(".onion"):
+        return False, f"Internal/non-routable evidence URL host '{host}' is not permitted."
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+            return False, f"Private or local IP address '{host}' is not permitted as evidence source."
+    except ValueError:
+        pass
+    if "." not in host:
+        return False, f"Invalid hostname '{host}' (must contain top-level domain)."
+
+    norm_class = (source_classification or "official_website").strip().lower()
+    cand_dom = (candidate_domain or "").strip().lower()
+    if norm_class in ("official_website", "official", "company_website"):
+        if not cand_dom:
+            return False, "Candidate has no official domain recorded to validate official company source."
+        if host != cand_dom and not host.endswith("." + cand_dom):
+            return False, f"Source URL '{clean_url}' does not belong to candidate official domain '{cand_dom}'."
+    elif norm_class in ("independent_external", "external", "external_source", "registry", "press", "directory"):
+        if field_name == "official_website":
+            return False, "The official_website field must point to the candidate's own official domain, not an external source."
+    else:
+        return False, f"Invalid source classification: '{source_classification}'. Must be 'official_website' or 'independent_external'."
+
+    return True, ""
+
+
+def validate_field_value_format(field_name: str, value: str) -> Tuple[bool, str]:
+    """
+    Validates field-specific value syntax and invariants prior to manual draft/verification persistence.
+    """
+    if not value or not isinstance(value, str):
+        return False, f"Field '{field_name}' cannot have an empty value."
+    clean_val = value.strip()
+    if clean_val.lower() in ("not found", "none", "null", "n/a"):
+        return False, f"Cannot verify field '{field_name}' with placeholder '{clean_val}'."
+    if len(clean_val) > 10000:
+        return False, f"Field '{field_name}' value exceeds maximum allowed length of 10000 characters."
+
+    if field_name == "official_website":
+        if not (clean_val.startswith("http://") or clean_val.startswith("https://")):
+            return False, "Official website must start with http:// or https://"
+    elif field_name == "contact_email_addresses":
+        tokens = [t.strip() for t in clean_val.split(",") if t.strip()]
+        for t in tokens:
+            if "@" not in t or not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}$", t):
+                return False, f"Invalid email address format: '{t}'"
+    elif field_name == "priority_level":
+        if clean_val.upper() not in ("A", "B", "C"):
+            return False, "Priority level must be A, B, or C."
+    elif field_name == "business_activities":
+        if len(clean_val) < 5:
+            return False, "Business activities description must be at least 5 characters long."
+    elif field_name == "company_name":
+        if len(clean_val) < 2:
+            return False, "Company name must be at least 2 characters long."
+
+    return True, ""
+
 from sales_engine.candidates.models import CandidateCompany
 from sales_engine.candidates.classifier import CompanyClassifier
 from sales_engine.discovery_v2.source_registry import SourceRegistry, sanitize_secret_text
@@ -2786,6 +2881,86 @@ async def preview_historical_import_action(
         missing_domain_count=missing_domain_count,
     )
 
+    # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
+    has_sent_emails_sheet = False
+    sent_emails_total = 0
+    sent_emails_matched = 0
+    sent_emails_unmatched = 0
+    sent_emails_already_imported = 0
+    sent_emails_new = 0
+    new_companies_count = 0
+    existing_companies_count = 0
+    company_changes_count = 0
+    reviewed_records_affected = 0
+
+    if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+        try:
+            sent_msgs = importer.parse_sent_emails(resolved)
+            if sent_msgs:
+                has_sent_emails_sheet = True
+                sent_emails_total = len(sent_msgs)
+                reconciled = importer.reconcile_sent_emails(sent_msgs, staged_records=records)
+                sent_emails_matched = sum(1 for m in reconciled if m.reconciliation_status == "matched")
+                sent_emails_unmatched = sum(1 for m in reconciled if m.reconciliation_status != "matched")
+
+                # Check how many are already imported in historical_sent_emails
+                with svcs["cand_store"]._get_connection() as c_conn:
+                    existing_mids = set(
+                        (r[0], r[1])
+                        for r in c_conn.execute("SELECT sender_account, message_id FROM historical_sent_emails").fetchall()
+                    )
+                sent_emails_already_imported = sum(1 for m in sent_msgs if (m.sender_account, m.message_id) in existing_mids)
+                sent_emails_new = sent_emails_total - sent_emails_already_imported
+        except Exception as e:
+            logger.warning(f"Error parsing Sent_Emails sheet for preview: {e}")
+
+    # Compute company reimport comparison against historical_imports and candidate_companies
+    try:
+        with svcs["cand_store"]._get_connection() as c_conn:
+            hist_domains = set(
+                r[0] for r in c_conn.execute("SELECT canonical_domain FROM historical_imports WHERE canonical_domain IS NOT NULL").fetchall()
+            )
+            hist_names = set(
+                r[0].strip().lower() for r in c_conn.execute("SELECT company_name FROM historical_imports WHERE company_name IS NOT NULL").fetchall()
+            )
+            # Map canonical_domain/company_name to raw_row_json for status change detection
+            raw_hist_rows = c_conn.execute("SELECT canonical_domain, company_name, raw_row_json FROM historical_imports").fetchall()
+            hist_raw_map = {}
+            for r in raw_hist_rows:
+                dom = r[0]
+                cname = r[1].strip().lower() if r[1] else ""
+                raw_d = json.loads(r[2]) if r[2] else {}
+                if dom:
+                    hist_raw_map[dom] = raw_d
+                if cname:
+                    hist_raw_map[cname] = raw_d
+
+            # Check OPERATOR_REVIEWED Lead Register records
+            reviewed_cids = set(
+                r[0] for r in c_conn.execute("SELECT candidate_id FROM lead_register_records WHERE verification_status = 'OPERATOR_REVIEWED'").fetchall()
+            )
+
+        for rec in records:
+            dom = svcs["cand_store"].canonicalize_domain(rec.domain) if rec.domain else None
+            cname = (rec.company_name or "").strip().lower()
+            if (dom and dom in hist_domains) or (cname in hist_names):
+                existing_companies_count += 1
+            else:
+                new_companies_count += 1
+
+            old_raw = (hist_raw_map.get(dom) if dom else None) or hist_raw_map.get(cname)
+            if old_raw:
+                old_status = old_raw.get("وضعیت ارتباط") or old_raw.get("communication_status")
+                new_status = rec.raw_outreach_status
+                if old_status != new_status:
+                    company_changes_count += 1
+
+            cid = f"cand:domain:{dom}" if dom else None
+            if cid and cid in reviewed_cids:
+                reviewed_records_affected += 1
+    except Exception as e:
+        logger.warning(f"Error computing historical comparison metrics: {e}")
+
     preview_res = HistoricalImportPreviewResult(
         file_path=str(resolved),
         file_hash=file_hash,
@@ -2817,6 +2992,16 @@ async def preview_historical_import_action(
         multiple_plausible_domains_count=multiple_plausible_domains_count,
         ambiguous_rows=ambiguous_rows,
         missing_domain_rows=missing_domain_rows,
+        has_sent_emails_sheet=has_sent_emails_sheet,
+        sent_emails_total=sent_emails_total,
+        sent_emails_matched=sent_emails_matched,
+        sent_emails_unmatched=sent_emails_unmatched,
+        sent_emails_already_imported=sent_emails_already_imported,
+        sent_emails_new=sent_emails_new,
+        new_companies_count=new_companies_count,
+        existing_companies_count=existing_companies_count,
+        company_changes_count=company_changes_count,
+        reviewed_records_affected=reviewed_records_affected,
     )
 
     # Check if request prefers JSON (e.g. from test or API client)
@@ -3103,6 +3288,22 @@ async def confirm_historical_import_action(
             staged_importer = HistoricalImporter(store=staged_store)
             result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
+            # 2b. If Sent_Emails sheet exists, import sent messages into staging store
+            sent_emails_stats = None
+            if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+                try:
+                    sent_msgs = staged_importer.parse_sent_emails(resolved)
+                    if sent_msgs:
+                        sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
+                        result.sent_emails_total = sent_emails_stats.get("total", 0)
+                        result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                        result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                        result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                        result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
+                except Exception as e:
+                    logger.error(f"Failed to import sent emails in staging: {e}")
+                    raise
+
             # 3. Promote staged store into live target ONLY if target had no concurrent writes
             with store._get_connection() as s_conn:
                 current_version = s_conn.execute("PRAGMA data_version;").fetchone()[0]
@@ -3128,8 +3329,19 @@ async def confirm_historical_import_action(
     else:
         # In-memory execution
         result = importer.import_records(records, operator_decisions=parsed_decisions)
+        if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+            sent_msgs = importer.parse_sent_emails(resolved)
+            if sent_msgs:
+                sent_emails_stats = importer.import_sent_emails(sent_msgs)
+                result.sent_emails_total = sent_emails_stats.get("total", 0)
+                result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
 
     msg = f"Import completed: {result.companies_created} new companies, {result.records_parsed} records, {result.duplicates_skipped} duplicates skipped."
+    if result.sent_emails_total > 0:
+        msg += f" Sent emails: {result.sent_emails_imported} imported ({result.sent_emails_matched} matched, {result.sent_emails_unmatched} unmatched, {result.sent_emails_duplicates} duplicates skipped)."
 
     accept = request.headers.get("accept", "")
     if "application/json" in accept:
@@ -3789,6 +4001,7 @@ async def lead_register_research_new_action(
 @router.get("/candidates", response_class=HTMLResponse)
 async def candidates_list_view(
     request: Request,
+    queue: Optional[str] = Query("active"),
     q: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     tier: Optional[str] = Query(None),
@@ -3799,103 +4012,184 @@ async def candidates_list_view(
     message: Optional[str] = None,
     error: Optional[str] = None,
 ):
-    svcs = get_console_services()
-    bridge = Phase10ConsoleBridge(store=svcs["cand_store"], registry=svcs["registry"])
-
-    all_summaries = bridge.get_candidate_list_summary(
-        status=status,
-        tier=tier,
-        limit=1000,
+    from sales_engine.candidates.lifecycle_service import (
+        CandidateLifecycleService,
+        CandidateQueueType,
+        project_candidate_lifecycle,
     )
 
-    filtered = all_summaries
-    if country:
-        filtered = [c for c in filtered if (c.get("country") or "").lower() == country.lower()]
-    if city:
-        filtered = [c for c in filtered if (c.get("city") or "").lower() == city.lower()]
-    if q:
-        query_lower = q.lower()
-        filtered = [
-            c for c in filtered
-            if query_lower in (c.get("name") or c.get("company_name") or "").lower()
-            or query_lower in (c.get("canonical_domain") or c.get("company_domain") or "").lower()
-        ]
+    svcs = get_console_services()
+    store = svcs["cand_store"]
+    lifecycle_svc = CandidateLifecycleService(store)
+
+    # 1. Authoritative queue counts across entire database without arbitrary truncation
+    queue_counts = lifecycle_svc.compute_queue_counts()
+
+    # 2. Retrieve all candidates
+    all_cands = store.list_candidates()
+
+    # Pre-collect snapshot IDs, lead register statuses, and suppression domains in bulk
+    snap_cids = set()
+    snapshot_map = {}
+    lr_map = {}
+    contact_map = {}
+    supp_domains = set()
+
+    try:
+        with store._get_connection() as conn:
+            snap_rows = conn.execute("SELECT candidate_id, snapshot_id FROM research_snapshots").fetchall()
+            for r in snap_rows:
+                snap_cids.add(r[0])
+                if r[0] not in snapshot_map:
+                    snapshot_map[r[0]] = r[1]
+
+            lr_rows = conn.execute("SELECT candidate_id, verification_status FROM lead_register_records").fetchall()
+            for r in lr_rows:
+                lr_map[r[0]] = r[1]
+
+            cur = conn.cursor()
+            cur.execute("SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts GROUP BY candidate_id")
+            for cr in cur.fetchall():
+                contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
+
+            cur.execute("SELECT company_domain FROM suppression_list WHERE company_domain IS NOT NULL")
+            for sr in cur.fetchall():
+                if sr[0]:
+                    supp_domains.add(sr[0].strip().lower())
+    except Exception:
+        pass
+
+    # Also check external research cache if available
+    res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
+    if res_cache_path.exists():
+        try:
+            import sqlite3 as sq3
+            c_conn = sq3.connect(str(res_cache_path), timeout=5.0)
+            c_cur = c_conn.cursor()
+            c_cur.execute("SELECT candidate_id, snapshot_id FROM research_snapshots")
+            for cr in c_cur.fetchall():
+                snap_cids.add(cr[0])
+                if cr[0] not in snapshot_map:
+                    snapshot_map[cr[0]] = cr[1]
+            c_conn.close()
+        except Exception:
+            pass
+
+    # 3. Project each candidate and filter by lifecycle queue
+    active_queue = (queue or "active").strip().lower()
+
+    matched_candidates = []
+    for c in all_cands:
+        cid = getattr(c, "candidate_id", "") or ""
+        dom = (getattr(c, "company_domain", "") or "").strip().lower()
+        is_supp = dom in supp_domains if dom else False
+        has_snap = cid in snap_cids
+        lr_stat = lr_map.get(cid)
+
+        state = project_candidate_lifecycle(
+            cand=c,
+            has_snapshot=has_snap,
+            lead_register_status=lr_stat,
+            is_suppressed_domain=is_supp,
+        )
+
+        # Queue membership filter
+        include_in_queue = False
+        if active_queue == "active":
+            include_in_queue = state.is_active_work
+        elif active_queue == "new":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEW
+        elif active_queue == "needs_research":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEEDS_RESEARCH
+        elif active_queue == "needs_verification":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEEDS_VERIFICATION
+        elif active_queue == "needs_correction":
+            include_in_queue = state.is_active_work and state.active_subqueue == CandidateQueueType.NEEDS_CORRECTION
+        elif active_queue in ("historical_pending", "historical"):
+            include_in_queue = state.primary_queue == CandidateQueueType.HISTORICAL_PENDING
+        elif active_queue in ("all", "all_companies", "archive"):
+            include_in_queue = True
+        else:
+            # Fallback to active work
+            include_in_queue = state.is_active_work
+
+        if not include_in_queue:
+            continue
+
+        matched_candidates.append((c, state))
+
+    # 4. Secondary filters (q, status, tier, country, city)
+    filtered = []
+    for c, state in matched_candidates:
+        c_country = getattr(c, "country", None) or ""
+        c_city = getattr(c, "city", None) or ""
+        raw_tier = getattr(c, "company_tier", None)
+        c_tier = raw_tier.value.lower() if hasattr(raw_tier, "value") else str(raw_tier or "").lower()
+        raw_status = getattr(c, "discovery_status", None)
+        c_status = raw_status.value.lower() if hasattr(raw_status, "value") else str(raw_status or "").lower()
+        c_name = getattr(c, "company_name", None) or getattr(c, "name", "") or ""
+        c_domain = getattr(c, "company_domain", None) or getattr(c, "domain", "") or ""
+
+        if country and c_country.lower() != country.strip().lower():
+            continue
+        if city and c_city.lower() != city.strip().lower():
+            continue
+        if tier and c_tier != tier.strip().lower():
+            continue
+        if status and c_status != status.strip().lower():
+            continue
+        if q:
+            q_lower = q.strip().lower()
+            if q_lower not in c_name.lower() and q_lower not in c_domain.lower():
+                continue
+
+        filtered.append((c, state))
 
     total = len(filtered)
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     page_items = filtered[start_idx:end_idx]
 
-    # Pre-fetch snapshot status and contact counts offline for page items
-    cand_ids = [c.get("company_id") or c.get("candidate_id", "") for c in page_items if (c.get("company_id") or c.get("candidate_id"))]
-    snapshot_map = {}
-    contact_map = {}
-    if cand_ids:
-        try:
-            with svcs["cand_store"]._get_connection() as conn:
-                cur = conn.cursor()
-                # Check research_snapshots in main db
-                q_marks = ",".join(["?"] * len(cand_ids))
-                cur.execute(f"SELECT candidate_id, snapshot_id FROM research_snapshots WHERE candidate_id IN ({q_marks})", cand_ids)
-                for r in cur.fetchall():
-                    snapshot_map[r[0]] = r[1]
-
-                # Check research_cache if available
-                res_cache_path = Path("data/research_snapshots/research_cache.sqlite3")
-                if res_cache_path.exists():
-                    try:
-                        import sqlite3 as sq3
-                        c_conn = sq3.connect(str(res_cache_path), timeout=5.0)
-                        c_cur = c_conn.cursor()
-                        c_cur.execute(f"SELECT candidate_id, snapshot_id FROM research_snapshots WHERE candidate_id IN ({q_marks})", cand_ids)
-                        for cr in c_cur.fetchall():
-                            if cr[0] not in snapshot_map:
-                                snapshot_map[cr[0]] = cr[1]
-                        c_conn.close()
-                    except Exception:
-                        pass
-
-                # Check candidate_contacts
-                cur.execute(f"SELECT candidate_id, COUNT(*), SUM(CASE WHEN email_status = 'verified' THEN 1 ELSE 0 END) FROM candidate_contacts WHERE candidate_id IN ({q_marks}) GROUP BY candidate_id", cand_ids)
-                for cr in cur.fetchall():
-                    contact_map[cr[0]] = (cr[1] or 0, cr[2] or 0)
-        except Exception:
-            pass
-
     candidates: List[CandidateListItem] = []
-    for c in page_items:
-        cid = c.get("company_id") or c.get("candidate_id", "")
-        dom = c.get("canonical_domain") or c.get("company_domain") or ""
-        # Authoritative domain suppression check
-        is_supp = check_authoritative_suppression(svcs["suppression_svc"], domain=dom)
+    for c, state in page_items:
+        cid = getattr(c, "candidate_id", "") or ""
+        dom = getattr(c, "company_domain", "") or None
+        is_supp = dom.lower() in supp_domains if dom else bool(getattr(c, "suppressed", False))
 
-        raw_bim = c.get("bim_maturity")
-        bim_display = raw_bim if raw_bim and raw_bim.strip() and raw_bim.lower() != "unknown" else "Unknown"
+        raw_bim = getattr(c, "bim_maturity", None)
+        bim_display = raw_bim.value if hasattr(raw_bim, "value") else str(raw_bim or "Unknown")
+        if bim_display.lower() == "unknown" or not bim_display.strip():
+            bim_display = "Unknown"
 
         snap_id = snapshot_map.get(cid)
         c_stats = contact_map.get(cid, (0, 0))
 
+        disc_sources = getattr(c, "source_refs", []) or []
+
         candidates.append(
             CandidateListItem(
                 candidate_id=cid,
-                company_name=c.get("name") or c.get("company_name", ""),
-                domain=dom or None,
-                country=c.get("country"),
-                city=c.get("city"),
-                tier=format_company_tier_label(c.get("company_tier")),
-                fit=c.get("fit_assessment") or c.get("fit_level"),
-                intent=c.get("intent_assessment") or c.get("intent_level"),
+                company_name=getattr(c, "company_name", "") or getattr(c, "name", "") or "Unnamed Company",
+                domain=dom,
+                country=getattr(c, "country", None),
+                city=getattr(c, "city", None),
+                tier=format_company_tier_label(getattr(c, "company_tier", None)),
+                fit=getattr(c, "fit_assessment", None) or getattr(c, "fit_level", None),
+                intent=getattr(c, "intent_assessment", None) or getattr(c, "intent_level", None),
                 bim_maturity=bim_display,
-                outsourcing_potential=c.get("outsourcing_potential"),
-                automation_potential=c.get("automation_potential"),
-                discovery_sources=c.get("discovery_sources", []),
-                status=c.get("status") or c.get("discovery_status", "new"),
-                is_previously_contacted=c.get("historical_contact_status") in ("contacted", "replied", "converted", "dnc") or c.get("historical_outreach_summary") in ("contacted", "replied", "converted", "dnc"),
+                outsourcing_potential=getattr(c, "outsourcing_potential", None),
+                automation_potential=getattr(c, "automation_potential", None),
+                discovery_sources=disc_sources,
+                status=getattr(c, "discovery_status", "new"),
+                is_previously_contacted=c.historical_contact_status in ("contacted", "replied", "converted", "dnc") or getattr(c, "previous_outreach_detected", False),
                 is_suppressed=is_supp,
                 has_research_snapshot=bool(snap_id),
                 snapshot_id=snap_id,
                 contact_count=c_stats[0],
                 verified_contact_count=c_stats[1],
+                lifecycle_queue=state.primary_queue.value if hasattr(state.primary_queue, "value") else str(state.primary_queue),
+                actionable_next_step=state.actionable_next_step,
+                recommended_action_url=state.recommended_action_url,
             )
         )
 
@@ -3916,6 +4210,8 @@ async def candidates_list_view(
             "tier": tier,
             "country": country,
             "city": city,
+            "current_queue": active_queue,
+            "queue_counts": queue_counts,
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
@@ -4166,6 +4462,8 @@ async def candidate_detail_view(
     )
 
     clean_display_title = format_company_display_name(cand.company_name, cand.company_domain)
+    trusted_senders = get_trusted_senders()
+    default_sender_name = (os.environ.get("SMTP_FROM_NAME") or "pyBIM Team").strip()
 
     return render_console_template(
         request=request,
@@ -4175,6 +4473,8 @@ async def candidate_detail_view(
             "active_tab": "candidates",
             "detail": view,
             "clean_display_title": clean_display_title,
+            "trusted_senders": trusted_senders,
+            "default_sender_name": default_sender_name,
             "contacts": contacts_view,
             "verified_contacts": verified_contacts,
             "likely_contacts": likely_contacts,
@@ -5078,15 +5378,20 @@ async def verify_candidate_field_action(
     candidate_id: str,
     field_name: str = Form(...),
     verified_value: str = Form(...),
-    source_url: str = Form(...),
+    action_type: str = Form("verify"),  # "verify" (Verify & Approve) or "draft" (Save Manual Draft)
+    source_classification: str = Form("official_website"),  # "official_website" or "independent_external"
+    source_url: Optional[str] = Form(None),
     operator_note: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
     """
-    Explicit Evidence-Aware Manual Field Verification Action.
-    Allows an operator to independently verify and approve a quarantined or unverified field
-    with explicit domain ownership checks, valid source URL, and full audit provenance.
-    Never approves or unquarantines the original unsupported AI claim.
+    Universal Evidence-Aware Manual Field Correction & Independent Operator Verification Action.
+    Supports two distinct operations:
+    1. 'draft' (Save Manual Draft): Preserves operator-entered value without falsely labeling it verified/approved.
+    2. 'verify' (Verify & Approve): Requires explicit operator confirmation, strict source URL validation,
+       and persists an authoritative FieldReviewRecord (review_state='OPERATOR_APPROVED', source_type='operator_manual').
+    Atomically suspends existing finalization if a core profile field (company_name, official_website, business_activities)
+    is modified on an already finalized record.
     """
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
@@ -5118,31 +5423,15 @@ async def verify_candidate_field_action(
         )
 
     val = verified_value.strip()
-    if not val or val.lower() in ("not found", "none", "null"):
-        err_msg = f"Cannot verify field '{fn}' with empty or 'Not Found' value."
+    # Field value validation
+    v_ok, v_err = validate_field_value_format(fn, val)
+    if not v_ok:
         return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
+            f"/sales/candidates/{candidate_id}/research?error={quote(v_err)}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    src = source_url.strip()
-    if not src or not src.startswith(("http://", "https://")):
-        err_msg = f"Manual verification of '{fn}' requires a valid HTTP/HTTPS source URL."
-        return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
-    # Harden evidence source URL validation:
-    # Source URL must correspond to candidate's official domain and preferably match crawled snapshot pages
     cand_domain = cand.company_domain or cand.domain or ""
-    if cand_domain and not is_canonical_domain_match(src, cand_domain):
-        err_msg = f"Evidence URL '{src}' does not belong to candidate's official domain '{cand_domain}'."
-        return RedirectResponse(
-            f"/sales/candidates/{candidate_id}/research?error={quote(err_msg)}",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
-
     # Domain ownership validation for official_website
     if fn == "official_website":
         if not is_canonical_domain_match(val, cand_domain):
@@ -5152,14 +5441,70 @@ async def verify_candidate_field_action(
                 status_code=status.HTTP_303_SEE_OTHER,
             )
 
+    # Extract string values handling possible direct Python call without FastAPI dependency resolution (e.g. in tests)
+    action_type_str = getattr(action_type, "default", action_type) if hasattr(action_type, "default") else action_type
+    if not isinstance(action_type_str, str):
+        action_type_str = "verify"
+    source_class_str = getattr(source_classification, "default", source_classification) if hasattr(source_classification, "default") else source_classification
+    if not isinstance(source_class_str, str):
+        source_class_str = "official_website"
+    source_url_str = getattr(source_url, "default", source_url) if hasattr(source_url, "default") else source_url
+    if not isinstance(source_url_str, str):
+        source_url_str = str(source_url_str) if source_url_str is not None else ""
+    operator_note_str = getattr(operator_note, "default", operator_note) if hasattr(operator_note, "default") else operator_note
+    if not isinstance(operator_note_str, str):
+        operator_note_str = str(operator_note_str) if operator_note_str is not None else ""
+
+    is_verify = (action_type_str.strip().lower() in ("verify", "approve", "verify_approve"))
+
+    src = (source_url_str or "").strip()
+    if is_verify:
+        s_ok, s_err = is_safe_and_valid_evidence_reference(
+            source_url=src,
+            source_classification=source_class_str,
+            candidate_domain=cand_domain,
+            field_name=fn,
+        )
+        if not s_ok:
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}/research?error={quote(s_err)}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+    else:
+        # For manual draft, if source_url is provided, it must still be safe (no SSRF/loopback)
+        if src:
+            s_ok, s_err = is_safe_and_valid_evidence_reference(
+                source_url=src,
+                source_classification=source_class_str,
+                candidate_domain=cand_domain,
+                field_name=fn,
+            )
+            if not s_ok:
+                return RedirectResponse(
+                    f"/sales/candidates/{candidate_id}/research?error={quote(s_err)}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+    # Detect if core field is changed on an already finalized record
+    core_fields = ("company_name", "official_website", "business_activities")
+    is_core_field = (fn in core_fields)
+    old_val = getattr(existing, fn, None)
+    is_changed = ((old_val or "").strip() != val)
+
+    new_verification_status = existing.verification_status or "EXTRACTED"
+    if is_core_field and is_changed and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        # Atomically suspend prior finalization!
+        new_verification_status = "EXTRACTED"
+
     # Prepare updated LeadRegisterRecord
     updated_dict = existing.to_dict()
     updated_dict[fn] = val
     updated_dict["provenance_source"] = "operator_edited"
+    updated_dict["verification_status"] = new_verification_status
     updated_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
-    # If source URL is not already in evidence_urls, append it
+    # Maintain evidence URLs list safely
     ev_urls = list(existing.evidence_urls or [])
-    if src not in ev_urls:
+    if src and src not in ev_urls:
         ev_urls.append(src)
     updated_dict["evidence_urls"] = ev_urls
 
@@ -5167,31 +5512,50 @@ async def verify_candidate_field_action(
 
     latest_snap = snap_store.get_latest_snapshot(candidate_id)
     chk = compute_field_checksum(val)
-    f_rev = FieldReviewRecord(
-        candidate_id=candidate_id,
-        field_name=fn,
-        approved_value=val,
-        value_checksum=chk,
-        review_state="OPERATOR_APPROVED",
-        reviewed_at=datetime.now(timezone.utc).isoformat(),
-        source_type="operator_manual",
-        snapshot_id=latest_snap.snapshot_id if latest_snap else None,
-        analysis_id=None,
-        evidence_url=src,
-        evidence_excerpt=None,
-        operator_note=operator_note.strip() if operator_note and operator_note.strip() else f"Independently verified via {src}",
+    note_text = operator_note_str.strip() if operator_note_str and operator_note_str.strip() else (
+        f"Independently verified via {src} ({source_class_str})" if is_verify else "Manual draft saved by operator"
     )
 
-    reg_store.save_record_with_reviews(updated_rec, [f_rev])
+    reviews_to_save: List[FieldReviewRecord] = []
+    if is_verify:
+        f_rev = FieldReviewRecord(
+            candidate_id=candidate_id,
+            field_name=fn,
+            approved_value=val,
+            value_checksum=chk,
+            review_state="OPERATOR_APPROVED",
+            reviewed_at=datetime.now(timezone.utc).isoformat(),
+            source_type="operator_manual",
+            snapshot_id=latest_snap.snapshot_id if latest_snap else None,
+            analysis_id=None,
+            evidence_url=src,
+            evidence_excerpt=None,
+            operator_note=note_text,
+        )
+        reviews_to_save.append(f_rev)
+    else:
+        # Saving manual draft: invalidate any existing approved review for this field since value was edited
+        # without renewed verification approval
+        reg_store.delete_field_review(candidate_id, fn, superseded_reason="superseded_by_manual_draft")
+
+    # Save record and review atomically
+    if reviews_to_save:
+        reg_store.save_record_with_reviews(updated_rec, reviews_to_save)
+    else:
+        reg_store.save_record(updated_rec)
 
     # Sync candidate domain if official_website was verified
-    if fn == "official_website":
+    if fn == "official_website" and is_verify:
         canon_w = canonicalize_domain(val)
         if canon_w and not cand.company_domain:
             cand.company_domain = canon_w
             svcs["cand_store"].save_candidate(cand)
 
-    msg = f"Field '{fn}' independently verified and approved by operator."
+    action_label = "independently verified and approved" if is_verify else "saved as manual draft"
+    msg = f"Field '{fn}' {action_label} by operator."
+    if is_core_field and is_changed and existing.verification_status in ("OPERATOR_REVIEWED", "VERIFIED"):
+        msg += " Previous Research Finalization has been suspended; renewed explicit finalization is required."
+
     return RedirectResponse(
         f"/sales/candidates/{candidate_id}/research?message={quote(msg)}",
         status_code=status.HTTP_303_SEE_OTHER,
@@ -5354,8 +5718,91 @@ async def review_candidate_action(
         cand.discovery_status = DiscoveryStatus.researching
         cand.last_researched_at = now_iso
         msg = f"Candidate '{cand.name}' marked for FURTHER RESEARCH."
+    elif decision_clean in ("reopen", "reopened"):
+        cand.manual_review_decision = "REOPENED"
+        cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' explicitly REOPENED for correction in Active Work."
+    elif decision_clean in ("needs_correction", "correction"):
+        cand.manual_review_decision = "NEEDS_CORRECTION"
+        cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' marked as NEEDS CORRECTION in Active Work."
+    elif decision_clean in ("finalize_historical", "historical_finalized"):
+        cand.manual_review_decision = "HISTORICAL_FINALIZED"
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' historical outreach FINALIZED and archived."
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported review decision '{decision}'")
+
+    if note_text not in cand.qualification_reasons:
+        cand.qualification_reasons.append(note_text)
+
+    svcs["cand_store"].save_candidate(cand)
+    return RedirectResponse(f"/sales/candidates/{candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/candidates/{candidate_id}/lifecycle")
+async def candidate_lifecycle_action(
+    candidate_id: str,
+    action: str = Form(...),
+    notes: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    Operator candidate lifecycle transition endpoint:
+    - 'reopen': Explicitly return candidate to Active Work (needs_correction subqueue).
+    - 'needs_correction': Explicitly mark candidate as requiring operator correction.
+    - 'finalize_historical': Reconcile and finalize historical communication, archiving from Active Work.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    action_clean = action.strip().lower()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    note_text = f"Lifecycle Action ({action_clean}): {notes.strip()}" if notes and notes.strip() else f"Lifecycle Action: {action_clean}"
+
+    cand.manual_reviewed_at = now_iso
+    cand.manual_reviewed_by = "operator"
+    if notes and notes.strip():
+        cand.manual_review_notes = notes.strip()
+
+    if action_clean in ("reopen", "reopened"):
+        cand.manual_review_decision = "REOPENED"
+        # Preserve original discovery_status if candidate was already qualified or researched
+        if not getattr(cand, "discovery_status", None):
+            cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' explicitly REOPENED for correction in Active Work."
+    elif action_clean in ("needs_correction", "correction"):
+        cand.manual_review_decision = "NEEDS_CORRECTION"
+        if not getattr(cand, "discovery_status", None):
+            cand.discovery_status = DiscoveryStatus.new
+        cand.cold_outreach_allowed = False
+        msg = f"Candidate '{cand.name}' marked as NEEDS CORRECTION in Active Work."
+    elif action_clean in ("finalize_historical", "historical_finalized"):
+        # SAFETY GUARD: Candidate MUST have genuine historical communication evidence to finalize historical
+        hist_records = svcs["cand_store"].get_historical_outreach_for_candidate(candidate_id)
+        has_hist_evidence = (
+            bool(hist_records)
+            or cand.historical_contact_status in ("contacted", "replied", "converted", "dnc")
+            or getattr(cand, "previous_outreach_detected", False)
+        )
+        if not has_hist_evidence:
+            err_msg = "Cannot finalize historical outreach: Candidate has no recorded historical communication evidence."
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}?error={quote(err_msg)}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
+        cand.manual_review_decision = "HISTORICAL_FINALIZED"
+        cand.cold_outreach_allowed = False
+        # Invariant: Do not overwrite qualification outcome or original discovery status
+        msg = f"Candidate '{cand.name}' historical outreach FINALIZED and archived."
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported lifecycle action '{action}'")
 
     if note_text not in cand.qualification_reasons:
         cand.qualification_reasons.append(note_text)
@@ -5621,11 +6068,13 @@ async def create_manual_draft_action(
     contact_id: Optional[str] = Form(None),
     recipient_email: str = Form(...),
     recipient_name: Optional[str] = Form(None),
+    sender_name: Optional[str] = Form(None),
+    sender_email: Optional[str] = Form(None),
     subject: str = Form(...),
     body: str = Form(...),
     csrf: None = Depends(validate_csrf),
 ):
-    """Creates a manual draft without LLM inference, strictly enforcing unified readiness, suppression, and verified contact evidence."""
+    """Creates a manual draft without LLM inference, strictly enforcing unified readiness, suppression, verified contact evidence, and authorized sender identity."""
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -5633,6 +6082,33 @@ async def create_manual_draft_action(
 
     from sales_engine.leads.register_store import LeadRegisterStore
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
+
+    # 0. Sender Identity Enforcement: must be configured and authorized
+    trusted_senders = get_trusted_senders()
+    if not trusted_senders:
+        return RedirectResponse(
+            f"/sales/candidates/{candidate_id}?error=No authorized company sender configured. Please configure SMTP_FROM_EMAIL or SMTP_ALLOWED_SENDERS.",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    resolved_sender_email = None
+    if sender_email and sender_email.strip():
+        candidate_sender = sender_email.strip().lower()
+        if candidate_sender not in trusted_senders:
+            allowed_str = ", ".join(trusted_senders)
+            return RedirectResponse(
+                f"/sales/candidates/{candidate_id}?error=Unauthorized sender identity: '{candidate_sender}'. Allowed senders: {allowed_str}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        resolved_sender_email = candidate_sender
+    else:
+        resolved_sender_email = trusted_senders[0]
+
+    resolved_sender_name = (
+        sender_name.strip()
+        if (sender_name is not None and sender_name.strip())
+        else (os.environ.get("SMTP_FROM_NAME") or "pyBIM Team").strip()
+    )
 
     # Evaluate authoritative readiness
     readiness_info = evaluate_candidate_readiness(
@@ -5720,11 +6196,11 @@ async def create_manual_draft_action(
     # Documented Lead Register emails without explicit verification are NOT eligible to draft.
     is_verified_evidence = False
     resolved_contact_id = None
-    resolved_contact_name = recipient_name
+    resolved_contact_name = (recipient_name.strip() if recipient_name and isinstance(recipient_name, str) and recipient_name.strip() else None)
 
     if matched_contact:
         resolved_contact_id = matched_contact.contact_id
-        resolved_contact_name = resolved_contact_name or matched_contact.full_name
+        resolved_contact_name = resolved_contact_name or matched_contact.full_name or "Contact"
         st = (matched_contact.email_status or "unknown").strip().lower()
         if st == "verified":
             is_verified_evidence = True
@@ -5758,10 +6234,6 @@ async def create_manual_draft_action(
     draft_id = f"draft:manual:{uuid.uuid4().hex[:12]}"
     lead_id = f"domain:{cand_domain}" if cand_domain else candidate_id
 
-    trusted_senders = get_trusted_senders()
-    primary_sender = trusted_senders[0] if trusted_senders else (os.environ.get("SMTP_FROM_EMAIL") or "outreach@pybim-studio.com")
-    primary_sender_name = os.environ.get("SMTP_FROM_NAME") or "pyBIM Team"
-
     draft_dict = {
         "draft_id": draft_id,
         "revision": 1,
@@ -5771,8 +6243,8 @@ async def create_manual_draft_action(
         "recipient_name": resolved_contact_name or "Contact",
         "recipient_title": "Key Contact",
         "recipient_email": clean_email,
-        "sender_name": primary_sender_name,
-        "sender_email": primary_sender,
+        "sender_name": resolved_sender_name,
+        "sender_email": resolved_sender_email,
         "subject": subject.strip(),
         "body": body.strip(),
         "service_used": "Tech-Enabled BIM Services",
@@ -6396,6 +6868,8 @@ async def draft_detail_view(
         can_send=(draft.approval_status == "approved" and draft.send_status != "sent" and not is_supp),
     )
 
+    trusted_senders = get_trusted_senders()
+
     return render_console_template(
         request=request,
         name="draft_detail.html",
@@ -6404,6 +6878,7 @@ async def draft_detail_view(
             "active_tab": "drafts",
             "draft": card,
             "events": events,
+            "trusted_senders": trusted_senders,
             "email_send_enabled": is_email_send_enabled(),
             "message": message,
             "error": error,
@@ -6450,6 +6925,8 @@ async def edit_draft_action(
     subject: str = Form(...),
     body: str = Form(...),
     recipient_email: Optional[str] = Form(None),
+    sender_name: Optional[str] = Form(None),
+    sender_email: Optional[str] = Form(None),
     reviewer: str = Form("local_operator"),
     note: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
@@ -6468,6 +6945,8 @@ async def edit_draft_action(
         subject=subject,
         body=body,
         recipient_email=recipient_email,
+        sender_name=sender_name,
+        sender_email=sender_email,
         reviewer=reviewer,
         review_note=note,
     )
@@ -6834,6 +7313,12 @@ async def sent_history_view(request: Request):
     # Also fetch confirmed manual external outbound logs
     manual_logs = svcs["rev_store"].list_manual_outreach_logs(limit=100)
 
+    # Fetch historical Gmail sent emails registry and stats
+    importer = HistoricalImporter(store=svcs["cand_store"])
+    hist_sent_emails = importer.get_sent_emails(limit=300)
+    hist_sent_stats = importer.get_sent_emails_stats()
+    unmatched_sent_emails = [m for m in hist_sent_emails if m.get("reconciliation_status") != "matched"]
+
     return render_console_template(
         request=request,
         name="sent.html",
@@ -6843,6 +7328,9 @@ async def sent_history_view(request: Request):
             "sent_items": items,
             "items": items,
             "manual_logs": manual_logs,
+            "hist_sent_emails": hist_sent_emails,
+            "hist_sent_stats": hist_sent_stats,
+            "unmatched_sent_emails": unmatched_sent_emails,
             "email_send_enabled": is_email_send_enabled(),
         },
     )

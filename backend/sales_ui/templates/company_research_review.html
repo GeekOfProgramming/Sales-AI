@@ -3,6 +3,53 @@
 {% block title %}Research Review — {{ candidate.company_name }} — Email Led{% endblock %}
 
 {% block content %}
+{% macro render_field_manual_verification(field_key, display_label, cur_val, prop_val, f_meta, is_textarea=False, placeholder_text="", field_rows=2, form_id_override=None, default_src="") %}
+{% set target_form = form_id_override if form_id_override else ('verify-' + field_key + '-form') %}
+<details style="margin-top: 8px; padding: 6px 10px; background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+  <summary style="font-weight: 600; color: var(--border-focus); cursor: pointer; font-size: 0.8rem; user-select: none;">
+    ✍️ Manual Correction &amp; Independent Verification
+  </summary>
+  <div style="margin-top: 8px; font-size: 0.78rem;">
+    <p style="margin: 0 0 6px 0; color: var(--text-secondary);">
+      Supply operator-verified value and supporting reference for <strong>{{ display_label }}</strong>:
+    </p>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div>
+        <label style="font-weight: 600; font-size: 0.74rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Operator Value:</label>
+        {% if is_textarea %}
+          <textarea form="{{ target_form }}" name="verified_value" class="form-control" rows="{{ field_rows }}" style="font-size: 0.78rem; padding: 4px 6px;" placeholder="{{ placeholder_text or ('Authoritative ' + display_label) }}">{{ cur_val if cur_val and cur_val != 'Not Found' and cur_val != 'None' and cur_val != 'Unassigned' else (prop_val if prop_val else '') }}</textarea>
+        {% else %}
+          <input type="text" form="{{ target_form }}" name="verified_value" class="form-control" style="font-size: 0.78rem; padding: 3px 6px;" value="{{ cur_val if cur_val and cur_val != 'Not Found' and cur_val != 'None' and cur_val != 'Unassigned' else (prop_val if prop_val else '') }}" placeholder="{{ placeholder_text or ('Authoritative ' + display_label) }}">
+        {% endif %}
+      </div>
+      <div>
+        <label style="font-weight: 600; font-size: 0.74rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Evidence Source URL:</label>
+        <input type="text" form="{{ target_form }}" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 3px 6px;" value="{{ f_meta.source_url if f_meta and f_meta.source_url and f_meta.source_url != 'Not Found' else (default_src if default_src else ('https://' + (candidate.company_domain or ''))) }}" placeholder="Authoritative Source URL (e.g. https://...)">
+      </div>
+      <div>
+        <label style="font-weight: 600; font-size: 0.74rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Source Classification:</label>
+        <select form="{{ target_form }}" name="source_classification" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;">
+          <option value="official_website" selected>Official Company Website (matches company domain)</option>
+          <option value="independent_external">Independent External Source (e.g. LinkedIn, Registry, Press)</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-weight: 600; font-size: 0.74rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Operator Note (optional):</label>
+        <input type="text" form="{{ target_form }}" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 3px 6px;" placeholder="e.g. Verified via official imprint or commercial registry">
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap;">
+        <button type="submit" form="{{ target_form }}" name="action_type" value="verify" class="btn btn-sm btn-outline-success" style="padding: 3px 12px; font-size: 0.76rem; font-weight: 600;">
+          {% if field_key == 'official_website' %}Verify Authoritative Website{% elif field_key == 'business_activities' %}Verify Business Activities{% else %}✅ Verify &amp; Approve{% endif %}
+        </button>
+        <button type="submit" form="{{ target_form }}" name="action_type" value="draft" class="btn btn-sm btn-outline-secondary" style="padding: 3px 10px; font-size: 0.76rem;">
+          💾 Save Manual Draft
+        </button>
+      </div>
+    </div>
+  </div>
+</details>
+{% endmacro %}
+
 <style>
   /* Accessible Theme-Aware Styling for Review Table */
   .review-table th {
@@ -411,6 +458,7 @@
                 {% elif research.evidence_items.get('company_name') %}
                   <div class="citation-tag">Source: {{ research.evidence_items['company_name'].source_url }} ({{ research.evidence_items['company_name'].validation_status }})</div>
                 {% endif %}
+                {{ render_field_manual_verification('company_name', 'Company Name', current_record.company_name if current_record else candidate.company_name, proposed_record.company_name, f_meta) }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -452,6 +500,7 @@
                   {% endif %}
                   <div><em>(AI Commercial Hypothesis &mdash; Subject to operator validation)</em></div>
                 </div>
+                {{ render_field_manual_verification('priority_level', 'Priority Level & Rationale', current_record.priority_level if current_record else '', proposed_record.priority_level, p_meta, placeholder_text='Priority (A, B, or C)') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 <input type="checkbox" name="apply_priority" value="1">
@@ -491,6 +540,7 @@
                 {% elif research.evidence_items.get('p_iva') %}
                   <div class="citation-tag">Source: {{ research.evidence_items['p_iva'].source_url }} (Checksum Validated)</div>
                 {% endif %}
+                {{ render_field_manual_verification('legal_identity', 'Legal Identity / P.IVA', current_record.legal_identity if current_record else '', proposed_record.legal_identity, f_meta, placeholder_text='e.g. IT12345678901') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -540,6 +590,7 @@
                     {% endif %}
                   </div>
                 {% endif %}
+                {{ render_field_manual_verification('geographic_location', 'Geographic Location', current_record.geographic_location if current_record else (candidate.city or ''), proposed_record.geographic_location, f_meta, placeholder_text='e.g. Milano, MI, Italy') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -583,6 +634,7 @@
                 {% elif research.evidence_items.get('telephone') %}
                   <div class="citation-tag">Source: {{ research.evidence_items['telephone'].source_url }} (Normalized)</div>
                 {% endif %}
+                {{ render_field_manual_verification('telephone_numbers', 'Telephone Numbers', current_record.telephone_numbers if current_record else '', proposed_record.telephone_numbers, f_meta, placeholder_text='e.g. +39 02 1234567') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -636,6 +688,7 @@
                 {% elif research.evidence_items.get('email') %}
                   <div class="citation-tag">Source: {{ research.evidence_items['email'].source_url }}</div>
                 {% endif %}
+                {{ render_field_manual_verification('contact_email_addresses', 'Contact Email Addresses', current_record.contact_email_addresses if current_record else '', proposed_record.contact_email_addresses, f_meta, placeholder_text='e.g. info@company.it') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -679,6 +732,7 @@
                 {% elif research.evidence_items.get('responsible_person') %}
                   <div class="citation-tag">Source: {{ research.evidence_items['responsible_person'].source_url }}</div>
                 {% endif %}
+                {{ render_field_manual_verification('responsible_person', 'Responsible Person', current_record.responsible_person if current_record else '', proposed_record.responsible_person, f_meta, placeholder_text='e.g. Mario Rossi (Amministratore Delegato)') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -717,21 +771,10 @@
                     {% endif %}
                     {% if f_meta.quarantined %}
                       <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
-                      <details style="margin-top: 6px; padding: 6px 8px; background-color: #fff; border: 1px solid #fca5a5; border-radius: 4px;">
-                        <summary style="font-weight: 600; color: #991b1b; cursor: pointer; font-size: 0.8rem;">Independent Operator Verification</summary>
-                        <div style="margin-top: 6px; font-size: 0.78rem;">
-                          <p style="margin: 0 0 4px 0; color: var(--text-secondary);">Verify authoritative business activities independently with verified source URL from candidate domain:</p>
-                          <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <textarea form="verify-business-activities-form" name="verified_value" class="form-control" rows="2" style="font-size: 0.78rem; padding: 4px 6px;" placeholder="Authoritative Business Activities description">{{ current_record.business_activities if current_record and current_record.business_activities and current_record.business_activities != 'Not Found' else (proposed_record.business_activities if proposed_record else '') }}</textarea>
-                            <input type="text" form="verify-business-activities-form" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ f_meta.source_url if f_meta.source_url and f_meta.source_url != 'Not Found' else ('https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL (e.g. https://domain.com/chi-siamo)">
-                            <input type="text" form="verify-business-activities-form" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
-                            <button type="submit" form="verify-business-activities-form" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Business Activities</button>
-                          </div>
-                        </div>
-                      </details>
                     {% endif %}
                   </div>
                 {% endif %}
+                {{ render_field_manual_verification('business_activities', 'Business Activities', current_record.business_activities if current_record else '', proposed_record.business_activities, f_meta, is_textarea=True, field_rows=3, form_id_override='verify-business-activities-form') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -770,21 +813,10 @@
                     {% endif %}
                     {% if f_meta.quarantined %}
                       <div style="color: #b91c1c; font-weight: 600; margin-top: 2px;">⚠️ QUARANTINED: {{ f_meta.quarantine_reason or 'Ungrounded claim' }}</div>
-                      <details style="margin-top: 6px; padding: 6px 8px; background-color: #fff; border: 1px solid #fca5a5; border-radius: 4px;">
-                        <summary style="font-weight: 600; color: #991b1b; cursor: pointer; font-size: 0.8rem;">Independent Operator Verification</summary>
-                        <div style="margin-top: 6px; font-size: 0.78rem;">
-                          <p style="margin: 0 0 4px 0; color: var(--text-secondary);">Verify authoritative official website independently with verified source URL:</p>
-                          <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <input type="text" form="verify-official-website-form" name="verified_value" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (candidate.company_domain if candidate.company_domain else proposed_record.official_website) }}" placeholder="e.g. https://domain.com/">
-                            <input type="text" form="verify-official-website-form" name="source_url" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" value="{{ current_record.official_website if current_record and current_record.official_website and current_record.official_website != 'Not Found' else (proposed_record.official_website if proposed_record.official_website else 'https://' + (candidate.company_domain or '')) }}" placeholder="Authoritative Source URL">
-                            <input type="text" form="verify-official-website-form" name="operator_note" class="form-control" style="font-size: 0.78rem; padding: 2px 6px;" placeholder="Operator verification note (optional)">
-                            <button type="submit" form="verify-official-website-form" class="btn btn-sm btn-outline-success" style="align-self: flex-start; padding: 2px 10px; font-size: 0.78rem; margin-top: 2px;">Verify Authoritative Website</button>
-                          </div>
-                        </div>
-                      </details>
                     {% endif %}
                   </div>
                 {% endif %}
+                {{ render_field_manual_verification('official_website', 'Official Website', current_record.official_website if current_record else '', proposed_record.official_website, f_meta, form_id_override='verify-official-website-form', default_src=current_record.official_website if current_record and current_record.official_website else (proposed_record.official_website if proposed_record else '')) }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -826,6 +858,7 @@
                     {% endif %}
                   </div>
                 {% endif %}
+                {{ render_field_manual_verification('descriptions_and_notes', 'Descriptions & Notes', current_record.descriptions_and_notes if current_record else '', proposed_record.descriptions_and_notes, f_meta, is_textarea=True, field_rows=4) }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -879,6 +912,7 @@
                 {% elif research.opportunity_urls %}
                   <div class="citation-tag">Extracted {{ research.opportunity_urls|length }} verified URL(s) from anchors</div>
                 {% endif %}
+                {{ render_field_manual_verification('job_advertisement_links', 'Job Advertisement Links', current_record.job_advertisement_links if current_record else '', proposed_record.job_advertisement_links, f_meta, placeholder_text='e.g. https://company.it/lavora-con-noi') }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -920,6 +954,7 @@
                     {% endif %}
                   </div>
                 {% endif %}
+                {{ render_field_manual_verification('other_links_and_references', 'Other Links & References', current_record.other_links_and_references if current_record else '', proposed_record.other_links_and_references, f_meta) }}
               </td>
               <td style="text-align: center; vertical-align: middle;">
                 {% if f_meta and f_meta.quarantined %}
@@ -1020,23 +1055,29 @@
   </div>
 </form>
 
-<!-- Independent Field Verification Form for Quarantined Website -->
-{% set f_meta_web = analysis_fields.get('official_website') if analysis_fields else None %}
-{% if f_meta_web and f_meta_web.quarantined %}
+<!-- Independent Field Verification Forms for Universal Operator Verification & Manual Corrections -->
 <form id="verify-official-website-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="field_name" value="official_website">
 </form>
-{% endif %}
 
-<!-- Independent Field Verification Form for Quarantined Business Activities -->
-{% set f_meta_act = analysis_fields.get('business_activities') if analysis_fields else None %}
-{% if f_meta_act and f_meta_act.quarantined %}
 <form id="verify-business-activities-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="field_name" value="business_activities">
 </form>
-{% endif %}
+
+<!-- Also expose verify-business_activities-form alias if accessed via underscore -->
+<form id="verify-business_activities-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="field_name" value="business_activities">
+</form>
+
+{% for f_key in ['company_name', 'priority_level', 'legal_identity', 'geographic_location', 'telephone_numbers', 'contact_email_addresses', 'responsible_person', 'descriptions_and_notes', 'job_advertisement_links', 'other_links_and_references'] %}
+<form id="verify-{{ f_key }}-form" method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/verify-field" style="display: none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="field_name" value="{{ f_key }}">
+</form>
+{% endfor %}
 
 <!-- Independent Finalization Form -->
 <div class="card" style="margin-bottom: 2rem; border: 2px solid {% if is_finalizable %}#16a34a{% else %}#cbd5e1{% endif %}; background-color: var(--bg-card); padding: 1.25rem 1.5rem;">

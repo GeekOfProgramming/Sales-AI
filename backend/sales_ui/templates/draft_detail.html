@@ -196,6 +196,33 @@
   <form method="POST" action="/sales/drafts/{{ draft.draft_id }}/edit">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="revision" value="{{ draft.revision }}">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+      <div>
+        <label class="form-label">Sender Email (Authorized Identity)</label>
+        <select name="sender_email" class="form-control">
+          {% if not trusted_senders %}
+            <option value="{{ draft.sender_email }}" selected>{{ draft.sender_email }} (Current)</option>
+          {% else %}
+            {% for s_email in trusted_senders %}
+              <option value="{{ s_email }}" {% if s_email == draft.sender_email %}selected{% endif %}>{{ s_email }}</option>
+            {% endfor %}
+            {% if draft.sender_email and draft.sender_email not in trusted_senders %}
+              <option value="{{ draft.sender_email }}" selected>{{ draft.sender_email }} (Unlisted/Legacy)</option>
+            {% endif %}
+          {% endif %}
+        </select>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+          🔒 Populated strictly from configured identities (SMTP_FROM_EMAIL / SMTP_ALLOWED_SENDERS).
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Sender Name</label>
+        <input type="text" name="sender_name" class="form-control" value="{{ draft.sender_name or '' }}" placeholder="e.g. pyBIM Team">
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">
+          Display name shown to the recipient.
+        </div>
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">Recipient Email</label>
       <input type="email" name="recipient_email" class="form-control" value="{{ draft.recipient_email }}" required>

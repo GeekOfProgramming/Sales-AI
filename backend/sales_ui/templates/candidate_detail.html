@@ -153,6 +153,9 @@
         <option value="reject">❌ Reject Candidate</option>
         <option value="duplicate">🔄 Mark Duplicate</option>
         <option value="needs_research">🔍 Needs Research</option>
+        <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
+        <option value="needs_correction">✏️ Needs Correction</option>
+        <option value="finalize_historical">📬 Finalize Historical Outreach</option>
       </select>
     </div>
     <div style="flex: 2; min-width: 260px;">
@@ -937,8 +940,40 @@
       <span>Stage Manual Draft to Review Queue</span>
       <span class="badge badge-secondary">Safe Offline Composer</span>
     </div>
+    {% if not trusted_senders %}
+    <div class="alert alert-warning" style="margin-bottom: 1rem; border-left: 4px solid var(--warning-color, #f59e0b); padding: 0.75rem 1rem;">
+      <strong>⚠️ No Authorized Sender Configured:</strong> Outbound drafting is locked because neither <code>SMTP_FROM_EMAIL</code> nor <code>SMTP_ALLOWED_SENDERS</code> has been configured on the server. Please define an authorized company sender before composing drafts.
+    </div>
+    {% endif %}
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/create-manual-draft">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      
+      <!-- Sender Identity Section -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 0.75rem;">
+        <div>
+          <label class="form-label" style="font-size: 0.8rem;">Sender Email (Authorized Identity) *</label>
+          <select name="sender_email" class="form-control" required {% if not trusted_senders %}disabled{% endif %}>
+            {% if not trusted_senders %}
+              <option value="" disabled selected>-- No authorized senders configured --</option>
+            {% else %}
+              {% for s_email in trusted_senders %}
+                <option value="{{ s_email }}">{{ s_email }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem;">
+            🔒 Restricted to configured company identities (SMTP_FROM_EMAIL / SMTP_ALLOWED_SENDERS).
+          </div>
+        </div>
+        <div>
+          <label class="form-label" style="font-size: 0.8rem;">Sender Name</label>
+          <input type="text" name="sender_name" class="form-control" value="{{ default_sender_name }}" placeholder="e.g. pyBIM Team" {% if not trusted_senders %}disabled{% endif %}>
+          <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem;">
+            Display name shown to the recipient.
+          </div>
+        </div>
+      </div>
+
     <div style="margin-bottom: 0.75rem;">
       <label class="form-label" style="font-size: 0.8rem;">Select Verified Recipient *</label>
       <select id="draft-recipient-select" name="contact_id" class="form-control" onchange="syncManualRecipient(this)" required>
@@ -982,7 +1017,7 @@
         <span style="font-size: 0.75rem; color: var(--text-muted);">
           🛡️ Safe &amp; Offline: Stages draft directly into Pending Review. Zero external LLM calls.
         </span>
-        <button type="submit" class="btn btn-secondary">
+        <button type="submit" class="btn btn-secondary" {% if not trusted_senders %}disabled{% endif %}>
           💾 Save Manual Draft to Review Queue
         </button>
       </div>

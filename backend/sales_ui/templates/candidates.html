@@ -1,41 +1,69 @@
 {% extends "base.html" %}
 
-{% block title %}Candidates | Email Led{% endblock %}
+{% block title %}Candidates Work Queue | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Candidate Intelligence</h1>
-    <p class="page-subtitle">Discovered companies across all sources with tier, intent, BIM maturity, and contact history.</p>
+    <h1 class="page-title">Candidate Work Queue</h1>
+    <p class="page-subtitle">Active human-in-the-loop candidate lifecycle pipeline: triage new targets, conduct research, verify evidence, and reconcile historical outreach.</p>
   </div>
+</div>
+
+<!-- Queue Views Navigation Pills -->
+<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; overflow-x: auto; padding-bottom: 0.35rem; align-items: center; border-bottom: 2px solid var(--border-color);">
+  <a href="/sales/candidates?queue=active{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'active' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+    <span>⚡ Active Work</span>
+    <span class="badge {% if current_queue == 'active' %}badge-light{% else %}badge-info{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('active', 0) }}</span>
+  </a>
+  <a href="/sales/candidates?queue=new{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'new' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+    <span>🌱 New</span>
+    <span class="badge {% if current_queue == 'new' %}badge-light{% else %}badge-info{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('new', 0) }}</span>
+  </a>
+  <a href="/sales/candidates?queue=needs_research{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'needs_research' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+    <span>🔬 Needs Research</span>
+    <span class="badge {% if current_queue == 'needs_research' %}badge-light{% else %}badge-warning{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('needs_research', 0) }}</span>
+  </a>
+  <a href="/sales/candidates?queue=needs_verification{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'needs_verification' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+    <span>📑 Needs Verification</span>
+    <span class="badge {% if current_queue == 'needs_verification' %}badge-light{% else %}badge-warning{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('needs_verification', 0) }}</span>
+  </a>
+  <a href="/sales/candidates?queue=needs_correction{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'needs_correction' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+    <span>🔄 Needs Correction / Reopened</span>
+    <span class="badge {% if current_queue == 'needs_correction' %}badge-light{% else %}badge-danger{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('needs_correction', 0) }}</span>
+  </a>
+  <a href="/sales/candidates?queue=historical_pending{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'historical_pending' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+    <span>📬 Historical Review Pending</span>
+    <span class="badge {% if current_queue == 'historical_pending' %}badge-light{% else %}badge-secondary{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('historical_pending', 0) }}</span>
+  </a>
+  <a href="/sales/candidates?queue=all{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tier %}&tier={{ tier }}{% endif %}{% if country %}&country={{ country }}{% endif %}{% if city %}&city={{ city }}{% endif %}" class="btn {% if current_queue == 'all' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm" style="display: flex; align-items: center; gap: 0.35rem; margin-left: auto;">
+    <span>🗂️ All Companies / Archived</span>
+    <span class="badge {% if current_queue == 'all' %}badge-light{% else %}badge-muted{% endif %}" style="font-size: 0.72rem;">{{ queue_counts.get('all', 0) }}</span>
+  </a>
 </div>
 
 <!-- Candidate Status & Lifecycle Reference Guide -->
 <details class="card" style="padding: 0.85rem 1.25rem; margin-bottom: 1rem; border-left: 4px solid var(--border-focus);">
   <summary style="cursor: pointer; font-weight: 700; color: var(--border-focus); display: flex; justify-content: space-between; align-items: center;">
-    <span>📖 Candidate Status, Verification &amp; Lifecycle Reference</span>
+    <span>📖 Candidate Work Queue &amp; Lifecycle Dimensions Guide</span>
     <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Click to expand / collapse</span>
   </summary>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 0.85rem; font-size: 0.82rem;">
     <div>
-      <h4 style="font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.4rem; text-transform: uppercase;">Discovery &amp; Triage Statuses</h4>
+      <h4 style="font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.4rem; text-transform: uppercase;">Lifecycle Invariants</h4>
       <ul style="padding-left: 1.1rem; margin: 0; color: var(--text-secondary); line-height: 1.45;">
-        <li><strong>New:</strong> Newly ingested candidate record awaiting operator review.</li>
-        <li><strong>Needs Research:</strong> Target requires deeper company and website research.</li>
-        <li><strong>Watchlist:</strong> Candidate saved for observation; paused from active pipeline.</li>
-        <li><strong>Qualified for Enrichment:</strong> Meets ICP criteria for deep profile research.</li>
-        <li><strong>Known Company:</strong> Company already exists in historical database.</li>
-        <li><strong>Re-engagement Review:</strong> Past contact requires manual re-evaluation.</li>
-        <li><strong>Rejected:</strong> Candidate does not fit ICP or business requirements.</li>
+        <li><strong>Active Work:</strong> Default view of actionable candidates (New, Needs Research, Needs Verification, Needs Correction).</li>
+        <li><strong>Qualified Leads Separation:</strong> Once ICP-qualified, candidates leave Active Work and move to <a href="/sales/leads" style="color: var(--border-focus);">Qualified Leads</a>.</li>
+        <li><strong>Historical Reconciliation:</strong> Contacted/replied companies are placed in Historical Review Pending until finalized by an operator.</li>
+        <li><strong>Explicit Reopening:</strong> Completed, archived, or rejected records can be explicitly reopened back into Active Work.</li>
       </ul>
     </div>
     <div>
-      <h4 style="font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.4rem; text-transform: uppercase;">Research &amp; Contact Invariants</h4>
+      <h4 style="font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.4rem; text-transform: uppercase;">Dimensional Separation</h4>
       <ul style="padding-left: 1.1rem; margin: 0; color: var(--text-secondary); line-height: 1.45;">
-        <li><strong>Researched:</strong> An immutable, persisted Research Snapshot exists. Does <em>not</em> imply all 13 fields are complete, human-approved, or outreach-eligible.</li>
-        <li><strong>Not Researched:</strong> No offline snapshot available yet.</li>
-        <li><strong>Contact Availability:</strong> Differentiates <em>Verified</em>, <em>Likely</em>, and <em>Unverified</em> emails. Likely emails are never represented as verified.</li>
-        <li><strong>Separation of Concerns:</strong> Discovery status, ICP qualification, research completion, contact verification, and manual outreach eligibility are distinct lifecycle states.</li>
+        <li><strong>Discovery vs Research:</strong> Discovery status tracks crawler ingestion; Research Snapshot captures immutable web evidence.</li>
+        <li><strong>Research vs Verification:</strong> AI extractions remain proposals until human-verified in the Lead Register.</li>
+        <li><strong>Safety Invariants:</strong> Historical contact suppression and DNC protections remain authoritative regardless of queue view.</li>
       </ul>
     </div>
   </div>
@@ -44,6 +72,7 @@
 <!-- Filters Bar -->
 <div class="card" style="padding: 1rem;">
   <form method="GET" action="/sales/candidates" class="form-inline">
+    <input type="hidden" name="queue" value="{{ current_queue or 'active' }}">
     <div style="flex: 1; min-width: 200px;">
       <input type="text" name="q" value="{{ query or '' }}" class="form-control" placeholder="Search company or domain...">
     </div>
@@ -53,9 +82,9 @@
         <option value="new" {% if status == 'new' %}selected{% endif %}>New</option>
         <option value="needs_research" {% if status == 'needs_research' %}selected{% endif %}>Needs Research</option>
         <option value="watchlist" {% if status == 'watchlist' %}selected{% endif %}>Watchlist</option>
+        <option value="qualified" {% if status == 'qualified' %}selected{% endif %}>Qualified</option>
         <option value="qualified_for_enrichment" {% if status == 'qualified_for_enrichment' %}selected{% endif %}>Qualified for Enrichment</option>
         <option value="known_company" {% if status == 'known_company' %}selected{% endif %}>Known Company</option>
-        <option value="reengagement_review" {% if status == 'reengagement_review' %}selected{% endif %}>Re-engagement Review</option>
         <option value="rejected" {% if status == 'rejected' %}selected{% endif %}>Rejected</option>
       </select>
     </div>
@@ -74,7 +103,7 @@
       <input type="text" name="city" value="{{ city or '' }}" class="form-control" placeholder="City">
     </div>
     <button type="submit" class="btn btn-secondary">Filter</button>
-    <a href="/sales/candidates" class="btn btn-secondary btn-sm" style="padding: 0.55rem 0.75rem;">Reset</a>
+    <a href="/sales/candidates?queue={{ current_queue or 'active' }}" class="btn btn-secondary btn-sm" style="padding: 0.55rem 0.75rem;">Reset</a>
     <div style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
       <a href="/sales/candidates/export?format=csv&approved_only=true" class="btn btn-primary btn-sm" title="Export only operator-approved qualified leads">✅ Export Approved Leads (CSV)</a>
       <a href="/sales/candidates/export?format=xlsx&approved_only=true" class="btn btn-primary btn-sm" title="Export only operator-approved qualified leads">✅ Export Approved Leads (XLSX)</a>
@@ -86,7 +115,16 @@
 <!-- Candidates Table -->
 <div class="card">
   <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
-    <span>Candidates ({{ total }} total, showing page {{ page }})</span>
+    <span>
+      {% if current_queue == 'active' %}Active Work Candidates
+      {% elif current_queue == 'new' %}New Candidates (Untouched)
+      {% elif current_queue == 'needs_research' %}Candidates Needing Research
+      {% elif current_queue == 'needs_verification' %}Candidates Needing Evidence Verification
+      {% elif current_queue == 'needs_correction' %}Candidates Reopened for Correction
+      {% elif current_queue == 'historical_pending' %}Historical Outreach Review Pending
+      {% else %}All Companies &amp; Archived Registry{% endif %}
+      ({{ total }} total, page {{ page }})
+    </span>
     <button type="submit" form="batch-research-form" class="btn btn-secondary btn-sm" title="Batch research up to 3 selected candidates">🔬 Batch Research (Max 3)</button>
   </div>
   {% if candidates %}
@@ -100,10 +138,10 @@
             <th>Company Name</th>
             <th>Official Domain</th>
             <th>Country / Market</th>
-            <th>Priority / Qualification</th>
+            <th>Priority / Fit</th>
             <th>Research Status</th>
             <th>Contact Availability</th>
-            <th>Status</th>
+            <th>Actionable Next Step</th>
             <th style="text-align: right; min-width: 140px;">Next Action</th>
           </tr>
         </thead>
@@ -169,9 +207,15 @@
               {% endif %}
             </td>
             <td>
-              <span class="badge {% if c.status == 'qualified_for_enrichment' %}badge-success{% elif c.status == 'needs_research' %}badge-warning{% elif c.status == 'rejected' %}badge-danger{% else %}badge-info{% endif %}">
-                {{ c.status }}
-              </span>
+              <div style="font-size: 0.78rem; color: var(--text-primary); line-height: 1.35;">
+                {% if c.recommended_action_url %}
+                  <a href="{{ c.recommended_action_url }}" style="color: var(--border-focus); text-decoration: none; font-weight: 600;">
+                    👉 {{ c.actionable_next_step or 'Proceed to candidate workspace' }}
+                  </a>
+                {% else %}
+                  <span>{{ c.actionable_next_step or 'No pending action' }}</span>
+                {% endif %}
+              </div>
             </td>
             <td style="text-align: right; white-space: nowrap;">
               <a href="/sales/candidates/{{ c.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
@@ -189,16 +233,32 @@
     <span>Showing {{ candidates|length }} of {{ total }} results</span>
     <div class="pagination-controls">
       {% if page > 1 %}
-      <a href="?page={{ page - 1 }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}" class="btn btn-secondary btn-sm">Previous</a>
+      <a href="?page={{ page - 1 }}&queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}" class="btn btn-secondary btn-sm">Previous</a>
       {% endif %}
       {% if has_next %}
-      <a href="?page={{ page + 1 }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}" class="btn btn-secondary btn-sm">Next</a>
+      <a href="?page={{ page + 1 }}&queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}" class="btn btn-secondary btn-sm">Next</a>
       {% endif %}
     </div>
   </div>
   {% else %}
-  <div class="empty-state">
-    <p class="empty-state-text">No candidate companies match the selected criteria.</p>
+  <div class="empty-state" style="padding: 2.5rem 1rem; text-align: center;">
+    <div style="font-size: 2rem; margin-bottom: 0.5rem;">🎉</div>
+    <h3 style="margin-bottom: 0.5rem; color: var(--text-primary);">No candidates in this queue</h3>
+    <p class="empty-state-text" style="color: var(--text-muted); max-width: 500px; margin: 0 auto 1.25rem auto;">
+      {% if current_queue == 'active' %}
+        All discovered candidates have either been ICP-qualified into <a href="/sales/leads">Qualified Leads</a>, placed under historical review, or archived.
+      {% elif current_queue == 'needs_correction' %}
+        No candidates currently require operator correction or reopening.
+      {% elif current_queue == 'historical_pending' %}
+        All historical outreach records have been reconciled.
+      {% else %}
+        No candidate companies match the selected filter criteria.
+      {% endif %}
+    </p>
+    <div style="display: flex; gap: 0.5rem; justify-content: center;">
+      <a href="/sales/candidates?queue=all" class="btn btn-secondary btn-sm">View All Companies</a>
+      <a href="/sales/leads" class="btn btn-primary btn-sm">Go to Qualified Leads</a>
+    </div>
   </div>
   {% endif %}
 </div>

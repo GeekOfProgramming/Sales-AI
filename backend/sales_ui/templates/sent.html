@@ -1,61 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sent History | Email Led
-<!-- Confirmed Operator Manual Outbound Dispatch Log -->
-<div class="card" style="margin-top: 1.5rem;">
-  <div class="card-title">
-    <span>Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
-    <span class="badge badge-info">Operator Hand-Off Log</span>
-  </div>
-  {% if manual_logs %}
-  <div class="table-responsive">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Candidate ID</th>
-          <th>Recipient Email</th>
-          <th>Recipient Name</th>
-          <th>Subject</th>
-          <th>Channel</th>
-          <th>Logged At</th>
-          <th>External Ref</th>
-          <th>Logged By</th>
-          <th>Operator Notes</th>
-          <th>Linked Draft</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for m in manual_logs %}
-        <tr>
-          <td><code>{{ m.candidate_id }}</code></td>
-          <td><strong>{{ m.recipient_email }}</strong></td>
-          <td>{{ m.recipient_name or '-' }}</td>
-          <td>{{ m.subject }}</td>
-          <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
-          <td>{{ m.logged_at[:19] }}</td>
-          <td><code>{{ m.external_ref or 'N/A' }}</code></td>
-          <td>{{ m.logged_by }}</td>
-          <td>{{ m.operator_notes or '-' }}</td>
-          <td>
-            {% if m.draft_id %}
-            <a href="/sales/drafts/{{ m.draft_id }}" class="btn btn-secondary btn-sm">r{{ m.revision }} ↗</a>
-            {% else %}
-            -
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="empty-state">
-    <p class="empty-state-text">No confirmed manual dispatches recorded yet.</p>
-  </div>
-  {% endif %}
-</div>
-
-{% endblock %}
+{% block title %}Sent History | Email Led{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -165,5 +110,124 @@
   </div>
   {% endif %}
 </div>
+
+<!-- Historical Sent Emails Registry (Reconciled from Historical Gmail) -->
+<div class="card" style="margin-top: 1.5rem;">
+  <div class="card-title">
+    <span>Historical Gmail Sent Emails ({{ hist_sent_emails|length }})</span>
+    {% if hist_sent_stats %}
+    <span class="badge badge-info">{{ hist_sent_stats.get('matched', 0) }} Matched / {{ hist_sent_stats.get('unmatched', 0) }} Unmatched / {{ hist_sent_stats.get('unique_threads', 0) }} Threads</span>
+    {% endif %}
+  </div>
+  {% if hist_sent_emails %}
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Sender Account</th>
+          <th>Recipient</th>
+          <th>Subject</th>
+          <th>Sent Date</th>
+          <th>Sent Time</th>
+          <th>Matched Company</th>
+          <th>Reconciliation</th>
+          <th>Gmail Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in hist_sent_emails %}
+        <tr>
+          <td><code>{{ h.sender_account }}</code></td>
+          <td><strong>{{ h.to_address }}</strong></td>
+          <td>{{ h.subject or '-' }}</td>
+          <td>{{ h.sent_date or '-' }}</td>
+          <td>{{ h.sent_time or '-' }}</td>
+          <td>
+            {% if h.matched_candidate_id %}
+            <a href="/sales/candidates/{{ h.matched_candidate_id }}" style="color: var(--primary);">
+              {{ h.matched_company_name or h.matched_candidate_id }}
+            </a>
+            {% else %}
+            <span style="color: var(--text-secondary);">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.reconciliation_status == 'matched' %}
+            <span class="badge badge-success">matched</span>
+            {% elif h.reconciliation_status == 'ambiguous' %}
+            <span class="badge badge-warning">ambiguous</span>
+            {% else %}
+            <span class="badge badge-secondary">unmatched</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if h.gmail_link %}
+            <a href="{{ h.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Gmail ↗</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="empty-state-text">No historical Gmail sent emails imported yet. Import a historical workbook with a Sent_Emails sheet.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Unmatched / Ambiguous Sent Emails Review Queue -->
+{% if unmatched_sent_emails %}
+<div class="card" style="margin-top: 1.5rem; border-left: 4px solid var(--color-warning, #f59e0b);">
+  <div class="card-title">
+    <span>⚠️ Unmatched / Ambiguous Sent Emails Review Queue ({{ unmatched_sent_emails|length }})</span>
+    <span class="badge badge-warning">Operator Review Required</span>
+  </div>
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    These sent Gmail messages could not be uniquely matched to an existing company record by verified recipient address. They are preserved in the registry with full metadata and body content for operator manual assignment.
+  </p>
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Message ID</th>
+          <th>Sender Account</th>
+          <th>Recipient Address</th>
+          <th>Subject</th>
+          <th>Sent Date</th>
+          <th>Body Excerpt</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in unmatched_sent_emails %}
+        <tr>
+          <td><code>{{ u.message_id }}</code></td>
+          <td>{{ u.sender_account }}</td>
+          <td><strong>{{ u.to_address }}</strong></td>
+          <td>{{ u.subject or '-' }}</td>
+          <td>{{ u.sent_date or '-' }}</td>
+          <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ u.email_body or '' }}">
+            {{ (u.email_body or '')[:80] }}...
+          </td>
+          <td><span class="badge badge-warning">{{ u.reconciliation_status }}</span></td>
+          <td>
+            {% if u.gmail_link %}
+            <a href="{{ u.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Inspect ↗</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 {% endblock %}
