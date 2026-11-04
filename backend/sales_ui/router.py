@@ -4809,6 +4809,16 @@ async def candidate_detail_view(
         limit=50
     )
 
+    # Fetch imported historical sent emails and meeting activities for this candidate
+    hist_sent_emails: List[Dict[str, Any]] = []
+    hist_meetings: List[Dict[str, Any]] = []
+    try:
+        hist_importer = HistoricalImporter(store=svcs["cand_store"])
+        hist_sent_emails = hist_importer.get_sent_emails(candidate_id=candidate_id, limit=100)
+        hist_meetings = hist_importer.get_meeting_activities(candidate_id=candidate_id, limit=100)
+    except Exception:
+        pass
+
     # Verification state summaries
     verified_contacts = [c for c in contacts_view if c.get("email_status") == "verified"]
     likely_contacts = [c for c in contacts_view if c.get("email_status") == "likely"]
@@ -4846,6 +4856,8 @@ async def candidate_detail_view(
             "historical_snapshots": historical_snapshots,
             "company_drafts": company_drafts,
             "manual_logs": candidate_manual_logs,
+            "hist_sent_emails": hist_sent_emails,
+            "hist_meetings": hist_meetings,
             "email_send_enabled": is_email_send_enabled(),
             "company_outreach_eligible": company_outreach_eligible,
             "has_verified_or_documented_recipient": has_verified_recipient,
@@ -8151,6 +8163,7 @@ async def replies_view(
 
         conversations.append({
             "conversation_id": c.conversation_id,
+            "company_id": c.company_id,
             "company_name": comp_name,
             "respondent_name": resp_name,
             "respondent_email": resp_email,
@@ -8181,14 +8194,15 @@ async def replies_view(
                     positive_count += 1
 
                 responses.append({
+                    "candidate_id": r["candidate_id"],
                     "company_name": r["company_name"] or r["candidate_id"],
-                    "recipient_email": r["recipient_email"] or r["contact_email"],
-                    "respondent_name": r["respondent_name"] or r["contact_name"],
-                    "respondent_role": r["respondent_role"],
+                    "recipient_email": r["contact_email"] if "contact_email" in r.keys() else (r["recipient_email"] if "recipient_email" in r.keys() else "N/A"),
+                    "respondent_name": r["respondent_name"] if ("respondent_name" in r.keys() and r["respondent_name"]) else (r["contact_name"] if "contact_name" in r.keys() else "Contact"),
+                    "respondent_role": r["respondent_role"] if "respondent_role" in r.keys() else "N/A",
                     "reply_status": stat,
-                    "reply_at": r["reply_at"] or "N/A",
-                    "meeting_status": r["meeting_status"] or "No meeting",
-                    "notes": r["notes"] or "",
+                    "reply_at": r["reply_at"] if "reply_at" in r.keys() else "N/A",
+                    "meeting_status": r["meeting_status"] if ("meeting_status" in r.keys() and r["meeting_status"]) else "No meeting",
+                    "notes": r["notes"] if "notes" in r.keys() else "",
                 })
     except Exception:
         pass

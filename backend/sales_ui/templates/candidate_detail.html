@@ -152,21 +152,41 @@
     <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
       <span>Operator Review Decision (Human-in-the-Loop)</span>
       <span class="badge badge-success" style="font-size: 0.72rem;">Manual Decision Authority</span>
+      {% if is_previously_contacted %}
+        <span class="badge badge-info" style="font-size: 0.72rem; background: #8b5cf6;">📬 Historical Outreach Detected</span>
+      {% endif %}
     </div>
     <span style="font-size: 0.8rem; color: var(--text-muted);">Current Qualification: <strong>{{ detail.candidate.status }}</strong></span>
   </div>
+
+  {% if is_previously_contacted %}
+  <div style="font-size: 0.8rem; color: #7c3aed; background: rgba(139, 92, 246, 0.08); border-left: 3px solid #8b5cf6; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; border-radius: 4px;">
+    <strong>📬 Historical Outreach Finalization:</strong> Selecting <em>Finalize Historical Outreach</em> archives this company from Active Work into historical registry, permanently locks automated cold outreach, and preserves all verified communication, email archives, and meeting evidence.
+  </div>
+  {% endif %}
+
   <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/review" style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <div style="width: 200px;">
+    <div style="width: 220px;">
       <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Decision</label>
       <select name="decision" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;" required>
-        <option value="approve">✅ Approve Lead</option>
-        <option value="reject">❌ Reject Candidate</option>
-        <option value="duplicate">🔄 Mark Duplicate</option>
-        <option value="needs_research">🔍 Needs Research</option>
-        <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
-        <option value="needs_correction">✏️ Needs Correction</option>
-        <option value="finalize_historical">📬 Finalize Historical Outreach</option>
+        {% if is_previously_contacted %}
+          <option value="finalize_historical" selected>📬 Finalize Historical Outreach</option>
+          <option value="approve">✅ Approve Lead</option>
+          <option value="reject">❌ Reject Candidate</option>
+          <option value="duplicate">🔄 Mark Duplicate</option>
+          <option value="needs_research">🔍 Needs Research</option>
+          <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
+          <option value="needs_correction">✏️ Needs Correction</option>
+        {% else %}
+          <option value="approve">✅ Approve Lead</option>
+          <option value="reject">❌ Reject Candidate</option>
+          <option value="duplicate">🔄 Mark Duplicate</option>
+          <option value="needs_research">🔍 Needs Research</option>
+          <option value="reopen">🔄 Reopen Candidate (Active Work)</option>
+          <option value="needs_correction">✏️ Needs Correction</option>
+          <option value="finalize_historical">📬 Finalize Historical Outreach</option>
+        {% endif %}
       </select>
     </div>
     <div style="flex: 2; min-width: 260px;">
@@ -195,7 +215,7 @@
     👥 4. Contacts &amp; Verification <span class="badge badge-secondary" style="margin-left: 4px;">{{ contacts|length }}</span>
   </button>
   <button type="button" id="tab-btn-outreach" class="btn btn-secondary" onclick="switchWorkspaceTab('outreach')" style="font-size: 0.88rem; padding: 0.45rem 0.9rem;">
-    ✉️ 5. Outreach &amp; History {% if company_drafts or manual_logs or detail.historical_outreach %}<span class="badge badge-info" style="margin-left: 4px;">{{ (company_drafts|length) + (manual_logs|length) + (detail.historical_outreach|length) }}</span>{% endif %}
+    ✉️ 5. Outreach &amp; History {% if company_drafts or manual_logs or detail.historical_outreach or hist_sent_emails or hist_meetings %}<span class="badge badge-info" style="margin-left: 4px;">{{ (company_drafts|length) + (manual_logs|length) + (detail.historical_outreach|length) + (hist_sent_emails|length) + (hist_meetings|length) }}</span>{% endif %}
   </button>
 </div>
 
@@ -977,11 +997,163 @@
     </div>
   </div>
 
-  <!-- Generated & Review Drafts -->
+  <!-- 1. Imported Historical Sent Emails (Gmail Archive) -->
   <div class="card" style="margin-bottom: 1.25rem;">
     <div class="card-title">
-      <span>Associated Outreach Drafts ({{ company_drafts|length }})</span>
-      <span class="badge badge-info">Review Store</span>
+      <span>1. Imported Historical Sent Emails (Gmail Archive)</span>
+      <span class="badge badge-secondary">{{ hist_sent_emails|length }} Recorded</span>
+    </div>
+    {% if hist_sent_emails %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Sent Date</th>
+            <th>Sent Time</th>
+            <th>Sender Account</th>
+            <th>Recipient Address</th>
+            <th>Subject</th>
+            <th>Reconciliation</th>
+            <th>Gmail Archive</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for em in hist_sent_emails %}
+          <tr>
+            <td>{{ em.sent_date or '-' }}</td>
+            <td>{{ em.sent_time or '-' }}</td>
+            <td><code>{{ em.sender_account or '-' }}</code></td>
+            <td><strong>{{ em.to_address }}</strong></td>
+            <td>{{ em.subject or '-' }}</td>
+            <td>
+              {% if em.reconciliation_status == 'matched' %}
+                <span class="badge badge-success">matched</span>
+              {% elif em.reconciliation_status == 'ambiguous' %}
+                <span class="badge badge-warning">ambiguous</span>
+              {% else %}
+                <span class="badge badge-secondary">{{ em.reconciliation_status or 'unmatched' }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if em.gmail_link %}
+                <a href="{{ em.gmail_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;">Gmail ↗</a>
+              {% else %}
+                <span style="color: var(--text-muted);">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No imported historical sent emails matched to this candidate.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 2. Historical Outreach & Prior Communication Events -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>2. Historical Communications &amp; Reply Tracking</span>
+      <span class="badge badge-historical">{{ detail.historical_outreach|length }} Events</span>
+    </div>
+    {% if detail.historical_outreach %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Contact Name</th>
+            <th>Email</th>
+            <th>Channel</th>
+            <th>Contact Date</th>
+            <th>Reply Status</th>
+            <th>Meeting Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in detail.historical_outreach %}
+          <tr>
+            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
+            <td><code>{{ h.recipient_email }}</code></td>
+            <td>{{ h.channel or 'email' }}</td>
+            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
+            <td>
+              {% if h.reply_status and h.reply_status != 'no_reply' %}
+                <span class="badge badge-success">{{ h.reply_status }}</span>
+              {% else %}
+                <span class="badge badge-secondary">no_reply</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if h.meeting_status and h.meeting_status != 'none' %}
+                <span class="badge badge-primary">{{ h.meeting_status }}</span>
+              {% else %}
+                <span style="color: var(--text-muted);">None</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No prior historical outreach events recorded for this company (First Contact Safe).</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 3. Historical Meeting Activities (Calendar & Meeting Records) -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>3. Historical Meeting Activities &amp; Follow-ups</span>
+      <span class="badge badge-info">{{ hist_meetings|length }} Activities</span>
+    </div>
+    {% if hist_meetings %}
+    <div class="table-responsive">
+      <table class="data-table" style="font-size: 0.85rem;">
+        <thead>
+          <tr>
+            <th>Contact Date</th>
+            <th>Sender</th>
+            <th>Follow-up Date</th>
+            <th>Reply Date</th>
+            <th>Status / Outcome</th>
+            <th>Meeting Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in hist_meetings %}
+          <tr>
+            <td>{{ m.contact_date or '-' }}</td>
+            <td><code>{{ m.sender or '-' }}</code></td>
+            <td>{{ m.follow_up_date or '-' }}</td>
+            <td>{{ m.reply_date or '-' }}</td>
+            <td>
+              <span class="badge badge-primary">{{ m.status or 'Recorded' }}</span>
+            </td>
+            <td style="max-width: 250px;">
+              {{ m.notes or m.follow_up_notes or '-' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p class="empty-state-text">No historical meeting activities recorded for this company.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 4. Associated Application Outreach Drafts -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-title">
+      <span>4. Native Outreach Drafts ({{ company_drafts|length }})</span>
+      <span class="badge badge-info">Staged in Review Store</span>
     </div>
     {% if company_drafts %}
     <div class="table-responsive">
@@ -1032,15 +1204,15 @@
     </div>
     {% else %}
     <div class="empty-state">
-      <p class="empty-state-text">No outreach drafts created for this company yet.</p>
+      <p class="empty-state-text">No native outreach drafts created for this company yet.</p>
     </div>
     {% endif %}
   </div>
 
-  <!-- Confirmed Manual External Dispatches -->
+  <!-- 5. Confirmed Manual External Dispatches -->
   <div class="card" style="margin-bottom: 1.25rem;">
     <div class="card-title">
-      <span>Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
+      <span>5. Confirmed Manual External Dispatches ({{ manual_logs|length }})</span>
       <span class="badge badge-info">Operator Hand-Off</span>
     </div>
     {% if manual_logs %}
@@ -1075,46 +1247,6 @@
     {% else %}
     <div class="empty-state">
       <p class="empty-state-text">No manual external outbound dispatches recorded for this candidate.</p>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- Historical Outreach & Prior Communications -->
-  <div class="card" style="margin-bottom: 1.25rem;">
-    <div class="card-title">
-      <span>Historical Communications &amp; Prior Contacts</span>
-      <span class="badge badge-historical">Historical Registry</span>
-    </div>
-    {% if detail.historical_outreach %}
-    <div class="table-responsive">
-      <table class="data-table" style="font-size: 0.85rem;">
-        <thead>
-          <tr>
-            <th>Contact Name</th>
-            <th>Email</th>
-            <th>Channel</th>
-            <th>Contact Date</th>
-            <th>Reply Status</th>
-            <th>Meeting</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for h in detail.historical_outreach %}
-          <tr>
-            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
-            <td><code>{{ h.recipient_email }}</code></td>
-            <td>{{ h.channel or 'email' }}</td>
-            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
-            <td><span class="badge badge-info">{{ h.reply_status or 'no_reply' }}</span></td>
-            <td>{{ h.meeting_status or 'none' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="empty-state">
-      <p class="empty-state-text">No prior historical outreach recorded for this company (First Contact Safe).</p>
     </div>
     {% endif %}
   </div>
@@ -1379,8 +1511,15 @@ function populateVerifyModal(contactId, fullName, email) {
   }
 }
 
-// Support direct hash navigation, e.g. #research, #register, #contacts, #outreach, #manual-draft
+// Support direct hash navigation or query param tab, e.g. ?tab=outreach or #outreach, #section-outreach, #manual-draft
 document.addEventListener('DOMContentLoaded', function() {
+  var targetTab = null;
+  var urlParams = new URLSearchParams(window.location.search);
+  var tabParam = urlParams.get('tab');
+  if (tabParam) {
+    targetTab = tabParam.toLowerCase();
+  }
+
   if (window.location.hash) {
     var rawHash = window.location.hash.substring(1).toLowerCase();
     if (rawHash === 'manual-draft') {
@@ -1389,10 +1528,15 @@ document.addEventListener('DOMContentLoaded', function() {
       if (draftEl) draftEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    var validTabs = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
-    if (validTabs.indexOf(rawHash) !== -1) {
-      switchWorkspaceTab(rawHash);
+    if (rawHash.startsWith('section-')) {
+      rawHash = rawHash.replace('section-', '');
     }
+    targetTab = rawHash;
+  }
+
+  var validTabs = ['overview', 'ai-handoff', 'research', 'register', 'contacts', 'outreach'];
+  if (targetTab && validTabs.indexOf(targetTab) !== -1) {
+    switchWorkspaceTab(targetTab);
   }
 });
 </script>

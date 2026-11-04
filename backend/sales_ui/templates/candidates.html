@@ -258,6 +258,9 @@
               </div>
             </td>
             <td style="text-align: right; white-space: nowrap;">
+              {% if current_queue in ('historical_pending', 'historical') or c.lifecycle_queue == 'historical_pending' or c.is_previously_contacted %}
+                <a href="/sales/candidates/{{ c.candidate_id }}?return_queue={{ current_queue or 'active' }}&tab=outreach#section-outreach" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: #8b5cf6; border-color: #8b5cf6;" title="Review historical communication, sent messages & replies">Review History</a>
+              {% endif %}
               <a href="/sales/candidates/{{ c.candidate_id }}?return_queue={{ current_queue or 'active' }}&q={{ query or '' }}&status={{ status or '' }}&tier={{ tier or '' }}&country={{ country or '' }}&city={{ city or '' }}&source={{ source or '' }}&outreach={{ outreach or '' }}&page={{ page }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Inspect</a>
               <a href="/sales/candidates/{{ c.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: var(--border-focus);" title="Review Research Snapshot">Research</a>
             </td>

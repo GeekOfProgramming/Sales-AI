@@ -83,7 +83,11 @@
       <tbody>
         {% for m in manual_logs %}
         <tr>
-          <td><code>{{ m.candidate_id }}</code></td>
+          <td>
+            <a href="/sales/candidates/{{ m.candidate_id }}?tab=outreach#section-outreach" style="font-weight: 600; color: var(--border-focus); text-decoration: none;">
+              <code>{{ m.candidate_id }}</code> ↗
+            </a>
+          </td>
           <td><strong>{{ m.recipient_email }}</strong></td>
           <td>{{ m.recipient_name or '-' }}</td>
           <td>{{ m.subject }}</td>
@@ -144,8 +148,8 @@
           <td>{{ h.sent_time or '-' }}</td>
           <td>
             {% if h.matched_candidate_id %}
-            <a href="/sales/candidates/{{ h.matched_candidate_id }}" style="color: var(--primary);">
-              {{ h.matched_company_name or h.matched_candidate_id }}
+            <a href="/sales/candidates/{{ h.matched_candidate_id }}?tab=outreach#section-outreach" style="color: var(--primary); font-weight: 600; text-decoration: none;">
+              {{ h.matched_company_name or h.matched_candidate_id }} ↗
             </a>
             {% else %}
             <span style="color: var(--text-secondary);">-</span>
