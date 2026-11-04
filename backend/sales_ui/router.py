@@ -3397,15 +3397,47 @@ async def confirm_historical_import_action(
                         )
 
                     # Discover all user tables present in staging and promote them transactionally into main
+                    # For tables with autoincrement integer PKs or dependent child FKs, avoid INSERT OR REPLACE
+                    # which deletes and re-inserts rows causing PK shifts or cascading foreign-key issues.
+                    # We promote parent tables first, then child tables, using safe INSERT OR IGNORE / selective UPDATE.
                     stg_tables = [
                         r[0] for r in target_check_conn.execute(
                             "SELECT name FROM staging.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
                         ).fetchall()
                     ]
-                    for tbl in stg_tables:
+                    # Specific ordering: parent tables before child tables
+                    table_priority = {
+                        "candidate_companies": 1,
+                        "historical_imports": 2,
+                        "historical_contacts": 3,
+                        "historical_company_links": 4,
+                        "historical_sent_emails": 5,
+                        "historical_meeting_activities": 6,
+                        "historical_outreach_events": 7,
+                        "operator_import_decisions": 8,
+                    }
+                    sorted_tables = sorted(stg_tables, key=lambda t: table_priority.get(t, 99))
+
+                    for tbl in sorted_tables:
                         cols = [r[1] for r in target_check_conn.execute(f"PRAGMA staging.table_info({tbl});").fetchall()]
                         cols_str = ", ".join(f'"{c}"' for c in cols)
-                        target_check_conn.execute(f'INSERT OR REPLACE INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}";')
+                        pk_cols = [r[1] for r in target_check_conn.execute(f"PRAGMA main.table_info({tbl});").fetchall() if r[5] > 0]
+
+                        # Tables with auto-increment 'id' as primary key (e.g. historical_contacts, historical_company_links, historical_sent_emails, historical_meeting_activities)
+                        # must not clobber existing rows on arbitrary integer ID collisions.
+                        if len(pk_cols) == 1 and pk_cols[0].lower() == "id" and "id" in cols:
+                            non_id_cols = [c for c in cols if c.lower() != "id"]
+                            non_id_str = ", ".join(f'"{c}"' for c in non_id_cols)
+                            # Check if table has a natural unique constraint
+                            unique_indexes = target_check_conn.execute(f"PRAGMA main.index_list({tbl});").fetchall()
+                            has_unique = any(idx[2] == 1 for idx in unique_indexes)
+                            if has_unique:
+                                target_check_conn.execute(f'INSERT OR IGNORE INTO main."{tbl}" ({non_id_str}) SELECT {non_id_str} FROM staging."{tbl}";')
+                            else:
+                                target_check_conn.execute(f'INSERT INTO main."{tbl}" ({non_id_str}) SELECT {non_id_str} FROM staging."{tbl}";')
+                        else:
+                            # Natural primary key (candidate_id, import_hash, event_id, decision_id):
+                            target_check_conn.execute(f'INSERT OR REPLACE INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}";')
 
                     # Post-promotion verification
                     fk_chk = target_check_conn.execute("PRAGMA foreign_key_check;").fetchall()

@@ -2214,6 +2214,11 @@ class HistoricalImporter:
                         cand_contacts_map.setdefault(em_clean, set()).add(cid)
 
         for m in sent_emails:
+            # If the record has already been explicitly reconciled/matched, preserve it
+            if m.matched_candidate_id and m.reconciliation_status == "matched":
+                reconciled.append(m)
+                continue
+
             matched_cids = set()
             for recip in m.recipient_emails:
                 cids = cand_contacts_map.get(recip.lower(), set())
@@ -2255,6 +2260,12 @@ class HistoricalImporter:
             "duplicates": 0,
         }
         reconciled = self.reconcile_sent_emails(sent_emails)
+        # If input records are already reconciled, preserve their matched candidate ids
+        for m_orig, m_rec in zip(sent_emails, reconciled):
+            if m_orig.matched_candidate_id and m_orig.reconciliation_status == "matched":
+                m_rec.matched_candidate_id = m_orig.matched_candidate_id
+                m_rec.matched_company_name = m_orig.matched_company_name or m_rec.matched_company_name
+                m_rec.reconciliation_status = "matched"
         now_iso = datetime.now(timezone.utc).isoformat()
 
         with self.store._get_connection() as conn:
@@ -2322,15 +2333,18 @@ class HistoricalImporter:
                         (m.sent_date, cid),
                     )
 
-                    # 2. Record historical outreach event idempotently, with cross-source Excel/Gmail deduplication
+                    # 2. Record historical outreach event idempotently, with combined-evidence Excel/Gmail correspondence
                     raw_hash = f"gmail:{m.sender_account}:{m.message_id}"
-                    contact_email = m.recipient_emails[0] if m.recipient_emails else m.to_address
+                    contact_email = (m.recipient_emails[0] if m.recipient_emails else m.to_address).strip().lower()
                     m_date_prefix = (m.sent_date or "")[:10]
                     gmail_note = f"Gmail message {m.message_id} (Thread {m.thread_id}) | Subject: {m.subject or 'No Subject'}"
 
-                    # Check for an existing historical outreach event on the same candidate with matching date or recipient email
+                    # Combined evidence rule:
+                    # Same recipient alone is insufficient (could be a distinct follow-up on another date).
+                    # Same date alone is insufficient (could be sent to a different contact/email at same company).
+                    # Legitimate correspondence requires BOTH matching date AND matching recipient email.
                     existing_ev = None
-                    if m_date_prefix or contact_email:
+                    if m_date_prefix and contact_email:
                         ev_rows = conn.execute(
                             """
                             SELECT event_id, contacted_at, contact_email, source_ref, notes FROM historical_outreach_events
@@ -2341,12 +2355,12 @@ class HistoricalImporter:
                         for er in ev_rows:
                             e_date = (er["contacted_at"] or "")[:10]
                             e_mail = (er["contact_email"] or "").strip().lower()
-                            if (e_date and m_date_prefix and e_date == m_date_prefix) or (e_mail and contact_email and e_mail == contact_email.lower()):
+                            if e_date == m_date_prefix and e_mail == contact_email:
                                 existing_ev = er
                                 break
 
                     if existing_ev:
-                        # Cross-source correspondence found: Enrich existing outreach event with Gmail provenance rather than duplicating
+                        # Combined correspondence confirmed: Enrich existing outreach event with Gmail provenance rather than duplicating
                         cur_notes = existing_ev["notes"] or ""
                         new_notes = f"{cur_notes} | {gmail_note}" if gmail_note not in cur_notes else cur_notes
                         conn.execute(
@@ -2359,7 +2373,8 @@ class HistoricalImporter:
                             (new_notes, f"gmail:{m.message_id}", existing_ev["event_id"]),
                         )
                     else:
-                        # New unique outreach event
+                        # Distinct follow-up or uncertain correspondence: retain as independent outreach event
+                        # Preserves distinct Gmail Message IDs and full provenance
                         self.store.record_historical_outreach(
                             candidate_id=cid,
                             source_ref=f"gmail:{m.sender_account}",
