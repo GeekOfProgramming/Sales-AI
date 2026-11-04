@@ -546,7 +546,8 @@ class CandidateStore:
                 if existing_row["historical_contact_status"] in ('contacted', 'replied', 'converted', 'dnc') and cand.historical_contact_status == 'uncontacted':
                     cand.historical_contact_status = existing_row["historical_contact_status"]
 
-            # Exclusion Registry Precedence: if company is active in excluded_companies, cold outreach is NEVER allowed
+            # Exclusion Registry Precedence: if company is active in excluded_companies, cold outreach is NEVER allowed.
+            # Exclusion is reversible by operator and must NOT pollute the permanent monotonic DNC/opt-out suppression flag.
             if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='excluded_companies' LIMIT 1").fetchone():
                 excl_hit = False
                 if cand.company_domain:
@@ -560,7 +561,6 @@ class CandidateStore:
                         excl_hit = True
                 if excl_hit:
                     cand.cold_outreach_allowed = False
-                    cand.suppressed = True
 
             conn.execute("""
                 INSERT INTO candidate_companies (

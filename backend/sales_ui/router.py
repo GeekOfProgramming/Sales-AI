@@ -2786,9 +2786,9 @@ async def preview_historical_import_action(
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format (CSV/XLSX only)")
 
-    # Stable preview token
+    # Stable preview token signed with PREVIEW_SIGNING_SECRET
     token_payload = f"{str(resolved)}:{file_hash}:{sheet_name or ''}"
-    preview_token = hmac.new(b"salesai_preview_salt", token_payload.encode(), hashlib.sha256).hexdigest()
+    preview_token = hmac.new(PREVIEW_SIGNING_SECRET, token_payload.encode(), hashlib.sha256).hexdigest()
 
     unique_comps = set(r.domain or r.company_name for r in records)
     total_contacts = sum(len(r.emails) for r in records)
@@ -3027,7 +3027,7 @@ async def preview_historical_import_action(
     )
 
 
-# P10_5-ADV-010 / ADV-011: Confirm and Execute Historical Import
+PREVIEW_SIGNING_SECRET = os.getenv("PREVIEW_SIGNING_SECRET", "salesai_preview_signing_secret_offline_guard").encode("utf-8")
 @router.post("/import/historical/confirm")
 @router.post("/sources/import-history/confirm")
 @router.post("/sources/historical/confirm")
@@ -3054,7 +3054,7 @@ async def confirm_historical_import_action(
 
     # Token verification
     expected_payload = f"{str(resolved)}:{effective_hash}:{sheet_name or ''}"
-    expected_token = hmac.new(b"salesai_preview_salt", expected_payload.encode(), hashlib.sha256).hexdigest()
+    expected_token = hmac.new(PREVIEW_SIGNING_SECRET, expected_payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(preview_token, expected_token):
         raise HTTPException(status_code=400, detail="Invalid preview confirmation token.")
 
@@ -3278,54 +3278,90 @@ async def confirm_historical_import_action(
         staging_path = staging_clone.name
         staging_clone.close()
         try:
-            # 1. Capture initial data_version and online backup source into staging clone
-            with store._get_connection() as src_conn:
-                initial_version = src_conn.execute("PRAGMA data_version;").fetchone()[0]
+            # 1. Maintain a persistent check connection on the live database to reliably detect external writes via PRAGMA data_version
+            target_check_conn = store._create_connection()
+            try:
+                target_check_conn.execute("PRAGMA busy_timeout = 5000;")
+                initial_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
+
+                # Online backup live database into staging clone
                 clone_conn = sqlite3.connect(staging_path)
                 try:
-                    src_conn.backup(clone_conn)
+                    target_check_conn.backup(clone_conn)
                 finally:
                     clone_conn.close()
 
-            # 2. Execute import on staging store
-            staged_store = CandidateStore(staging_path)
-            staged_importer = HistoricalImporter(store=staged_store)
-            result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
+                # 2. Execute import on staging store
+                staged_store = CandidateStore(staging_path)
+                staged_importer = HistoricalImporter(store=staged_store)
+                result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
-            # 2b. If Sent_Emails sheet exists, import sent messages into staging store
-            sent_emails_stats = None
-            if resolved.suffix.lower() in (".xlsx", ".xlsm"):
-                try:
-                    sent_msgs = staged_importer.parse_sent_emails(resolved)
-                    if sent_msgs:
-                        sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
-                        result.sent_emails_total = sent_emails_stats.get("total", 0)
-                        result.sent_emails_imported = sent_emails_stats.get("imported", 0)
-                        result.sent_emails_matched = sent_emails_stats.get("matched", 0)
-                        result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
-                        result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
-                except Exception as e:
-                    logger.error(f"Failed to import sent emails in staging: {e}")
-                    raise
+                # 2b. If Sent_Emails sheet exists, import sent messages into staging store
+                sent_emails_stats = None
+                if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+                    try:
+                        sent_msgs = staged_importer.parse_sent_emails(resolved)
+                        if sent_msgs:
+                            sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
+                            result.sent_emails_total = sent_emails_stats.get("total", 0)
+                            result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                            result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                            result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                            result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
+                    except Exception as e:
+                        logger.error(f"Failed to import sent emails in staging: {e}")
+                        raise
 
-                # 2c. If Meeting sheet exists, import meeting activity records into staging store
-                try:
-                    meetings = staged_importer.parse_meeting_activities(resolved)
-                    if meetings:
-                        staged_importer.import_meeting_activities(meetings, staged_records=records)
-                except Exception as e:
-                    logger.error(f"Failed to import meeting activities in staging: {e}")
-                    raise
+                    # 2c. If Meeting sheet exists, import meeting activity records into staging store
+                    try:
+                        meetings = staged_importer.parse_meeting_activities(resolved)
+                        if meetings:
+                            staged_importer.import_meeting_activities(meetings, staged_records=records)
+                    except Exception as e:
+                        logger.error(f"Failed to import meeting activities in staging: {e}")
+                        raise
 
-            # 3. Promote staged store into live target ONLY if target had no concurrent writes
-            with store._get_connection() as s_conn:
-                current_version = s_conn.execute("PRAGMA data_version;").fetchone()[0]
+                # Verify staging clone integrity before promoting
+                with staged_store._get_connection() as s_check:
+                    quick_chk = s_check.execute("PRAGMA quick_check;").fetchone()
+                    if not quick_chk or quick_chk[0] != "ok":
+                        raise RuntimeError(f"Staged database integrity check failed: {quick_chk[0] if quick_chk else 'no response'}")
+
+                # 3. Check for concurrent modification on live database before acquiring lock
+                current_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
                 if current_version != initial_version:
                     raise RuntimeError(
                         f"Concurrent database modification detected during staging (version changed from {initial_version} to {current_version}). Promotion aborted to prevent silent data loss."
                     )
-                with staged_store._get_connection() as c_conn:
-                    c_conn.backup(s_conn)
+
+                # Acquire immediate transaction lock on target connection to prevent concurrent writes during promotion
+                target_check_conn.execute("BEGIN IMMEDIATE;")
+                try:
+                    # Double-check version under lock
+                    lock_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
+                    if lock_version != initial_version:
+                        raise RuntimeError(
+                            f"Concurrent database modification detected when locking target database ({initial_version} vs {lock_version}). Promotion aborted."
+                        )
+
+                    # Promote staged clone into live target
+                    with staged_store._get_connection() as c_conn:
+                        c_conn.backup(target_check_conn)
+
+                    # Post-promotion verification
+                    fk_chk = target_check_conn.execute("PRAGMA foreign_key_check;").fetchall()
+                    if fk_chk:
+                        raise RuntimeError(f"Foreign key violations detected after promotion: {fk_chk}")
+                    post_chk = target_check_conn.execute("PRAGMA quick_check;").fetchone()
+                    if not post_chk or post_chk[0] != "ok":
+                        raise RuntimeError(f"Post-promotion integrity check failed: {post_chk[0] if post_chk else 'no response'}")
+
+                    target_check_conn.commit()
+                except Exception:
+                    target_check_conn.rollback()
+                    raise
+            finally:
+                target_check_conn.close()
 
         except Exception as e:
             logger.error(f"Historical import transaction rolled back due to error: {e}")

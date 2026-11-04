@@ -119,12 +119,12 @@ def normalize_emails(email_cell: Optional[str]) -> List[str]:
     chunks = EMAIL_SPLIT_REGEX.split(str(email_cell))
     clean_emails = []
     for ch in chunks:
-        ch = ch.strip().strip("'\"<>")
+        ch = ch.strip().strip("'\"<>").strip(" .\"'<>")
         if not ch:
             continue
         matches = EMAIL_BASIC_REGEX.findall(ch)
         for m in matches:
-            m_clean = m.lower().strip()
+            m_clean = m.lower().strip().strip(" .\"'<>")
             if m_clean and m_clean not in clean_emails:
                 clean_emails.append(m_clean)
     return clean_emails
@@ -512,11 +512,11 @@ def normalize_outreach_status(raw_status: Optional[str]) -> Dict[str, Any]:
         res["is_dnc"] = True
         return res
 
-    # 7. Explicit general meeting / conversation
-    if any(k in norm for k in ("جلسه", "مذاکره", "صحبت", "قرار", "تماس تلفنی", "علاقهمند", "علاقه مند")) or any(k in norm_slug for k in ("meeting", "conversation", "in_discussion", "call_scheduled")):
+    # 7. Explicit general meeting / conversation / interest
+    if any(k in norm for k in ("جلسه", "مذاکره", "صحبت", "قرار", "تماس تلفنی", "علاقهمند", "علاقه مند")) or any(k in norm_slug for k in ("meeting", "conversation", "in_discussion", "call_scheduled", "interested", "positive")):
         res["historical_contact_status"] = "replied"
         res["has_past_contact"] = True
-        res["reply_status"] = "conversation_active"
+        res["reply_status"] = "conversation_active" if "interested" not in norm_slug else raw_clean
         res["has_active_conversation"] = True
         return res
 
@@ -627,8 +627,28 @@ class HistoricalRecord:
     primary_website_info: Dict[str, Any] = field(default_factory=dict)
     import_hash: str = ""
 
+    def compute_communication_hash(self) -> str:
+        """
+        Calculates a hash identifying actual communication events.
+        Decoupled from mutable row attributes (notes, phone numbers, links, location).
+        Ensures editing non-communication metadata in a spreadsheet does not create
+        duplicate historical outreach events.
+        """
+        c_name = self.company_name.strip().lower() if self.company_name else ""
+        c_dom = self.domain.strip().lower() if self.domain else ""
+        emails_str = ",".join(sorted(self.emails))
+        c_date = self.contact_date or ""
+        r_date = self.reply_date or ""
+        r_status = self.reply_status or ""
+        resp_name = (self.respondent_name or "").strip().lower()
+        resp_email = (self.respondent_email or "").strip().lower()
+        p_sender = (self.sender or "").strip().lower()
+        ident_str = f"comm:{c_name}:{c_dom}:{emails_str}:{c_date}:{r_date}:{r_status}:{resp_name}:{resp_email}:{p_sender}"
+        return hashlib.sha256(ident_str.encode("utf-8")).hexdigest()[:16]
+
     def compute_hash(self) -> str:
-        # Content-stable hash: depends on domain/name and outreach data, NOT on file name or row position
+        # Content-stable hash: depends on domain/name, outreach data, and mutable descriptive fields
+        # Used for raw row revision identity in historical_imports.
         c_name = self.company_name.strip().lower() if self.company_name else ""
         c_dom = self.domain.strip().lower() if self.domain else ""
         emails_str = ",".join(sorted(self.emails))
@@ -2067,6 +2087,7 @@ class HistoricalImporter:
             cand_id = getattr(saved_company, "candidate_id", getattr(saved_company, "company_id", None))
             has_genuine_event = bool(rec.contact_date or rec.reply_date or norm_status["has_past_contact"])
             if cand_id and has_genuine_event:
+                comm_hash = rec.compute_communication_hash()
                 self.store.record_historical_outreach(
                     candidate_id=cand_id,
                     source_ref=f"historical:{rec.source_file}",
@@ -2080,7 +2101,7 @@ class HistoricalImporter:
                     respondent_role=rec.respondent_role,
                     respondent_email=rec.respondent_email,
                     notes=rec.notes,
-                    raw_row_hash=import_hash,
+                    raw_row_hash=comm_hash,
                     follow_up_at=rec.follow_up_date,
                     meeting_status="scheduled" if "meeting" in (rec.reply_status or "").lower() else None,
                     opportunity_status="active" if rec.has_active_conversation else None,
@@ -2437,12 +2458,6 @@ class HistoricalImporter:
                 clean_name = m.company_name.strip().lower()
                 norm_name = normalize_company_name(m.company_name)
                 matched_cid = name_to_cid.get(clean_name) or name_to_cid.get(norm_name)
-                if not matched_cid:
-                    # Try partial prefix match
-                    for ex_norm, ex_cid in name_to_cid.items():
-                        if ex_norm and (ex_norm in norm_name or norm_name in ex_norm):
-                            matched_cid = ex_cid
-                            break
 
             if matched_cid:
                 m.matched_candidate_id = matched_cid
@@ -2520,8 +2535,9 @@ class HistoricalImporter:
 
                 if m.matched_candidate_id and m.reconciliation_status == "matched":
                     cid = m.matched_candidate_id
-                    # Record outreach event for meeting
-                    meet_status = "completed" if m.reply_date else "scheduled"
+                    m_norm = normalize_outreach_status(m.status)
+                    has_reply = bool(m.reply_date or m_norm["has_active_conversation"] or m_norm["historical_contact_status"] == "replied")
+                    meet_status = "completed" if (m.reply_date or has_reply) else "scheduled"
                     contact_email = m.emails[0] if m.emails else None
                     self.store.record_historical_outreach(
                         candidate_id=cid,
@@ -2536,24 +2552,40 @@ class HistoricalImporter:
                         raw_row_hash=act_hash,
                         follow_up_at=m.follow_up_date,
                         meeting_status=meet_status,
-                        opportunity_status="active",
+                        opportunity_status="active" if has_reply else None,
                     )
-                    # Update candidate company status to replied / active conversation
-                    conn.execute(
-                        """
-                        UPDATE candidate_companies
-                        SET cold_outreach_allowed = 0,
-                            active_conversation = 1,
-                            historical_contact_status = CASE
-                                WHEN historical_contact_status IN ('replied', 'converted', 'dnc') THEN historical_contact_status
-                                ELSE 'replied'
-                            END,
-                            reply_status = COALESCE(reply_status, ?),
-                            last_contacted_at = COALESCE(last_contacted_at, ?)
-                        WHERE candidate_id = ?
-                        """,
-                        (m.status, m.contact_date, cid),
-                    )
+                    # Update candidate company status conservatively:
+                    # Only mark as 'replied' and active_conversation=1 if actual reply/active conversation evidence exists
+                    if has_reply:
+                        conn.execute(
+                            """
+                            UPDATE candidate_companies
+                            SET cold_outreach_allowed = 0,
+                                active_conversation = 1,
+                                historical_contact_status = CASE
+                                    WHEN historical_contact_status IN ('replied', 'converted', 'dnc') THEN historical_contact_status
+                                    ELSE 'replied'
+                                END,
+                                reply_status = COALESCE(reply_status, ?),
+                                last_contacted_at = COALESCE(last_contacted_at, ?)
+                            WHERE candidate_id = ?
+                            """,
+                            (m.status, m.contact_date, cid),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            UPDATE candidate_companies
+                            SET cold_outreach_allowed = 0,
+                                historical_contact_status = CASE
+                                    WHEN historical_contact_status IN ('replied', 'converted', 'dnc') THEN historical_contact_status
+                                    ELSE 'contacted'
+                                END,
+                                last_contacted_at = COALESCE(last_contacted_at, ?)
+                            WHERE candidate_id = ?
+                            """,
+                            (m.contact_date, cid),
+                        )
 
         return stats
 
