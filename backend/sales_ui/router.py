@@ -609,7 +609,7 @@ async def validate_csrf(request: Request):
 def _get_navigation_badge_counts() -> Dict[str, int]:
     """
     Computes real pending work counts for top-level navigation badges:
-    - candidates: Active work candidates needing triage / processing
+    - candidates: Active work candidates needing triage / processing (lifecycle queue: active)
     - human_verification: Candidates with research snapshots/proposals needing human verification
     - drafts: Drafts pending operator review
     - replies: Active conversations waiting on us / needs review (only if inbox_store present)
@@ -627,28 +627,12 @@ def _get_navigation_badge_counts() -> Dict[str, int]:
         rev_store = svcs.get("rev_store")
         inbox_store = svcs.get("inbox_store")
 
-        if cand_store and hasattr(cand_store, "_get_connection"):
-            with cand_store._get_connection() as conn:
-                # Active candidates: discovery_status in ('new', 'needs_research', 'researching') and not suppressed/rejected
-                r_cand = conn.execute("""
-                    SELECT COUNT(*) FROM candidate_companies
-                    WHERE (discovery_status IN ('new', 'needs_research', 'researching')
-                           OR qualification_outcome = 'research_more'
-                           OR manual_review_decision = 'REOPENED')
-                      AND (qualification_outcome IS NULL OR qualification_outcome NOT IN ('reject', 'suppressed', 'watchlist'))
-                """).fetchone()
-                if r_cand:
-                    counts["candidates"] = r_cand[0]
-
-                # Human verification: records in lead_register_records with status in ('Unverified', 'EXTRACTED')
-                r_has_lr = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone()
-                if r_has_lr:
-                    r_hv = conn.execute("""
-                        SELECT COUNT(*) FROM lead_register_records
-                        WHERE verification_status IN ('Unverified', 'EXTRACTED')
-                    """).fetchone()
-                    if r_hv:
-                        counts["human_verification"] = r_hv[0]
+        if cand_store:
+            from sales_engine.candidates.lifecycle_service import CandidateLifecycleService
+            lifecycle_svc = CandidateLifecycleService(cand_store)
+            q_counts = lifecycle_svc.compute_queue_counts()
+            counts["candidates"] = q_counts.get("active", 0)
+            counts["human_verification"] = q_counts.get("needs_verification", 0)
 
         if rev_store and hasattr(rev_store, "_get_connection"):
             with rev_store._get_connection() as conn:
@@ -8171,6 +8155,8 @@ async def replies_view(
     request: Request,
     category: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(None, alias="status"),
+    resp_page: int = Query(1, ge=1),
+    resp_page_size: int = Query(25, ge=1, le=100),
 ):
     svcs = get_console_services()
     store = svcs["cand_store"]
@@ -8224,21 +8210,38 @@ async def replies_view(
     # 2. Historical responses (Phase 10.5 compatibility)
     responses = []
     positive_count = 0
+    total_responses = 0
+    resp_offset = (resp_page - 1) * resp_page_size
     try:
         with store._get_connection() as conn:
+            # Get positive count
+            row_pos = conn.execute("""
+                SELECT COUNT(*) FROM historical_outreach_events
+                WHERE reply_status IS NOT NULL AND reply_status != ''
+                  AND (LOWER(reply_status) LIKE '%positive%' OR LOWER(reply_status) LIKE '%interested%')
+            """).fetchone()
+            if row_pos:
+                positive_count = row_pos[0]
+
+            # Get total response count
+            row_tot = conn.execute("""
+                SELECT COUNT(*) FROM historical_outreach_events
+                WHERE reply_status IS NOT NULL AND reply_status != ''
+            """).fetchone()
+            if row_tot:
+                total_responses = row_tot[0]
+
             rows = conn.execute("""
                 SELECT h.*, c.company_name
                 FROM historical_outreach_events h
                 LEFT JOIN candidate_companies c ON h.candidate_id = c.candidate_id
                 WHERE h.reply_status IS NOT NULL AND h.reply_status != ''
                 ORDER BY h.reply_at DESC
-                LIMIT 100
-            """).fetchall()
+                LIMIT ? OFFSET ?
+            """, (resp_page_size, resp_offset)).fetchall()
 
             for r in rows:
                 stat = r["reply_status"] or ""
-                if "positive" in stat.lower() or "interested" in stat.lower():
-                    positive_count += 1
 
                 responses.append({
                     "candidate_id": r["candidate_id"],
@@ -8254,6 +8257,7 @@ async def replies_view(
     except Exception:
         pass
 
+    has_next_resp = (resp_offset + resp_page_size) < total_responses
     csrf_token = get_or_create_csrf_token(request)
 
     response = render_console_template(
@@ -8266,6 +8270,10 @@ async def replies_view(
             "sync_state": sync_state,
             "conversations": conversations,
             "responses": responses,
+            "total_responses": total_responses,
+            "resp_page": resp_page,
+            "resp_page_size": resp_page_size,
+            "has_next_resp": has_next_resp,
             "positive_count": positive_count,
             "meetings_count": meetings_count,
             "waiting_count": waiting_count,
