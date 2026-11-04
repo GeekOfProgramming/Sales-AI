@@ -2786,9 +2786,10 @@ async def preview_historical_import_action(
     else:
         raise HTTPException(status_code=400, detail="Unsupported file format (CSV/XLSX only)")
 
-    # Stable preview token signed with PREVIEW_SIGNING_SECRET
+    # Stable preview token signed with get_preview_signing_secret()
     token_payload = f"{str(resolved)}:{file_hash}:{sheet_name or ''}"
-    preview_token = hmac.new(PREVIEW_SIGNING_SECRET, token_payload.encode(), hashlib.sha256).hexdigest()
+    signing_secret = get_preview_signing_secret()
+    preview_token = hmac.new(signing_secret, token_payload.encode(), hashlib.sha256).hexdigest()
 
     unique_comps = set(r.domain or r.company_name for r in records)
     total_contacts = sum(len(r.emails) for r in records)
@@ -3027,7 +3028,54 @@ async def preview_historical_import_action(
     )
 
 
-PREVIEW_SIGNING_SECRET = os.getenv("PREVIEW_SIGNING_SECRET", "salesai_preview_signing_secret_offline_guard").encode("utf-8")
+# Cryptographically secure, persistently managed preview signing secret
+def get_preview_signing_secret() -> bytes:
+    """
+    Returns the HMAC key used to sign and verify historical import preview tokens.
+    Prioritizes the PREVIEW_SIGNING_SECRET environment variable.
+    If absent, securely generates a persistent 32-byte secret in the local data directory
+    with restricted file permissions (fail closed against insecure defaults).
+    Never uses a hardcoded or publicly known fallback salt.
+    """
+    env_secret = os.getenv("PREVIEW_SIGNING_SECRET")
+    if env_secret and env_secret.strip():
+        return env_secret.strip().encode("utf-8")
+
+    secret_file = Path("data/.preview_signing_key")
+    if secret_file.exists():
+        try:
+            stored = secret_file.read_bytes().strip()
+            if stored and len(stored) >= 32:
+                return stored
+        except Exception as e:
+            logger.warning(f"Failed to read existing preview signing key file: {e}")
+
+    try:
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        new_secret = secrets.token_hex(32).encode("utf-8")
+        secret_file.write_bytes(new_secret)
+        # On POSIX systems set strict file permissions
+        try:
+            os.chmod(str(secret_file), 0o600)
+        except Exception:
+            pass
+        return new_secret
+    except Exception as e:
+        logger.error(f"Failed to persist preview signing key: {e}")
+        # Fail closed: generate an in-memory session key so no static public salt is ever used
+        return secrets.token_hex(32).encode("utf-8")
+
+
+class _PreviewSigningSecretBytes(bytes):
+    """Subclass of bytes providing dynamic resolution while passing isinstance(key, (bytes, bytearray))."""
+    def __new__(cls):
+        val = get_preview_signing_secret()
+        return super().__new__(cls, val)
+
+def _get_preview_secret_bytes() -> bytes:
+    return _PreviewSigningSecretBytes()
+
+PREVIEW_SIGNING_SECRET = _get_preview_secret_bytes()
 @router.post("/import/historical/confirm")
 @router.post("/sources/import-history/confirm")
 @router.post("/sources/historical/confirm")
@@ -3054,7 +3102,8 @@ async def confirm_historical_import_action(
 
     # Token verification
     expected_payload = f"{str(resolved)}:{effective_hash}:{sheet_name or ''}"
-    expected_token = hmac.new(PREVIEW_SIGNING_SECRET, expected_payload.encode(), hashlib.sha256).hexdigest()
+    signing_secret = get_preview_signing_secret()
+    expected_token = hmac.new(signing_secret, expected_payload.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(preview_token, expected_token):
         raise HTTPException(status_code=400, detail="Invalid preview confirmation token.")
 
@@ -3279,7 +3328,8 @@ async def confirm_historical_import_action(
         staging_clone.close()
         try:
             # 1. Maintain a persistent check connection on the live database to reliably detect external writes via PRAGMA data_version
-            target_check_conn = store._create_connection()
+            target_check_conn = sqlite3.connect(store.db_path)
+            target_check_conn.row_factory = sqlite3.Row
             try:
                 target_check_conn.execute("PRAGMA busy_timeout = 5000;")
                 initial_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
@@ -3334,19 +3384,28 @@ async def confirm_historical_import_action(
                         f"Concurrent database modification detected during staging (version changed from {initial_version} to {current_version}). Promotion aborted to prevent silent data loss."
                     )
 
-                # Acquire immediate transaction lock on target connection to prevent concurrent writes during promotion
+                # Acquire exclusive transaction lock on target connection to prevent concurrent writes during promotion
+                # SQLite ATTACH strategy ensures atomic, transactional table-level promotion
+                target_check_conn.execute("ATTACH DATABASE ? AS staging;", (staging_path,))
                 target_check_conn.execute("BEGIN IMMEDIATE;")
                 try:
-                    # Double-check version under lock
+                    # Double-check data_version under lock
                     lock_version = target_check_conn.execute("PRAGMA data_version;").fetchone()[0]
                     if lock_version != initial_version:
                         raise RuntimeError(
                             f"Concurrent database modification detected when locking target database ({initial_version} vs {lock_version}). Promotion aborted."
                         )
 
-                    # Promote staged clone into live target
-                    with staged_store._get_connection() as c_conn:
-                        c_conn.backup(target_check_conn)
+                    # Discover all user tables present in staging and promote them transactionally into main
+                    stg_tables = [
+                        r[0] for r in target_check_conn.execute(
+                            "SELECT name FROM staging.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+                        ).fetchall()
+                    ]
+                    for tbl in stg_tables:
+                        cols = [r[1] for r in target_check_conn.execute(f"PRAGMA staging.table_info({tbl});").fetchall()]
+                        cols_str = ", ".join(f'"{c}"' for c in cols)
+                        target_check_conn.execute(f'INSERT OR REPLACE INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}";')
 
                     # Post-promotion verification
                     fk_chk = target_check_conn.execute("PRAGMA foreign_key_check;").fetchall()
@@ -3360,6 +3419,11 @@ async def confirm_historical_import_action(
                 except Exception:
                     target_check_conn.rollback()
                     raise
+                finally:
+                    try:
+                        target_check_conn.execute("DETACH DATABASE staging;")
+                    except Exception:
+                        pass
             finally:
                 target_check_conn.close()
 

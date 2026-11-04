@@ -852,10 +852,18 @@ class HistoricalImporter:
                     matched_company_name TEXT,
                     source_file TEXT NOT NULL,
                     source_sheet TEXT NOT NULL DEFAULT 'Meeting',
+                    raw_row_json TEXT,
                     imported_at TEXT NOT NULL
                 )
                 """
             )
+            # Migration check: ensure raw_row_json column exists if table pre-existed
+            try:
+                cols = [r[1] for r in conn.execute("PRAGMA table_info(historical_meeting_activities);").fetchall()]
+                if "raw_row_json" not in cols:
+                    conn.execute("ALTER TABLE historical_meeting_activities ADD COLUMN raw_row_json TEXT;")
+            except Exception:
+                pass
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_hist_meeting_matched_cid
@@ -2314,20 +2322,55 @@ class HistoricalImporter:
                         (m.sent_date, cid),
                     )
 
-                    # 2. Record historical outreach event idempotently
+                    # 2. Record historical outreach event idempotently, with cross-source Excel/Gmail deduplication
                     raw_hash = f"gmail:{m.sender_account}:{m.message_id}"
                     contact_email = m.recipient_emails[0] if m.recipient_emails else m.to_address
-                    self.store.record_historical_outreach(
-                        candidate_id=cid,
-                        source_ref=f"gmail:{m.sender_account}",
-                        contact_name=m.to_address,
-                        contact_email=contact_email,
-                        contacted_at=m.sent_date,
-                        channel="gmail_sent",
-                        reply_status="contacted",
-                        notes=f"Gmail message {m.message_id} (Thread {m.thread_id}) | Subject: {m.subject or 'No Subject'}",
-                        raw_row_hash=raw_hash,
-                    )
+                    m_date_prefix = (m.sent_date or "")[:10]
+                    gmail_note = f"Gmail message {m.message_id} (Thread {m.thread_id}) | Subject: {m.subject or 'No Subject'}"
+
+                    # Check for an existing historical outreach event on the same candidate with matching date or recipient email
+                    existing_ev = None
+                    if m_date_prefix or contact_email:
+                        ev_rows = conn.execute(
+                            """
+                            SELECT event_id, contacted_at, contact_email, source_ref, notes FROM historical_outreach_events
+                            WHERE candidate_id = ?
+                            """,
+                            (cid,),
+                        ).fetchall()
+                        for er in ev_rows:
+                            e_date = (er["contacted_at"] or "")[:10]
+                            e_mail = (er["contact_email"] or "").strip().lower()
+                            if (e_date and m_date_prefix and e_date == m_date_prefix) or (e_mail and contact_email and e_mail == contact_email.lower()):
+                                existing_ev = er
+                                break
+
+                    if existing_ev:
+                        # Cross-source correspondence found: Enrich existing outreach event with Gmail provenance rather than duplicating
+                        cur_notes = existing_ev["notes"] or ""
+                        new_notes = f"{cur_notes} | {gmail_note}" if gmail_note not in cur_notes else cur_notes
+                        conn.execute(
+                            """
+                            UPDATE historical_outreach_events
+                            SET notes = ?,
+                                intent_evidence = COALESCE(intent_evidence, ?)
+                            WHERE event_id = ?
+                            """,
+                            (new_notes, f"gmail:{m.message_id}", existing_ev["event_id"]),
+                        )
+                    else:
+                        # New unique outreach event
+                        self.store.record_historical_outreach(
+                            candidate_id=cid,
+                            source_ref=f"gmail:{m.sender_account}",
+                            contact_name=m.to_address,
+                            contact_email=contact_email,
+                            contacted_at=m.sent_date,
+                            channel="gmail_sent",
+                            reply_status="contacted",
+                            notes=gmail_note,
+                            raw_row_hash=raw_hash,
+                        )
 
         return stats
 
@@ -2502,8 +2545,8 @@ class HistoricalImporter:
                             activity_hash, company_name, canonical_domain, status, sender,
                             contact_date, follow_up_date, reply_date, follow_up_notes,
                             origin_sheet, notes, matched_candidate_id, matched_company_name,
-                            source_file, source_sheet, imported_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            source_file, source_sheet, raw_row_json, imported_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             act_hash,
@@ -2521,6 +2564,7 @@ class HistoricalImporter:
                             m.matched_company_name,
                             m.source_file,
                             m.source_sheet,
+                            json.dumps(m.raw_row or {}),
                             now_iso,
                         ),
                     )
@@ -2625,6 +2669,7 @@ class HistoricalImporter:
                     "matched_company_name": r["matched_company_name"],
                     "source_file": r["source_file"],
                     "source_sheet": r["source_sheet"],
+                    "raw_row": json.loads(r["raw_row_json"] or "{}") if "raw_row_json" in r.keys() else {},
                     "imported_at": r["imported_at"],
                 })
             return results
