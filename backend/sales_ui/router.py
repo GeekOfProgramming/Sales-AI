@@ -3397,9 +3397,11 @@ async def confirm_historical_import_action(
                         )
 
                     # Discover all user tables present in staging and promote them transactionally into main
-                    # For tables with autoincrement integer PKs or dependent child FKs, avoid INSERT OR REPLACE
-                    # which deletes and re-inserts rows causing PK shifts or cascading foreign-key issues.
-                    # We promote parent tables first, then child tables, using safe INSERT OR IGNORE / selective UPDATE.
+                    # Using row-identity-aware UPSERT (ON CONFLICT(pk) DO UPDATE ...)
+                    # 1. Preserves existing primary keys (including autoincrement ids copied during online backup).
+                    # 2. Avoids DELETE + INSERT side effects of INSERT OR REPLACE that trigger ON DELETE CASCADE or foreign-key violations.
+                    # 3. Avoids silent data loss of INSERT OR IGNORE, ensuring updated attributes in staging are applied.
+                    # 4. Ensures repeated Preview -> Confirm imports are completely idempotent with no duplicate rows created.
                     stg_tables = [
                         r[0] for r in target_check_conn.execute(
                             "SELECT name FROM staging.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
@@ -3423,21 +3425,20 @@ async def confirm_historical_import_action(
                         cols_str = ", ".join(f'"{c}"' for c in cols)
                         pk_cols = [r[1] for r in target_check_conn.execute(f"PRAGMA main.table_info({tbl});").fetchall() if r[5] > 0]
 
-                        # Tables with auto-increment 'id' as primary key (e.g. historical_contacts, historical_company_links, historical_sent_emails, historical_meeting_activities)
-                        # must not clobber existing rows on arbitrary integer ID collisions.
-                        if len(pk_cols) == 1 and pk_cols[0].lower() == "id" and "id" in cols:
-                            non_id_cols = [c for c in cols if c.lower() != "id"]
-                            non_id_str = ", ".join(f'"{c}"' for c in non_id_cols)
-                            # Check if table has a natural unique constraint
-                            unique_indexes = target_check_conn.execute(f"PRAGMA main.index_list({tbl});").fetchall()
-                            has_unique = any(idx[2] == 1 for idx in unique_indexes)
-                            if has_unique:
-                                target_check_conn.execute(f'INSERT OR IGNORE INTO main."{tbl}" ({non_id_str}) SELECT {non_id_str} FROM staging."{tbl}";')
+                        if pk_cols:
+                            pk_str = ", ".join(f'"{c}"' for c in pk_cols)
+                            non_pk_cols = [c for c in cols if c not in pk_cols]
+                            if non_pk_cols:
+                                update_clause = ", ".join(f'"{c}" = excluded."{c}"' for c in non_pk_cols)
+                                sql = f'INSERT INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}" WHERE true ON CONFLICT({pk_str}) DO UPDATE SET {update_clause};'
                             else:
-                                target_check_conn.execute(f'INSERT INTO main."{tbl}" ({non_id_str}) SELECT {non_id_str} FROM staging."{tbl}";')
+                                sql = f'INSERT INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}" WHERE true ON CONFLICT({pk_str}) DO NOTHING;'
+                            target_check_conn.execute(sql)
                         else:
-                            # Natural primary key (candidate_id, import_hash, event_id, decision_id):
-                            target_check_conn.execute(f'INSERT OR REPLACE INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}";')
+                            # Fallback for tables without primary key: insert genuinely new rows only
+                            target_check_conn.execute(
+                                f'INSERT INTO main."{tbl}" ({cols_str}) SELECT {cols_str} FROM staging."{tbl}" EXCEPT SELECT {cols_str} FROM main."{tbl}";'
+                            )
 
                     # Post-promotion verification
                     fk_chk = target_check_conn.execute("PRAGMA foreign_key_check;").fetchall()
