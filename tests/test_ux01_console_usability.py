@@ -108,13 +108,13 @@ def test_04_research_review_section_grouping_and_details_collapse(disposable_ux_
     assert len(candidates) > 0
     cid = candidates[0].candidate_id
 
-    resp = client.get(f"/sales/candidates/{cid}/research-review")
-    if resp.status_code == 200:
-        html = resp.text
-        assert "Section 1: Core Identity, Legal & Official Website" in html
-        assert "Section 2: Location, Contact Details & Key Personnel" in html
-        assert "Section 3: Priority Rationale, Business Operations & Intelligence" in html
-        assert "Section 4: Traceable References, Provenance & Verification" in html
+    resp = client.get(f"/sales/candidates/{cid}/research")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "Section 1: Core Identity, Legal &amp; Official Website" in html or "Section 1: Core Identity, Legal & Official Website" in html
+    assert "Section 2: Location, Contact Details &amp; Key Personnel" in html or "Section 2: Location, Contact Details & Key Personnel" in html
+    assert "Section 3: Priority Rationale, Business Operations &amp; Intelligence" in html or "Section 3: Priority Rationale, Business Operations & Intelligence" in html
+    assert "Section 4: Traceable References, Provenance &amp; Verification" in html or "Section 4: Traceable References, Provenance & Verification" in html
 
     detail_resp = client.get(f"/sales/candidates/{cid}")
     if detail_resp.status_code == 200:
