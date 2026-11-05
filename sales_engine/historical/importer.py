@@ -590,6 +590,10 @@ class SentEmailRecord:
     matched_candidate_id: Optional[str] = None
     matched_company_name: Optional[str] = None
     reconciliation_status: str = "unmatched"  # 'matched' | 'ambiguous' | 'unmatched'
+    proposed_candidate_id: Optional[str] = None
+    proposed_company_name: Optional[str] = None
+    match_evidence: Optional[str] = None
+    proposal_status: Optional[str] = None  # None | 'proposed' | 'approved' | 'rejected'
 
 
 @dataclass
@@ -2589,10 +2593,6 @@ class HistoricalImporter:
                     em_clean = em.strip().lower()
                     if em_clean and cid:
                         cand_contacts_map.setdefault(em_clean, set()).add(cid)
-                    # Normalize leading/trailing dots or delimiters in staged email cells
-                    for norm_em in normalize_emails(em):
-                        if norm_em and cid:
-                            cand_contacts_map.setdefault(norm_em, set()).add(cid)
 
         # 4. Verified Candidate Identities & Established Aliases Map
         # Used safely ONLY when direct recipient address matching fails.
@@ -2620,6 +2620,18 @@ class HistoricalImporter:
                     except Exception:
                         pass
 
+        # Staged records alternate domain mapping (for workbook rows where alternate domains appear in contacts)
+        staged_domain_map: Dict[str, Set[str]] = {}
+        if staged_records:
+            for rec in staged_records:
+                cid = f"cand:domain:{self.store.canonicalize_domain(rec.domain)}" if rec.domain else None
+                if cid:
+                    for em in rec.emails:
+                        if "@" in em:
+                            em_dom = self.store.canonicalize_domain(em.split("@")[-1].strip().lower())
+                            if em_dom and em_dom not in GENERIC_OR_FREE_EMAIL_DOMAINS and not is_disallowed_or_unsafe_host(em_dom):
+                                staged_domain_map.setdefault(em_dom, set()).add(cid)
+
         for m in sent_emails:
             # If the record has already been explicitly reconciled/matched, preserve it
             if m.matched_candidate_id and m.reconciliation_status == "matched":
@@ -2636,32 +2648,59 @@ class HistoricalImporter:
                 m.matched_candidate_id = cid
                 m.matched_company_name = cand_names.get(cid)
                 m.reconciliation_status = "matched"
+                m.proposed_candidate_id = None
+                m.proposed_company_name = None
+                m.match_evidence = "exact_recipient_address"
+                m.proposal_status = "approved"
             elif len(matched_cids) > 1:
                 m.matched_candidate_id = None
                 m.matched_company_name = None
                 m.reconciliation_status = "ambiguous"
+                m.proposed_candidate_id = None
+                m.proposed_company_name = None
+                m.match_evidence = "multiple_candidate_exact_matches"
+                m.proposal_status = None
             else:
-                # Step 2: Fallback to verified existing Candidate identities and established aliases
+                # Step 2: Fallback candidates considered ONLY as PROPOSED associations requiring operator approval.
+                # Invariant (HIST-04A): Do NOT automatically attach or mark matched. Leave reconciliation_status='unmatched'.
                 fallback_cids = set()
+                evidence_note = ""
                 for recip in m.recipient_emails:
                     dom = recip.split("@")[-1].lower() if "@" in recip else ""
                     canon = self.store.canonicalize_domain(dom)
                     if canon and canon not in GENERIC_OR_FREE_EMAIL_DOMAINS and not is_disallowed_or_unsafe_host(canon):
-                        fallback_cids.update(cand_domain_map.get(canon, set()))
+                        if canon in cand_domain_map:
+                            fallback_cids.update(cand_domain_map[canon])
+                            evidence_note = f"Verified candidate_domain: {canon}"
+                        elif canon in staged_domain_map:
+                            fallback_cids.update(staged_domain_map[canon])
+                            evidence_note = f"Workbook alternate contact domain: {canon}"
 
                 if len(fallback_cids) == 1:
-                    cid = list(fallback_cids)[0]
-                    m.matched_candidate_id = cid
-                    m.matched_company_name = cand_names.get(cid)
-                    m.reconciliation_status = "matched"
+                    prop_cid = list(fallback_cids)[0]
+                    m.matched_candidate_id = None
+                    m.matched_company_name = None
+                    m.reconciliation_status = "unmatched"
+                    m.proposed_candidate_id = prop_cid
+                    m.proposed_company_name = cand_names.get(prop_cid)
+                    m.match_evidence = evidence_note
+                    m.proposal_status = "proposed"
                 elif len(fallback_cids) > 1:
                     m.matched_candidate_id = None
                     m.matched_company_name = None
                     m.reconciliation_status = "ambiguous"
+                    m.proposed_candidate_id = None
+                    m.proposed_company_name = None
+                    m.match_evidence = "ambiguous_fallback_domains"
+                    m.proposal_status = None
                 else:
                     m.matched_candidate_id = None
                     m.matched_company_name = None
                     m.reconciliation_status = "unmatched"
+                    m.proposed_candidate_id = None
+                    m.proposed_company_name = None
+                    m.match_evidence = "no_verified_candidate_association"
+                    m.proposal_status = None
 
             reconciled.append(m)
 
@@ -2670,6 +2709,7 @@ class HistoricalImporter:
     def import_sent_emails(
         self,
         sent_emails: List[SentEmailRecord],
+        staged_records: Optional[List[StagedLeadRecord]] = None,
     ) -> Dict[str, int]:
         """
         Persists Sent_Emails records idempotently into historical_sent_emails.
@@ -2684,13 +2724,12 @@ class HistoricalImporter:
             "unmatched": 0,
             "duplicates": 0,
         }
-        reconciled = self.reconcile_sent_emails(sent_emails)
-        # If input records are already reconciled, preserve their matched candidate ids
-        for m_orig, m_rec in zip(sent_emails, reconciled):
-            if m_orig.matched_candidate_id and m_orig.reconciliation_status == "matched":
-                m_rec.matched_candidate_id = m_orig.matched_candidate_id
-                m_rec.matched_company_name = m_orig.matched_company_name or m_rec.matched_company_name
-                m_rec.reconciliation_status = "matched"
+        # If sent_emails have already been explicitly reconciled by the caller, reuse them
+        already_reconciled = any(m.reconciliation_status != "unmatched" or m.proposal_status for m in sent_emails)
+        if already_reconciled:
+            reconciled = sent_emails
+        else:
+            reconciled = self.reconcile_sent_emails(sent_emails, staged_records=staged_records)
         now_iso = datetime.now(timezone.utc).isoformat()
 
         with self.store._get_connection() as conn:
