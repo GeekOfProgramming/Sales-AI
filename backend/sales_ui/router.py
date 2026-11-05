@@ -3448,6 +3448,18 @@ async def confirm_historical_import_action(
                 # 2. Execute import on staging store
                 staged_store = CandidateStore(staging_path)
                 staged_importer = HistoricalImporter(store=staged_store)
+
+                # Pre-reconcile Sent_Emails against staging store before mutating candidate_contacts
+                # This ensures the 303 direct matches vs 11 proposed associations are reconciled with exact parity
+                pre_reconciled_sent = None
+                if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+                    try:
+                        raw_sent = staged_importer.parse_sent_emails(resolved)
+                        if raw_sent:
+                            pre_reconciled_sent = staged_importer.reconcile_sent_emails(raw_sent, staged_records=records)
+                    except Exception as e:
+                        logger.warning(f"Error pre-reconciling sent emails: {e}")
+
                 if is_lead_res:
                     result = staged_importer.import_lead_research_records(records, source_file_name=resolved.name)
                 else:
@@ -3455,11 +3467,22 @@ async def confirm_historical_import_action(
 
                 # 2b. If Sent_Emails sheet exists, import sent messages into staging store
                 sent_emails_stats = None
-                if resolved.suffix.lower() in (".xlsx", ".xlsm"):
+                if pre_reconciled_sent:
+                    try:
+                        sent_emails_stats = staged_importer.import_sent_emails(pre_reconciled_sent)
+                        result.sent_emails_total = sent_emails_stats.get("total", 0)
+                        result.sent_emails_imported = sent_emails_stats.get("imported", 0)
+                        result.sent_emails_matched = sent_emails_stats.get("matched", 0)
+                        result.sent_emails_unmatched = sent_emails_stats.get("unmatched", 0)
+                        result.sent_emails_duplicates = sent_emails_stats.get("duplicates", 0)
+                    except Exception as e:
+                        logger.error(f"Failed to import sent emails in staging: {e}")
+                        raise
+                elif resolved.suffix.lower() in (".xlsx", ".xlsm"):
                     try:
                         sent_msgs = staged_importer.parse_sent_emails(resolved)
                         if sent_msgs:
-                            sent_emails_stats = staged_importer.import_sent_emails(sent_msgs)
+                            sent_emails_stats = staged_importer.import_sent_emails(sent_msgs, staged_records=records)
                             result.sent_emails_total = sent_emails_stats.get("total", 0)
                             result.sent_emails_imported = sent_emails_stats.get("imported", 0)
                             result.sent_emails_matched = sent_emails_stats.get("matched", 0)
@@ -3605,6 +3628,11 @@ async def confirm_historical_import_action(
             "status": "completed",
             "companies_created": result.companies_created,
             "records_parsed": result.records_parsed,
+            "sent_emails_total": getattr(result, "sent_emails_total", 0),
+            "sent_emails_imported": getattr(result, "sent_emails_imported", 0),
+            "sent_emails_matched": getattr(result, "sent_emails_matched", 0),
+            "sent_emails_unmatched": getattr(result, "sent_emails_unmatched", 0),
+            "sent_emails_duplicates": getattr(result, "sent_emails_duplicates", 0),
             "backup_path": str(backup_path) if backup_path else None,
             "backup_sha": backup_sha,
         })
