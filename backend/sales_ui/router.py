@@ -8023,7 +8023,7 @@ async def sent_history_view(request: Request):
 
     # Fetch historical Gmail sent emails registry and stats
     importer = HistoricalImporter(store=svcs["cand_store"])
-    hist_sent_emails = importer.get_sent_emails(limit=300)
+    hist_sent_emails = importer.get_sent_emails(limit=500)
     hist_sent_stats = importer.get_sent_emails_stats()
     unmatched_sent_emails = [m for m in hist_sent_emails if m.get("reconciliation_status") != "matched"]
 
