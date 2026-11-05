@@ -667,7 +667,20 @@ def render_console_template(request: Request, name: str, context: Dict[str, Any]
     csrf_token = get_or_create_csrf_token(request)
     context["csrf_token"] = csrf_token
     if "nav_badges" not in context:
-        context["nav_badges"] = _get_navigation_badge_counts()
+        # Optimization: Reuse already available authoritative lifecycle queue counts or summary if present in context
+        nav_counts = None
+        if "queue_counts" in context and isinstance(context["queue_counts"], dict):
+            qc = context["queue_counts"]
+            nav_counts = _get_navigation_badge_counts()
+            nav_counts["candidates"] = qc.get("active", 0)
+            nav_counts["human_verification"] = qc.get("needs_verification", 0)
+        elif "summary" in context and hasattr(context["summary"], "active_candidates"):
+            s = context["summary"]
+            nav_counts = _get_navigation_badge_counts()
+            nav_counts["candidates"] = getattr(s, "active_candidates", 0)
+            nav_counts["human_verification"] = getattr(s, "needs_verification", 0)
+
+        context["nav_badges"] = nav_counts if nav_counts is not None else _get_navigation_badge_counts()
     resp = templates.TemplateResponse(request=request, name=name, context=context)
     if request.cookies.get(CSRF_COOKIE_NAME) != csrf_token:
         resp.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
