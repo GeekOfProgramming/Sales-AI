@@ -150,6 +150,12 @@ DISALLOWED_PRIMARY_DOMAINS = {
     "paginegialle.it", "indeed.com", "glassdoor.com", "stepstone.de"
 }
 
+GENERIC_OR_FREE_EMAIL_DOMAINS = {
+    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com", "icloud.com",
+    "libero.it", "virgilio.it", "pec.it", "alice.it", "tiscali.it", "fastwebnet.it",
+    "mail.com", "protonmail.com", "aol.com", "zoho.com", "amabim.com"
+}
+
 
 def is_disallowed_or_unsafe_host(host: Optional[str]) -> bool:
     """
@@ -1532,20 +1538,21 @@ class HistoricalImporter:
 
             # 6. Save unverified contacts if email was extracted (without verifying them)
             if rec.emails:
-                for em in rec.emails:
-                    clean_em = em.strip().lower()
-                    if clean_em and "@" in clean_em and "تأیید نشد" not in clean_em:
-                        contact_data = {
-                            "contact_id": f"contact:{clean_em}",
-                            "work_email": clean_em,
-                            "full_name": rec.contact_name if (rec.contact_name and "تأیید نشد" not in rec.contact_name) else "Research Contact",
-                            "job_title": rec.contact_role or rec.business_topic or "Unverified Contact",
-                            "email_status": "unverified",
-                            "email_confidence": 30,
-                            "provider": "research_excel",
-                        }
-                        self.store.save_contact(contact_data, candidate_id=cid)
-                        result.contacts_extracted += 1
+                for raw_em in rec.emails:
+                    for em in normalize_emails(raw_em):
+                        clean_em = em.strip().lower()
+                        if clean_em and "@" in clean_em and "تأیید نشد" not in clean_em:
+                            contact_data = {
+                                "contact_id": f"contact:{clean_em}",
+                                "work_email": clean_em,
+                                "full_name": rec.contact_name if (rec.contact_name and "تأیید نشد" not in rec.contact_name) else "Research Contact",
+                                "job_title": rec.contact_role or rec.business_topic or "Unverified Contact",
+                                "email_status": "unverified",
+                                "email_confidence": 30,
+                                "provider": "research_excel",
+                            }
+                            self.store.save_contact(contact_data, candidate_id=cid)
+                            result.contacts_extracted += 1
 
         return result
 
@@ -2375,8 +2382,13 @@ class HistoricalImporter:
                     ),
                 )
 
-                # Contacts storage with deduplication
+                # Contacts storage with deduplication and email normalization
+                clean_extracted_emails = []
                 for em in rec.emails:
+                    for norm_em in normalize_emails(em):
+                        if norm_em and norm_em not in clean_extracted_emails:
+                            clean_extracted_emails.append(norm_em)
+                for em in clean_extracted_emails:
                     conn.execute(
                         """
                         INSERT OR IGNORE INTO historical_contacts (
@@ -2577,6 +2589,36 @@ class HistoricalImporter:
                     em_clean = em.strip().lower()
                     if em_clean and cid:
                         cand_contacts_map.setdefault(em_clean, set()).add(cid)
+                    # Normalize leading/trailing dots or delimiters in staged email cells
+                    for norm_em in normalize_emails(em):
+                        if norm_em and cid:
+                            cand_contacts_map.setdefault(norm_em, set()).add(cid)
+
+        # 4. Verified Candidate Identities & Established Aliases Map
+        # Used safely ONLY when direct recipient address matching fails.
+        # Excludes free/generic providers, social media, and internal company domains.
+        cand_domain_map: Dict[str, Set[str]] = {}
+        with self.store._get_connection() as conn:
+            cand_rows = conn.execute("SELECT candidate_id, company_name, company_domain, aliases_json FROM candidate_companies").fetchall()
+            for cr in cand_rows:
+                cid_str = str(cr[0])
+                c_dom = str(cr[2] or "").strip().lower()
+                canon = None
+                if c_dom:
+                    canon = self.store.canonicalize_domain(c_dom)
+                    if canon and canon not in GENERIC_OR_FREE_EMAIL_DOMAINS and not is_disallowed_or_unsafe_host(canon):
+                        cand_domain_map.setdefault(canon, set()).add(cid_str)
+                # Check authoritative aliases where present
+                if cr[3]:
+                    try:
+                        al_list = json.loads(cr[3])
+                        for al in al_list:
+                            for token in re.findall(r"[\w.-]+\.[a-zA-Z]{2,}", al):
+                                t_dom = self.store.canonicalize_domain(token.strip(" .()[]'\",;:").lower())
+                                if t_dom and t_dom not in GENERIC_OR_FREE_EMAIL_DOMAINS and not is_disallowed_or_unsafe_host(t_dom):
+                                    cand_domain_map.setdefault(t_dom, set()).add(cid_str)
+                    except Exception:
+                        pass
 
         for m in sent_emails:
             # If the record has already been explicitly reconciled/matched, preserve it
@@ -2599,9 +2641,27 @@ class HistoricalImporter:
                 m.matched_company_name = None
                 m.reconciliation_status = "ambiguous"
             else:
-                m.matched_candidate_id = None
-                m.matched_company_name = None
-                m.reconciliation_status = "unmatched"
+                # Step 2: Fallback to verified existing Candidate identities and established aliases
+                fallback_cids = set()
+                for recip in m.recipient_emails:
+                    dom = recip.split("@")[-1].lower() if "@" in recip else ""
+                    canon = self.store.canonicalize_domain(dom)
+                    if canon and canon not in GENERIC_OR_FREE_EMAIL_DOMAINS and not is_disallowed_or_unsafe_host(canon):
+                        fallback_cids.update(cand_domain_map.get(canon, set()))
+
+                if len(fallback_cids) == 1:
+                    cid = list(fallback_cids)[0]
+                    m.matched_candidate_id = cid
+                    m.matched_company_name = cand_names.get(cid)
+                    m.reconciliation_status = "matched"
+                elif len(fallback_cids) > 1:
+                    m.matched_candidate_id = None
+                    m.matched_company_name = None
+                    m.reconciliation_status = "ambiguous"
+                else:
+                    m.matched_candidate_id = None
+                    m.matched_company_name = None
+                    m.reconciliation_status = "unmatched"
 
             reconciled.append(m)
 
