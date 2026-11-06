@@ -102,18 +102,22 @@
       </div>
     </div>
 
-    <!-- Step 3: Contacts & Verification -->
+    <!-- Step 3: Recipient Readiness (UX-OUT-03 Single Source of Truth) -->
     <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
-      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">3. Contact Status</div>
+      <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">3. Recipient Readiness</div>
       <div style="margin-top: 0.2rem; font-weight: 600;">
-        {% if verified_contacts %}
-          <span class="badge badge-success">{{ verified_contacts|length }} Verified</span>
+        {% if readiness_info and readiness_info.recipient_readiness %}
+          <span class="badge {{ readiness_info.recipient_readiness.badge }}" title="{{ readiness_info.recipient_readiness.reason }}">
+            {{ readiness_info.recipient_readiness.label }}
+          </span>
+        {% elif verified_contacts %}
+          <span class="badge badge-success">Verified Recipient</span>
         {% elif lead_record and lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
-          <span class="badge badge-info" title="Lead Register Documentation Alone Requires Human Verification">Documented (Unverified)</span>
+          <span class="badge badge-warning" title="Lead Register Documentation Alone Requires Human Verification">Evidence Required</span>
         {% elif likely_contacts or unverified_contacts %}
-          <span class="badge badge-warning">Unverified</span>
+          <span class="badge badge-warning">Evidence Required</span>
         {% else %}
-          <span class="badge badge-secondary">Missing</span>
+          <span class="badge badge-secondary">Missing Recipient</span>
         {% endif %}
       </div>
     </div>
@@ -129,7 +133,17 @@
         {% elif company_outreach_status == 'HISTORICAL_CONTACT_REVIEW' %}
           <span class="badge" style="background-color: #7c3aed; color: #fff;">📬 HISTORICAL_CONTACT_REVIEW</span>
         {% elif company_outreach_status == 'DRAFT_READY' %}
-          <span class="badge" style="background-color: #d97706; color: #fff;">📝 DRAFT_READY</span>
+          {% set ns = namespace(has_approved=false) %}
+          {% for d in company_drafts %}
+            {% if d.approval_status == 'approved' %}{% set ns.has_approved = true %}{% endif %}
+          {% endfor %}
+          {% if ns.has_approved %}
+            <span class="badge badge-success" style="background-color: #059669; color: #fff;">Approved Draft</span>
+          {% else %}
+            <span class="badge badge-warning" style="background-color: #d97706; color: #fff;">Draft Pending</span>
+          {% endif %}
+        {% elif can_generate_draft %}
+          <span class="badge badge-success">Draft Eligible</span>
         {% else %}
           <span class="badge badge-secondary">⚪ NOT_SENT</span>
         {% endif %}
@@ -843,7 +857,27 @@
           <td style="font-weight: 600;">13. Contact Email Addresses</td>
           <td>
             {% if lead_record.contact_email_addresses and lead_record.contact_email_addresses != 'Not Found' %}
-              <code>{{ lead_record.contact_email_addresses }}</code>
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                  <code>{{ lead_record.contact_email_addresses }}</code>
+                  {% set em_rev = field_reviews.get('contact_email_addresses') if field_reviews else None %}
+                  {% if em_rev and em_rev.review_state in ('OPERATOR_APPROVED', 'OPERATOR_CORRECTED') %}
+                    <span class="badge badge-success" style="font-size: 0.72rem; margin-left: 0.5rem;">✓ Register Approved</span>
+                    {% if em_rev.evidence_url %}
+                      <a href="{{ em_rev.evidence_url }}" target="_blank" rel="noopener noreferrer" style="font-size: 0.75rem; margin-left: 0.25rem; color: var(--border-focus);">🔗 Evidence ↗</a>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge badge-warning" style="font-size: 0.72rem; margin-left: 0.5rem;">Review Pending</span>
+                  {% endif %}
+                </div>
+                <div>
+                  {% if not (em_rev and em_rev.review_state in ('OPERATOR_APPROVED', 'OPERATOR_CORRECTED')) %}
+                    <a href="/sales/register/{{ detail.candidate.candidate_id }}/edit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
+                      ✍️ Review in Register
+                    </a>
+                  {% endif %}
+                </div>
+              </div>
             {% else %}
               <span class="badge badge-secondary" style="font-size: 0.72rem;">No verified email</span>
             {% endif %}
@@ -874,13 +908,13 @@
 </div>
 
 <!-- ========================================================================= -->
-<!-- AREA 4: CONTACTS & VERIFICATION -->
+<!-- AREA 4: CONTACTS & EVIDENCE REVIEW -->
 <!-- ========================================================================= -->
 <div id="section-contacts" class="workspace-section" style="display: none;">
   <!-- Contacts Verification Summary Breakdown -->
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
     <div class="card" style="margin-bottom: 0; padding: 0.85rem 1rem; text-align: center; border-top: 3px solid #10b981;">
-      <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Verified Contacts</div>
+      <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Verified Recipients</div>
       <div style="font-size: 1.4rem; font-weight: 700; color: #10b981; margin-top: 0.25rem;">{{ verified_contacts|length }}</div>
     </div>
     <div class="card" style="margin-bottom: 0; padding: 0.85rem 1rem; text-align: center; border-top: 3px solid #f59e0b;">
@@ -893,10 +927,34 @@
     </div>
   </div>
 
+  {% set has_reg_approved = (field_reviews and field_reviews.get('contact_email_addresses') and field_reviews.get('contact_email_addresses').review_state in ('OPERATOR_APPROVED', 'OPERATOR_CORRECTED')) %}
+  {% if has_reg_approved %}
+  <!-- Lead Register Approval Active Banner -->
+  <div class="card" style="margin-bottom: 1.25rem; border-left: 4px solid #10b981; background: rgba(16, 185, 129, 0.05);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+      <div>
+        <h4 style="margin: 0 0 0.25rem 0; color: #10b981;">✓ Contact Evidence Approved in Lead Register</h4>
+        <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
+          Contact email <code>{{ lead_record.contact_email_addresses }}</code> was verified during 13-Field Register review.
+          No duplicate verification required.
+          {% if field_reviews.get('contact_email_addresses').evidence_url %}
+            <a href="{{ field_reviews.get('contact_email_addresses').evidence_url }}" target="_blank" rel="noopener noreferrer" style="color: var(--border-focus); margin-left: 0.5rem;">View Source Evidence ↗</a>
+          {% endif %}
+        </p>
+      </div>
+      <div>
+        <a href="/sales/register/{{ detail.candidate.candidate_id }}/edit" class="btn btn-secondary btn-sm" style="font-size: 0.8rem;">
+          📋 Edit Register Review
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Contacts Table -->
   <div class="card" style="margin-bottom: 1.25rem;">
     <div class="card-title">
-      <span>Company Contacts &amp; Verification Evidence</span>
+      <span>Company Contacts &amp; Evidence Provenance</span>
       <span class="badge badge-info">{{ contacts|length }} Total</span>
     </div>
     {% if contacts %}
@@ -907,7 +965,7 @@
             <th>Name</th>
             <th>Role / Title</th>
             <th>Work Email</th>
-            <th>Status</th>
+            <th>Status / Provenance</th>
             <th>Eligibility</th>
             <th>Action</th>
           </tr>
@@ -919,10 +977,12 @@
             <td>{{ c.job_title }}</td>
             <td><code>{{ c.work_email }}</code></td>
             <td>
-              {% if c.email_status == 'verified' %}
+              {% if c.provenance == 'lead_register_approved' or c.is_lead_register_approved %}
+                <span class="badge badge-success" title="Approved in 13-Field Lead Register with verifiable evidence">✓ Register Approved</span>
+              {% elif c.email_status == 'verified' %}
                 <span class="badge badge-success">✓ Verified</span>
               {% elif c.is_documented %}
-                <span class="badge badge-info" title="Documented in 13-Field Lead Register (Not Independently Verified)">Documented</span>
+                <span class="badge badge-info" title="Documented in 13-Field Lead Register (Evidence review required)">Documented</span>
               {% elif c.email_status == 'likely' %}
                 <span class="badge badge-warning">Likely</span>
               {% else %}
@@ -933,13 +993,23 @@
               {% if c.is_eligible %}
                 <span class="badge badge-success">Outreach Eligible</span>
               {% else %}
-                <span class="badge badge-secondary">Verification Required</span>
+                <span class="badge badge-secondary">Evidence Required</span>
               {% endif %}
             </td>
             <td>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="populateVerifyModal('{{ c.contact_id }}', '{{ c.full_name }}', '{{ c.work_email }}')">
-                🔍 Verify Evidence
-              </button>
+              {% if c.is_verified %}
+                {% if field_reviews and field_reviews.get('contact_email_addresses') and field_reviews.get('contact_email_addresses').evidence_url %}
+                  <a href="{{ field_reviews.get('contact_email_addresses').evidence_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size: 0.75rem;">
+                    🔗 View Source
+                  </a>
+                {% else %}
+                  <span class="text-subtle" style="font-size: 0.75rem;">Verified</span>
+                {% endif %}
+              {% else %}
+                <button type="button" class="btn btn-secondary btn-sm" onclick="populateVerifyModal('{{ c.contact_id }}', '{{ c.full_name }}', '{{ c.work_email }}')">
+                  🔍 Verify Evidence
+                </button>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -953,13 +1023,14 @@
     {% endif %}
   </div>
 
-  <!-- Explicit Evidence-Aware Contact Verification Action -->
+  <!-- Evidence Verification Form (Visible when unverified contacts exist) -->
+  {% if not has_reg_approved or unverified_contacts %}
   <div class="card">
     <div class="card-title">
       <span>Verify Contact with Audit Trail (Explicit Evidence Source Required)</span>
     </div>
     <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
-      Per Phase P0 safety requirements, arbitrary email addresses cannot be treated as verified without documenting public evidence.
+      Per safety requirements, arbitrary email addresses cannot be treated as verified without documenting public evidence. Once verified, this evidence applies across the workspace.
     </p>
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/verify-contact">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -993,6 +1064,7 @@
       </div>
     </form>
   </div>
+  {% endif %}
 </div>
 
 <!-- ========================================================================= -->
@@ -1329,7 +1401,9 @@
         {% for c in contacts %}
           <option value="{{ c.contact_id }}" data-email="{{ c.work_email }}" data-name="{{ c.full_name }}" {% if not c.is_eligible %}disabled{% endif %}>
             {{ c.full_name }} &lt;{{ c.work_email }}&gt;
-            {% if c.is_verified %}
+            {% if c.provenance == 'lead_register_approved' or c.is_lead_register_approved %}
+              [Approved in Lead Register]
+            {% elif c.is_verified %}
               [Verified]
             {% elif c.is_documented %}
               [Documented in Lead Register - Verification Required]

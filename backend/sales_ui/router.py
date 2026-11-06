@@ -1378,6 +1378,7 @@ def evaluate_candidate_readiness(
     prefetched_has_history: Optional[bool] = None,
     prefetched_suppressed_domains: Optional[Set[str]] = None,
     prefetched_suppressed_emails: Optional[Set[str]] = None,
+    prefetched_field_reviews: Optional[Dict[str, Any]] = None,
     has_prefetched: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -1387,7 +1388,7 @@ def evaluate_candidate_readiness(
       2. Authoritative domain/candidate suppression
       3. Historical contact / active conversation
       4. Candidate policy qualification & cold outreach permission
-      5. Available recipient verification / Lead Register documentation
+      5. Available recipient verification / Lead Register approved evidence
     Returns a unified dictionary with:
       - effective_readiness: 'suppressed' | 'prior_contact' | 'not_eligible' | 'verification_required' | 'draft_ready'
       - readiness_label: Human-readable display label
@@ -1395,9 +1396,10 @@ def evaluate_candidate_readiness(
       - readiness_title: Detailed tooltip
       - is_suppressed: bool
       - is_previously_contacted: bool
-      - has_verified_recipient: bool (verified or documented in Lead Register)
+      - has_verified_recipient: bool (verified or Lead Register approved with exact evidence)
       - can_generate_draft: bool (ready for manual draft)
-      - usable_recipients: List[Dict[str, Any]] (eligible recipients with verified or documented evidence)
+      - usable_recipients: List[Dict[str, Any]] (eligible recipients with verified or approved evidence)
+      - recipient_readiness: Dict[str, str] (compact indicator: status, label, badge, reason)
     """
     cid = getattr(cand, "candidate_id", None) or ""
     c_name = getattr(cand, "company_name", None) or getattr(cand, "name", "Company")
@@ -1438,14 +1440,15 @@ def evaluate_candidate_readiness(
     if not cid.strip():
         base_eligible = False
 
-    # 4. Check recipient evidence:
-    # A recipient is draft-eligible ONLY if:
+    # 4. Check recipient evidence & Lead Register single source of truth:
+    # A recipient is draft-eligible if:
     #   - Valid email syntax
     #   - Not individually suppressed
-    #   - Explicitly verified: email_status == 'verified' (backed by explicit audit verification)
-    # NOTE: Documented emails (from 13-Field Lead Register or research snapshots) are collected for
-    # inspection/verification reference, but DO NOT automatically satisfy draft readiness without verification.
-    # Contacts with status 'likely', 'unverified', 'unknown', or missing contacts require contact verification.
+    #   - Explicitly verified: either email_status == 'verified' in candidate_contacts OR
+    #     explicitly operator-approved in the 13-Field Lead Register (field_name = 'contact_email_addresses',
+    #     review_state in ('OPERATOR_APPROVED', 'OPERATOR_CORRECTED')) with matching value checksum and
+    #     sufficient traceable evidence linking the address to the company.
+    # Merely extracted, imported, or unreviewed AI-suggested addresses DO NOT automatically satisfy readiness.
     reg_emails = []
     company_lead_record = None
     if has_prefetched:
@@ -1458,6 +1461,33 @@ def evaluate_candidate_readiness(
 
     if company_lead_record and company_lead_record.contact_email_addresses and company_lead_record.contact_email_addresses.strip() != "Not Found":
         reg_emails = [e.strip().lower() for e in company_lead_record.contact_email_addresses.split(",") if e.strip() and e.strip() != "Not Found"]
+
+    # Inspect Lead Register approval for contact_email_addresses
+    approved_reg_emails = set()
+    reg_email_review = None
+    if prefetched_field_reviews is not None:
+        reg_email_review = prefetched_field_reviews.get("contact_email_addresses")
+    elif reg_store and cid.strip():
+        try:
+            reviews = reg_store.get_field_reviews(cid.strip())
+            reg_email_review = reviews.get("contact_email_addresses")
+        except Exception:
+            pass
+
+    if reg_email_review and reg_email_review.review_state in ("OPERATOR_APPROVED", "OPERATOR_CORRECTED"):
+        # Verify value checksum matches current lead record value to detect tampering or subsequent edits
+        from sales_engine.leads.register_store import compute_field_checksum
+        cur_val = company_lead_record.contact_email_addresses if company_lead_record else None
+        if cur_val and reg_email_review.value_checksum == compute_field_checksum(cur_val):
+            # Verify traceable evidence exists (evidence_url or snapshot_id or lead_record evidence_urls)
+            has_evidence = bool(
+                reg_email_review.evidence_url
+                or reg_email_review.snapshot_id
+                or (company_lead_record and company_lead_record.evidence_urls)
+            )
+            if has_evidence:
+                for re in reg_emails:
+                    approved_reg_emails.add(re)
 
     usable_recipients = []
     all_workspace_recipients = []
@@ -1487,24 +1517,36 @@ def evaluate_candidate_readiness(
         else:
             is_supp_recipient = check_authoritative_suppression(suppression_svc, email=w_email)
 
-        is_verified = (st == "verified")
+        is_reg_approved = (w_email in approved_reg_emails)
+        is_verified = (st == "verified" or is_reg_approved)
         is_doc = (w_email in reg_emails)
+
+        provenance_label = "verified_contact"
+        if is_reg_approved:
+            provenance_label = "lead_register_approved"
+        elif is_verified:
+            provenance_label = "verified_contact"
+        elif is_doc:
+            provenance_label = "lead_register_documented"
+        else:
+            provenance_label = "candidate_contact"
 
         rec_item = {
             "contact_id": getattr(cnt, "contact_id", None) or f"email:{w_email}",
             "full_name": getattr(cnt, "full_name", None) or f"{cnt.first_name or ''} {cnt.last_name or ''}".strip() or "Unnamed Contact",
             "job_title": getattr(cnt, "job_title", None) or "Unknown Title",
             "work_email": w_email,
-            "email_status": st,
+            "email_status": "verified" if is_verified else st,
             "is_verified": is_verified,
             "is_documented": is_doc,
+            "is_lead_register_approved": is_reg_approved,
             "is_suppressed": is_supp_recipient,
             "is_eligible": is_verified and not is_supp_recipient,
-            "provenance": "verified_contact" if is_verified else ("lead_register_documented" if is_doc else "candidate_contact"),
+            "provenance": provenance_label,
         }
         all_workspace_recipients.append(rec_item)
 
-        # Only explicitly verified and unsuppressed recipients are usable for draft readiness
+        # Only explicitly verified/approved and unsuppressed recipients are usable for draft readiness
         if is_verified and not is_supp_recipient:
             usable_recipients.append(rec_item)
 
@@ -1518,23 +1560,77 @@ def evaluate_candidate_readiness(
             else:
                 is_supp_doc = check_authoritative_suppression(suppression_svc, email=doc_email)
 
+            is_reg_approved = (doc_email in approved_reg_emails)
+            is_verified = is_reg_approved
+
             doc_item = {
                 "contact_id": f"contact:{doc_email}",
                 "full_name": "Lead Register Contact",
                 "job_title": "Documented Contact",
                 "work_email": doc_email,
-                "email_status": "unverified",
-                "is_verified": False,
+                "email_status": "verified" if is_verified else "unverified",
+                "is_verified": is_verified,
                 "is_documented": True,
+                "is_lead_register_approved": is_reg_approved,
                 "is_suppressed": is_supp_doc,
-                "is_eligible": False,  # Documented alone is NOT draft-ready without verification
-                "provenance": "lead_register_documented",
+                "is_eligible": is_verified and not is_supp_doc,
+                "provenance": "lead_register_approved" if is_reg_approved else "lead_register_documented",
             }
             all_workspace_recipients.append(doc_item)
+            if is_verified and not is_supp_doc:
+                usable_recipients.append(doc_item)
 
     has_usable_recipient = (len(usable_recipients) > 0)
 
-    # 5. Determine effective readiness with strict priority:
+    # 5. Compact Recipient Readiness Indicator (UX-OUT-03):
+    # - Verified Recipient: Approved evidence exists and contact is eligible
+    # - Evidence Required: Recipient on file but lacks verified evidence
+    # - Missing Recipient: No recipient email on file
+    # - Outreach Blocked: Suppressed, prior contact, or policy ineligible
+    if is_supp:
+        recipient_readiness = {
+            "status": "outreach_blocked",
+            "label": "Outreach Blocked",
+            "badge": "badge-danger",
+            "reason": "Domain or candidate is suppressed (Do Not Contact)",
+        }
+    elif is_contacted:
+        recipient_readiness = {
+            "status": "outreach_blocked",
+            "label": "Outreach Blocked",
+            "badge": "badge-warning",
+            "reason": "Previous outreach history or active conversation detected",
+        }
+    elif not base_eligible:
+        recipient_readiness = {
+            "status": "outreach_blocked",
+            "label": "Outreach Blocked",
+            "badge": "badge-muted",
+            "reason": "Candidate not eligible for outreach under policy rules",
+        }
+    elif has_usable_recipient:
+        recipient_readiness = {
+            "status": "verified_recipient",
+            "label": "Verified Recipient",
+            "badge": "badge-success",
+            "reason": "Explicitly verified recipient ready for draft preparation",
+        }
+    elif reg_emails or raw_contacts:
+        recipient_readiness = {
+            "status": "evidence_required",
+            "label": "Evidence Required",
+            "badge": "badge-warning",
+            "reason": "Recipient on file requires operator evidence review",
+        }
+    else:
+        recipient_readiness = {
+            "status": "missing_recipient",
+            "label": "Missing Recipient",
+            "badge": "badge-secondary",
+            "reason": "No recipient contact on file",
+        }
+
+    # 6. Determine effective readiness with strict priority:
     # 1. Suppressed / DNC (authoritative suppression overrides all positive states)
     # 2. Prior Contact / Active Conversation
     # 3. Ineligible (policy, cold_outreach_allowed=False, or empty candidate_id)
@@ -1580,6 +1676,7 @@ def evaluate_candidate_readiness(
         "can_generate_draft": can_generate_draft,
         "usable_recipients": usable_recipients,
         "all_workspace_recipients": all_workspace_recipients,
+        "recipient_readiness": recipient_readiness,
     }
 
 
@@ -4852,6 +4949,7 @@ async def candidate_detail_view(
 
     reg_store = LeadRegisterStore(db_path=svcs["cand_store"].db_path)
     company_lead_record = reg_store.get_explicit_record(candidate_id)
+    field_reviews = reg_store.get_field_reviews(candidate_id)
 
     # Use unified authoritative evaluate_candidate_readiness evaluator
     readiness_info = evaluate_candidate_readiness(
@@ -4859,6 +4957,7 @@ async def candidate_detail_view(
         cand_store=svcs["cand_store"],
         suppression_svc=svcs["suppression_svc"],
         reg_store=reg_store,
+        prefetched_field_reviews=field_reviews,
     )
 
     company_outreach_eligible = readiness_info["base_eligible"] and not readiness_info["is_suppressed"] and not readiness_info["is_previously_contacted"] and not is_excluded
@@ -4960,6 +5059,7 @@ async def candidate_detail_view(
             "research_info": research_info,
             "company_intel_text": company_intel_text,
             "reviewed_13_fields_text": reviewed_13_fields_text,
+            "field_reviews": field_reviews,
             "ai_brief_text": ai_brief_text,
             "is_suppressed": is_supp,
             "is_previously_contacted": is_contacted,
@@ -6941,8 +7041,9 @@ async def create_manual_draft_action(
         if contact_by_email:
             matched_contact = contact_by_email
 
-    # Strict Rule: Recipient must be an explicitly verified contact (email_status == 'verified')
-    # Documented Lead Register emails without explicit verification are NOT eligible to draft.
+    # Strict Rule: Recipient must be an explicitly verified contact (email_status == 'verified'
+    # or explicitly approved in 13-Field Lead Register with matching checksum and traceable evidence).
+    # Merely extracted, imported, or unreviewed AI-suggested addresses are NOT eligible to draft.
     is_verified_evidence = False
     resolved_contact_id = None
     resolved_contact_name = (recipient_name.strip() if recipient_name and isinstance(recipient_name, str) and recipient_name.strip() else None)
@@ -6953,6 +7054,57 @@ async def create_manual_draft_action(
         st = (matched_contact.email_status or "unknown").strip().lower()
         if st == "verified":
             is_verified_evidence = True
+
+    # Check 13-Field Lead Register approval as Single Source of Truth if not yet marked verified
+    if not is_verified_evidence:
+        try:
+            lead_rec = reg_store.get_explicit_record(candidate_id)
+            if lead_rec and lead_rec.contact_email_addresses:
+                field_revs = reg_store.get_field_reviews(candidate_id)
+                em_rev = field_revs.get("contact_email_addresses")
+                if em_rev and em_rev.review_state in ("OPERATOR_APPROVED", "OPERATOR_CORRECTED"):
+                    from sales_engine.leads.register_store import compute_field_checksum
+                    if em_rev.value_checksum == compute_field_checksum(lead_rec.contact_email_addresses):
+                        has_evidence = bool(em_rev.evidence_url or em_rev.snapshot_id or lead_rec.evidence_urls)
+                        if has_evidence:
+                            approved_list = [e.strip().lower() for e in lead_rec.contact_email_addresses.split(",") if e.strip()]
+                            if clean_email in approved_list:
+                                is_verified_evidence = True
+                                # Synchronize contact record in candidate store to reflect verified status
+                                from backend.schemas import ContactCandidate
+                                if matched_contact:
+                                    updated_c = ContactCandidate(
+                                        contact_id=matched_contact.contact_id,
+                                        candidate_id=candidate_id,
+                                        first_name=matched_contact.first_name,
+                                        last_name=matched_contact.last_name,
+                                        full_name=matched_contact.full_name,
+                                        job_title=matched_contact.job_title,
+                                        work_email=clean_email,
+                                        email_status="verified",
+                                        email_confidence=100,
+                                        provider="lead_register_approved",
+                                    )
+                                    svcs["cand_store"].save_contact(updated_c, candidate_id=candidate_id)
+                                    resolved_contact_id = matched_contact.contact_id
+                                else:
+                                    new_c = ContactCandidate(
+                                        contact_id=f"contact:{clean_email}",
+                                        candidate_id=candidate_id,
+                                        first_name=recipient_name.split()[0] if recipient_name else "Contact",
+                                        last_name=" ".join(recipient_name.split()[1:]) if recipient_name and len(recipient_name.split()) > 1 else "",
+                                        full_name=recipient_name or "Contact",
+                                        job_title="Documented Contact",
+                                        work_email=clean_email,
+                                        email_status="verified",
+                                        email_confidence=100,
+                                        provider="lead_register_approved",
+                                    )
+                                    svcs["cand_store"].save_contact(new_c, candidate_id=candidate_id)
+                                    resolved_contact_id = new_c.contact_id
+                                    resolved_contact_name = resolved_contact_name or new_c.full_name
+        except Exception as e:
+            logger.warning(f"Error checking lead register approval for candidate {candidate_id}: {e}")
 
     if not is_verified_evidence:
         # Save contact with email_status='unverified' if not exists, but DO NOT allow draft creation
@@ -7102,8 +7254,13 @@ async def leads_view(
                     rec = reg_store._row_to_record(rr)
                     if rec and rec.candidate_id:
                         prefetched_reg_records_by_cid[rec.candidate_id] = rec
+            # 5. Lead register field reviews batch (for contact_email_addresses single source of truth)
+            all_candidate_ids = [getattr(c, "candidate_id", None) for c in cands if getattr(c, "candidate_id", None)]
+            prefetched_field_reviews_by_cid = reg_store.get_field_reviews_for_candidates(
+                all_candidate_ids, field_name="contact_email_addresses"
+            )
     except Exception:
-        pass
+        prefetched_field_reviews_by_cid = {}
 
     try:
         with snap_store._get_connection() as sconn:
@@ -7149,6 +7306,7 @@ async def leads_view(
         p_snap = prefetched_snapshots_by_cid.get(cid)
         p_an = prefetched_analyses_by_cid.get(cid)
         p_has_hist = cid in prefetched_history_cids
+        p_field_revs = prefetched_field_reviews_by_cid.get(cid, {}) if 'prefetched_field_reviews_by_cid' in locals() else {}
 
         readiness_info = evaluate_candidate_readiness(
             c,
@@ -7160,6 +7318,7 @@ async def leads_view(
             prefetched_has_history=p_has_hist,
             prefetched_suppressed_domains=prefetched_supp_domains,
             prefetched_suppressed_emails=prefetched_supp_emails,
+            prefetched_field_reviews=p_field_revs,
             has_prefetched=True,
         )
 
