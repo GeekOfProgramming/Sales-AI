@@ -54,16 +54,30 @@
       <div id="email-body-text" style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); font-family: inherit; background: var(--bg-card); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color);">{{ draft.body }}</div>
       <div style="margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
         <div style="display: flex; gap: 0.5rem; align-items: center;">
-          <!-- Gmail Web Compose Deep Link -->
-          {% set gmail_url = "https://mail.google.com/mail/?view=cm&fs=1&to=" ~ (draft.recipient_email|urlencode) ~ "&su=" ~ (draft.subject|urlencode) ~ "&body=" ~ (draft.body|urlencode) %}
-          <a href="{{ gmail_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.35rem 0.8rem; background-color: #ea4335; border-color: #ea4335; color: #fff; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
-            ✉️ Open in Gmail Web ↗
-          </a>
-          <!-- Standard mailto link -->
-          {% set mailto_url = "mailto:" ~ draft.recipient_email ~ "?subject=" ~ (draft.subject|urlencode) ~ "&body=" ~ (draft.body|urlencode) %}
-          <a href="{{ mailto_url }}" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.8rem; text-decoration: none;">
-            📬 Open Default Client (mailto)
-          </a>
+          <!-- Gmail Web Compose Deep Link (with safe URL length fallback) -->
+          {% if draft.body|length > 1500 %}
+            {% set gmail_url = "https://mail.google.com/mail/?view=cm&fs=1&to=" ~ (draft.recipient_email|urlencode) ~ "&su=" ~ (draft.subject|urlencode) %}
+            <a href="{{ gmail_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" title="Draft body is long. Click 'Copy Email Body' and paste directly into Gmail." style="font-size: 0.82rem; padding: 0.35rem 0.8rem; background-color: #ea4335; border-color: #ea4335; color: #fff; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              ✉️ Open in Gmail Web ↗
+            </a>
+          {% else %}
+            {% set gmail_url = "https://mail.google.com/mail/?view=cm&fs=1&to=" ~ (draft.recipient_email|urlencode) ~ "&su=" ~ (draft.subject|urlencode) ~ "&body=" ~ (draft.body|urlencode) %}
+            <a href="{{ gmail_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.35rem 0.8rem; background-color: #ea4335; border-color: #ea4335; color: #fff; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              ✉️ Open in Gmail Web ↗
+            </a>
+          {% endif %}
+          <!-- Standard mailto link (with safe URL length fallback) -->
+          {% if draft.body|length > 1500 %}
+            {% set mailto_url = "mailto:" ~ draft.recipient_email ~ "?subject=" ~ (draft.subject|urlencode) %}
+            <a href="{{ mailto_url }}" class="btn btn-secondary" title="Draft body is long. Click 'Copy Email Body' and paste directly into your client." style="font-size: 0.82rem; padding: 0.35rem 0.8rem; text-decoration: none;">
+              📬 Open Default Client (mailto)
+            </a>
+          {% else %}
+            {% set mailto_url = "mailto:" ~ draft.recipient_email ~ "?subject=" ~ (draft.subject|urlencode) ~ "&body=" ~ (draft.body|urlencode) %}
+            <a href="{{ mailto_url }}" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.8rem; text-decoration: none;">
+              📬 Open Default Client (mailto)
+            </a>
+          {% endif %}
         </div>
         <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('email-body-text').innerText, this)">
           📋 Copy Email Body
