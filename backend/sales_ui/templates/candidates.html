@@ -215,15 +215,17 @@
                   {% elif c.lifecycle_queue == 'qualified' %}✅ Qualified
                   {% else %}{{ c.lifecycle_queue|upper }}{% endif %}
                 </span>
-                <!-- Verification status -->
+                <!-- Verification & Research status -->
                 {% if c.verification_status == 'OPERATOR_REVIEWED' or c.verification_status == 'VERIFIED' %}
-                  <span class="badge badge-success" style="font-size: 0.68rem; align-self: flex-start;">Verified Record</span>
+                  <span class="badge badge-success" style="font-size: 0.68rem; align-self: flex-start;" title="13-Field Register record fully reviewed and verified by operator">Verified Record</span>
+                {% elif c.verification_status == 'PARTIALLY_REVIEWED' %}
+                  <span class="badge badge-info" style="font-size: 0.68rem; align-self: flex-start;" title="Some fields reviewed by operator; final approval pending">Partially Reviewed</span>
                 {% elif c.verification_status == 'EXTRACTED' or c.verification_status == 'Unverified' %}
-                  <span class="badge badge-warning" style="font-size: 0.68rem; align-self: flex-start;">Unverified Data</span>
+                  <span class="badge badge-warning" style="font-size: 0.68rem; align-self: flex-start;" title="Field values extracted via AI/importer; awaiting operator review">Needs Verification</span>
                 {% elif c.has_research_snapshot %}
-                  <span class="badge badge-info" style="font-size: 0.68rem; align-self: flex-start;">Snapshot Captured</span>
+                  <span class="badge badge-info" style="font-size: 0.68rem; align-self: flex-start;" title="Snapshot crawled; Lead Register record not yet synthesized">Snapshot Captured</span>
                 {% else %}
-                  <span style="font-size: 0.68rem; color: var(--text-muted);">No Research Snapshot</span>
+                  <span class="badge badge-secondary" style="font-size: 0.68rem; align-self: flex-start;" title="No web crawl or 13-field record captured yet">Needs Research</span>
                 {% endif %}
               </div>
             </td>

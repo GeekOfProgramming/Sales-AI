@@ -141,8 +141,11 @@
 
 <!-- Historical Responses Table (Phase 10.5 Compatibility) -->
 <div class="card">
-  <div class="card-title">
-    <span>Historical Recorded Responses ({{ responses|length }})</span>
+  <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+    <span>Historical Recorded Responses ({{ total_responses or responses|length }})</span>
+    {% if total_responses and total_responses > resp_page_size %}
+    <span style="font-size: 0.8rem; color: var(--text-muted);">Page {{ resp_page }}</span>
+    {% endif %}
   </div>
   {% if responses %}
   <div class="table-responsive">
@@ -156,7 +159,7 @@
           <th>Reply Status</th>
           <th>Meeting Status</th>
           <th>Date</th>
-          <th>Notes</th>
+          <th style="min-width: 250px; max-width: 400px;">Notes</th>
         </tr>
       </thead>
       <tbody>
@@ -181,12 +184,49 @@
           </td>
           <td>{{ r.meeting_status or 'None' }}</td>
           <td>{{ r.reply_at[:10] if r.reply_at else (r.contacted_at[:10] if r.contacted_at else 'Historical') }}</td>
-          <td>{{ r.notes or '' }}</td>
+          <td dir="auto" style="unicode-bidi: plaintext; max-width: 380px;">
+            {% if r.notes %}
+              {% if r.notes|length > 90 %}
+              <div class="note-truncated">
+                <span>{{ r.notes[:85] }}...</span>
+                <details style="display: inline-block; margin-top: 0.25rem;">
+                  <summary style="cursor: pointer; color: var(--border-focus); font-size: 0.75rem; user-select: none;">
+                    Expand Note ▾
+                  </summary>
+                  <div style="margin-top: 0.35rem; padding: 0.5rem; background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; line-height: 1.4;" dir="auto">
+                    {{ r.notes }}
+                  </div>
+                </details>
+              </div>
+              {% else %}
+              <span style="white-space: pre-wrap; word-break: break-word;">{{ r.notes }}</span>
+              {% endif %}
+            {% else %}
+              <span style="color: var(--text-muted);">-</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  <!-- Pagination Controls for Historical Responses -->
+  {% if total_responses and total_responses > resp_page_size %}
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color);">
+    <div>
+      Showing {{ (resp_page - 1) * resp_page_size + 1 }} to {{ [resp_page * resp_page_size, total_responses]|min }} of {{ total_responses }} responses
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      {% if resp_page > 1 %}
+      <a href="/sales/replies?resp_page={{ resp_page - 1 }}{% if category %}&category={{ category }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-secondary btn-sm">← Previous</a>
+      {% endif %}
+      {% if has_next_resp %}
+      <a href="/sales/replies?resp_page={{ resp_page + 1 }}{% if category %}&category={{ category }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-secondary btn-sm">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
   {% else %}
   <div class="empty-state">
     <p class="empty-state-text">No historical responses imported.</p>
