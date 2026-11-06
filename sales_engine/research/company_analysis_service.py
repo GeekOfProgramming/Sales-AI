@@ -420,15 +420,30 @@ def select_pages_for_analysis(
         current_chars += p_len
         return True
 
-    # P1: SERVICES (all unique subpages), ABOUT_COMPANY, CONTACT
-    # (Home is classified as ABOUT_COMPANY or has root path)
-    for p in category_grouped[PageCategory.ABOUT_COMPANY.value]:
+    # Section 2 Requirement: Minimum Evidence Coverage for Mandatory Categories.
+    # Under tight character budgets, guarantee at least 1 core page each for ABOUT_COMPANY,
+    # SERVICES, and CONTACT when available, so voluminous Services subpages cannot crowd out
+    # About or Contact.
+    about_pool = category_grouped[PageCategory.ABOUT_COMPANY.value]
+    services_pool = category_grouped[PageCategory.SERVICES.value]
+    contact_pool = category_grouped[PageCategory.CONTACT.value]
+
+    # Step 3A: Add primary anchor page for each mandatory category first
+    if about_pool:
+        try_add_page(about_pool[0])
+    if services_pool:
+        try_add_page(services_pool[0])
+    if contact_pool:
+        try_add_page(contact_pool[0])
+
+    # Step 3B: Fill remaining P1 pages (all unique Services subpages, additional About & Contact)
+    for p in about_pool[1:]:
         try_add_page(p)
 
-    for p in category_grouped[PageCategory.SERVICES.value]:
+    for p in services_pool[1:]:
         try_add_page(p)
 
-    for p in category_grouped[PageCategory.CONTACT.value]:
+    for p in contact_pool[1:]:
         try_add_page(p)
 
     # P2: BIM_CAPABILITIES
