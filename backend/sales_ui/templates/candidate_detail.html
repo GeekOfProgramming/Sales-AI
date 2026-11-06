@@ -507,6 +507,7 @@
       <span class="badge badge-secondary">{{ latest_snapshot.pages|length }} Pages</span>
     </div>
     {% if latest_snapshot.pages %}
+    {% set total_pages = latest_snapshot.pages|length %}
     <div class="table-responsive">
       <table class="data-table" style="font-size: 0.85rem;">
         <thead>
@@ -519,10 +520,10 @@
           </tr>
         </thead>
         <tbody>
-          {% for p in latest_snapshot.pages %}
+          {% for p in latest_snapshot.pages[:6] %}
           <tr>
             <td><span class="badge badge-info">{{ p.page_type }}</span></td>
-            <td><code title="{{ p.requested_url }}">{{ p.requested_url[:55] }}{% if p.requested_url|length > 55 %}...{% endif %}</code></td>
+            <td><code title="{{ p.requested_url }}"><a href="{{ p.requested_url }}" target="_blank" rel="noopener" style="color: inherit;">{{ p.requested_url[:55] }}{% if p.requested_url|length > 55 %}...{% endif %} ↗</a></code></td>
             <td>
               {% if p.http_status == 200 %}
                 <span class="badge badge-success">200 OK</span>
@@ -537,6 +538,44 @@
         </tbody>
       </table>
     </div>
+
+    {% if total_pages > 6 %}
+    <details style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-hover); border-radius: 4px; border: 1px solid var(--border-color);">
+      <summary style="cursor: pointer; font-weight: 600; color: var(--border-focus); font-size: 0.82rem; user-select: none;">
+        📂 View All {{ total_pages }} Crawled Evidence URLs ({{ total_pages - 6 }} more) ▾
+      </summary>
+      <div class="table-responsive" style="margin-top: 0.5rem;">
+        <table class="data-table" style="font-size: 0.82rem;">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Requested URL</th>
+              <th>Status</th>
+              <th>Title / Snippet</th>
+              <th>Retrieved</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in latest_snapshot.pages[6:] %}
+            <tr>
+              <td><span class="badge badge-info">{{ p.page_type }}</span></td>
+              <td><code title="{{ p.requested_url }}"><a href="{{ p.requested_url }}" target="_blank" rel="noopener" style="color: inherit;">{{ p.requested_url[:55] }}{% if p.requested_url|length > 55 %}...{% endif %} ↗</a></code></td>
+              <td>
+                {% if p.http_status == 200 %}
+                  <span class="badge badge-success">200 OK</span>
+                {% else %}
+                  <span class="badge badge-warning">{{ p.http_status or p.retrieval_status }}</span>
+                {% endif %}
+              </td>
+              <td>{{ p.title or p.meta_description or '-' }}</td>
+              <td>{{ p.retrieved_at[:19] if p.retrieved_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
     {% else %}
     <div class="empty-state">
       <p class="empty-state-text">No page evidence stored in snapshot.</p>

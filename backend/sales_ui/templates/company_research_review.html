@@ -433,6 +433,13 @@
             </tr>
           </thead>
           <tbody>
+            <!-- SECTION GROUP A: Core Identity & Website (Fields 1, 3, 9) -->
+            <tr style="background-color: var(--bg-hover); border-top: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
+              <td colspan="4" style="padding: 0.5rem 1rem; font-size: 0.82rem; font-weight: 700; color: var(--border-focus); text-transform: uppercase; letter-spacing: 0.5px;">
+                🏢 Section 1: Core Identity, Legal &amp; Official Website (Fields 1, 3, 9)
+              </td>
+            </tr>
+
             <!-- 1. Company Name -->
             {% set f_meta = analysis_fields.get('company_name') if analysis_fields else None %}
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
@@ -559,6 +566,13 @@
                 {% else %}
                   <input type="checkbox" name="apply_legal_identity" value="1">
                 {% endif %}
+              </td>
+            </tr>
+
+            <!-- SECTION GROUP B: Contacts & Communication (Fields 4, 5, 6, 7) -->
+            <tr style="background-color: var(--bg-hover); border-top: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
+              <td colspan="4" style="padding: 0.5rem 1rem; font-size: 0.82rem; font-weight: 700; color: var(--border-focus); text-transform: uppercase; letter-spacing: 0.5px;">
+                📞 Section 2: Location, Contact Details &amp; Key Personnel (Fields 4, 5, 6, 7)
               </td>
             </tr>
 
@@ -751,6 +765,13 @@
                 {% else %}
                   <input type="checkbox" name="apply_responsible_person" value="1">
                 {% endif %}
+              </td>
+            </tr>
+
+            <!-- SECTION GROUP C: Business Activities & Intelligence (Fields 2, 8, 10, 11) -->
+            <tr style="background-color: var(--bg-hover); border-top: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
+              <td colspan="4" style="padding: 0.5rem 1rem; font-size: 0.82rem; font-weight: 700; color: var(--border-focus); text-transform: uppercase; letter-spacing: 0.5px;">
+                ⚙️ Section 3: Priority Rationale, Business Operations &amp; Intelligence (Fields 2, 8, 10, 11)
               </td>
             </tr>
 
@@ -951,6 +972,13 @@
               </td>
             </tr>
 
+            <!-- SECTION GROUP D: Evidence, References & Verification (Fields 12, 13) -->
+            <tr style="background-color: var(--bg-hover); border-top: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
+              <td colspan="4" style="padding: 0.5rem 1rem; font-size: 0.82rem; font-weight: 700; color: var(--border-focus); text-transform: uppercase; letter-spacing: 0.5px;">
+                📑 Section 4: Traceable References, Provenance &amp; Verification (Fields 12, 13)
+              </td>
+            </tr>
+
             <!-- 12. References & Evidence URLs -->
             {% set f_meta = analysis_fields.get('other_links_and_references') if analysis_fields else None %}
             <tr {% if f_meta and f_meta.quarantined %}style="background-color: #fff1f2;"{% endif %}>
@@ -970,12 +998,28 @@
               </td>
               <td style="font-size: 0.82rem;">
                 {% if current_record and current_record.other_links_and_references and current_record.other_links_and_references != 'Not Found' %}
-                  {% for ourl in current_record.other_links_and_references.split(',') %}
+                  {% set link_items = current_record.other_links_and_references.split(',') %}
+                  {% for ourl in link_items[:4] %}
                     {% set cur_url = ourl.strip() %}
                     {% if cur_url %}
                       <div><a href="{{ cur_url if cur_url.startswith('http') else 'https://' ~ cur_url }}" target="_blank" rel="noopener" style="color: var(--border-focus);">{{ cur_url }} ↗</a></div>
                     {% endif %}
                   {% endfor %}
+                  {% if link_items|length > 4 %}
+                    <details style="margin-top: 0.35rem;">
+                      <summary style="cursor: pointer; color: var(--border-focus); font-size: 0.75rem; user-select: none;">
+                        + {{ link_items|length - 4 }} more reference links ▾
+                      </summary>
+                      <div style="margin-top: 0.25rem; padding-left: 0.25rem;">
+                        {% for ourl in link_items[4:] %}
+                          {% set cur_url = ourl.strip() %}
+                          {% if cur_url %}
+                            <div><a href="{{ cur_url if cur_url.startswith('http') else 'https://' ~ cur_url }}" target="_blank" rel="noopener" style="color: var(--border-focus);">{{ cur_url }} ↗</a></div>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    </details>
+                  {% endif %}
                 {% else %}
                   <span class="text-subtle" style="font-style: italic;">Not Found</span>
                 {% endif %}
@@ -1069,13 +1113,29 @@
           </div>
 
           <h4 style="font-size: 0.95rem; margin-top: 0; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600;">Direct Opportunity URLs</h4>
+          {% if research.opportunity_urls %}
           <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 0;">
-            {% for u in research.opportunity_urls %}
-            <li style="margin-bottom: 0.25rem;"><a href="{{ u }}" target="_blank" rel="noopener">{{ u }}</a></li>
-            {% else %}
-            <li style="color: #64748b;">No opportunity URLs identified.</li>
+            {% for u in research.opportunity_urls[:3] %}
+            <li style="margin-bottom: 0.25rem;"><a href="{{ u }}" target="_blank" rel="noopener">{{ u }} ↗</a></li>
             {% endfor %}
           </ul>
+          {% if research.opportunity_urls|length > 3 %}
+          <details style="margin-top: 0.35rem; padding-left: 1.25rem;">
+            <summary style="cursor: pointer; color: var(--border-focus); font-size: 0.78rem; user-select: none;">
+              + {{ research.opportunity_urls|length - 3 }} more opportunity URLs ▾
+            </summary>
+            <ul style="font-size: 0.82rem; padding-left: 1.25rem; margin-top: 0.25rem; margin-bottom: 0;">
+              {% for u in research.opportunity_urls[3:] %}
+              <li style="margin-bottom: 0.25rem;"><a href="{{ u }}" target="_blank" rel="noopener">{{ u }} ↗</a></li>
+              {% endfor %}
+            </ul>
+          </details>
+          {% endif %}
+          {% else %}
+          <ul style="font-size: 0.85rem; padding-left: 1.25rem; margin-bottom: 0;">
+            <li style="color: #64748b;">No opportunity URLs identified.</li>
+          </ul>
+          {% endif %}
         </div>
       </div>
     </div>
