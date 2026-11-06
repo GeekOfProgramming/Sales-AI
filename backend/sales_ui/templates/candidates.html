@@ -246,6 +246,19 @@
                 {% if c.is_previously_contacted %}
                   <span class="badge badge-previously-contacted" style="font-size: 0.68rem; align-self: flex-start;" title="Previously contacted in historical outreach">⏱️ Contacted</span>
                 {% endif %}
+
+                <!-- Company-Level Outreach Status Badge -->
+                {% if c.company_outreach_status == 'REPLY_RECEIVED' %}
+                  <span class="badge" style="background-color: #059669; color: #fff; font-size: 0.68rem; align-self: flex-start;">📩 REPLY_RECEIVED</span>
+                {% elif c.company_outreach_status == 'SENT_MANUALLY_CONFIRMED' %}
+                  <span class="badge" style="background-color: #2563eb; color: #fff; font-size: 0.68rem; align-self: flex-start;">📤 SENT_MANUALLY_CONFIRMED</span>
+                {% elif c.company_outreach_status == 'HISTORICAL_CONTACT_REVIEW' %}
+                  <span class="badge" style="background-color: #7c3aed; color: #fff; font-size: 0.68rem; align-self: flex-start;">📬 HISTORICAL_CONTACT_REVIEW</span>
+                {% elif c.company_outreach_status == 'DRAFT_READY' %}
+                  <span class="badge" style="background-color: #d97706; color: #fff; font-size: 0.68rem; align-self: flex-start;">📝 DRAFT_READY</span>
+                {% else %}
+                  <span class="badge badge-secondary" style="font-size: 0.68rem; align-self: flex-start;">⚪ NOT_SENT</span>
+                {% endif %}
               </div>
             </td>
             <td>

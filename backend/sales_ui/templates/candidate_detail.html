@@ -122,24 +122,16 @@
     <div style="padding: 0.5rem 0.75rem; background: var(--bg-hover); border-radius: 6px; border: 1px solid var(--border-color);">
       <div style="color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase;">4. Outreach State</div>
       <div style="margin-top: 0.2rem; font-weight: 600;">
-        {% if is_suppressed or is_previously_contacted %}
-          <span class="badge badge-danger">Restricted</span>
-        {% elif manual_logs %}
-          <span class="badge badge-info">Manually Dispatched</span>
-        {% elif company_drafts %}
-          {% set ns = namespace(has_approved=false) %}
-          {% for d in company_drafts %}
-            {% if d.approval_status == 'approved' %}{% set ns.has_approved = true %}{% endif %}
-          {% endfor %}
-          {% if ns.has_approved %}
-            <span class="badge badge-success">Approved Draft</span>
-          {% else %}
-            <span class="badge badge-warning">Draft Pending</span>
-          {% endif %}
-        {% elif can_generate_draft %}
-          <span class="badge badge-success">Draft Eligible</span>
+        {% if company_outreach_status == 'REPLY_RECEIVED' %}
+          <span class="badge" style="background-color: #059669; color: #fff;">📩 REPLY_RECEIVED</span>
+        {% elif company_outreach_status == 'SENT_MANUALLY_CONFIRMED' %}
+          <span class="badge" style="background-color: #2563eb; color: #fff;">📤 SENT_MANUALLY_CONFIRMED</span>
+        {% elif company_outreach_status == 'HISTORICAL_CONTACT_REVIEW' %}
+          <span class="badge" style="background-color: #7c3aed; color: #fff;">📬 HISTORICAL_CONTACT_REVIEW</span>
+        {% elif company_outreach_status == 'DRAFT_READY' %}
+          <span class="badge" style="background-color: #d97706; color: #fff;">📝 DRAFT_READY</span>
         {% else %}
-          <span class="badge badge-secondary">Verification Required</span>
+          <span class="badge badge-secondary">⚪ NOT_SENT</span>
         {% endif %}
       </div>
     </div>
@@ -433,6 +425,9 @@
         {% else %}
         <button type="button" class="btn btn-primary" onclick="copyToClipboard(document.getElementById('raw-ai-brief-text').value, this)" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; background-color: #6366f1; border-color: #6366f1;">
           📋 Copy AI Brief
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="switchWorkspaceTab('outreach'); document.getElementById('manual-draft').scrollIntoView({behavior: 'smooth', block: 'center'});" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; font-weight: 600;">
+          📝 Paste to Draft Composer →
         </button>
         {% endif %}
       </div>
@@ -1284,9 +1279,14 @@
   <!-- Manual Draft Staging Box (Safe & Offline) -->
   {% if can_generate_draft %}
   <div id="manual-draft" class="card" style="border: 1px dashed var(--border-color);">
-    <div class="card-title">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
       <span>Stage Manual Draft to Review Queue</span>
-      <span class="badge badge-secondary">Safe Offline Composer</span>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="switchWorkspaceTab('ai-handoff')" title="Review factual context and generated AI brief">
+          🤖 View AI Handoff &amp; Brief
+        </button>
+        <span class="badge badge-secondary">Safe Offline Composer</span>
+      </div>
     </div>
     {% if not trusted_senders %}
     <div class="alert alert-warning" style="margin-bottom: 1rem; border-left: 4px solid var(--warning-color, #f59e0b); padding: 0.75rem 1rem;">

@@ -1583,6 +1583,61 @@ def evaluate_candidate_readiness(
     }
 
 
+def derive_company_outreach_status(
+    cand: Any,
+    drafts: Optional[List[Any]] = None,
+    manual_logs: Optional[List[Any]] = None,
+    historical_sent_emails: Optional[List[Any]] = None,
+) -> str:
+    """
+    Derives the authoritative company-level outreach status from existing operational records:
+      - REPLY_RECEIVED: Explicit reply recorded in candidate fields or conversation.
+      - HISTORICAL_CONTACT_REVIEW: Ambiguous / proposed historical match or pending relationship review.
+      - SENT_MANUALLY_CONFIRMED: Confirmed manual outreach logged or historical sent message matched.
+      - DRAFT_READY: Active outreach draft composed and ready in the review queue.
+      - NOT_SENT: No outreach sent or draft in progress.
+    """
+    if not cand:
+        return "NOT_SENT"
+
+    hist_status = (getattr(cand, "historical_contact_status", None) or "").strip().lower()
+    reply_status = (getattr(cand, "reply_status", None) or "").strip().lower()
+    active_conv = bool(getattr(cand, "active_conversation", False))
+
+    # 1. Reply Received
+    if reply_status in ("received", "positive_interview", "replied") or hist_status == "replied":
+        return "REPLY_RECEIVED"
+
+    # 2. Historical Contact Review
+    q_outcome = getattr(cand, "qualification_outcome", None)
+    if hasattr(q_outcome, "value"):
+        q_outcome = q_outcome.value
+    disc_status = getattr(cand, "discovery_status", None)
+    if hasattr(disc_status, "value"):
+        disc_status = disc_status.value
+
+    if str(q_outcome) == "reengagement_review" or str(disc_status) == "historical_pending":
+        return "HISTORICAL_CONTACT_REVIEW"
+
+    # 3. Sent Manually Confirmed
+    if manual_logs and len(manual_logs) > 0:
+        return "SENT_MANUALLY_CONFIRMED"
+    if historical_sent_emails and len(historical_sent_emails) > 0:
+        return "SENT_MANUALLY_CONFIRMED"
+    if hist_status in ("contacted", "converted") or bool(getattr(cand, "previous_outreach_detected", False)):
+        return "SENT_MANUALLY_CONFIRMED"
+
+    # 4. Draft Ready
+    if drafts and len(drafts) > 0:
+        # Check if there is an active (non-rejected) draft
+        has_active_draft = any(getattr(d, "approval_status", "") != "rejected" for d in drafts)
+        if has_active_draft:
+            return "DRAFT_READY"
+
+    # 5. Not Sent (default)
+    return "NOT_SENT"
+
+
 def is_candidate_outreach_eligible(cand: Any) -> bool:
     """
     Authoritative eligibility for outreach draft generation:
@@ -4522,6 +4577,8 @@ async def candidates_list_view(
         cand_verif_status = lr_map.get(cid)
         subq_val = state.active_subqueue.value if (state.active_subqueue and hasattr(state.active_subqueue, "value")) else (str(state.active_subqueue) if state.active_subqueue else None)
 
+        c_outreach_status = derive_company_outreach_status(cand=c)
+
         candidates.append(
             CandidateListItem(
                 candidate_id=cid,
@@ -4552,6 +4609,7 @@ async def candidates_list_view(
                 exclusion_reason=cand_excl_reason,
                 verification_status=cand_verif_status,
                 primary_source=primary_src,
+                company_outreach_status=c_outreach_status,
             )
         )
 
@@ -4858,6 +4916,15 @@ async def candidate_detail_view(
         cand, company_lead_record, latest_snapshot, readiness_info, research_info
     )
 
+    # Derive consistent company-level outreach status
+    company_outreach_status = derive_company_outreach_status(
+        cand=cand,
+        drafts=company_drafts,
+        manual_logs=candidate_manual_logs,
+        historical_sent_emails=hist_sent_emails,
+    )
+    candidate_item.company_outreach_status = company_outreach_status
+
     clean_display_title = format_company_display_name(cand.company_name, cand.company_domain)
     trusted_senders = get_trusted_senders()
     default_sender_name = (os.environ.get("SMTP_FROM_NAME") or "pyBIM Team").strip()
@@ -4869,6 +4936,7 @@ async def candidate_detail_view(
             "request": request,
             "active_tab": "candidates",
             "detail": view,
+            "company_outreach_status": company_outreach_status,
             "clean_display_title": clean_display_title,
             "trusted_senders": trusted_senders,
             "default_sender_name": default_sender_name,
@@ -7912,6 +7980,14 @@ async def log_manual_send_action(
             cand.previous_outreach_detected = True
             cand.cold_outreach_allowed = False
             svcs["cand_store"].save_candidate(cand)
+
+        # Mark draft as sent in rev_store so queue projections update consistently
+        try:
+            draft.send_status = "sent"
+            rev_store.save_draft(draft)
+        except Exception as e:
+            logger.warning(f"Failed to update draft send_status after manual dispatch: {e}")
+
         msg = "Manual external dispatch event successfully confirmed and logged." if not is_retro else "Retrospective historical outreach event successfully recorded for audit."
 
     return RedirectResponse(
