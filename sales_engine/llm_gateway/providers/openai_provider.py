@@ -6,7 +6,9 @@ Uses httpx without commercial vendor SDKs. Supports sync and async invocations.
 
 import ipaddress
 import json
+import logging
 import os
+import random
 import re
 import time
 from typing import Optional, Set, Dict, Any
@@ -14,7 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse
+from sales_engine.llm_gateway.contracts import LLMRequest, LLMResponse, sanitize_log_str
 from sales_engine.llm_gateway.errors import (
     LLMAuthenticationError,
     LLMInvalidRequestError,
@@ -29,6 +31,8 @@ from sales_engine.llm_gateway.errors import (
 )
 from sales_engine.llm_gateway.rate_limit_diagnostics import classify_http_429
 from sales_engine.llm_gateway.interface import BaseLLMProvider
+
+logger = logging.getLogger(__name__)
 
 
 def classify_httpx_timeout(e: Exception) -> str:
@@ -520,35 +524,121 @@ class OpenAIProvider(BaseLLMProvider):
         if self._transport:
             client_kwargs["transport"] = self._transport
 
-        t0 = time.perf_counter()
-        try:
-            if self._injected_client:
-                resp = self._injected_client.post(endpoint, json=payload, headers=headers)
+        # Bounded retry policy for transient 503 (GEM-03):
+        # Initial attempt + at most 2 retries (max_attempts = 3)
+        max_attempts = 3 if self._provider_id == "gemini" else 1
+        overall_deadline = time.time() + (request.timeout_seconds * max_attempts)
+        resp = None
+        latency_ms = 0.0
+
+        for attempt in range(1, max_attempts + 1):
+            t0 = time.perf_counter()
+            try:
+                if self._injected_client:
+                    resp = self._injected_client.post(endpoint, json=payload, headers=headers)
+                else:
+                    with httpx.Client(**client_kwargs) as client:
+                        resp = client.post(endpoint, json=payload, headers=headers)
+                t1 = time.perf_counter()
+            except httpx.TimeoutException as e:
+                cat = classify_httpx_timeout(e)
+                logger.warning(
+                    "LLM provider request timeout (provider=%s, task=%s, attempt=%d/%d, category=%s, elapsed=%.2fs)",
+                    self._provider_id,
+                    sanitize_log_str(request.task_id, 32),
+                    attempt,
+                    max_attempts,
+                    cat,
+                    request.timeout_seconds,
+                )
+                raise LLMTimeoutError(
+                    message=f"Request timed out after {request.timeout_seconds}s ({cat}).",
+                    provider=self._provider_id,
+                    task_id=request.task_id,
+                    timeout_category=cat,
+                ) from e
+            except httpx.NetworkError as e:
+                logger.warning(
+                    "LLM provider network error (provider=%s, task=%s, attempt=%d/%d)",
+                    self._provider_id,
+                    sanitize_log_str(request.task_id, 32),
+                    attempt,
+                    max_attempts,
+                )
+                raise LLMProviderUnavailableError(
+                    message="Network connectivity error connecting to OpenAI API.",
+                    provider=self._provider_id,
+                    task_id=request.task_id,
+                ) from e
+
+            latency_ms = (t1 - t0) * 1000.0
+
+            if resp.status_code == 200:
+                logger.info(
+                    "LLM provider request succeeded (provider=%s, status=%d, category=SUCCESS, attempt=%d/%d, elapsed_ms=%.1f)",
+                    self._provider_id,
+                    resp.status_code,
+                    attempt,
+                    max_attempts,
+                    latency_ms,
+                )
+                return self._parse_response_body(resp, request, model, latency_ms)
+
+            # Check if this is a transient HTTP 503 eligible for bounded retry
+            if resp.status_code == 503 and attempt < max_attempts:
+                # Parse Retry-After if supplied, clamped to upper bound of 10.0s
+                retry_after_hdr = resp.headers.get("Retry-After")
+                delay = None
+                if retry_after_hdr:
+                    try:
+                        delay = min(10.0, max(0.5, float(retry_after_hdr)))
+                    except ValueError:
+                        delay = None
+
+                if delay is None:
+                    # Exponential backoff with jitter: 2.0s, 5.0s (+/- 20% jitter)
+                    base_delay = 2.0 if attempt == 1 else 5.0
+                    jitter = base_delay * random.uniform(-0.2, 0.2)
+                    delay = max(0.5, base_delay + jitter)
+
+                logger.warning(
+                    "LLM provider HTTP 503 detected; backing off (provider=%s, status=%d, category=TRANSIENT_OVERLOAD, attempt=%d/%d, retry_after=%.2fs, elapsed_ms=%.1f)",
+                    self._provider_id,
+                    resp.status_code,
+                    attempt,
+                    max_attempts,
+                    delay,
+                    latency_ms,
+                )
+
+                if time.time() + delay > overall_deadline:
+                    logger.warning("Retry delay exceeds execution deadline; terminating retries.")
+                    break
+
+                time.sleep(delay)
+                continue
             else:
-                with httpx.Client(**client_kwargs) as client:
-                    resp = client.post(endpoint, json=payload, headers=headers)
-            t1 = time.perf_counter()
-        except httpx.TimeoutException as e:
-            cat = classify_httpx_timeout(e)
-            raise LLMTimeoutError(
-                message=f"Request timed out after {request.timeout_seconds}s ({cat}).",
-                provider=self._provider_id,
-                task_id=request.task_id,
-                timeout_category=cat,
-            ) from e
-        except httpx.NetworkError as e:
-            raise LLMProviderUnavailableError(
-                message="Network connectivity error connecting to OpenAI API.",
-                provider=self._provider_id,
-                task_id=request.task_id,
-            ) from e
+                # Permanent error or retry limit exhausted
+                resp_cat = "TRANSIENT_OVERLOAD_EXHAUSTED" if resp.status_code == 503 else "PERMANENT_ERROR"
+                logger.error(
+                    "LLM provider request failed (provider=%s, status=%d, category=%s, attempt=%d/%d, elapsed_ms=%.1f)",
+                    self._provider_id,
+                    resp.status_code,
+                    resp_cat,
+                    attempt,
+                    max_attempts,
+                    latency_ms,
+                )
+                raise self._parse_http_error(resp, request.task_id)
 
-        latency_ms = (t1 - t0) * 1000.0
-
-        if resp.status_code != 200:
+        # Fallback if loop finishes unexpectedly
+        if resp is not None:
             raise self._parse_http_error(resp, request.task_id)
-
-        return self._parse_response_body(resp, request, model, latency_ms)
+        raise LLMProviderUnavailableError(
+            message=f"{self._provider_id.capitalize()} service temporarily unavailable (retries exhausted)",
+            provider=self._provider_id,
+            task_id=request.task_id,
+        )
 
     async def generate_async(self, request: LLMRequest) -> LLMResponse:
         """Asynchronous generation using httpx.AsyncClient."""

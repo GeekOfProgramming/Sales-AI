@@ -218,7 +218,7 @@
 
       <!-- Button B: Analyze Saved Snapshot with LLM (or Resume Analysis) -->
       {% if snapshot and snapshot.pages_succeeded > 0 %}
-      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm Authorized Paid LLM Analysis?\n\nProvider: {{ analysis_preflight.provider|default("gemini")|upper }}\nModel: {{ analysis_preflight.model|default("gemini-3.5-flash-lite") }}\nSnapshot: {{ snapshot.snapshot_id }}\nEligible Pages: {{ analysis_preflight.eligible_pages_count|default(snapshot.pages_succeeded) }}\nChunks: {{ analysis_preflight.chunks_count|default(1) }}\nEstimated Tokens: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} in / {{ analysis_preflight.estimated_output_tokens|default(1200) }} out\nApprox Cost: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }} (Billing tier: {{ analysis_preflight.billing_tier|default("Standard") }})\n{% if chunk_stats and chunk_stats.uncertain > 0 %}\nNOTICE: {{ chunk_stats.uncertain }} chunk(s) previously timed out. Retrying an uncertain chunk may cause duplicate provider processing or billing.\n{% endif %}\nServer Authorization Token verified.');">
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/analyze" style="display: inline-block;" id="formAnalyzeLLM" onsubmit="return confirm('Confirm Authorized Paid LLM Analysis?\n\nProvider: {{ analysis_preflight.provider|default("gemini")|upper }}\nModel: {{ analysis_preflight.model|default("gemini-3.5-flash-lite") }}\nSnapshot: {{ snapshot.snapshot_id }}\nEligible Pages: {{ analysis_preflight.eligible_pages_count|default(snapshot.pages_succeeded) }}\nChunks: {{ analysis_preflight.chunks_count|default(1) }}\nEstimated Tokens: ~{{ analysis_preflight.estimated_input_tokens|default(0) }} in / {{ analysis_preflight.estimated_output_tokens|default(1200) }} out\nHypothetical Commercial-Rate Estimate: ~${{ analysis_preflight.estimated_cost_usd|default(0.0) }} (API billing tier: Not verified)\n{% if chunk_stats and chunk_stats.uncertain > 0 %}\nNOTICE: {{ chunk_stats.uncertain }} chunk(s) previously timed out. Retrying an uncertain chunk may cause duplicate provider processing or billing.\n{% endif %}\nServer Authorization Token verified.');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="provider" value="gemini">
         <input type="hidden" name="model" value="gemini-3.5-flash-lite">
@@ -252,7 +252,7 @@
     <div>
       Provider: <strong>Google Gemini (gemini-3.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong> | Budget: <strong>Max 20 Pages</strong>
       {% if analysis_preflight %}
-      | Preflight Estimate: <strong>~{{ analysis_preflight.estimated_input_tokens }} tokens (~${{ analysis_preflight.estimated_cost_usd }})</strong>
+      | Preflight Estimate (Hypothetical Commercial Rate): <strong>~{{ analysis_preflight.estimated_input_tokens }} tokens (~${{ analysis_preflight.estimated_cost_usd }})</strong> | API Tier: <strong>Not verified</strong>
       {% if analysis_preflight.will_omit_chunks %}
       | <span class="badge" style="background-color: #b45309; color: #fff;">Notice: 5-call ceiling active; {{ analysis_preflight.omitted_chunks_count }} chunks omitted</span>
       {% endif %}
