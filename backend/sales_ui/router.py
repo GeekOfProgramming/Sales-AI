@@ -5158,7 +5158,8 @@ async def candidate_research_view(
 @router.post("/candidates/{candidate_id}/crawl")
 async def crawl_candidate_website_action(
     candidate_id: str,
-    max_pages: Optional[int] = Form(20),
+    max_pages: Optional[int] = Form(None),
+    crawl_profile: Optional[str] = Form("standard"),
     resume: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf)
 ):
@@ -5166,9 +5167,9 @@ async def crawl_candidate_website_action(
     Stage 1: Crawl & Save Website.
     Executes configurable, budget-governed website crawler and stores immutable ResearchSnapshot.
     Zero LLM calls during crawling.
-    Supports resumable crawling if resume='1' and a prior snapshot exists.
+    Supports operator-selectable crawl profiles (quick, standard, deep, extended) and resumable crawling.
     """
-    from sales_engine.research.website_crawler import WebsiteCrawlerV2, CrawlBudget
+    from sales_engine.research.website_crawler import WebsiteCrawlerV2, CrawlBudget, get_crawl_budget_for_profile
     from sales_engine.research.research_store import ResearchSnapshotStore
     from sales_engine.research.company_research_service import load_research_from_snapshot
 
@@ -5200,7 +5201,7 @@ async def crawl_candidate_website_action(
         if latest_snap and latest_snap.pages_succeeded > 0:
             resume_snap_id = latest_snap.snapshot_id
 
-    budget = CrawlBudget(max_pages=max_pages or 20)
+    budget = get_crawl_budget_for_profile(profile_name=crawl_profile, max_pages_override=max_pages)
     crawler = WebsiteCrawlerV2(snapshot_store=snap_store, budget=budget)
 
     try:

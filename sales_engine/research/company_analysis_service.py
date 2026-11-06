@@ -34,6 +34,7 @@ from sales_engine.research.research_store import (
     CompanyAnalysisRecord,
     AnalysisChunkRecord,
 )
+from sales_engine.research.page_classifier import PageCategory, PageClassification, classify_page
 from sales_engine.research.pricing_config import (
     get_model_pricing,
     calculate_cost,
@@ -331,44 +332,230 @@ def build_analysis_gateway(
     return gw, target_model
 
 
-def partition_snapshot_into_chunks(
+def select_pages_for_analysis(
     snapshot: ResearchSnapshot,
-    chunk_size_chars: int = 40_000,
-) -> Tuple[List[Dict[str, Any]], List[Any], Dict[str, str]]:
+    max_projects: int = 3,
+    max_total_chars: int = 160_000,
+    max_total_pages: int = 25,
+) -> Tuple[List[Any], Dict[str, str], Dict[str, Any]]:
     """
-    Partitions all eligible successful pages of a snapshot into bounded chunks.
-    Ensures that every eligible page is assigned to a chunk without silent discarding.
-    Deduplicates repeated content lines across pages.
+    Evidence-Aware AI Page Selection Algorithm.
+    Separates the crawling budget from the AI analysis budget.
+
+    Priorities:
+    - P1: Home, All unique SERVICES (including subpages), All ABOUT_COMPANY, All CONTACT.
+    - P2: All BIM_CAPABILITIES.
+    - P3: At most `max_projects` representative PROJECT pages (skipping index/catalogs if detail exists).
+    - P4: TEAM, CAREERS, LEGAL, OTHER up to remaining character / page ceiling.
+
     Returns:
-      (chunks, eligible_pages, omitted_pages_reasons)
+        (selected_pages, omitted_pages_reasons, selection_summary_metadata)
     """
-    eligible_pages: List[Any] = []
+    from sales_engine.research.page_classifier import PageCategory, classify_page
+
     omitted_pages_reasons: Dict[str, str] = {}
     seen_content_hashes: Set[str] = set()
+    category_grouped: Dict[str, List[Any]] = {cat.value: [] for cat in PageCategory}
 
+    # Step 1: Filter invalid, empty, or duplicate pages from snapshot
+    valid_pages: List[Any] = []
     for p in snapshot.pages:
+        target_url = p.requested_url or p.resolved_url
         if p.retrieval_status != "FETCH_SUCCESS":
-            omitted_pages_reasons[p.requested_url or p.resolved_url] = f"Retrieval status was {p.retrieval_status}"
+            omitted_pages_reasons[target_url] = f"Retrieval status was {p.retrieval_status}"
             continue
         body = (p.cleaned_text or "").strip()
         if not body:
-            omitted_pages_reasons[p.resolved_url] = "Page cleaned text content is empty"
+            omitted_pages_reasons[target_url] = "Page cleaned text content is empty"
             continue
 
         c_hash = p.content_sha256 or hashlib.sha256(body.encode("utf-8")).hexdigest()
         if c_hash in seen_content_hashes:
-            omitted_pages_reasons[p.resolved_url] = "Exact duplicate page content"
+            omitted_pages_reasons[target_url] = "Exact duplicate page content"
             continue
         seen_content_hashes.add(c_hash)
-        eligible_pages.append(p)
+        valid_pages.append(p)
 
-    # Sort pages by priority order: Homepage, Contacts, About, Services, BIM, Legal, etc.
-    priority_order = ["home", "contacts", "about", "services", "bim", "legal", "projects", "careers", "general"]
-    def get_sort_key(p: Any) -> int:
-        pt = (p.page_type or "general").lower()
-        return priority_order.index(pt) if pt in priority_order else 99
+    # Step 2: Categorize each page using PageClassifier
+    for p in valid_pages:
+        pt = (p.page_type or "").upper()
+        # If page_type is not already a valid PageCategory, re-classify
+        if pt not in [c.value for c in PageCategory]:
+            cls = classify_page(
+                url=p.resolved_url or p.requested_url,
+                title=p.title,
+                cleaned_text=p.cleaned_text,
+            )
+            cat_name = cls.category.value
+            p.page_type = cat_name
+        else:
+            cat_name = pt
 
-    eligible_pages.sort(key=get_sort_key)
+        if cat_name in category_grouped:
+            category_grouped[cat_name].append(p)
+        else:
+            category_grouped[PageCategory.OTHER.value].append(p)
+
+    # Record discovered category counts
+    discovered_category_counts = {k: len(v) for k, v in category_grouped.items()}
+
+    # Step 3: Prioritized Selection
+    selected_pages: List[Any] = []
+    current_chars = 0
+
+    def try_add_page(page: Any) -> bool:
+        nonlocal current_chars
+        p_len = len(page.cleaned_text or "")
+        if len(selected_pages) >= max_total_pages:
+            omitted_pages_reasons[page.resolved_url or page.requested_url] = (
+                f"Exceeded max AI page selection limit ({max_total_pages} pages)"
+            )
+            return False
+        if current_chars + p_len > max_total_chars and selected_pages:
+            omitted_pages_reasons[page.resolved_url or page.requested_url] = (
+                f"Exceeded AI context character ceiling ({max_total_chars} chars)"
+            )
+            return False
+        selected_pages.append(page)
+        current_chars += p_len
+        return True
+
+    # P1: SERVICES (all unique subpages), ABOUT_COMPANY, CONTACT
+    # (Home is classified as ABOUT_COMPANY or has root path)
+    for p in category_grouped[PageCategory.ABOUT_COMPANY.value]:
+        try_add_page(p)
+
+    for p in category_grouped[PageCategory.SERVICES.value]:
+        try_add_page(p)
+
+    for p in category_grouped[PageCategory.CONTACT.value]:
+        try_add_page(p)
+
+    # P2: BIM_CAPABILITIES
+    for p in category_grouped[PageCategory.BIM_CAPABILITIES.value]:
+        try_add_page(p)
+
+    # P3: PROJECTS (Cap at max_projects)
+    project_pages = category_grouped[PageCategory.PROJECTS.value]
+    # Distinguish index/catalogs from project details: paths with more slashes/slugs are detail pages
+    detail_projects = []
+    index_projects = []
+    for prj in project_pages:
+        path = (prj.resolved_url or "").strip("/").split("/")
+        if len(path) > 3 or (len(path) == 3 and path[-1] not in ("projects", "progetti", "portfolio")):
+            detail_projects.append(prj)
+        else:
+            index_projects.append(prj)
+
+    # Prefer detail projects first
+    ordered_projects = detail_projects + index_projects
+    accepted_projects = 0
+    for prj in ordered_projects:
+        if accepted_projects < max_projects:
+            if try_add_page(prj):
+                accepted_projects += 1
+        else:
+            omitted_pages_reasons[prj.resolved_url or prj.requested_url] = (
+                f"Project portfolio cap enforced ({max_projects} representative projects max)"
+            )
+
+    # P4: TEAM, CAREERS, LEGAL, OTHER (if budget permits)
+    p4_pool = (
+        category_grouped[PageCategory.TEAM.value]
+        + category_grouped[PageCategory.CAREERS.value]
+        + category_grouped[PageCategory.LEGAL.value]
+        + category_grouped[PageCategory.OTHER.value]
+    )
+    for p in p4_pool:
+        try_add_page(p)
+
+    # Category breakdown of selected pages
+    selected_category_counts: Dict[str, int] = {}
+    for p in selected_pages:
+        pt = (p.page_type or "OTHER").upper()
+        selected_category_counts[pt] = selected_category_counts.get(pt, 0) + 1
+
+    # Check for missing high-value categories
+    missing_mandatory = []
+    if discovered_category_counts.get(PageCategory.SERVICES.value, 0) == 0:
+        missing_mandatory.append("SERVICES")
+    if discovered_category_counts.get(PageCategory.ABOUT_COMPANY.value, 0) == 0:
+        missing_mandatory.append("ABOUT_COMPANY")
+    if discovered_category_counts.get(PageCategory.CONTACT.value, 0) == 0:
+        missing_mandatory.append("CONTACT")
+
+    selection_metadata = {
+        "total_snapshot_pages": len(snapshot.pages),
+        "valid_pages_count": len(valid_pages),
+        "selected_pages_count": len(selected_pages),
+        "omitted_pages_count": len(omitted_pages_reasons),
+        "selected_chars": current_chars,
+        "discovered_category_counts": discovered_category_counts,
+        "selected_category_counts": selected_category_counts,
+        "missing_mandatory_categories": missing_mandatory,
+        "selected_pages_preview": [
+            {
+                "url": p.resolved_url or p.requested_url,
+                "title": p.title or "Untitled",
+                "category": (p.page_type or "OTHER").upper(),
+                "chars": len(p.cleaned_text or ""),
+            }
+            for p in selected_pages
+        ],
+        "omitted_pages_preview": [
+            {
+                "url": url,
+                "reason": reason,
+            }
+            for url, reason in omitted_pages_reasons.items()
+        ],
+    }
+
+    return selected_pages, omitted_pages_reasons, selection_metadata
+
+
+def partition_snapshot_into_chunks(
+    snapshot: ResearchSnapshot,
+    chunk_size_chars: int = 40_000,
+    use_page_selection: bool = True,
+) -> Tuple[List[Dict[str, Any]], List[Any], Dict[str, str]]:
+    """
+    Partitions pages of a snapshot into bounded chunks.
+    When use_page_selection=True (default), applies the Evidence-Aware AI Page Selection
+    Algorithm to filter noise, cap project catalogs, and prioritize Services/BIM/About/Contact.
+    Returns:
+      (chunks, eligible_pages, omitted_pages_reasons)
+    """
+    if use_page_selection:
+        eligible_pages, omitted_pages_reasons, _ = select_pages_for_analysis(snapshot)
+    else:
+        eligible_pages: List[Any] = []
+        omitted_pages_reasons: Dict[str, str] = {}
+        seen_content_hashes: Set[str] = set()
+
+        for p in snapshot.pages:
+            if p.retrieval_status != "FETCH_SUCCESS":
+                omitted_pages_reasons[p.requested_url or p.resolved_url] = f"Retrieval status was {p.retrieval_status}"
+                continue
+            body = (p.cleaned_text or "").strip()
+            if not body:
+                omitted_pages_reasons[p.resolved_url] = "Page cleaned text content is empty"
+                continue
+
+            c_hash = p.content_sha256 or hashlib.sha256(body.encode("utf-8")).hexdigest()
+            if c_hash in seen_content_hashes:
+                omitted_pages_reasons[p.resolved_url] = "Exact duplicate page content"
+                continue
+            seen_content_hashes.add(c_hash)
+            eligible_pages.append(p)
+
+        # Sort pages by priority order: Homepage, Contacts, About, Services, BIM, Legal, etc.
+        priority_order = ["home", "contacts", "about", "services", "bim", "legal", "projects", "careers", "general"]
+        def get_sort_key(p: Any) -> int:
+            pt = (p.page_type or "general").lower()
+            return priority_order.index(pt) if pt in priority_order else 99
+
+        eligible_pages.sort(key=get_sort_key)
 
     chunks: List[Dict[str, Any]] = []
     current_chunk_blocks: List[str] = []
@@ -1227,12 +1414,14 @@ def estimate_analysis_preflight(
     """
     P1-B: Calculates official pre-inference token and cost estimates based on
     all eligible snapshot pages and model-specific pricing configuration.
+    Includes Evidence-Aware AI Page Selection breakdown and category inventory.
     """
     pid = (provider_id or "gemini").lower()
     target_model = model or (DEFAULT_GEMINI_MODEL if pid == "gemini" else "default")
     pricing = get_model_pricing(pid, target_model)
 
-    chunks, eligible_pages, omitted = partition_snapshot_into_chunks(snapshot, chunk_size_chars=chunk_size_chars)
+    selected_pages, omitted, selection_meta = select_pages_for_analysis(snapshot)
+    chunks, eligible_pages, _ = partition_snapshot_into_chunks(snapshot, chunk_size_chars=chunk_size_chars, use_page_selection=True)
     total_chars = sum(len(c["text"]) for c in chunks)
 
     # Conservative token estimation: ~4 chars per token
@@ -1269,4 +1458,5 @@ def estimate_analysis_preflight(
         "pricing_source_date": pricing.source_date,
         "rate_input_1m": pricing.input_usd_per_1m,
         "rate_output_1m": pricing.output_usd_per_1m,
+        "selection_metadata": selection_meta,
     }
