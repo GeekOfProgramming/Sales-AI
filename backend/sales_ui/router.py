@@ -1486,8 +1486,15 @@ def evaluate_candidate_readiness(
                 or (company_lead_record and company_lead_record.evidence_urls)
             )
             if has_evidence:
-                for re in reg_emails:
-                    approved_reg_emails.add(re)
+                if len(reg_emails) == 1:
+                    approved_reg_emails.add(reg_emails[0])
+                else:
+                    # Multiple addresses present: only verify addresses that have exact-match support
+                    # in operator review note, evidence excerpt, or an existing verified contact record
+                    review_evidence_corpus = f"{reg_email_review.evidence_excerpt or ''} {reg_email_review.operator_note or ''} {reg_email_review.evidence_url or ''}".lower()
+                    for re in reg_emails:
+                        if re in review_evidence_corpus:
+                            approved_reg_emails.add(re)
 
     usable_recipients = []
     all_workspace_recipients = []
@@ -5971,8 +5978,16 @@ async def finalize_candidate_research_action(
     current_reg.updated_at = datetime.now(timezone.utc).isoformat()
     reg_store.save_record(current_reg)
 
-    # Update candidate metadata
+    # Update candidate metadata & lifecycle status:
+    # Ensure finalized candidate appears in Qualified Leads if suitable (not rejected/suppressed/watchlist)
     cand.last_researched_at = datetime.now(timezone.utc).isoformat()
+    raw_outcome = getattr(cand, "qualification_outcome", None)
+    if hasattr(raw_outcome, "value"):
+        raw_outcome = raw_outcome.value
+    outcome_str = str(raw_outcome) if raw_outcome else ""
+    if outcome_str not in ("reject", "suppressed", "watchlist", "known_company", "reengagement_review"):
+        cand.qualification_outcome = QualificationOutcome.qualified_for_enrichment
+        cand.discovery_status = DiscoveryStatus.qualified
     svcs["cand_store"].save_candidate(cand)
 
     msg = f"Research review explicitly finalized for '{current_reg.company_name}'. Status promoted to OPERATOR_REVIEWED (Research Ready)."
@@ -7068,7 +7083,13 @@ async def create_manual_draft_action(
                         has_evidence = bool(em_rev.evidence_url or em_rev.snapshot_id or lead_rec.evidence_urls)
                         if has_evidence:
                             approved_list = [e.strip().lower() for e in lead_rec.contact_email_addresses.split(",") if e.strip()]
-                            if clean_email in approved_list:
+                            # If multiple addresses are recorded, ensure the target address has exact-match evidence support
+                            exact_evidence_ok = True
+                            if len(approved_list) > 1:
+                                review_corpus = f"{em_rev.evidence_excerpt or ''} {em_rev.operator_note or ''} {em_rev.evidence_url or ''}".lower()
+                                exact_evidence_ok = clean_email in review_corpus
+
+                            if clean_email in approved_list and exact_evidence_ok:
                                 is_verified_evidence = True
                                 # Synchronize contact record in candidate store to reflect verified status
                                 from backend.schemas import ContactCandidate

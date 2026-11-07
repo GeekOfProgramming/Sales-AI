@@ -372,9 +372,11 @@
                 <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Open Company Workspace">Workspace</a>
 
                 {% if l.effective_readiness == 'draft_ready' %}
-                  <a href="/sales/candidates/{{ l.candidate_id }}#manual-draft" class="btn btn-success btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #10b981; color: white; border: none;" title="Prepare Offline Manual Draft">Prepare Draft</a>
+                  <a href="/sales/candidates/{{ l.candidate_id }}#manual-draft" class="btn btn-success btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #10b981; color: white; border: none;" title="Prepare Offline Manual Draft in Composer">Draft Composer</a>
                 {% elif l.effective_readiness == 'verification_required' %}
                   <a href="/sales/candidates/{{ l.candidate_id }}#contacts" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f59e0b;" title="Verify Contact Evidence">Verify Contact</a>
+                {% elif l.is_previously_contacted %}
+                  <a href="/sales/sent" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #6366f1;" title="View in Sent &amp; History">Sent History</a>
                 {% endif %}
               </div>
             {% else %}
