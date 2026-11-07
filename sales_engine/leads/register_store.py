@@ -730,6 +730,44 @@ class LeadRegisterStore:
                 )
             return reviews
 
+    def get_field_reviews_for_candidates(self, candidate_ids: List[str], field_name: Optional[str] = None) -> Dict[str, Dict[str, FieldReviewRecord]]:
+        """Batch fetches field reviews for multiple candidates to avoid N+1 queries."""
+        if not candidate_ids:
+            return {}
+        clean_cids = [c.strip() for c in candidate_ids if c and c.strip()]
+        if not clean_cids:
+            return {}
+        with self._get_connection() as conn:
+            if not self._table_exists(conn, "lead_register_field_reviews"):
+                return {}
+            placeholders = ",".join("?" for _ in clean_cids)
+            sql = f"SELECT * FROM lead_register_field_reviews WHERE candidate_id IN ({placeholders})"
+            params: List[Any] = list(clean_cids)
+            if field_name:
+                sql += " AND field_name = ?"
+                params.append(field_name)
+            rows = conn.execute(sql, params).fetchall()
+            result: Dict[str, Dict[str, FieldReviewRecord]] = {cid: {} for cid in clean_cids}
+            for r in rows:
+                cid = r["candidate_id"]
+                fn = r["field_name"]
+                if cid in result:
+                    result[cid][fn] = FieldReviewRecord(
+                        candidate_id=r["candidate_id"],
+                        field_name=r["field_name"],
+                        approved_value=r["approved_value"],
+                        value_checksum=r["value_checksum"],
+                        review_state=r["review_state"],
+                        reviewed_at=r["reviewed_at"],
+                        source_type=r["source_type"],
+                        snapshot_id=r["snapshot_id"],
+                        analysis_id=r["analysis_id"],
+                        evidence_url=r["evidence_url"],
+                        evidence_excerpt=r["evidence_excerpt"],
+                        operator_note=r["operator_note"],
+                    )
+            return result
+
     def delete_field_review(self, candidate_id: str, field_name: str, superseded_reason: str = "field_value_modified") -> bool:
         """Deletes a field review when a field value is modified or revoked, recording it to audit history."""
         with self._get_connection() as conn:

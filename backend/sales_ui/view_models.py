@@ -78,6 +78,7 @@ class CandidateListItem(BaseModel):
     exclusion_reason: Optional[str] = None
     verification_status: Optional[str] = None  # OPERATOR_REVIEWED, EXTRACTED, Unverified, etc.
     primary_source: Optional[str] = None
+    company_outreach_status: str = "NOT_SENT"
 
 
 class CandidateDetailView(BaseModel):

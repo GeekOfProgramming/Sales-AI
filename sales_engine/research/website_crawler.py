@@ -46,6 +46,11 @@ from sales_engine.research.research_store import (
     ResearchSnapshot,
     ResearchSnapshotStore,
 )
+from sales_engine.research.page_classifier import (
+    PageCategory,
+    PageClassification,
+    classify_page,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +136,32 @@ class CrawlBudget:
     crawl_delay_seconds: float = 0.0
 
 
+# Operator-selectable crawl profiles
+CRAWL_PROFILES: Dict[str, CrawlBudget] = {
+    "quick": CrawlBudget(max_pages=10, max_depth=2, total_timeout_seconds=45.0),
+    "standard": CrawlBudget(max_pages=20, max_depth=3, total_timeout_seconds=90.0),
+    "deep": CrawlBudget(max_pages=50, max_depth=4, total_timeout_seconds=180.0),
+    "extended": CrawlBudget(max_pages=100, max_depth=5, total_timeout_seconds=300.0),
+}
+
+
+def get_crawl_budget_for_profile(profile_name: Optional[str] = "standard", max_pages_override: Optional[int] = None) -> CrawlBudget:
+    """Returns a CrawlBudget instance configured for the specified profile."""
+    p_name = (profile_name or "standard").lower().strip()
+    base = CRAWL_PROFILES.get(p_name, CRAWL_PROFILES["standard"])
+    budget = CrawlBudget(
+        max_pages=max_pages_override if (max_pages_override and max_pages_override > 0) else base.max_pages,
+        max_depth=base.max_depth,
+        per_page_timeout_seconds=base.per_page_timeout_seconds,
+        total_timeout_seconds=base.total_timeout_seconds,
+        max_page_bytes=base.max_page_bytes,
+        max_total_bytes=base.max_total_bytes,
+        max_discovered_urls=base.max_discovered_urls,
+        crawl_delay_seconds=base.crawl_delay_seconds,
+    )
+    return budget
+
+
 @dataclass
 class CrawlSummary:
     """Outcome report for a crawl execution."""
@@ -206,37 +237,46 @@ def normalize_url(url: str, base_domain: str) -> Optional[str]:
     return rebuilt
 
 
-def classify_page_type(url: str, anchor_text: Optional[str] = None) -> str:
-    """Classifies a URL into a high-level page type."""
-    combined = (url + " " + (anchor_text or "")).lower()
-
-    parsed = urllib.parse.urlsplit(url)
-    path = parsed.path.strip("/")
-    if not path or path.lower() in ("index.html", "index.php", "home"):
-        return "home"
-
-    for ptype, patterns in SECTION_PATTERNS.items():
-        for pat in patterns:
-            if re.search(pat, combined, re.I):
-                return ptype
-
-    return "general"
+def classify_page_type(
+    url: str,
+    anchor_text: Optional[str] = None,
+    title: Optional[str] = None,
+    cleaned_text: Optional[str] = None,
+    headings: Optional[List[str]] = None,
+) -> str:
+    """Classifies a URL into a high-level page type using deterministic PageClassifier."""
+    classification = classify_page(
+        url=url,
+        title=title,
+        cleaned_text=cleaned_text,
+        anchor_text=anchor_text,
+        headings=headings,
+    )
+    # If the classifier identified a category, return its value
+    return classification.category.value
 
 
 def score_page_priority(url: str, page_type: str, depth: int) -> int:
     """Computes a frontier priority score (higher = fetched first)."""
+    pt_upper = (page_type or "OTHER").upper()
     base_scores = {
-        "home": 100,
-        "contacts": 90,
-        "about": 85,
-        "services": 80,
-        "bim": 80,
-        "careers": 75,
-        "projects": 70,
-        "legal": 65,
-        "general": 40,
+        "SERVICES": 95,
+        "ABOUT_COMPANY": 90,
+        "CONTACT": 90,
+        "BIM_CAPABILITIES": 85,
+        "PROJECTS": 70,
+        "TEAM": 60,
+        "CAREERS": 55,
+        "LEGAL": 50,
+        "OTHER": 40,
+        # Backward compatibility with legacy lower-case names
+        "HOME": 100,
+        "CONTACTS": 90,
+        "ABOUT": 90,
+        "BIM": 85,
+        "GENERAL": 40,
     }
-    score = base_scores.get(page_type, 40)
+    score = base_scores.get(pt_upper, 40)
     score -= (depth * 10)
     return max(1, score)
 
@@ -705,6 +745,18 @@ class WebsiteCrawlerV2:
                 # Preserve element boundaries by using separator=" " and normalize whitespace
                 raw_text = soup.get_text(separator=" ", strip=True)
                 res.text_content = re.sub(r"[ \t]+", " ", raw_text).strip()
+
+                # Extract headings for classification
+                headings = [h.get_text(strip=True) for h in soup.find_all(["h1", "h2", "h3"])]
+
+                # Re-classify with full DOM context (title, headings, text)
+                refined_class = classify_page(
+                    url=res.url,
+                    title=res.title,
+                    cleaned_text=res.text_content,
+                    headings=headings,
+                )
+                res.page_type = refined_class.category.value
 
         except SSRFValidationError as e:
             res.status = "BLOCKED_UNSAFE"

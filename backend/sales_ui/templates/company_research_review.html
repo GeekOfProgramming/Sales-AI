@@ -195,23 +195,32 @@
 
     <!-- Independent Action Buttons (A & B) -->
     <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-      <!-- Button A: Crawl & Save Website -->
-      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-block;" id="formCrawlWebsite">
+      <!-- Button A: Crawl & Save Website with Profile Selector -->
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-flex; align-items: center; gap: 0.4rem;" id="formCrawlWebsite">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="max_pages" value="20">
-        <button type="submit" class="btn btn-primary" id="btnCrawlWebsite" style="padding: 0.55rem 1.25rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='🕷️ Crawling Website...'; document.getElementById('formCrawlWebsite').submit();">
-          🕷️ Crawl &amp; Save Website
+        <select name="crawl_profile" class="form-select" style="font-size: 0.82rem; padding: 0.45rem 0.6rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-weight: 500;" title="Select Crawl Profile (Depth &amp; Page Budget)">
+          <option value="quick">⚡ Quick (10 p, d:2)</option>
+          <option value="standard" selected>🎯 Standard (20 p, d:3)</option>
+          <option value="deep">🌐 Deep (50 p, d:4)</option>
+          <option value="extended">🔭 Extended (100 p, d:5)</option>
+        </select>
+        <button type="submit" class="btn btn-primary" id="btnCrawlWebsite" style="padding: 0.55rem 1rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='🕷️ Crawling...'; document.getElementById('formCrawlWebsite').submit();">
+          🕷️ Crawl Website
         </button>
       </form>
 
       <!-- Resume / Continue Crawl Button (if partial crawl exists) -->
       {% if snapshot and snapshot.pages_succeeded > 0 %}
-      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-block;" id="formResumeCrawl">
+      <form method="POST" action="/sales/candidates/{{ candidate.candidate_id }}/crawl" style="display: inline-flex; align-items: center; gap: 0.4rem;" id="formResumeCrawl">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="max_pages" value="20">
+        <select name="crawl_profile" class="form-select" style="font-size: 0.82rem; padding: 0.45rem 0.6rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-weight: 500;" title="Select Resume Crawl Profile">
+          <option value="standard" selected>🎯 Standard (+20 p)</option>
+          <option value="deep">🌐 Deep (+50 p)</option>
+          <option value="extended">🔭 Extended (+100 p)</option>
+        </select>
         <input type="hidden" name="resume" value="1">
-        <button type="submit" class="btn btn-secondary" id="btnResumeCrawl" style="padding: 0.55rem 1rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='⏳ Resuming Crawl...'; document.getElementById('formResumeCrawl').submit();">
-          🔄 Continue / Resume Crawl
+        <button type="submit" class="btn btn-secondary" id="btnResumeCrawl" style="padding: 0.55rem 1rem; font-weight: 600;" onclick="this.disabled=true; this.innerText='⏳ Resuming...'; document.getElementById('formResumeCrawl').submit();">
+          🔄 Continue Crawl
         </button>
       </form>
       {% endif %}
@@ -250,9 +259,10 @@
   <!-- Operational Progress & Configuration Details -->
   <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-secondary);">
     <div>
-      Provider: <strong>Google Gemini (gemini-3.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong> | Budget: <strong>Max 20 Pages</strong>
+      Provider: <strong>Google Gemini (gemini-3.5-flash-lite)</strong> | Mode: <strong>Fail-Closed / No Silent Fallback</strong>
       {% if analysis_preflight %}
-      | Preflight Estimate (Hypothetical Commercial Rate): <strong>~{{ analysis_preflight.estimated_input_tokens }} tokens (~${{ analysis_preflight.estimated_cost_usd }})</strong> | API Tier: <strong>Not verified</strong>
+      | AI Selection: <strong>{{ analysis_preflight.eligible_pages_count }} of {{ snapshot.pages_succeeded if snapshot else '?' }} pages (~{{ analysis_preflight.total_context_chars }} chars)</strong>
+      | Preflight Estimate: <strong>~{{ analysis_preflight.estimated_input_tokens }} in / {{ analysis_preflight.estimated_output_tokens }} out (~${{ analysis_preflight.estimated_cost_usd }})</strong> | Tier: <strong>Not verified</strong>
       {% if analysis_preflight.will_omit_chunks %}
       | <span class="badge" style="background-color: #b45309; color: #fff;">Notice: 5-call ceiling active; {{ analysis_preflight.omitted_chunks_count }} chunks omitted</span>
       {% endif %}
@@ -274,6 +284,96 @@
       {% endif %}
     </div>
   </div>
+
+  {% if analysis_preflight and analysis_preflight.selection_metadata %}
+  {% set sm = analysis_preflight.selection_metadata %}
+  <!-- AI Page Selection Compact Summary & Collapsible Inspection -->
+  <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-color); font-size: 0.82rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <span style="font-weight: 700; color: var(--text-primary);">🧠 Evidence-Aware AI Selection:</span>
+        <span class="badge" style="background-color: #0284c7; color: #fff;">{{ sm.selected_pages_count }} Selected for Gemini</span>
+        <span class="badge" style="background-color: #64748b; color: #fff;">{{ sm.omitted_pages_count }} Omitted (Noise / Budget Caps)</span>
+        {% if sm.selected_category_counts %}
+          {% for cat, cnt in sm.selected_category_counts.items() %}
+            <span class="badge" style="background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;">{{ cat }}: {{ cnt }}</span>
+          {% endfor %}
+        {% endif %}
+      </div>
+
+      {% if sm.missing_mandatory_categories %}
+      <div>
+        {% for missing_cat in sm.missing_mandatory_categories %}
+          <span class="badge" style="background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171;">⚠️ Missing Coverage: {{ missing_cat }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Collapsible Inspection Drawer -->
+    <details style="margin-top: 0.6rem;">
+      <summary style="cursor: pointer; color: var(--border-focus); font-weight: 600; user-select: none;">
+        🔍 Inspect AI Page Selection Breakdown ({{ sm.selected_pages_count }} selected, {{ sm.omitted_pages_count }} omitted) ▾
+      </summary>
+      <div style="margin-top: 0.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background-color: var(--bg-hover); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color);">
+        <!-- Column 1: Selected Pages -->
+        <div>
+          <strong style="color: #15803d; font-size: 0.8rem; text-transform: uppercase;">✅ Selected Pages for Gemini Analysis ({{ sm.selected_pages_preview|length }})</strong>
+          <div style="max-height: 220px; overflow-y: auto; margin-top: 0.35rem;">
+            <table class="table" style="font-size: 0.76rem; margin-bottom: 0;">
+              <thead>
+                <tr>
+                  <th style="padding: 0.25rem 0.5rem;">Category</th>
+                  <th style="padding: 0.25rem 0.5rem;">URL / Title</th>
+                  <th style="padding: 0.25rem 0.5rem;">Chars</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for sp in sm.selected_pages_preview %}
+                <tr>
+                  <td style="padding: 0.25rem 0.5rem;"><span class="badge" style="font-size: 0.7rem; background-color: #e0f2fe; color: #0369a1;">{{ sp.category }}</span></td>
+                  <td style="padding: 0.25rem 0.5rem; word-break: break-all;">
+                    <code>{{ sp.url }}</code><br>
+                    <span style="color: var(--text-secondary);">{{ sp.title }}</span>
+                  </td>
+                  <td style="padding: 0.25rem 0.5rem;">{{ sp.chars }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Column 2: Omitted Pages -->
+        <div>
+          <strong style="color: #b45309; font-size: 0.8rem; text-transform: uppercase;">🛑 Omitted Pages &amp; Discard Reasons ({{ sm.omitted_pages_preview|length }})</strong>
+          <div style="max-height: 220px; overflow-y: auto; margin-top: 0.35rem;">
+            <table class="table" style="font-size: 0.76rem; margin-bottom: 0;">
+              <thead>
+                <tr>
+                  <th style="padding: 0.25rem 0.5rem;">URL</th>
+                  <th style="padding: 0.25rem 0.5rem;">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for op in sm.omitted_pages_preview %}
+                <tr>
+                  <td style="padding: 0.25rem 0.5rem; word-break: break-all;"><code>{{ op.url }}</code></td>
+                  <td style="padding: 0.25rem 0.5rem; color: #b45309;">{{ op.reason }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="2" style="padding: 0.5rem; color: var(--text-secondary); text-align: center;">No pages omitted. All crawled pages selected.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+  {% endif %}
 </div>
 
 {% if research %}

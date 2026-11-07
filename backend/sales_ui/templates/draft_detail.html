@@ -52,7 +52,33 @@
     </div>
     <div style="position: relative;">
       <div id="email-body-text" style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); font-family: inherit; background: var(--bg-card); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-color);">{{ draft.body }}</div>
-      <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end;">
+      <div style="margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <!-- Gmail Web Compose Deep Link (with safe URL length fallback) -->
+          {% if draft.body|length > 1500 %}
+            {% set gmail_url = "https://mail.google.com/mail/?view=cm&fs=1&to=" ~ (draft.recipient_email|urlencode) ~ "&su=" ~ (draft.subject|urlencode) %}
+            <a href="{{ gmail_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" title="Draft body is long. Click 'Copy Email Body' and paste directly into Gmail." style="font-size: 0.82rem; padding: 0.35rem 0.8rem; background-color: #ea4335; border-color: #ea4335; color: #fff; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              ✉️ Open in Gmail Web ↗
+            </a>
+          {% else %}
+            {% set gmail_url = "https://mail.google.com/mail/?view=cm&fs=1&to=" ~ (draft.recipient_email|urlencode) ~ "&su=" ~ (draft.subject|urlencode) ~ "&body=" ~ (draft.body|urlencode) %}
+            <a href="{{ gmail_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="font-size: 0.82rem; padding: 0.35rem 0.8rem; background-color: #ea4335; border-color: #ea4335; color: #fff; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;">
+              ✉️ Open in Gmail Web ↗
+            </a>
+          {% endif %}
+          <!-- Standard mailto link (with safe URL length fallback) -->
+          {% if draft.body|length > 1500 %}
+            {% set mailto_url = "mailto:" ~ draft.recipient_email ~ "?subject=" ~ (draft.subject|urlencode) %}
+            <a href="{{ mailto_url }}" class="btn btn-secondary" title="Draft body is long. Click 'Copy Email Body' and paste directly into your client." style="font-size: 0.82rem; padding: 0.35rem 0.8rem; text-decoration: none;">
+              📬 Open Default Client (mailto)
+            </a>
+          {% else %}
+            {% set mailto_url = "mailto:" ~ draft.recipient_email ~ "?subject=" ~ (draft.subject|urlencode) ~ "&body=" ~ (draft.body|urlencode) %}
+            <a href="{{ mailto_url }}" class="btn btn-secondary" style="font-size: 0.82rem; padding: 0.35rem 0.8rem; text-decoration: none;">
+              📬 Open Default Client (mailto)
+            </a>
+          {% endif %}
+        </div>
         <button type="button" class="copy-btn" onclick="copyToClipboard(document.getElementById('email-body-text').innerText, this)">
           📋 Copy Email Body
         </button>
@@ -81,24 +107,24 @@
       </div>
       <div style="width: 160px;">
         <label class="form-label">External Ref (Optional)</label>
-        <input type="text" name="external_ref" class="form-control" placeholder="e.g. Message ID">
+        <input type="text" name="external_ref" class="form-control" placeholder="e.g. Gmail Message-ID">
       </div>
       <div style="flex: 2; min-width: 240px;">
         <label class="form-label">Operator Notes</label>
-        <input type="text" name="operator_notes" class="form-control" placeholder="Notes on manual transmission...">
+        <input type="text" name="operator_notes" class="form-control" placeholder="Notes on manual transmission in Gmail...">
       </div>
       <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
         <div style="display: flex; flex-direction: column; gap: 0.35rem;">
           <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
             <input type="checkbox" name="confirm_external_transmission" value="1" required>
-            I explicitly confirm this message was transmitted externally outside• Email Led.
+            I explicitly confirm this message was transmitted externally outside pyBIM Sales-AI (e.g. via Gmail).
           </label>
           <label style="font-size: 0.78rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
             <input type="checkbox" name="is_retrospective_audit" value="1">
             Retrospective audit log: message was dispatched in the past (does not authorize new outreach).
           </label>
         </div>
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="btn btn-primary" style="font-weight: 600;">
           📝 Confirm &amp; Log Manual Dispatch
         </button>
       </div>
