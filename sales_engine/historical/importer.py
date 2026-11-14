@@ -40,6 +40,7 @@ from sales_engine.candidates.models import (
     DiscoveryObservation,
     DiscoveryStatus,
     OpportunityType,
+    QualificationOutcome,
     RelationshipType,
 )
 from sales_engine.candidates.candidate_store import CandidateStore, normalize_company_name
@@ -602,12 +603,12 @@ class HistoricalRecord:
     sheet_name: str
     row_number: int
     company_name: str
-    domain: Optional[str]
-    tier_hint: Optional[str]
-    notes: Optional[str]
-    source_url: Optional[str]
-    contact_name: Optional[str]
-    contact_role: Optional[str]
+    domain: Optional[str] = None
+    tier_hint: Optional[str] = None
+    notes: Optional[str] = None
+    source_url: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_role: Optional[str] = None
     country: Optional[str] = None
     city: Optional[str] = None
     emails: List[str] = field(default_factory=list)
@@ -698,6 +699,10 @@ class HistoricalImportResult:
     companies_updated: int = 0
     contacts_extracted: int = 0
     duplicates_skipped: int = 0
+    companies_unverified_website: int = 0
+    invalid_emails_marked: int = 0
+    multiple_plausible_domains_resolved: int = 0
+    duplicates_consolidated: int = 0
     sent_emails_total: int = 0
     sent_emails_imported: int = 0
     sent_emails_matched: int = 0
@@ -974,6 +979,9 @@ class HistoricalImporter:
             sname_clean = sname.strip().lower()
             is_summary_sheet = sname_clean in ("dashboard", "summary", "overview", "riepilogo", "statistiche", "metrics", "meeting")
             is_communication_sheet = sname_clean in ("sent_emails", "sent", "sent emails", "outbox", "emails_sent")
+            is_deferred_sheet = sname_clean in ("received_emails", "received", "email_conversations", "conversations")
+            is_excluded_sheet = sname_clean in ("bim coordinator", "worng emails", "wrong emails", "indeed")
+            is_non_company = is_summary_sheet or is_communication_sheet or is_deferred_sheet or is_excluded_sheet
 
             sheets_report.append({
                 "sheet_name": sname,
@@ -984,7 +992,9 @@ class HistoricalImporter:
                 "has_domain_column": has_domain,
                 "is_summary_sheet": is_summary_sheet,
                 "is_communication_sheet": is_communication_sheet,
-                "mapping_valid": (has_company or has_domain) if (not is_summary_sheet and not is_communication_sheet) else True,
+                "is_deferred_sheet": is_deferred_sheet,
+                "is_excluded_sheet": is_excluded_sheet,
+                "mapping_valid": (has_company or has_domain) if not is_non_company else True,
             })
 
         wb.close()
@@ -1162,10 +1172,12 @@ class HistoricalImporter:
             raise FileNotFoundError(f"File not found: {path}")
 
         wb = openpyxl.load_workbook(path, data_only=True)
-        # Skip Dashboard, Meeting, Summary, Overview, and Sent_Emails communication sheets from importing as companies
+        # Skip non-company sheets: summaries, communication, deferred, duplicate formula, or excluded sheets
         skip_sheet_names = {
             "dashboard", "meeting", "summary", "overview", "riepilogo", "statistiche", "metrics",
             "sent_emails", "sent", "sent emails", "outbox", "emails_sent",
+            "received_emails", "received", "email_conversations", "conversations",
+            "bim coordinator", "worng emails", "wrong emails", "indeed",
         }
         target_sheets = [sheet_name] if sheet_name and sheet_name in wb.sheetnames else [
             s for s in wb.sheetnames if s.strip().lower() not in skip_sheet_names
@@ -1368,197 +1380,16 @@ class HistoricalImporter:
         source_file_name: str = "pyBIM_Lead_Research.xlsx",
     ) -> HistoricalImportResult:
         """
-        HV-02.6: Automatic Research Candidate Import.
+        HV-02.6 / IMPORT-NEW-02: Unified Automatic Lead Research & Historical Import.
+        - Applies operator-approved flexible policies and full provenance.
         - Matches existing candidates using reliable canonical domain or exact company identity.
         - Creates new Candidates with Needs Research status when no reliable match exists.
         - Never invents or assigns an unverified domain (leaves company_domain=None).
         - Attaches all original research data as LeadRegisterRecord + DiscoveryObservation provenance.
         - Preserves operator-reviewed data, historical emails, DNC, and exclusions.
-        - Separate from historical email import: ZERO fabricated outreach events.
         - Strictly idempotent.
         """
-        from sales_engine.candidates.exclusion_store import ExcludedCompaniesStore
-        from sales_engine.candidates.models import (
-            CandidateCompany,
-            CompanyTier,
-            DiscoveryStatus,
-            QualificationOutcome,
-            DiscoveryObservation,
-        )
-        from sales_engine.leads.register_store import LeadRegisterStore
-        from sales_engine.leads.register_models import LeadRegisterRecord
-
-        excl_store = ExcludedCompaniesStore(self.store.db_path)
-        reg_store = LeadRegisterStore(self.store.db_path)
-        reg_store._init_db()
-
-        result = HistoricalImportResult(total_rows_read=len(records))
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        # Query operator-reviewed records and existing verified contacts
-        reviewed_cids = set()
-        with self.store._get_connection() as conn:
-            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone():
-                reviewed_cids = set(
-                    r[0] for r in conn.execute(
-                        "SELECT candidate_id FROM lead_register_records WHERE verification_status = 'OPERATOR_REVIEWED'"
-                    ).fetchall()
-                )
-
-        for rec in records:
-            result.records_parsed += 1
-            cname = (rec.company_name or "").strip()
-            raw_dom = rec.domain
-            dom = self.store.canonicalize_domain(raw_dom) if raw_dom else None
-
-            # 1. Genuinely ambiguous check
-            if not cname or len(cname) < 2 or cname.lower() in ("none", "null", "unknown", "تأیید نشد", "#n/a"):
-                result.duplicates_skipped += 1
-                continue
-
-            # 2. Check Excluded Companies Registry
-            if excl_store.is_company_excluded(company_domain=dom, company_name=cname):
-                result.duplicates_skipped += 1
-                continue
-
-            # 3. Match existing candidate or determine candidate_id
-            existing = None
-            is_ambiguous_identity = False
-
-            if dom:
-                existing = self.store.get_by_domain(dom)
-
-            if not existing:
-                matches = self.store.find_by_name(cname, country=rec.country) if hasattr(self.store, "find_by_name") else []
-                if len(matches) > 1:
-                    is_ambiguous_identity = True
-                elif len(matches) == 1:
-                    cand_match = matches[0]
-                    if dom and cand_match.company_domain and cand_match.company_domain != dom:
-                        is_ambiguous_identity = True
-                    else:
-                        existing = cand_match
-
-            if is_ambiguous_identity:
-                # Quarantined for operator review: consistent with preview
-                result.duplicates_skipped += 1
-                continue
-
-            is_new = False
-            if existing:
-                cid = existing.candidate_id
-                company = existing
-                # Never overwrite an existing verified domain based on an uncertain match
-                if dom and not company.company_domain:
-                    company.company_domain = dom
-                if rec.country and not company.country:
-                    company.country = rec.country
-                if rec.city and not company.city:
-                    company.city = rec.city
-                if cname not in company.aliases:
-                    company.aliases.append(cname)
-                if "research_lead_excel" not in company.source_refs:
-                    company.source_refs.append("research_lead_excel")
-                result.companies_updated += 1
-            else:
-                is_new = True
-                cid = self.store.generate_company_id(cname, dom, rec.country or "it")
-                tier_val = (
-                    CompanyTier.tier_1 if rec.tier_hint == "A"
-                    else (CompanyTier.tier_2 if rec.tier_hint == "B"
-                          else (CompanyTier.tier_3 if rec.tier_hint == "C" else CompanyTier.unknown))
-                )
-                company = CandidateCompany(
-                    candidate_id=cid,
-                    company_name=cname,
-                    normalized_company_name=normalize_company_name(cname),
-                    company_domain=dom,  # Never invent domain: None if unverified
-                    country=rec.country or "Italy",
-                    city=rec.city,
-                    company_tier=tier_val,
-                    tier_evidence=[rec.priority_reason] if rec.priority_reason else [],
-                    discovery_status=DiscoveryStatus.researching,  # Needs Research status
-                    qualification_outcome=QualificationOutcome.research_more,
-                    source_refs=["research_lead_excel"],
-                    aliases=[cname],
-                    domain_history=[dom] if dom else [],
-                    first_seen_at=now_iso,
-                    last_seen_at=now_iso,
-                    historical_contact_status="uncontacted",
-                    cold_outreach_allowed=False,
-                )
-                result.companies_created += 1
-
-            self.store.save_candidate(company)
-
-            # 4. Attach original research data as LeadRegisterRecord without overwriting OPERATOR_REVIEWED records
-            if cid not in reviewed_cids:
-                # Format emails string safely
-                emails_str = ",".join(sorted(rec.emails)) if rec.emails else None
-                phone_str = rec.phone_numbers if (rec.phone_numbers and "تأیید نشد" not in rec.phone_numbers) else None
-                contact_str = rec.contact_name if (rec.contact_name and "تأیید نشد" not in rec.contact_name) else None
-                job_link_str = rec.job_link if (rec.job_link and "موجود نیست" not in rec.job_link and "تأیید نشد" not in rec.job_link) else None
-                other_links_str = rec.other_links if (rec.other_links and "تأیید نشد" not in rec.other_links) else None
-                official_web_str = (f"https://{dom}" if dom else None) or rec.source_url
-
-                reg_rec = LeadRegisterRecord(
-                    candidate_id=cid,
-                    priority_level=rec.tier_hint or "B",
-                    priority_rationale=rec.priority_reason,
-                    company_name=cname,
-                    geographic_location=rec.raw_location or rec.city,
-                    telephone_numbers=phone_str,
-                    business_activities=rec.business_topic,
-                    official_website=official_web_str,
-                    responsible_person=contact_str,
-                    descriptions_and_notes=rec.notes,
-                    job_advertisement_links=job_link_str,
-                    other_links_and_references=other_links_str,
-                    contact_email_addresses=emails_str,
-                    provenance_source="research_excel_import",
-                    verification_status="Unverified",
-                )
-                reg_store.save_record(reg_rec)
-
-            # 5. Attach original row payload as DiscoveryObservation for provenance
-            obs_id = f"obs:research:{hashlib.sha256(f'{cid}:{rec.row_number}:{cname}'.encode()).hexdigest()[:16]}"
-            observation = DiscoveryObservation(
-                observation_id=obs_id,
-                candidate_id=cid,
-                source_id="research_lead_excel",
-                source_name=source_file_name,
-                source_type="excel_lead_research",
-                observed_company_name=cname,
-                observed_domain=dom,
-                country=rec.country or "Italy",
-                city=rec.city,
-                observation_type="lead_research_row",
-                raw_title=rec.business_topic,
-                raw_snippet=rec.notes,
-                raw_payload=rec.raw_row or {},
-                confidence=1.0 if dom else 0.8,
-            )
-            self.store.add_observation(observation)
-
-            # 6. Save unverified contacts if email was extracted (without verifying them)
-            if rec.emails:
-                for raw_em in rec.emails:
-                    for em in normalize_emails(raw_em):
-                        clean_em = em.strip().lower()
-                        if clean_em and "@" in clean_em and "تأیید نشد" not in clean_em:
-                            contact_data = {
-                                "contact_id": f"contact:{clean_em}",
-                                "work_email": clean_em,
-                                "full_name": rec.contact_name if (rec.contact_name and "تأیید نشد" not in rec.contact_name) else "Research Contact",
-                                "job_title": rec.contact_role or rec.business_topic or "Unverified Contact",
-                                "email_status": "unverified",
-                                "email_confidence": 30,
-                                "provider": "research_excel",
-                            }
-                            self.store.save_contact(contact_data, candidate_id=cid)
-                            result.contacts_extracted += 1
-
-        return result
+        return self.import_records(records)
 
     def parse_sent_emails(self, file_path: Union[str, Path], sheet_name: str = "Sent_Emails") -> List[SentEmailRecord]:
         """
@@ -2151,7 +1982,26 @@ class HistoricalImporter:
         records: List[HistoricalRecord],
         operator_decisions: Optional[List[Dict[str, Any]]] = None,
     ) -> HistoricalImportResult:
+        from sales_engine.leads.register_store import LeadRegisterStore
+        from sales_engine.leads.register_models import LeadRegisterRecord
+
         result = HistoricalImportResult(total_rows_read=len(records))
+
+        reg_store = None
+        reviewed_cids = set()
+        if self.store.db_path and self.store.db_path != ":memory:":
+            try:
+                reg_store = LeadRegisterStore(self.store.db_path)
+                reg_store._init_db()
+                with self.store._get_connection() as conn:
+                    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='lead_register_records' LIMIT 1").fetchone():
+                        reviewed_cids = set(
+                            r[0] for r in conn.execute(
+                                "SELECT candidate_id FROM lead_register_records WHERE verification_status = 'OPERATOR_REVIEWED'"
+                            ).fetchall()
+                        )
+            except Exception as e:
+                logger.warning(f"LeadRegisterStore init error in import_records: {e}")
 
         # Index operator decisions by (sheet_name, row_number)
         dec_map: Dict[Tuple[str, int], Dict[str, Any]] = {}
@@ -2215,36 +2065,72 @@ class HistoricalImporter:
                 # Check by ID
                 company = self.store.get_by_id(company_id)
 
+            if not company and not canon_domain:
+                matches = self.store.find_by_name(rec.company_name, country=rec.country) if hasattr(self.store, "find_by_name") else []
+                if len(matches) == 1:
+                    company = matches[0]
+
             if not company:
                 is_new = True
+                company_id = self.store.generate_company_id(rec.company_name, canon_domain, rec.country)
+                tier_val = (
+                    CompanyTier.tier_1 if rec.tier_hint in ("A", "1")
+                    else (CompanyTier.tier_2 if rec.tier_hint in ("B", "2")
+                          else (CompanyTier.tier_3 if rec.tier_hint in ("C", "3") else CompanyTier.unknown))
+                )
+                disc_status = DiscoveryStatus.researching if not canon_domain else DiscoveryStatus.discovered
+                qual_outcome = QualificationOutcome.research_more if not canon_domain else None
                 company = CandidateCompany(
-                    company_id=self.store.generate_company_id(rec.company_name, canon_domain, rec.country),
+                    company_id=company_id,
                     name=rec.company_name,
                     canonical_domain=canon_domain,
                     country=rec.country,
                     city=rec.city,
+                    company_tier=tier_val,
+                    tier_evidence=[rec.priority_reason] if rec.priority_reason else [],
                     discovery_sources=["historical_seed"],
-                    status=DiscoveryStatus.discovered,
+                    status=disc_status,
+                    qualification_outcome=qual_outcome,
                 )
+                if not canon_domain:
+                    result.companies_unverified_website += 1
             else:
                 if rec.country and not company.country:
                     company.country = rec.country
                 if rec.city and not company.city:
                     company.city = rec.city
+                if canon_domain and not company.company_domain:
+                    company.company_domain = canon_domain
+                if rec.company_name not in company.aliases:
+                    company.aliases.append(rec.company_name)
+                if "historical_seed" not in company.discovery_sources:
+                    company.discovery_sources.append("historical_seed")
+                result.duplicates_consolidated += 1
 
-            # Preserve aliases & sources
-            if rec.company_name not in company.aliases:
-                company.aliases.append(rec.company_name)
-            if "historical_seed" not in company.discovery_sources:
-                company.discovery_sources.append("historical_seed")
+            web_info = getattr(rec, "primary_website_info", {})
+            if web_info.get("multiple_plausible_domains"):
+                result.multiple_plausible_domains_resolved += 1
 
             # PREVIOUS OUTREACH / ACTIVE CONVERSATION GUARD:
             # Separate raw outreach status from normalized contact status and normalized reply status.
             # Only factual send, reply, or other reliable contact evidence may establish previous outreach.
             norm_status = normalize_outreach_status(rec.raw_outreach_status)
             has_past_contact = bool(rec.contact_date or rec.reply_date or norm_status["has_past_contact"])
+            is_wrong = norm_status["is_wrong_email"] or rec.is_wrong_email
+            if is_wrong:
+                result.invalid_emails_marked += 1
 
-            if norm_status["historical_contact_status"] == "uncontacted":
+            if is_wrong:
+                # Policy E: Invalid / Bounced email.
+                # Preserve affected companies and all their valid contact data.
+                # Mark exact incorrect recipient email as invalid when identifiable.
+                # Do NOT mark company as DNC or all contacts invalid!
+                company.suppressed = False
+                if not (rec.contact_date or rec.reply_date or has_past_contact):
+                    company.cold_outreach_allowed = True
+                    company.historical_contact_status = "uncontacted"
+                    company.previous_outreach_detected = False
+            elif norm_status["historical_contact_status"] == "uncontacted":
                 # Explicit uncontacted / under initial review (e.g. بررسی اولیه)
                 # Keep cold outreach allowed unless independent contact date/reply exists!
                 if not (rec.contact_date or rec.reply_date):
@@ -2264,6 +2150,7 @@ class HistoricalImporter:
                     company.historical_contact_status = "replied"
                 elif norm_status["historical_contact_status"] == "dnc":
                     company.historical_contact_status = "dnc"
+                    company.suppressed = True
                 else:
                     company.historical_contact_status = "contacted"
 
@@ -2277,7 +2164,7 @@ class HistoricalImporter:
                 company.active_conversation = True
                 company.metadata["active_conversation"] = True
 
-            if rec.is_dnc or norm_status["is_dnc"]:
+            if (rec.is_dnc or norm_status["is_dnc"]) and not is_wrong:
                 company.cold_outreach_allowed = False
                 company.suppressed = True
                 company.suppression_state["historical_dnc"] = True
@@ -2406,7 +2293,7 @@ class HistoricalImporter:
                             rec.contact_name,
                             rec.contact_role,
                             em,
-                            "historical_unknown",
+                            "invalid" if is_wrong else "historical_unknown",
                             rec.reply_date,
                         ),
                     )
@@ -2469,6 +2356,52 @@ class HistoricalImporter:
                             lnk.get("availability", "VALID_URL"),
                         ),
                     )
+
+            cand_id = getattr(saved_company, "candidate_id", getattr(saved_company, "company_id", None))
+
+            # Save contacts to candidate_contacts in CandidateStore
+            if cand_id and clean_extracted_emails:
+                for em in clean_extracted_emails:
+                    clean_em = em.strip().lower()
+                    if clean_em and "@" in clean_em and "تأیید نشد" not in clean_em:
+                        contact_data = {
+                            "contact_id": f"contact:{clean_em}",
+                            "work_email": clean_em,
+                            "full_name": rec.contact_name if (rec.contact_name and "تأیید نشد" not in str(rec.contact_name)) else "Research Contact",
+                            "job_title": rec.contact_role or rec.business_topic or "Unverified Contact",
+                            "email_status": "invalid" if is_wrong else "unverified",
+                            "email_confidence": 0 if is_wrong else 30,
+                            "provider": "historical_excel",
+                        }
+                        self.store.save_contact(contact_data, candidate_id=cand_id)
+
+            # Save LeadRegisterRecord without overwriting OPERATOR_REVIEWED records
+            if reg_store and cand_id and cand_id not in reviewed_cids:
+                phone_str = rec.phone_numbers if (rec.phone_numbers and "تأیید نشد" not in str(rec.phone_numbers)) else None
+                contact_str = rec.contact_name if (rec.contact_name and "تأیید نشد" not in str(rec.contact_name)) else None
+                job_link_str = rec.job_link if (rec.job_link and "موجود نیست" not in str(rec.job_link) and "تأیید نشد" not in str(rec.job_link)) else None
+                other_links_str = rec.other_links if (rec.other_links and "تأیید نشد" not in str(rec.other_links)) else None
+                emails_str = ",".join(sorted(clean_extracted_emails)) if clean_extracted_emails else None
+                official_web_str = (f"https://{canon_domain}" if canon_domain else None) or rec.source_url
+
+                reg_rec = LeadRegisterRecord(
+                    candidate_id=cand_id,
+                    priority_level=rec.tier_hint or "B",
+                    priority_rationale=rec.priority_reason,
+                    company_name=rec.company_name,
+                    geographic_location=rec.raw_location or rec.city,
+                    telephone_numbers=phone_str,
+                    business_activities=rec.business_topic,
+                    official_website=official_web_str,
+                    responsible_person=contact_str,
+                    descriptions_and_notes=rec.notes,
+                    job_advertisement_links=job_link_str,
+                    other_links_and_references=other_links_str,
+                    contact_email_addresses=emails_str,
+                    provenance_source="historical_excel_import",
+                    verification_status="Unverified",
+                )
+                reg_store.save_record(reg_rec)
 
             # Populate historical_outreach_events table in CandidateStore ONLY if genuine outreach evidence exists:
             # Genuine evidence: confirmed contact date, confirmed reply date, or recognized send/reply status.

@@ -2938,10 +2938,15 @@ def evaluate_import_readiness(
     distinct_canonical_domains: int,
     multiple_plausible_domains_count: int,
     missing_domain_count: int,
+    operator_approved_policy: bool = True,
 ) -> Tuple[str, List[str]]:
     """
     Single authoritative readiness evaluator shared by Preview and Confirm.
     Returns (readiness_status: 'READY' | 'REVIEW_REQUIRED' | 'BLOCKED', readiness_reasons: List[str]).
+    Applies operator-approved flexible policies (Policies A, B, C):
+    - Unverified websites imported with company_domain=None (Policy A)
+    - Domain collisions auto-consolidated / preserved (Policy B)
+    - Multiple plausible domains resolved using primary host (Policy C)
     """
     reasons = []
     if len(records) == 0:
@@ -2949,23 +2954,35 @@ def evaluate_import_readiness(
     if unmapped_columns_count > 0:
         return "BLOCKED", [f"{unmapped_columns_count} unmapped column(s) detected in company sheets."]
 
-    if domain_collisions_count > 0:
-        reasons.append(
-            f"{domain_collisions_count} canonical domain collision(s) detected across {len(records)} rows ({distinct_canonical_domains} unique domains). Human identity review required."
-        )
-    if multiple_plausible_domains_count > 0:
-        reasons.append(
-            f"{multiple_plausible_domains_count} company row(s) contain multiple plausible primary domains requiring human review."
-        )
+    if not operator_approved_policy:
+        if domain_collisions_count > 0:
+            reasons.append(
+                f"{domain_collisions_count} canonical domain collision(s) detected across {len(records)} rows ({distinct_canonical_domains} unique domains). Human identity review required."
+            )
+        if multiple_plausible_domains_count > 0:
+            reasons.append(
+                f"{multiple_plausible_domains_count} company row(s) contain multiple plausible primary domains requiring human review."
+            )
+        if missing_domain_count > 0:
+            reasons.append(
+                f"{missing_domain_count} company row(s) have unresolvable website placeholders [link removed] or missing primary websites."
+            )
+        if reasons:
+            return "REVIEW_REQUIRED", reasons
+        return "READY", [f"All {len(records)} rows validated with 0 unmapped headers and 0 collisions."]
+
+    policy_notes = []
     if missing_domain_count > 0:
-        reasons.append(
-            f"{missing_domain_count} company row(s) have unresolvable website placeholders [link removed] or missing primary websites."
-        )
+        policy_notes.append(f"{missing_domain_count} company row(s) without verified websites will be imported with unverified website status (Policy A)")
+    if multiple_plausible_domains_count > 0:
+        policy_notes.append(f"{multiple_plausible_domains_count} company row(s) with multiple plausible domains will use proposed primary host (Policy C)")
+    if domain_collisions_count > 0:
+        policy_notes.append(f"{domain_collisions_count} domain collision group(s) will be auto-consolidated / preserved (Policy B)")
 
-    if reasons:
-        return "REVIEW_REQUIRED", reasons
-
-    return "READY", [f"All {len(records)} rows validated with 0 unmapped headers and 0 collisions."]
+    reasons = [
+        f"Workbook validated under operator-approved policies: {len(records)} company rows ready for import."
+    ] + policy_notes
+    return "READY", reasons
 
 
 # P10_5-ADV-009 / ADV-012 / ADV-013: Preview Historical Import (Zero Mutations)
@@ -3108,21 +3125,15 @@ async def preview_historical_import_action(
 
     is_lead_res = importer.is_lead_research_workbook(resolved)
 
-    # Evaluate Readiness with authoritative shared function
-    if is_lead_res:
-        # Lead Research workbooks automatically match verified domains and route unverified companies
-        # to 'Needs Research' candidates with zero outreach; they do not block on missing domains.
-        readiness_status = "READY"
-        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
-    else:
-        readiness_status, readiness_reasons = evaluate_import_readiness(
-            records=records,
-            unmapped_columns_count=unmapped_columns_count,
-            domain_collisions_count=domain_collisions_count,
-            distinct_canonical_domains=distinct_canonical_domains,
-            multiple_plausible_domains_count=multiple_plausible_domains_count,
-            missing_domain_count=missing_domain_count,
-        )
+    # Evaluate Readiness with authoritative shared function (parity across Preview and Confirm)
+    readiness_status, readiness_reasons = evaluate_import_readiness(
+        records=records,
+        unmapped_columns_count=unmapped_columns_count,
+        domain_collisions_count=domain_collisions_count,
+        distinct_canonical_domains=distinct_canonical_domains,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        missing_domain_count=missing_domain_count,
+    )
 
     # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
     has_sent_emails_sheet = False
@@ -3387,18 +3398,14 @@ async def confirm_historical_import_action(
     is_lead_res = importer.is_lead_research_workbook(resolved)
 
     # Server-side validation gate parity with Preview
-    if is_lead_res:
-        readiness_status = "READY"
-        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
-    else:
-        readiness_status, readiness_reasons = evaluate_import_readiness(
-            records=records,
-            unmapped_columns_count=unmapped_count,
-            domain_collisions_count=domain_collisions_count,
-            distinct_canonical_domains=distinct_canonical_domains,
-            multiple_plausible_domains_count=multiple_plausible_domains_count,
-            missing_domain_count=missing_domain_count,
-        )
+    readiness_status, readiness_reasons = evaluate_import_readiness(
+        records=records,
+        unmapped_columns_count=unmapped_count,
+        domain_collisions_count=domain_collisions_count,
+        distinct_canonical_domains=distinct_canonical_domains,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        missing_domain_count=missing_domain_count,
+    )
 
     # Parse and rigorously validate operator decisions if supplied
     parsed_decisions = []
@@ -3616,10 +3623,7 @@ async def confirm_historical_import_action(
                     except Exception as e:
                         logger.warning(f"Error pre-reconciling sent emails: {e}")
 
-                if is_lead_res:
-                    result = staged_importer.import_lead_research_records(records, source_file_name=resolved.name)
-                else:
-                    result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
+                result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
                 # 2b. If Sent_Emails sheet exists, import sent messages into staging store
                 sent_emails_stats = None
