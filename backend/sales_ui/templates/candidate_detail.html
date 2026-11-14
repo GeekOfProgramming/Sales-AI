@@ -143,7 +143,7 @@
             <span class="badge badge-warning" style="background-color: #d97706; color: #fff;">Draft Pending</span>
           {% endif %}
         {% elif can_generate_draft %}
-          <span class="badge badge-success">Draft Eligible</span>
+          <span class="badge badge-success">Ready to Email</span>
         {% else %}
           <span class="badge badge-secondary">⚪ NOT_SENT</span>
         {% endif %}
@@ -177,7 +177,7 @@
       <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">Decision</label>
       <select name="decision" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.6rem;" required>
         <option value="" disabled selected>-- Select decision --</option>
-        <option value="approve">✅ Approve Lead</option>
+        <option value="approve">✅ Approve for Outreach</option>
         <option value="reject">❌ Reject Candidate</option>
         <option value="duplicate">🔄 Mark Duplicate</option>
         <option value="needs_research">🔍 Needs Research</option>
@@ -1112,6 +1112,7 @@
             <th>Subject</th>
             <th>Reconciliation</th>
             <th>Gmail Archive</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -1137,6 +1138,14 @@
               {% else %}
                 <span style="color: var(--text-muted);">-</span>
               {% endif %}
+            </td>
+            <td>
+              <button type="button" class="btn btn-primary btn-sm" onclick="viewHistoricalEmail({{ em.id }})" style="font-size: 0.75rem; padding: 0.25rem 0.55rem; white-space: nowrap;">
+                👁️ View Email
+              </button>
+              <script type="application/json" id="hist-email-data-{{ em.id }}">
+                {{ em | tojson }}
+              </script>
             </td>
           </tr>
           {% endfor %}
@@ -1166,29 +1175,37 @@
             <th>Channel</th>
             <th>Contact Date</th>
             <th>Reply Status</th>
-            <th>Meeting Status</th>
+            <th>Reply Date</th>
+            <th>Evidence / Notes</th>
           </tr>
         </thead>
         <tbody>
           {% for h in detail.historical_outreach %}
           <tr>
-            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
-            <td><code>{{ h.recipient_email }}</code></td>
+            <td><strong>{{ h.contact_name or h.recipient_name or '-' }}</strong></td>
+            <td><code>{{ h.contact_email or h.recipient_email or '-' }}</code></td>
             <td>{{ h.channel or 'email' }}</td>
-            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
+            <td>{{ h.contacted_at[:16] if h.contacted_at else '-' }}</td>
             <td>
-              {% if h.reply_status and h.reply_status != 'no_reply' %}
+              {% if h.reply_at or (h.reply_status and 'replied' in h.reply_status|lower) %}
+                <span class="badge badge-success" title="Reply confirmed at {{ h.reply_at or '' }}">replied</span>
+              {% elif h.reply_status and h.reply_status not in ('no_reply', 'contacted', 'none') %}
                 <span class="badge badge-success">{{ h.reply_status }}</span>
+              {% elif h.reply_status == 'contacted' or (h.channel and 'sent' in h.channel) %}
+                <span class="badge badge-info">contacted</span>
               {% else %}
                 <span class="badge badge-secondary">no_reply</span>
               {% endif %}
             </td>
             <td>
-              {% if h.meeting_status and h.meeting_status != 'none' %}
-                <span class="badge badge-primary">{{ h.meeting_status }}</span>
+              {% if h.reply_at %}
+                <strong style="color: var(--color-success, #22c55e);">{{ h.reply_at[:16] }}</strong>
               {% else %}
-                <span style="color: var(--text-muted);">None</span>
+                <span style="color: var(--text-muted);">-</span>
               {% endif %}
+            </td>
+            <td style="max-width: 320px; font-size: 0.78rem; color: var(--text-secondary); word-break: break-word;">
+              {{ h.notes or h.intent_evidence or '-' }}
             </td>
           </tr>
           {% endfor %}
@@ -1306,6 +1323,63 @@
     {% endif %}
   </div>
 
+  <!-- FLOW-02: Mark as Sent (Thunderbird Manual Send) Form -->
+  {% if can_generate_draft or (not is_previously_contacted and not is_suppressed and not is_excluded) %}
+  <div id="mark-sent-card" class="card" style="border: 2px solid #059669; background: rgba(5, 150, 105, 0.04); margin-bottom: 1.5rem;">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="color: #059669; font-weight: 700;">✉️ Mark as Sent (Thunderbird Manual Send)</span>
+      <span class="badge badge-success">No Draft Required</span>
+    </div>
+    <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      Record an operator-confirmed manual email sent through Thunderbird. This directly updates the company to <strong>Sent Manually</strong> without requiring a draft or SMTP configuration.
+    </p>
+    <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/mark-sent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; align-items: flex-end;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="return_to" value="/sales/candidates/{{ detail.candidate.candidate_id }}?tab=outreach">
+      <input type="hidden" name="idempotency_token" value="idemp_{{ detail.candidate.candidate_id }}_{{ current_rome_time | replace(' ', '_') | replace(':', '_') }}">
+      
+      <div>
+        <label class="form-label" style="font-size: 0.78rem;">Sending Identity (pyBIM Account) *</label>
+        <select name="sender_account" class="form-control" required style="font-size: 0.85rem;">
+          {% for s in authorized_sender_accounts %}
+            <option value="{{ s }}">{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div>
+        <label class="form-label" style="font-size: 0.78rem;">Verified Recipient Email *</label>
+        <input type="email" name="recipient_email" class="form-control" value="{{ default_verified_recipient or '' }}" required style="font-size: 0.85rem;" placeholder="e.g. director@company.com">
+      </div>
+      
+      <div>
+        <label class="form-label" style="font-size: 0.78rem;">Sent Date &amp; Time (Europe/Rome) *</label>
+        <input type="text" name="sent_at" class="form-control" value="{{ current_rome_time }}" required style="font-size: 0.85rem;">
+      </div>
+      
+      <div>
+        <label class="form-label" style="font-size: 0.78rem;">Subject Line (Optional)</label>
+        <input type="text" name="subject" class="form-control" placeholder="e.g. pyBIM Architectural Collaboration" style="font-size: 0.85rem;">
+      </div>
+      
+      <div style="grid-column: 1 / -1;">
+        <label class="form-label" style="font-size: 0.78rem;">Operator Notes / Context (Optional)</label>
+        <input type="text" name="operator_notes" class="form-control" placeholder="Notes on outreach conversation, context or Thunderbird transmission..." style="font-size: 0.85rem;">
+      </div>
+      
+      <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: 0.25rem;">
+        <label style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+          <input type="checkbox" name="confirm_thunderbird_sent" value="1" required style="width: 16px; height: 16px;">
+          <span>I explicitly confirm that I have sent this email to the recipient using the Thunderbird client.</span>
+        </label>
+        <button type="submit" class="btn btn-success" style="font-size: 0.85rem; padding: 0.45rem 1.1rem; background-color: #059669; border: none; font-weight: 700;">
+          Confirm Mark as Sent
+        </button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
   <!-- 5. Confirmed Manual External Dispatches -->
   <div class="card" style="margin-bottom: 1.25rem;">
     <div class="card-title">
@@ -1317,25 +1391,42 @@
       <table class="data-table" style="font-size: 0.85rem;">
         <thead>
           <tr>
+            <th>Sender</th>
             <th>Recipient</th>
-            <th>Channel</th>
+            <th>Sent At (Rome)</th>
             <th>Subject</th>
-            <th>Logged At</th>
-            <th>External Ref</th>
-            <th>Logged By</th>
-            <th>Notes</th>
+            <th>Status</th>
+            <th>External Ref / Notes</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {% for m in manual_logs %}
           <tr>
+            <td><code>{{ m.sender_account or '-' }}</code></td>
             <td><strong>{{ m.recipient_name or '' }}</strong> &lt;{{ m.recipient_email }}&gt;</td>
-            <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
+            <td>{{ m.sent_at or m.logged_at[:19] }}</td>
             <td>{{ m.subject }}</td>
-            <td>{{ m.logged_at[:19] }}</td>
-            <td><code>{{ m.external_ref or 'N/A' }}</code></td>
-            <td>{{ m.logged_by }}</td>
-            <td>{{ m.operator_notes or '-' }}</td>
+            <td>
+              {% if m.is_voided %}
+                <span class="badge badge-danger" title="Voided: {{ m.voided_reason or '' }}">Voided</span>
+              {% else %}
+                <span class="badge badge-success">Confirmed</span>
+              {% endif %}
+            </td>
+            <td style="max-width: 250px; font-size: 0.78rem;">
+              {{ m.operator_notes or m.external_ref or '-' }}
+              {% if m.is_voided and m.voided_reason %}
+                <div style="color: var(--color-danger, #ef4444); font-size: 0.72rem; margin-top: 2px;">Reason: {{ m.voided_reason }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if not m.is_voided %}
+                <button type="button" class="btn btn-secondary btn-sm" onclick="promptVoidManualSent('{{ m.log_id }}')" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #ef4444;">Void</button>
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.72rem;">Voided</span>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -1606,6 +1697,40 @@ function syncManualRecipient(selectEl) {
   }
 }
 
+function promptVoidManualSent(logId) {
+  var reason = prompt("Enter the audited reason for voiding this manual sent entry (required):");
+  if (!reason || !reason.trim()) {
+    if (reason !== null) {
+      alert("Void rationale is required.");
+    }
+    return;
+  }
+  var form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/sales/manual-sent/" + encodeURIComponent(logId) + "/void";
+
+  var csrfInput = document.createElement("input");
+  csrfInput.type = "hidden";
+  csrfInput.name = "csrf_token";
+  csrfInput.value = "{{ csrf_token }}";
+  form.appendChild(csrfInput);
+
+  var reasonInput = document.createElement("input");
+  reasonInput.type = "hidden";
+  reasonInput.name = "void_reason";
+  reasonInput.value = reason.trim();
+  form.appendChild(reasonInput);
+
+  var returnInput = document.createElement("input");
+  returnInput.type = "hidden";
+  returnInput.name = "return_to";
+  returnInput.value = window.location.pathname + window.location.search + window.location.hash;
+  form.appendChild(returnInput);
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
 function populateVerifyModal(contactId, fullName, email) {
   switchWorkspaceTab('contacts');
   var sel = document.getElementById('verify-select-contact');
@@ -1644,4 +1769,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
+
+{% include "historical_email_modal.html" %}
+{% include "mark_sent_modal.html" %}
 {% endblock %}

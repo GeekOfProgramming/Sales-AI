@@ -69,15 +69,14 @@
       <thead>
         <tr>
           <th>Candidate ID</th>
-          <th>Recipient Email</th>
-          <th>Recipient Name</th>
+          <th>Sender Account</th>
+          <th>Recipient</th>
           <th>Subject</th>
-          <th>Channel</th>
-          <th>Logged At</th>
-          <th>External Ref</th>
-          <th>Logged By</th>
-          <th>Operator Notes</th>
+          <th>Sent At (Rome)</th>
+          <th>Status</th>
+          <th>Notes / External Ref</th>
           <th>Linked Draft</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -88,19 +87,40 @@
               <code>{{ m.candidate_id }}</code> ↗
             </a>
           </td>
-          <td><strong>{{ m.recipient_email }}</strong></td>
-          <td>{{ m.recipient_name or '-' }}</td>
+          <td><code>{{ m.sender_account or '-' }}</code></td>
+          <td>
+            <strong>{{ m.recipient_name or '' }}</strong>
+            <div>&lt;{{ m.recipient_email }}&gt;</div>
+          </td>
           <td>{{ m.subject }}</td>
-          <td><span class="badge badge-secondary">{{ m.channel }}</span></td>
-          <td>{{ m.logged_at[:19] }}</td>
-          <td><code>{{ m.external_ref or 'N/A' }}</code></td>
-          <td>{{ m.logged_by }}</td>
-          <td>{{ m.operator_notes or '-' }}</td>
+          <td>{{ m.sent_at or m.logged_at[:19] }}</td>
+          <td>
+            {% if m.is_voided %}
+              <span class="badge badge-danger" title="Voided: {{ m.voided_reason or '' }}">Voided</span>
+            {% else %}
+              <span class="badge badge-success">Confirmed</span>
+            {% endif %}
+          </td>
+          <td style="max-width: 250px; font-size: 0.8rem;">
+            {% if m.external_ref %}<div><code>{{ m.external_ref }}</code></div>{% endif %}
+            {% if m.operator_notes %}<div>{{ m.operator_notes }}</div>{% endif %}
+            {% if not m.external_ref and not m.operator_notes %}-{% endif %}
+            {% if m.is_voided and m.voided_reason %}
+              <div style="color: var(--color-danger, #ef4444); font-size: 0.72rem; margin-top: 2px;">Reason: {{ m.voided_reason }}</div>
+            {% endif %}
+          </td>
           <td>
             {% if m.draft_id %}
             <a href="/sales/drafts/{{ m.draft_id }}" class="btn btn-secondary btn-sm">r{{ m.revision }} ↗</a>
             {% else %}
-            -
+            <span style="color: var(--text-muted); font-size: 0.75rem;">None</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if not m.is_voided %}
+              <button type="button" class="btn btn-secondary btn-sm" onclick="promptVoidManualSent('{{ m.log_id }}')" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #ef4444;">Void</button>
+            {% else %}
+              <span style="color: var(--text-muted); font-size: 0.72rem;">Voided</span>
             {% endif %}
           </td>
         </tr>
@@ -135,7 +155,7 @@
           <th>Sent Time</th>
           <th>Matched Company</th>
           <th>Reconciliation</th>
-          <th>Gmail Link</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -165,11 +185,17 @@
             {% endif %}
           </td>
           <td>
-            {% if h.gmail_link %}
-            <a href="{{ h.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Gmail ↗</a>
-            {% else %}
-            -
-            {% endif %}
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="viewHistoricalEmail({{ h.id }})" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; white-space: nowrap;">
+                👁️ View Email
+              </button>
+              {% if h.gmail_link %}
+              <a href="{{ h.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;">Gmail ↗</a>
+              {% endif %}
+            </div>
+            <script type="application/json" id="hist-email-data-{{ h.id }}">
+              {{ h | tojson }}
+            </script>
           </td>
         </tr>
         {% endfor %}
@@ -204,7 +230,7 @@
           <th>Sent Date</th>
           <th>Body Excerpt</th>
           <th>Status</th>
-          <th>Action</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -220,11 +246,17 @@
           </td>
           <td><span class="badge badge-warning">{{ u.reconciliation_status }}</span></td>
           <td>
-            {% if u.gmail_link %}
-            <a href="{{ u.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Inspect ↗</a>
-            {% else %}
-            -
-            {% endif %}
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="viewHistoricalEmail({{ u.id }})" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; white-space: nowrap;">
+                👁️ View Email
+              </button>
+              {% if u.gmail_link %}
+              <a href="{{ u.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;">Gmail ↗</a>
+              {% endif %}
+            </div>
+            <script type="application/json" id="hist-email-data-{{ u.id }}">
+              {{ u | tojson }}
+            </script>
           </td>
         </tr>
         {% endfor %}
@@ -234,4 +266,41 @@
 </div>
 {% endif %}
 
+<script>
+function promptVoidManualSent(logId) {
+  var reason = prompt("Enter the audited reason for voiding this manual sent entry (required):");
+  if (!reason || !reason.trim()) {
+    if (reason !== null) {
+      alert("Void rationale is required.");
+    }
+    return;
+  }
+  var form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/sales/manual-sent/" + encodeURIComponent(logId) + "/void";
+
+  var csrfInput = document.createElement("input");
+  csrfInput.type = "hidden";
+  csrfInput.name = "csrf_token";
+  csrfInput.value = "{{ csrf_token }}";
+  form.appendChild(csrfInput);
+
+  var reasonInput = document.createElement("input");
+  reasonInput.type = "hidden";
+  reasonInput.name = "void_reason";
+  reasonInput.value = reason.trim();
+  form.appendChild(reasonInput);
+
+  var returnInput = document.createElement("input");
+  returnInput.type = "hidden";
+  returnInput.name = "return_to";
+  returnInput.value = window.location.pathname + window.location.search;
+  form.appendChild(returnInput);
+
+  document.body.appendChild(form);
+  form.submit();
+}
+</script>
+
+{% include "historical_email_modal.html" %}
 {% endblock %}

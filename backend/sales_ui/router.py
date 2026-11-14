@@ -1368,6 +1368,36 @@ def generate_ai_brief_text(
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# FLOW-02: Manual Dispatch Metadata & Europe/Rome Time Helpers
+# ---------------------------------------------------------------------------
+AUTHORIZED_MANUAL_SENDER_ACCOUNTS = [
+    "info@pybim.com",
+    "info@pybim.it",
+    "careers@pybim.com",
+    "support@pybim.com",
+    "hamed.sharifi@pybim.it",
+    "hamid.lotfalian@pybim.it",
+]
+
+def get_europe_rome_now() -> datetime:
+    """Returns current date/time in Europe/Rome timezone."""
+    try:
+        import dateutil.tz
+        tz = dateutil.tz.gettz("Europe/Rome")
+        if tz:
+            return datetime.now(tz)
+    except Exception:
+        pass
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Rome"))
+    except Exception:
+        pass
+    from datetime import timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=1)))
+
+
 def evaluate_candidate_readiness(
     cand: Any,
     cand_store: Any,
@@ -1637,12 +1667,30 @@ def evaluate_candidate_readiness(
             "reason": "No recipient contact on file",
         }
 
-    # 6. Determine effective readiness with strict priority:
-    # 1. Suppressed / DNC (authoritative suppression overrides all positive states)
-    # 2. Prior Contact / Active Conversation
-    # 3. Ineligible (policy, cold_outreach_allowed=False, or empty candidate_id)
-    # 4. Contact Verification Required (qualified, clear, but missing verified recipient)
-    # 5. Eligible for Manual Draft / Ready for Manual Draft (qualified, clear, explicitly verified recipient available)
+    # FLOW-02 Authoritative validation:
+    # A company becomes Ready to Email only when:
+    # 1. Research finalization passes authoritative validation (13-field review: OPERATOR_REVIEWED or VERIFIED)
+    # 2. Operator explicitly approves suitability ("Approve for Outreach")
+    # 3. Recipient email has verified evidence (has_usable_recipient)
+    # 4. Not suppressed / DNC, not previously contacted, outreach eligible
+    #
+    # Unresearched candidate cannot become Ready to Email merely by clicking Approve Lead.
+    # Existing verified records are not downgraded.
+    is_actively_researching = bool(
+        (company_lead_record is None and (
+            str(getattr(cand, "discovery_status", "")).lower() in ("researching", "new")
+            or str(getattr(cand, "qualification_outcome", "")).lower() in ("research_more", "new")
+            or getattr(cand, "manual_review_decision", None) == "NEEDS_RESEARCH"
+            or getattr(cand, "research_status", None) in ("unresearched", "in_progress", "pending", None)
+        ))
+        or (company_lead_record and company_lead_record.verification_status not in ("OPERATOR_REVIEWED", "VERIFIED"))
+    )
+
+    is_suitability_approved = bool(
+        getattr(cand, "manual_review_decision", None) in ("APPROVED", "OPERATOR_APPROVED")
+        or (company_lead_record and company_lead_record.verification_status in ("OPERATOR_REVIEWED", "VERIFIED") and getattr(cand, "manual_review_decision", None) not in ("REJECTED", "NEEDS_RESEARCH"))
+    )
+
     if is_supp:
         effective_readiness = "suppressed"
         readiness_label = "Suppressed"
@@ -1658,16 +1706,26 @@ def evaluate_candidate_readiness(
         readiness_label = "Ineligible"
         readiness_badge = "badge-muted"
         readiness_title = "Candidate does not meet outreach eligibility criteria or has invalid ID"
+    elif is_actively_researching:
+        effective_readiness = "needs_research"
+        readiness_label = "Needs Research"
+        readiness_badge = "badge-secondary"
+        readiness_title = "Research must be completed and finalized before company can become Ready to Email"
+    elif not is_suitability_approved:
+        effective_readiness = "needs_approval"
+        readiness_label = "Needs Approval"
+        readiness_badge = "badge-warning"
+        readiness_title = "13-Field research is finalized, but operator suitability approval (Approve for Outreach) is required"
     elif not has_usable_recipient:
         effective_readiness = "verification_required"
         readiness_label = "Contact Verification Required"
         readiness_badge = "badge-warning"
-        readiness_title = "Company is qualified, but no verified contact is on file. Lead Register documentation alone requires human verification."
+        readiness_title = "Company is approved and research is finalized, but verified recipient is required"
     else:
         effective_readiness = "draft_ready"
-        readiness_label = "Eligible for Manual Draft"
+        readiness_label = "Ready to Email"
         readiness_badge = "badge-success"
-        readiness_title = "Qualified and verified recipient available for manual draft preparation"
+        readiness_title = "Ready to Email — Eligible for Manual Draft with verified recipient"
 
     can_generate_draft = (effective_readiness == "draft_ready")
 
@@ -1682,6 +1740,7 @@ def evaluate_candidate_readiness(
         "has_verified_recipient": has_usable_recipient,
         "can_generate_draft": can_generate_draft,
         "usable_recipients": usable_recipients,
+        "verified_recipient_email": (usable_recipients[0].get("work_email") or usable_recipients[0].get("email")) if usable_recipients else None,
         "all_workspace_recipients": all_workspace_recipients,
         "recipient_readiness": recipient_readiness,
     }
@@ -2938,34 +2997,70 @@ def evaluate_import_readiness(
     distinct_canonical_domains: int,
     multiple_plausible_domains_count: int,
     missing_domain_count: int,
+    operator_approved_policy: bool = True,
+    missing_essential_identity_count: int = 0,
 ) -> Tuple[str, List[str]]:
     """
     Single authoritative readiness evaluator shared by Preview and Confirm.
     Returns (readiness_status: 'READY' | 'REVIEW_REQUIRED' | 'BLOCKED', readiness_reasons: List[str]).
+    Applies operator-approved flexible policies (Policies A, B, C):
+    - Unverified websites imported with company_domain=None (Policy A)
+    - Domain collisions auto-consolidated / preserved (Policy B)
+    - Multiple plausible domains resolved using primary host (Policy C)
+    - Nonessential unmapped metadata columns preserved in raw-row provenance without blocking (Policy D/Schema)
     """
     reasons = []
     if len(records) == 0:
         return "BLOCKED", ["Zero company records detected in workbook."]
-    if unmapped_columns_count > 0:
-        return "BLOCKED", [f"{unmapped_columns_count} unmapped column(s) detected in company sheets."]
 
-    if domain_collisions_count > 0:
-        reasons.append(
-            f"{domain_collisions_count} canonical domain collision(s) detected across {len(records)} rows ({distinct_canonical_domains} unique domains). Human identity review required."
-        )
-    if multiple_plausible_domains_count > 0:
-        reasons.append(
-            f"{multiple_plausible_domains_count} company row(s) contain multiple plausible primary domains requiring human review."
+    if missing_essential_identity_count > 0:
+        return "BLOCKED", [
+            f"{missing_essential_identity_count} company sheet(s) lack required company identifier columns (company name or domain)."
+        ]
+
+    if not operator_approved_policy:
+        if unmapped_columns_count > 0:
+            reasons.append(
+                f"{unmapped_columns_count} unmapped column(s) detected in company sheets requiring human mapping review."
+            )
+        if domain_collisions_count > 0:
+            reasons.append(
+                f"{domain_collisions_count} canonical domain collision(s) detected across {len(records)} rows ({distinct_canonical_domains} unique domains). Human identity review required."
+            )
+        if multiple_plausible_domains_count > 0:
+            reasons.append(
+                f"{multiple_plausible_domains_count} company row(s) contain multiple plausible primary domains requiring human review."
+            )
+        if missing_domain_count > 0:
+            reasons.append(
+                f"{missing_domain_count} company row(s) have unresolvable website placeholders [link removed] or missing primary websites."
+            )
+        if reasons:
+            return "REVIEW_REQUIRED", reasons
+        return "READY", [f"All {len(records)} rows validated with 0 unmapped headers and 0 collisions."]
+
+    policy_notes = []
+    if unmapped_columns_count > 0:
+        policy_notes.append(
+            f"{unmapped_columns_count} nonessential metadata column(s) detected in company sheets and preserved in raw record data."
         )
     if missing_domain_count > 0:
-        reasons.append(
-            f"{missing_domain_count} company row(s) have unresolvable website placeholders [link removed] or missing primary websites."
+        policy_notes.append(
+            f"{missing_domain_count} company row(s) without verified websites will be imported with unverified website status (Policy A)"
+        )
+    if multiple_plausible_domains_count > 0:
+        policy_notes.append(
+            f"{multiple_plausible_domains_count} company row(s) with multiple plausible domains will use proposed primary host (Policy C)"
+        )
+    if domain_collisions_count > 0:
+        policy_notes.append(
+            f"{domain_collisions_count} domain collision group(s) will be auto-consolidated / preserved (Policy B)"
         )
 
-    if reasons:
-        return "REVIEW_REQUIRED", reasons
-
-    return "READY", [f"All {len(records)} rows validated with 0 unmapped headers and 0 collisions."]
+    reasons = [
+        f"Workbook validated under operator-approved policies: {len(records)} company rows ready for import."
+    ] + policy_notes
+    return "READY", reasons
 
 
 # P10_5-ADV-009 / ADV-012 / ADV-013: Preview Historical Import (Zero Mutations)
@@ -3066,8 +3161,19 @@ async def preview_historical_import_action(
             missing_domain_rows = inspection.get("missing_domain_rows", [])
 
             if sheets_data:
-                # Top sheet or selected sheet column mapping
-                target_sheet_info = next((s for s in sheets_data if s["sheet_name"] == sheet_name), sheets_data[0])
+                # Selected sheet or first eligible company sheet column mapping
+                target_sheet_info = next(
+                    (s for s in sheets_data if s["sheet_name"] == sheet_name),
+                    next(
+                        (s for s in sheets_data if s.get("is_eligible_company") or (
+                            not s.get("is_summary_sheet")
+                            and not s.get("is_communication_sheet")
+                            and not s.get("is_deferred_sheet")
+                            and not s.get("is_excluded_sheet")
+                        )),
+                        sheets_data[0]
+                    )
+                )
                 column_mappings = target_sheet_info.get("column_mappings", {})
         except Exception:
             pass
@@ -3099,30 +3205,36 @@ async def preview_historical_import_action(
             if not r.domain
         ]
 
-    # Count unmapped columns across active sheets
+    # Count unmapped columns and validate schema across eligible company sheets
     unmapped_columns_count = 0
+    missing_essential_identity_count = 0
     if sheets_data:
         for s in sheets_data:
-            if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
+            is_company = s.get("is_eligible_company")
+            if is_company is None:
+                is_company = not (
+                    s.get("is_summary_sheet")
+                    or s.get("is_communication_sheet")
+                    or s.get("is_deferred_sheet")
+                    or s.get("is_excluded_sheet")
+                )
+            if is_company and s.get("row_count", 0) > 0:
+                if not s.get("mapping_valid", True):
+                    missing_essential_identity_count += 1
                 unmapped_columns_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
 
     is_lead_res = importer.is_lead_research_workbook(resolved)
 
-    # Evaluate Readiness with authoritative shared function
-    if is_lead_res:
-        # Lead Research workbooks automatically match verified domains and route unverified companies
-        # to 'Needs Research' candidates with zero outreach; they do not block on missing domains.
-        readiness_status = "READY"
-        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
-    else:
-        readiness_status, readiness_reasons = evaluate_import_readiness(
-            records=records,
-            unmapped_columns_count=unmapped_columns_count,
-            domain_collisions_count=domain_collisions_count,
-            distinct_canonical_domains=distinct_canonical_domains,
-            multiple_plausible_domains_count=multiple_plausible_domains_count,
-            missing_domain_count=missing_domain_count,
-        )
+    # Evaluate Readiness with authoritative shared function (parity across Preview and Confirm)
+    readiness_status, readiness_reasons = evaluate_import_readiness(
+        records=records,
+        unmapped_columns_count=unmapped_columns_count,
+        domain_collisions_count=domain_collisions_count,
+        distinct_canonical_domains=distinct_canonical_domains,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        missing_domain_count=missing_domain_count,
+        missing_essential_identity_count=missing_essential_identity_count,
+    )
 
     # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
     has_sent_emails_sheet = False
@@ -3376,8 +3488,19 @@ async def confirm_historical_import_action(
         records = importer.parse_xlsx(resolved, sheet_name=sheet_name)
         inspection = importer.inspect_workbook(resolved)
         unmapped_count = 0
+        missing_essential_identity_count = 0
         for s in inspection.get("sheets", []):
-            if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
+            is_company = s.get("is_eligible_company")
+            if is_company is None:
+                is_company = not (
+                    s.get("is_summary_sheet")
+                    or s.get("is_communication_sheet")
+                    or s.get("is_deferred_sheet")
+                    or s.get("is_excluded_sheet")
+                )
+            if is_company and s.get("row_count", 0) > 0:
+                if not s.get("mapping_valid", True):
+                    missing_essential_identity_count += 1
                 unmapped_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
         domain_collisions_count = inspection.get("domain_collisions_count", 0)
         distinct_canonical_domains = inspection.get("distinct_canonical_domains", 0)
@@ -3387,18 +3510,15 @@ async def confirm_historical_import_action(
     is_lead_res = importer.is_lead_research_workbook(resolved)
 
     # Server-side validation gate parity with Preview
-    if is_lead_res:
-        readiness_status = "READY"
-        readiness_reasons = [f"Lead Research workbook validated: {len(records)} rows ready for automatic Candidate and Lead Register ingestion."]
-    else:
-        readiness_status, readiness_reasons = evaluate_import_readiness(
-            records=records,
-            unmapped_columns_count=unmapped_count,
-            domain_collisions_count=domain_collisions_count,
-            distinct_canonical_domains=distinct_canonical_domains,
-            multiple_plausible_domains_count=multiple_plausible_domains_count,
-            missing_domain_count=missing_domain_count,
-        )
+    readiness_status, readiness_reasons = evaluate_import_readiness(
+        records=records,
+        unmapped_columns_count=unmapped_count,
+        domain_collisions_count=domain_collisions_count,
+        distinct_canonical_domains=distinct_canonical_domains,
+        multiple_plausible_domains_count=multiple_plausible_domains_count,
+        missing_domain_count=missing_domain_count,
+        missing_essential_identity_count=missing_essential_identity_count,
+    )
 
     # Parse and rigorously validate operator decisions if supplied
     parsed_decisions = []
@@ -3616,10 +3736,7 @@ async def confirm_historical_import_action(
                     except Exception as e:
                         logger.warning(f"Error pre-reconciling sent emails: {e}")
 
-                if is_lead_res:
-                    result = staged_importer.import_lead_research_records(records, source_file_name=resolved.name)
-                else:
-                    result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
+                result = staged_importer.import_records(records, operator_decisions=parsed_decisions)
 
                 # 2b. If Sent_Emails sheet exists, import sent messages into staging store
                 sent_emails_stats = None
@@ -5058,6 +5175,9 @@ async def candidate_detail_view(
             "hist_sent_emails": hist_sent_emails,
             "hist_meetings": hist_meetings,
             "email_send_enabled": is_email_send_enabled(),
+            "authorized_sender_accounts": AUTHORIZED_MANUAL_SENDER_ACCOUNTS,
+            "default_verified_recipient": (readiness_info.get("usable_recipients") or [{}])[0].get("work_email") or "",
+            "current_rome_time": get_europe_rome_now().strftime("%Y-%m-%d %H:%M:%S"),
             "company_outreach_eligible": company_outreach_eligible,
             "has_verified_or_documented_recipient": has_verified_recipient,
             "has_verified_recipient": has_verified_recipient,
@@ -6321,17 +6441,17 @@ async def review_candidate_action(
     cand.manual_reviewed_by = "operator"
     cand.manual_review_notes = notes.strip() if notes and notes.strip() else None
 
-    if decision_clean == "approve":
+    if decision_clean in ("approve", "approve_outreach", "approve_for_outreach"):
         cand.manual_review_decision = "APPROVED"
         cand.qualification_outcome = QualificationOutcome.qualified_for_enrichment
         cand.discovery_status = DiscoveryStatus.qualified
-        cand.fit_assessment = "high"
+        # NOTE (FLOW-02): Do not automatically set fit_assessment="high" merely because operator clicks Approve Lead
         # Only allow cold outreach if company was NOT previously contacted and NOT suppressed
         if not cand.previous_outreach_detected and cand.historical_contact_status in ("uncontacted", None, "") and not cand.suppressed:
             cand.cold_outreach_allowed = True
         else:
             cand.cold_outreach_allowed = False
-        msg = f"Candidate '{cand.name}' manually APPROVED as qualified lead."
+        msg = f"Candidate '{cand.name}' explicitly approved for outreach."
     elif decision_clean == "reject":
         cand.manual_review_decision = "REJECTED"
         cand.qualification_outcome = QualificationOutcome.reject
@@ -7219,6 +7339,7 @@ async def leads_view(
     prefetched_snapshots_by_cid = {}
     prefetched_analyses_by_cid = {}
     prefetched_history_cids = set()
+    prefetched_manual_sent_cids = set()
     prefetched_supp_domains = set()
     prefetched_supp_emails = set()
 
@@ -7280,6 +7401,12 @@ async def leads_view(
             prefetched_field_reviews_by_cid = reg_store.get_field_reviews_for_candidates(
                 all_candidate_ids, field_name="contact_email_addresses"
             )
+            # 6. FLOW-02 Confirmed manual sent logs batch
+            if _chk_table(conn, "manual_outreach_log"):
+                m_rows = conn.execute("SELECT DISTINCT candidate_id FROM manual_outreach_log WHERE (is_voided IS NULL OR is_voided = 0)").fetchall()
+                for mr in m_rows:
+                    if mr[0]:
+                        prefetched_manual_sent_cids.add(str(mr[0]))
     except Exception:
         prefetched_field_reviews_by_cid = {}
 
@@ -7422,6 +7549,10 @@ async def leads_view(
         else:
             copy_13_fields_label = "Copy 13 Fields (Unreviewed)"
 
+        usable_recs = readiness_info.get("usable_recipients") or []
+        verified_recip_email = usable_recs[0]["work_email"] if usable_recs else ""
+        has_manual_sent = (c.candidate_id in prefetched_manual_sent_cids)
+
         evaluated_leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
             "company_name": clean_company_name,
@@ -7454,6 +7585,8 @@ async def leads_view(
             "is_suppressed": readiness_info["is_suppressed"],
             "can_generate_draft": readiness_info["can_generate_draft"],
             "has_verified_recipient": readiness_info["has_verified_recipient"],
+            "verified_recipient_email": verified_recip_email,
+            "has_manual_sent": has_manual_sent,
             "is_invalid_id": is_invalid_id,
             "candidate_id": c.candidate_id or "",
             "can_generate_cold_brief": can_generate_cold_brief,
@@ -7469,12 +7602,14 @@ async def leads_view(
             "copy_ai_brief_text": "",
         })
 
-    # Summary Queue Counts (8 clearly separated queues)
+    # Summary Queue Counts (FLOW-02: Clear operational CRM queues)
     total_qualified = len(evaluated_leads)
     count_needs_research = sum(1 for l in evaluated_leads if l["research_status"] == "unresearched")
-    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence"))
+    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence") or l["effective_readiness"] == "needs_approval")
     count_research_ready = sum(1 for l in evaluated_leads if l["research_status"] == "research_ready")
-    count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"])
+    count_ready_to_email = sum(1 for l in evaluated_leads if l["effective_readiness"] in ("draft_ready", "ready_to_email") and not l["is_invalid_id"])
+    count_draft_ready = count_ready_to_email
+    count_sent_manually = sum(1 for l in evaluated_leads if l.get("has_manual_sent"))
     count_verification_required = sum(1 for l in evaluated_leads if l["effective_readiness"] == "verification_required")
     count_previously_contacted = sum(1 for l in evaluated_leads if l["effective_readiness"] == "prior_contact")
     count_suppressed_or_ineligible = sum(1 for l in evaluated_leads if l["effective_readiness"] in ("suppressed", "not_eligible"))
@@ -7485,17 +7620,19 @@ async def leads_view(
 
     if target_queue == "needs_research":
         filtered_leads = [l for l in filtered_leads if l["research_status"] == "unresearched"]
-    elif target_queue == "review_required":
-        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence")]
+    elif target_queue in ("needs_review", "review_required"):
+        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence") or l["effective_readiness"] == "needs_approval"]
     elif target_queue == "research_ready":
         filtered_leads = [l for l in filtered_leads if l["research_status"] == "research_ready"]
-    elif target_queue == "draft_ready":
-        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"]]
+    elif target_queue in ("ready_to_email", "draft_ready"):
+        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] in ("draft_ready", "ready_to_email") and not l["is_invalid_id"]]
+    elif target_queue == "sent_manually":
+        filtered_leads = [l for l in filtered_leads if l.get("has_manual_sent")]
     elif target_queue == "verification_required":
         filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "verification_required"]
     elif target_queue == "previously_contacted":
         filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "prior_contact"]
-    elif target_queue == "suppressed_or_ineligible":
+    elif target_queue in ("restricted_dnc", "suppressed_or_ineligible"):
         filtered_leads = [l for l in filtered_leads if l["effective_readiness"] in ("suppressed", "not_eligible")]
 
     # 1. Search Query
@@ -7645,11 +7782,15 @@ async def leads_view(
             "count_needs_research": count_needs_research,
             "count_review_required": count_review_required,
             "count_research_ready": count_research_ready,
+            "count_ready_to_email": count_ready_to_email,
             "count_draft_ready": count_draft_ready,
+            "count_sent_manually": count_sent_manually,
             "count_verification_required": count_verification_required,
             "count_prior_contact": count_previously_contacted,
             "count_previously_contacted": count_previously_contacted,
             "count_suppressed_or_ineligible": count_suppressed_or_ineligible,
+            "authorized_sender_accounts": AUTHORIZED_MANUAL_SENDER_ACCOUNTS,
+            "current_rome_time": get_europe_rome_now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_filtered": total_filtered,
             "page": page,
             "page_size": page_size,
@@ -8177,6 +8318,164 @@ async def log_manual_send_action(
 
 
 # ---------------------------------------------------------------------------
+# FLOW-02: Manual Sent Confirmation Without Draft & Audited Correction
+# ---------------------------------------------------------------------------
+@router.post("/candidates/{candidate_id}/mark-sent")
+@router.post("/leads/{candidate_id}/mark-sent")
+async def mark_candidate_sent_action(
+    candidate_id: str,
+    sender_account: str = Form(...),
+    recipient_email: str = Form(...),
+    sent_at: Optional[str] = Form(None),
+    subject: Optional[str] = Form(None),
+    operator_notes: Optional[str] = Form(None),
+    confirm_thunderbird_sent: Optional[str] = Form(None),
+    idempotency_token: Optional[str] = Form(None),
+    return_to: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    FLOW-02: Operator manual sent confirmation without requiring a draft or SMTP configuration.
+    Records confirmed Thunderbird outbound message with exact sender, recipient, and Europe/Rome timestamp.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    target_redirect = return_to if return_to and return_to.startswith("/sales/") else f"/sales/candidates/{candidate_id}?tab=outreach"
+
+    # 1. P0 Safety: Explicit confirmation of Thunderbird transmission required
+    if not confirm_thunderbird_sent or confirm_thunderbird_sent.strip().lower() not in ("1", "true", "yes", "on"):
+        err = "Explicit operator confirmation that the email was actually sent in Thunderbird is required."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # 2. Validate sender account is one of the 6 authorized pyBIM company accounts
+    clean_sender = sender_account.strip().lower() if sender_account else ""
+    if clean_sender not in AUTHORIZED_MANUAL_SENDER_ACCOUNTS:
+        err = f"Invalid sender account '{sender_account}'. Must be one of the authorized pyBIM company accounts: {', '.join(AUTHORIZED_MANUAL_SENDER_ACCOUNTS)}."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # 3. Validate recipient email syntax and suppression
+    clean_recipient = recipient_email.strip().lower() if recipient_email else ""
+    if not clean_recipient or not EMAIL_REGEX.match(clean_recipient):
+        err = f"Invalid recipient email format: '{recipient_email}'."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    if check_authoritative_suppression(svcs["suppression_svc"], email=clean_recipient, domain=cand_domain) or bool(getattr(cand, "suppressed", False)):
+        err = "Recipient email or company domain is suppressed (DNC). Manual dispatch is blocked."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    c_name = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cand_domain, company_name=c_name):
+        err = "Company is on the Excluded Companies Registry. Manual dispatch is blocked."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # 4. Determine sent timestamp in Europe/Rome
+    clean_sent_at = sent_at.strip() if sent_at and sent_at.strip() else ""
+    if not clean_sent_at:
+        clean_sent_at = get_europe_rome_now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 5. Record manual dispatch event in review store (draft-less)
+    rev_store = svcs["rev_store"]
+    clean_subj = subject.strip() if subject and subject.strip() else f"Manual Outreach via Thunderbird ({clean_sender})"
+    clean_notes = operator_notes.strip() if operator_notes and operator_notes.strip() else None
+
+    log_res = rev_store.log_operator_manual_sent(
+        candidate_id=candidate_id,
+        sender_account=clean_sender,
+        recipient_email=clean_recipient,
+        sent_at=clean_sent_at,
+        subject=clean_subj,
+        operator_notes=clean_notes,
+        recipient_name=getattr(cand, "company_name", None) or "Recipient",
+        client_app="thunderbird",
+        idempotency_token=idempotency_token,
+    )
+
+    if log_res.get("duplicate"):
+        msg = f"Notice: Duplicate manual dispatch event detected ({log_res.get('log_id')}). Preserved existing record without creating duplicate."
+    else:
+        # Record into candidate store historical outreach atomically
+        svcs["cand_store"].record_historical_outreach(
+            candidate_id=candidate_id,
+            source_ref="operator_manual_confirmation:thunderbird",
+            contact_email=clean_recipient,
+            contacted_at=clean_sent_at,
+            channel="email",
+            notes=f"Thunderbird manual dispatch by {clean_sender} to {clean_recipient}. Subject: {clean_subj}. Notes: {clean_notes or 'None'}",
+            raw_row_hash=log_res.get("log_id"),
+        )
+        # Transition candidate outreach lifecycle states
+        cand.historical_contact_status = "contacted"
+        cand.previous_outreach_detected = True
+        cand.cold_outreach_allowed = False
+        svcs["cand_store"].save_candidate(cand)
+        msg = f"Manual dispatch via Thunderbird ({clean_sender} → {clean_recipient}) successfully confirmed and logged."
+
+    sep = "&" if "?" in target_redirect else "?"
+    return RedirectResponse(f"{target_redirect}{sep}message={urllib.parse.quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/manual-sent/{log_id}/void")
+async def void_manual_sent_action(
+    log_id: str,
+    void_reason: str = Form(...),
+    return_to: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    FLOW-02: Audited correction path for accidental manual confirmations.
+    Marks the manual dispatch record as voided with operator rationale.
+    Never silently deletes sent history.
+    """
+    svcs = get_console_services()
+    rev_store = svcs["rev_store"]
+    clean_reason = void_reason.strip() if void_reason else ""
+    target_redirect = return_to if return_to and return_to.startswith("/sales/") else "/sales/sent"
+
+    if not clean_reason:
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote('Audited void rationale is required to correct manual dispatch.')}", status_code=status.HTTP_303_SEE_OTHER)
+
+    log_entry = rev_store.get_manual_outreach_log(log_id)
+    if not log_entry:
+        raise HTTPException(status_code=404, detail="Manual outreach log not found")
+
+    rev_store.void_manual_outreach_log(log_id, void_reason=clean_reason)
+    cand_id = log_entry["candidate_id"]
+    cand = svcs["cand_store"].get_by_id(cand_id)
+
+    # Check if candidate has any remaining active (non-voided) manual logs
+    all_logs = rev_store.list_manual_outreach_logs(cand_id, limit=50)
+    active_logs = [m for m in all_logs if not m.get("is_voided")]
+    if not active_logs and cand:
+        # Check historical outreach events that are NOT from the voided manual log
+        hist_events = svcs["cand_store"].get_historical_outreach_for_candidate(cand_id)
+        other_events = [e for e in hist_events if not (e.get("raw_row_hash") == log_id or "thunderbird" in (e.get("source_ref") or "").lower())]
+        if not other_events:
+            with svcs["cand_store"]._get_connection() as conn:
+                conn.execute(
+                    "UPDATE candidate_companies SET cold_outreach_allowed = 1, historical_contact_status = 'uncontacted' WHERE candidate_id = ?",
+                    (cand_id,)
+                )
+                conn.execute(
+                    "DELETE FROM historical_outreach_events WHERE candidate_id = ? AND (raw_row_hash = ? OR source_ref LIKE '%thunderbird%')",
+                    (cand_id, log_id)
+                )
+
+    msg = f"Manual dispatch record {log_id} voided with audited reason: '{clean_reason}'."
+    sep = "&" if "?" in target_redirect else "?"
+    return RedirectResponse(f"{target_redirect}{sep}message={urllib.parse.quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------------------------------------------------------------------------
 # 7. APPROVED QUEUE
 # ---------------------------------------------------------------------------
 @router.get("/approved", response_class=HTMLResponse)
@@ -8324,6 +8623,50 @@ async def sent_history_view(request: Request):
             "email_send_enabled": is_email_send_enabled(),
         },
     )
+
+
+@router.get("/historical-emails/{email_id}")
+async def get_historical_email_detail(email_id: int):
+    """
+    Read-only retrieval of a single archived historical sent email message (UX-MAIL-01).
+    Used by the frontend historical email viewer modal.
+    """
+    svcs = get_console_services()
+    store = svcs["cand_store"]
+    with store._get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM historical_sent_emails WHERE id = ?",
+            (email_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Historical email not found")
+        recips = []
+        try:
+            recips = json.loads(row["recipient_emails_json"]) if row["recipient_emails_json"] else []
+        except Exception:
+            pass
+        return JSONResponse({
+            "id": row["id"],
+            "message_id": row["message_id"],
+            "thread_id": row["thread_id"],
+            "sender_account": row["sender_account"],
+            "sender_group": row["sender_group"],
+            "from_address": row["from_address"],
+            "to_address": row["to_address"],
+            "recipient_emails": recips,
+            "cc": row["cc"],
+            "bcc": row["bcc"],
+            "sent_date": row["sent_date"],
+            "sent_time": row["sent_time"],
+            "subject": row["subject"],
+            "email_body": row["email_body"],
+            "body_truncated": row["body_truncated"],
+            "gmail_link": row["gmail_link"],
+            "matched_candidate_id": row["matched_candidate_id"],
+            "matched_company_name": row["matched_company_name"],
+            "reconciliation_status": row["reconciliation_status"],
+            "imported_at": row["imported_at"],
+        })
 
 
 # ---------------------------------------------------------------------------
