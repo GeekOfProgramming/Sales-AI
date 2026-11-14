@@ -8366,7 +8366,7 @@ async def mark_candidate_sent_action(
         return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
 
     cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
-    if check_authoritative_suppression(svcs["suppression_svc"], email=clean_recipient, domain=cand_domain):
+    if check_authoritative_suppression(svcs["suppression_svc"], email=clean_recipient, domain=cand_domain) or bool(getattr(cand, "suppressed", False)):
         err = "Recipient email or company domain is suppressed (DNC). Manual dispatch is blocked."
         sep = "&" if "?" in target_redirect else "?"
         return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
