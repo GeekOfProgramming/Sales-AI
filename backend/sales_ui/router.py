@@ -8384,6 +8384,50 @@ async def sent_history_view(request: Request):
     )
 
 
+@router.get("/historical-emails/{email_id}")
+async def get_historical_email_detail(email_id: int):
+    """
+    Read-only retrieval of a single archived historical sent email message (UX-MAIL-01).
+    Used by the frontend historical email viewer modal.
+    """
+    svcs = get_console_services()
+    store = svcs["cand_store"]
+    with store._get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM historical_sent_emails WHERE id = ?",
+            (email_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Historical email not found")
+        recips = []
+        try:
+            recips = json.loads(row["recipient_emails_json"]) if row["recipient_emails_json"] else []
+        except Exception:
+            pass
+        return JSONResponse({
+            "id": row["id"],
+            "message_id": row["message_id"],
+            "thread_id": row["thread_id"],
+            "sender_account": row["sender_account"],
+            "sender_group": row["sender_group"],
+            "from_address": row["from_address"],
+            "to_address": row["to_address"],
+            "recipient_emails": recips,
+            "cc": row["cc"],
+            "bcc": row["bcc"],
+            "sent_date": row["sent_date"],
+            "sent_time": row["sent_time"],
+            "subject": row["subject"],
+            "email_body": row["email_body"],
+            "body_truncated": row["body_truncated"],
+            "gmail_link": row["gmail_link"],
+            "matched_candidate_id": row["matched_candidate_id"],
+            "matched_company_name": row["matched_company_name"],
+            "reconciliation_status": row["reconciliation_status"],
+            "imported_at": row["imported_at"],
+        })
+
+
 # ---------------------------------------------------------------------------
 # 9. WATCHLIST
 # ---------------------------------------------------------------------------

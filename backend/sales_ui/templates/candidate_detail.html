@@ -1112,6 +1112,7 @@
             <th>Subject</th>
             <th>Reconciliation</th>
             <th>Gmail Archive</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -1137,6 +1138,14 @@
               {% else %}
                 <span style="color: var(--text-muted);">-</span>
               {% endif %}
+            </td>
+            <td>
+              <button type="button" class="btn btn-primary btn-sm" onclick="viewHistoricalEmail({{ em.id }})" style="font-size: 0.75rem; padding: 0.25rem 0.55rem; white-space: nowrap;">
+                👁️ View Email
+              </button>
+              <script type="application/json" id="hist-email-data-{{ em.id }}">
+                {{ em | tojson }}
+              </script>
             </td>
           </tr>
           {% endfor %}
@@ -1166,29 +1175,37 @@
             <th>Channel</th>
             <th>Contact Date</th>
             <th>Reply Status</th>
-            <th>Meeting Status</th>
+            <th>Reply Date</th>
+            <th>Evidence / Notes</th>
           </tr>
         </thead>
         <tbody>
           {% for h in detail.historical_outreach %}
           <tr>
-            <td><strong>{{ h.recipient_name or '-' }}</strong></td>
-            <td><code>{{ h.recipient_email }}</code></td>
+            <td><strong>{{ h.contact_name or h.recipient_name or '-' }}</strong></td>
+            <td><code>{{ h.contact_email or h.recipient_email or '-' }}</code></td>
             <td>{{ h.channel or 'email' }}</td>
-            <td>{{ h.contacted_at[:10] if h.contacted_at else '-' }}</td>
+            <td>{{ h.contacted_at[:16] if h.contacted_at else '-' }}</td>
             <td>
-              {% if h.reply_status and h.reply_status != 'no_reply' %}
+              {% if h.reply_at or (h.reply_status and 'replied' in h.reply_status|lower) %}
+                <span class="badge badge-success" title="Reply confirmed at {{ h.reply_at or '' }}">replied</span>
+              {% elif h.reply_status and h.reply_status not in ('no_reply', 'contacted', 'none') %}
                 <span class="badge badge-success">{{ h.reply_status }}</span>
+              {% elif h.reply_status == 'contacted' or (h.channel and 'sent' in h.channel) %}
+                <span class="badge badge-info">contacted</span>
               {% else %}
                 <span class="badge badge-secondary">no_reply</span>
               {% endif %}
             </td>
             <td>
-              {% if h.meeting_status and h.meeting_status != 'none' %}
-                <span class="badge badge-primary">{{ h.meeting_status }}</span>
+              {% if h.reply_at %}
+                <strong style="color: var(--color-success, #22c55e);">{{ h.reply_at[:16] }}</strong>
               {% else %}
-                <span style="color: var(--text-muted);">None</span>
+                <span style="color: var(--text-muted);">-</span>
               {% endif %}
+            </td>
+            <td style="max-width: 320px; font-size: 0.78rem; color: var(--text-secondary); word-break: break-word;">
+              {{ h.notes or h.intent_evidence or '-' }}
             </td>
           </tr>
           {% endfor %}
@@ -1644,4 +1661,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
+
+{% include "historical_email_modal.html" %}
 {% endblock %}

@@ -1,0 +1,275 @@
+<!-- Reusable Historical Email Viewer Modal (UX-MAIL-01) -->
+<div id="historical-email-viewer-modal" class="modal-overlay" onclick="handleHistoricalModalBackdrop(event)" style="z-index: 1050;">
+  <div class="modal-card" style="max-width: 760px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; padding: 1.5rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+    
+    <!-- Modal Header -->
+    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+      <div style="flex: 1; padding-right: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; flex-wrap: wrap;">
+          <span style="font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.05em;">Historical Gmail Archive</span>
+          <span id="hem-reconciliation-badge" class="badge"></span>
+          <span id="hem-truncated-badge" class="badge" style="display: none;"></span>
+        </div>
+        <h3 id="hem-subject" class="modal-title" style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin: 0; word-break: break-word; line-height: 1.35;"></h3>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeHistoricalEmailModal()" style="font-size: 1.1rem; padding: 0.2rem 0.55rem; border-radius: 4px; line-height: 1; cursor: pointer;" title="Close (Esc)">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="modal-body" style="overflow-y: auto; flex: 1; padding-right: 0.25rem; margin-bottom: 1rem;">
+      
+      <!-- Metadata Grid -->
+      <div style="background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.6rem;">
+          <div>
+            <span style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-bottom: 0.15rem;">From / Sender:</span>
+            <div id="hem-from" style="font-weight: 600; color: var(--text-primary); word-break: break-all;"></div>
+          </div>
+          <div>
+            <span style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-bottom: 0.15rem;">To / Recipient:</span>
+            <div id="hem-to" style="font-weight: 600; color: var(--text-primary); word-break: break-all;"></div>
+          </div>
+          <div id="hem-cc-container" style="display: none;">
+            <span style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-bottom: 0.15rem;">CC:</span>
+            <div id="hem-cc" style="color: var(--text-primary); word-break: break-all;"></div>
+          </div>
+          <div id="hem-bcc-container" style="display: none;">
+            <span style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-bottom: 0.15rem;">BCC:</span>
+            <div id="hem-bcc" style="color: var(--text-primary); word-break: break-all;"></div>
+          </div>
+          <div>
+            <span style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-bottom: 0.15rem;">Sent Date &amp; Time:</span>
+            <div id="hem-date-time" style="color: var(--text-primary);"></div>
+          </div>
+          <div>
+            <span style="color: var(--text-secondary); font-size: 0.75rem; display: block; margin-bottom: 0.15rem;">Message &amp; Thread ID:</span>
+            <div style="font-family: monospace; font-size: 0.75rem; color: var(--text-secondary);">
+              Msg: <code id="hem-message-id" style="color: var(--text-primary); background: var(--bg-card); padding: 1px 4px; border-radius: 3px;"></code>
+              &bull; Thrd: <code id="hem-thread-id" style="color: var(--text-primary); background: var(--bg-card); padding: 1px 4px; border-radius: 3px;"></code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Truncated Source Warning Banner (if truncated) -->
+      <div id="hem-truncated-notice" style="display: none; background: rgba(245, 158, 11, 0.12); border-left: 4px solid var(--color-warning, #f59e0b); padding: 0.65rem 0.85rem; border-radius: 4px; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.85rem;">
+        ⚠️ <strong>Note:</strong> The source email body was truncated in the original workbook archive. This viewer displays the complete available archived text without assuming or inventing missing content.
+      </div>
+
+      <!-- Missing Body Notice (if empty) -->
+      <div id="hem-missing-notice" style="display: none; background: var(--bg-hover); border: 1px dashed var(--border-color); padding: 1.5rem; text-align: center; border-radius: 6px; font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 0.85rem;">
+        ℹ️ <em>No message body was archived for this email in the historical dataset.</em>
+      </div>
+
+      <!-- Email Body (Rendered safely as textContent inside pre) -->
+      <div id="hem-body-wrapper" style="margin-top: 0.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+          <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Message Content (Archived Plain Text)</span>
+          <span id="hem-body-length" style="font-size: 0.72rem; color: var(--text-secondary);"></span>
+        </div>
+        <pre id="hem-body-content" style="white-space: pre-wrap; word-wrap: break-word; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 0.88rem; line-height: 1.55; color: var(--text-primary); background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; max-height: 380px; overflow-y: auto; margin: 0;"></pre>
+      </div>
+
+    </div>
+
+    <!-- Modal Footer Actions -->
+    <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 0.75rem; margin-top: auto;">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <button type="button" id="hem-copy-btn" class="btn btn-secondary btn-sm" onclick="copyHistoricalEmailBody()" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;">
+          📋 Copy Email Body
+        </button>
+        <span id="hem-copy-feedback" style="display: none; color: var(--color-success, #22c55e); font-size: 0.78rem; font-weight: 600;">Copied to clipboard!</span>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <a id="hem-gmail-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+          Gmail Archive ↗
+        </a>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeHistoricalEmailModal()" style="font-size: 0.82rem; padding: 0.35rem 0.75rem;">
+          Close
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function openHistoricalEmailModal(emailData) {
+  if (!emailData) return;
+  
+  // Subject
+  document.getElementById('hem-subject').textContent = emailData.subject || '(No Subject)';
+  
+  // From & To
+  var fromText = emailData.from_address || emailData.sender_account || '-';
+  if (emailData.sender_account && emailData.from_address && emailData.sender_account !== emailData.from_address) {
+    fromText += ' (' + emailData.sender_account + ')';
+  }
+  document.getElementById('hem-from').textContent = fromText;
+  
+  var toText = emailData.to_address || '-';
+  if (emailData.recipient_emails && emailData.recipient_emails.length > 1) {
+    toText = emailData.recipient_emails.join(', ');
+  }
+  document.getElementById('hem-to').textContent = toText;
+  
+  // CC / BCC
+  var ccElem = document.getElementById('hem-cc-container');
+  if (emailData.cc && String(emailData.cc).trim() && String(emailData.cc).trim() !== 'None') {
+    ccElem.style.display = 'block';
+    document.getElementById('hem-cc').textContent = emailData.cc;
+  } else {
+    ccElem.style.display = 'none';
+  }
+  
+  var bccElem = document.getElementById('hem-bcc-container');
+  if (emailData.bcc && String(emailData.bcc).trim() && String(emailData.bcc).trim() !== 'None') {
+    bccElem.style.display = 'block';
+    document.getElementById('hem-bcc').textContent = emailData.bcc;
+  } else {
+    bccElem.style.display = 'none';
+  }
+  
+  // Sent Date & Time
+  var dt = (emailData.sent_date || '-') + (emailData.sent_time ? (' ' + emailData.sent_time) : '');
+  document.getElementById('hem-date-time').textContent = dt;
+  
+  // Message ID & Thread ID
+  document.getElementById('hem-message-id').textContent = emailData.message_id || '-';
+  document.getElementById('hem-thread-id').textContent = emailData.thread_id || '-';
+  
+  // Reconciliation status badge
+  var recBadge = document.getElementById('hem-reconciliation-badge');
+  recBadge.className = 'badge ' + (emailData.reconciliation_status === 'matched' ? 'badge-success' : 'badge-warning');
+  recBadge.textContent = emailData.reconciliation_status || 'unmatched';
+  
+  // Truncated indicator badge & notice
+  var truncVal = String(emailData.body_truncated || '').toUpperCase();
+  var isTruncated = truncVal === 'YES' || truncVal === 'TRUE' || emailData.body_truncated === true;
+  var truncBadge = document.getElementById('hem-truncated-badge');
+  var truncNotice = document.getElementById('hem-truncated-notice');
+  if (isTruncated) {
+    truncBadge.style.display = 'inline-block';
+    truncBadge.className = 'badge badge-warning';
+    truncBadge.textContent = 'TRUNCATED SOURCE';
+    truncNotice.style.display = 'block';
+  } else {
+    truncBadge.style.display = 'none';
+    truncNotice.style.display = 'none';
+  }
+  
+  // Email Body (Safe textContent rendering)
+  var rawBody = emailData.email_body;
+  var bodyContent = document.getElementById('hem-body-content');
+  var bodyWrapper = document.getElementById('hem-body-wrapper');
+  var missingNotice = document.getElementById('hem-missing-notice');
+  var lengthIndicator = document.getElementById('hem-body-length');
+  var copyBtn = document.getElementById('hem-copy-btn');
+  
+  if (rawBody && String(rawBody).trim()) {
+    bodyWrapper.style.display = 'block';
+    missingNotice.style.display = 'none';
+    bodyContent.textContent = rawBody; // Plain text only - no HTML/script execution
+    lengthIndicator.textContent = rawBody.length.toLocaleString() + ' characters';
+    copyBtn.disabled = false;
+    copyBtn.dataset.body = rawBody;
+  } else {
+    bodyWrapper.style.display = 'none';
+    missingNotice.style.display = 'block';
+    lengthIndicator.textContent = '';
+    copyBtn.disabled = true;
+    copyBtn.dataset.body = '';
+  }
+  
+  // Gmail Link
+  var gmailLink = document.getElementById('hem-gmail-link');
+  if (emailData.gmail_link) {
+    gmailLink.href = emailData.gmail_link;
+    gmailLink.style.display = 'inline-flex';
+  } else {
+    gmailLink.style.display = 'none';
+  }
+  
+  // Show modal
+  document.getElementById('historical-email-viewer-modal').classList.add('active');
+}
+
+function closeHistoricalEmailModal() {
+  var modal = document.getElementById('historical-email-viewer-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  var fb = document.getElementById('hem-copy-feedback');
+  if (fb) fb.style.display = 'none';
+}
+
+function handleHistoricalModalBackdrop(event) {
+  if (event.target === document.getElementById('historical-email-viewer-modal')) {
+    closeHistoricalEmailModal();
+  }
+}
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') {
+    closeHistoricalEmailModal();
+  }
+});
+
+function copyHistoricalEmailBody() {
+  var btn = document.getElementById('hem-copy-btn');
+  var bodyText = (btn && btn.dataset.body) ? btn.dataset.body : '';
+  if (!bodyText) return;
+  
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(bodyText).then(function() {
+      showCopyFeedback();
+    }).catch(function() {
+      fallbackCopy(bodyText);
+    });
+  } else {
+    fallbackCopy(bodyText);
+  }
+}
+
+function fallbackCopy(text) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showCopyFeedback();
+  } catch(e) {}
+  document.body.removeChild(ta);
+}
+
+function showCopyFeedback() {
+  var fb = document.getElementById('hem-copy-feedback');
+  if (fb) {
+    fb.style.display = 'inline';
+    setTimeout(function() {
+      fb.style.display = 'none';
+    }, 2500);
+  }
+}
+
+function viewHistoricalEmail(emailId) {
+  var scriptTag = document.getElementById('hist-email-data-' + emailId);
+  if (scriptTag) {
+    try {
+      var data = JSON.parse(scriptTag.textContent);
+      openHistoricalEmailModal(data);
+      return;
+    } catch(e) {
+      console.error('Failed to parse embedded email data:', e);
+    }
+  }
+  // Fallback to fetch if available
+  fetch('/sales/historical-emails/' + emailId)
+    .then(function(res) { return res.json(); })
+    .then(function(data) { openHistoricalEmailModal(data); })
+    .catch(function(err) { console.error('Failed to fetch historical email:', err); });
+}
+</script>

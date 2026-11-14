@@ -135,7 +135,7 @@
           <th>Sent Time</th>
           <th>Matched Company</th>
           <th>Reconciliation</th>
-          <th>Gmail Link</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -165,11 +165,17 @@
             {% endif %}
           </td>
           <td>
-            {% if h.gmail_link %}
-            <a href="{{ h.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Gmail ↗</a>
-            {% else %}
-            -
-            {% endif %}
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="viewHistoricalEmail({{ h.id }})" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; white-space: nowrap;">
+                👁️ View Email
+              </button>
+              {% if h.gmail_link %}
+              <a href="{{ h.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;">Gmail ↗</a>
+              {% endif %}
+            </div>
+            <script type="application/json" id="hist-email-data-{{ h.id }}">
+              {{ h | tojson }}
+            </script>
           </td>
         </tr>
         {% endfor %}
@@ -204,7 +210,7 @@
           <th>Sent Date</th>
           <th>Body Excerpt</th>
           <th>Status</th>
-          <th>Action</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -220,11 +226,17 @@
           </td>
           <td><span class="badge badge-warning">{{ u.reconciliation_status }}</span></td>
           <td>
-            {% if u.gmail_link %}
-            <a href="{{ u.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Inspect ↗</a>
-            {% else %}
-            -
-            {% endif %}
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="viewHistoricalEmail({{ u.id }})" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; white-space: nowrap;">
+                👁️ View Email
+              </button>
+              {% if u.gmail_link %}
+              <a href="{{ u.gmail_link }}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;">Gmail ↗</a>
+              {% endif %}
+            </div>
+            <script type="application/json" id="hist-email-data-{{ u.id }}">
+              {{ u | tojson }}
+            </script>
           </td>
         </tr>
         {% endfor %}
@@ -234,4 +246,5 @@
 </div>
 {% endif %}
 
+{% include "historical_email_modal.html" %}
 {% endblock %}
