@@ -2939,6 +2939,7 @@ def evaluate_import_readiness(
     multiple_plausible_domains_count: int,
     missing_domain_count: int,
     operator_approved_policy: bool = True,
+    missing_essential_identity_count: int = 0,
 ) -> Tuple[str, List[str]]:
     """
     Single authoritative readiness evaluator shared by Preview and Confirm.
@@ -2947,14 +2948,22 @@ def evaluate_import_readiness(
     - Unverified websites imported with company_domain=None (Policy A)
     - Domain collisions auto-consolidated / preserved (Policy B)
     - Multiple plausible domains resolved using primary host (Policy C)
+    - Nonessential unmapped metadata columns preserved in raw-row provenance without blocking (Policy D/Schema)
     """
     reasons = []
     if len(records) == 0:
         return "BLOCKED", ["Zero company records detected in workbook."]
-    if unmapped_columns_count > 0:
-        return "BLOCKED", [f"{unmapped_columns_count} unmapped column(s) detected in company sheets."]
+
+    if missing_essential_identity_count > 0:
+        return "BLOCKED", [
+            f"{missing_essential_identity_count} company sheet(s) lack required company identifier columns (company name or domain)."
+        ]
 
     if not operator_approved_policy:
+        if unmapped_columns_count > 0:
+            reasons.append(
+                f"{unmapped_columns_count} unmapped column(s) detected in company sheets requiring human mapping review."
+            )
         if domain_collisions_count > 0:
             reasons.append(
                 f"{domain_collisions_count} canonical domain collision(s) detected across {len(records)} rows ({distinct_canonical_domains} unique domains). Human identity review required."
@@ -2972,12 +2981,22 @@ def evaluate_import_readiness(
         return "READY", [f"All {len(records)} rows validated with 0 unmapped headers and 0 collisions."]
 
     policy_notes = []
+    if unmapped_columns_count > 0:
+        policy_notes.append(
+            f"{unmapped_columns_count} nonessential metadata column(s) detected in company sheets and preserved in raw record data."
+        )
     if missing_domain_count > 0:
-        policy_notes.append(f"{missing_domain_count} company row(s) without verified websites will be imported with unverified website status (Policy A)")
+        policy_notes.append(
+            f"{missing_domain_count} company row(s) without verified websites will be imported with unverified website status (Policy A)"
+        )
     if multiple_plausible_domains_count > 0:
-        policy_notes.append(f"{multiple_plausible_domains_count} company row(s) with multiple plausible domains will use proposed primary host (Policy C)")
+        policy_notes.append(
+            f"{multiple_plausible_domains_count} company row(s) with multiple plausible domains will use proposed primary host (Policy C)"
+        )
     if domain_collisions_count > 0:
-        policy_notes.append(f"{domain_collisions_count} domain collision group(s) will be auto-consolidated / preserved (Policy B)")
+        policy_notes.append(
+            f"{domain_collisions_count} domain collision group(s) will be auto-consolidated / preserved (Policy B)"
+        )
 
     reasons = [
         f"Workbook validated under operator-approved policies: {len(records)} company rows ready for import."
@@ -3083,8 +3102,19 @@ async def preview_historical_import_action(
             missing_domain_rows = inspection.get("missing_domain_rows", [])
 
             if sheets_data:
-                # Top sheet or selected sheet column mapping
-                target_sheet_info = next((s for s in sheets_data if s["sheet_name"] == sheet_name), sheets_data[0])
+                # Selected sheet or first eligible company sheet column mapping
+                target_sheet_info = next(
+                    (s for s in sheets_data if s["sheet_name"] == sheet_name),
+                    next(
+                        (s for s in sheets_data if s.get("is_eligible_company") or (
+                            not s.get("is_summary_sheet")
+                            and not s.get("is_communication_sheet")
+                            and not s.get("is_deferred_sheet")
+                            and not s.get("is_excluded_sheet")
+                        )),
+                        sheets_data[0]
+                    )
+                )
                 column_mappings = target_sheet_info.get("column_mappings", {})
         except Exception:
             pass
@@ -3116,11 +3146,22 @@ async def preview_historical_import_action(
             if not r.domain
         ]
 
-    # Count unmapped columns across active sheets
+    # Count unmapped columns and validate schema across eligible company sheets
     unmapped_columns_count = 0
+    missing_essential_identity_count = 0
     if sheets_data:
         for s in sheets_data:
-            if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
+            is_company = s.get("is_eligible_company")
+            if is_company is None:
+                is_company = not (
+                    s.get("is_summary_sheet")
+                    or s.get("is_communication_sheet")
+                    or s.get("is_deferred_sheet")
+                    or s.get("is_excluded_sheet")
+                )
+            if is_company and s.get("row_count", 0) > 0:
+                if not s.get("mapping_valid", True):
+                    missing_essential_identity_count += 1
                 unmapped_columns_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
 
     is_lead_res = importer.is_lead_research_workbook(resolved)
@@ -3133,6 +3174,7 @@ async def preview_historical_import_action(
         distinct_canonical_domains=distinct_canonical_domains,
         multiple_plausible_domains_count=multiple_plausible_domains_count,
         missing_domain_count=missing_domain_count,
+        missing_essential_identity_count=missing_essential_identity_count,
     )
 
     # Reimport & Sent_Emails Reconciliation Pre-Import Comparison
@@ -3387,8 +3429,19 @@ async def confirm_historical_import_action(
         records = importer.parse_xlsx(resolved, sheet_name=sheet_name)
         inspection = importer.inspect_workbook(resolved)
         unmapped_count = 0
+        missing_essential_identity_count = 0
         for s in inspection.get("sheets", []):
-            if not s.get("is_summary_sheet") and s.get("row_count", 0) > 0:
+            is_company = s.get("is_eligible_company")
+            if is_company is None:
+                is_company = not (
+                    s.get("is_summary_sheet")
+                    or s.get("is_communication_sheet")
+                    or s.get("is_deferred_sheet")
+                    or s.get("is_excluded_sheet")
+                )
+            if is_company and s.get("row_count", 0) > 0:
+                if not s.get("mapping_valid", True):
+                    missing_essential_identity_count += 1
                 unmapped_count += sum(1 for m in s.get("column_mappings", {}).values() if m == "unmapped")
         domain_collisions_count = inspection.get("domain_collisions_count", 0)
         distinct_canonical_domains = inspection.get("distinct_canonical_domains", 0)
@@ -3405,6 +3458,7 @@ async def confirm_historical_import_action(
         distinct_canonical_domains=distinct_canonical_domains,
         multiple_plausible_domains_count=multiple_plausible_domains_count,
         missing_domain_count=missing_domain_count,
+        missing_essential_identity_count=missing_essential_identity_count,
     )
 
     # Parse and rigorously validate operator decisions if supplied

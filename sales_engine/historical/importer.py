@@ -946,6 +946,7 @@ class HistoricalImporter:
             "active_conversation": ["active_conversation", "in_discussion"],
             "meeting": ["meeting", "riunione", "appuntamento"],
             "row_id": ["ردیف", "شماره"],
+            "source_sheet": ["شیت مبدا", "شیت مبدأ", "source_sheet", "source sheet", "origin_sheet"],
         }
 
         for sname in wb.sheetnames:
@@ -994,6 +995,7 @@ class HistoricalImporter:
                 "is_communication_sheet": is_communication_sheet,
                 "is_deferred_sheet": is_deferred_sheet,
                 "is_excluded_sheet": is_excluded_sheet,
+                "is_eligible_company": not is_non_company,
                 "mapping_valid": (has_company or has_domain) if not is_non_company else True,
             })
 
