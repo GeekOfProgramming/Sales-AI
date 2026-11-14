@@ -1,6 +1,6 @@
 # ==============================================================================
-# SalesAI Windows PowerShell Launcher (MVP-01)
-# Starts SalesAI Local Operator Console without mandatory Ollama or GPU dependencies.
+# SalesAI Windows PowerShell Launcher (MVP-01 / LAN-01)
+# Starts SalesAI Local Operator Console with automatic trusted LAN detection.
 # ==============================================================================
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -86,7 +86,131 @@ if ($portConnections.Count -gt 0) {
     Write-Host "[OK] Port $targetPort is available." -ForegroundColor Green
 }
 
-# 4. Secure Automatic Brave Search Credential Loading (DPAPI)
+# 4. Network Interface, Private Profile & Local/LAN URL Configuration
+Write-Host ""
+Write-Host "Detecting active network interfaces..." -ForegroundColor Gray
+
+# Retrieve physical network adapters that are Up (excludes virtual adapters, VPNs, Hyper-V, Docker)
+$physicalAdapters = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' })
+
+# Prefer Wi-Fi (802.11) or Ethernet (802.3)
+$activeAdapter = $physicalAdapters | Where-Object {
+    $_.PhysicalMediaType -match '802.11|Native 802.11' -or $_.Name -like '*Wi-Fi*' -or $_.InterfaceDescription -like '*Wireless*'
+} | Select-Object -First 1
+
+if (-not $activeAdapter) {
+    $activeAdapter = $physicalAdapters | Where-Object {
+        $_.PhysicalMediaType -match '802.3' -or $_.Name -like '*Ethernet*'
+    } | Select-Object -First 1
+}
+
+if (-not $activeAdapter) {
+    $activeAdapter = $physicalAdapters | Select-Object -First 1
+}
+
+$detectedLanIp = $null
+$detectedProfileName = "Unknown"
+$isPrivateProfile = $false
+$lanReason = ""
+
+if ($activeAdapter) {
+    Write-Host "[INFO] Active physical interface: $($activeAdapter.Name) ($($activeAdapter.InterfaceDescription))" -ForegroundColor Gray
+
+    # Retrieve IPv4 addresses associated with this interface
+    $ipAddresses = @(Get-NetIPAddress -InterfaceIndex $activeAdapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {
+        $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254*'
+    })
+
+    # Validate RFC 1918 Private IPv4 address:
+    # - 10.0.0.0/8
+    # - 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    # - 192.168.0.0/16
+    foreach ($entry in $ipAddresses) {
+        $addr = $entry.IPAddress
+        if ($addr -match '^10\.' -or $addr -match '^192\.168\.' -or ($addr -match '^172\.(1[6-9]|2[0-9]|3[0-1])\.')) {
+            $detectedLanIp = $addr
+            break
+        }
+    }
+
+    # Inspect Windows Network Profile
+    $profile = Get-NetConnectionProfile -InterfaceIndex $activeAdapter.InterfaceIndex -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($profile) {
+        $detectedProfileName = $profile.Name
+        if ($profile.NetworkCategory -eq 'Private' -or $profile.NetworkCategory -eq 'DomainAuthenticated') {
+            $isPrivateProfile = $true
+        } else {
+            $lanReason = "Connected network '$detectedProfileName' is configured as Windows '$($profile.NetworkCategory)' profile (requires 'Private')."
+        }
+    } else {
+        $lanReason = "Could not verify Windows network profile category for '$($activeAdapter.Name)'."
+    }
+} else {
+    $lanReason = "No active physical Wi-Fi or Ethernet network adapter detected."
+}
+
+# Determine Host Binding: 0.0.0.0 (LAN) vs 127.0.0.1 (Localhost)
+$bindHost = "127.0.0.1"
+$lanAvailable = $false
+
+if ($env:SALESAI_ALLOW_LAN -in @("1", "true", "True", "YES", "yes") -or $env:SALESAI_HOST -eq "0.0.0.0") {
+    $bindHost = "0.0.0.0"
+    $lanAvailable = $true
+    Write-Host "[INFO] Operator override active: binding Uvicorn to 0.0.0.0 (LAN enabled)." -ForegroundColor Cyan
+} elseif ($detectedLanIp -and $isPrivateProfile) {
+    $bindHost = "0.0.0.0"
+    $lanAvailable = $true
+    Write-Host "[OK] Trusted Private LAN verified on $($activeAdapter.Name) ($detectedLanIp). Binding to 0.0.0.0." -ForegroundColor Green
+} else {
+    $bindHost = "127.0.0.1"
+    $lanAvailable = $false
+    Write-Host "[NOTICE] LAN sharing unavailable: $lanReason" -ForegroundColor Yellow
+    Write-Host "         Binding to 127.0.0.1 (Localhost only) for security." -ForegroundColor Yellow
+    if ($detectedProfileName -ne "Unknown" -and (-not $isPrivateProfile)) {
+        Write-Host "         To enable LAN sharing across laptops on this Wi-Fi, change network profile to 'Private' in Windows Settings:" -ForegroundColor Gray
+        Write-Host "         Settings -> Network & internet -> Wi-Fi -> '$detectedProfileName' -> Network profile type -> Private" -ForegroundColor Gray
+        Write-Host "         (Or set `$env:SALESAI_ALLOW_LAN = '1' to override for this session)." -ForegroundColor Gray
+    }
+}
+
+$env:SALESAI_HOST = $bindHost
+$env:SALESAI_PORT = "$targetPort"
+$env:SALESAI_LAN_IP = if ($detectedLanIp) { $detectedLanIp } else { "" }
+
+# 5. Check Windows Firewall Inbound Rule for Port 8000
+$hasFirewallRule = $false
+try {
+    $ruleCheck = netsh advfirewall firewall show rule name="SalesAI Local Operator Console (Port 8000)" 2>$null | Out-String
+    if ($LASTEXITCODE -eq 0 -and $ruleCheck -match "Action:\s+Allow") {
+        $hasFirewallRule = $true
+    }
+} catch {
+    $hasFirewallRule = $false
+}
+
+if ($lanAvailable -and (-not $hasFirewallRule)) {
+    Write-Host ""
+    Write-Host "[FIREWALL] Inbound Windows Firewall rule for TCP port $targetPort is not configured." -ForegroundColor Yellow
+    Write-Host "           Other laptops on the Wi-Fi may be blocked by Windows Firewall." -ForegroundColor Yellow
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isAdmin) {
+        $fwConfirm = Read-Host "Would you like to automatically create the Windows Firewall rule for Private local subnet now? (y/N)"
+        if ($fwConfirm -match "^[yY](es)?$") {
+            try {
+                netsh advfirewall firewall add rule name="SalesAI Local Operator Console (Port $targetPort)" dir=in action=allow protocol=TCP localport=$targetPort profile=private remoteip=localsubnet | Out-Null
+                Write-Host "[OK] Windows Firewall rule added: Private profile, local subnet only." -ForegroundColor Green
+                $hasFirewallRule = $true
+            } catch {
+                Write-Host "[WARN] Could not add firewall rule: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    } else {
+        Write-Host "           To allow inbound traffic on Private networks, run this command in an Administrator PowerShell:" -ForegroundColor Gray
+        Write-Host "           netsh advfirewall firewall add rule name=`"SalesAI Local Operator Console (Port $targetPort)`" dir=in action=allow protocol=TCP localport=$targetPort profile=private remoteip=localsubnet" -ForegroundColor Cyan
+    }
+}
+
+# 6. Secure Automatic Brave Search Credential Loading (DPAPI)
 $braveVar = "BRAVE_SEARCH_API_KEY"
 if ($env:BRAVE_SEARCH_API_KEY -and $env:BRAVE_SEARCH_API_KEY.Trim()) {
     Write-Host "[INFO] BRAVE_SEARCH_API_KEY is already present in current process environment." -ForegroundColor Green
@@ -108,16 +232,7 @@ if ($env:BRAVE_SEARCH_API_KEY -and $env:BRAVE_SEARCH_API_KEY.Trim()) {
     Write-Host "[NOTICE] BRAVE_SEARCH_API_KEY is not configured. Live web discovery is blocked; dry-run preview is enabled." -ForegroundColor Yellow
 }
 
-Write-Host ""
-Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host "  - Operator Dashboard:   http://127.0.0.1:8000/sales                " -ForegroundColor White
-Write-Host "  - Discovery Search:     http://127.0.0.1:8000/sales/discovery      " -ForegroundColor White
-Write-Host "  - Candidate Review:     http://127.0.0.1:8000/sales/candidates     " -ForegroundColor White
-Write-Host "  - Workbook Import:      http://127.0.0.1:8000/sales/sources        " -ForegroundColor White
-Write-Host "  - API Documentation:    http://127.0.0.1:8000/docs                 " -ForegroundColor White
-Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host ""
-# 5. Secure Automatic Gemini LLM Credential Loading (DPAPI)
+# 7. Secure Automatic Gemini LLM Credential Loading (DPAPI)
 $geminiVar = "GEMINI_API_KEY"
 if ($env:GEMINI_API_KEY -and $env:GEMINI_API_KEY.Trim()) {
     Write-Host "[INFO] GEMINI_API_KEY is already present in current process environment." -ForegroundColor Green
@@ -139,7 +254,29 @@ if ($env:GEMINI_API_KEY -and $env:GEMINI_API_KEY.Trim()) {
     Write-Host "[NOTICE] GEMINI_API_KEY is not configured. Paid LLM analysis is disabled; local heuristics active." -ForegroundColor Gray
 }
 
-Write-Host "Starting Uvicorn server on http://127.0.0.1:8000 (Press Ctrl+C to stop)..." -ForegroundColor Green
+# 8. Display Connectivity URLs Dynamically
+Write-Host ""
+Write-Host "======================================================================" -ForegroundColor Cyan
+Write-Host "Sales-AI Server" -ForegroundColor Cyan
+Write-Host "Local (this laptop):" -ForegroundColor White
+Write-Host "http://127.0.0.1:$targetPort/sales" -ForegroundColor Green
+Write-Host ""
+Write-Host "LAN (share with another laptop on the same Wi-Fi):" -ForegroundColor White
+if ($detectedLanIp) {
+    if ($lanAvailable) {
+        Write-Host "http://${detectedLanIp}:$targetPort/sales" -ForegroundColor Green
+    } else {
+        Write-Host "http://${detectedLanIp}:$targetPort/sales" -ForegroundColor Gray
+        Write-Host "  (Status: Inactive - Uvicorn bound to 127.0.0.1 because network profile is not Private)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[No private LAN IPv4 detected]" -ForegroundColor Gray
+}
+Write-Host ""
+Write-Host "Access Scope: Private Local Network (No public internet exposure)" -ForegroundColor Gray
+Write-Host "======================================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Starting Uvicorn server on http://${bindHost}:${targetPort} (Press Ctrl+C to stop)..." -ForegroundColor Green
 Write-Host ""
 
 & $PythonExe -u start_server.py

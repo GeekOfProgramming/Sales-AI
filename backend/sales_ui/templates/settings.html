@@ -37,13 +37,20 @@
 <div class="card">
   <div class="card-title">
     <span>System Information</span>
+    {% if bind_address and bind_address.startswith('0.0.0.0') %}
+    <span class="badge badge-success">Trusted LAN Active (0.0.0.0)</span>
+    {% else %}
     <span class="badge badge-success">Localhost Bound</span>
+    {% endif %}
   </div>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; font-size: 0.875rem;">
     <div><strong>Application Name:</strong> <code>{{ app_name or 'Email Led' }}</code></div>
     <div><strong>Runtime Mode:</strong> <span class="badge badge-info">{{ runtime_mode or 'Local-First' }}</span></div>
-    <div><strong>Local Server Address:</strong> <code>{{ bind_address or '127.0.0.1:8000' }}</code> (Loopback)</div>
-    <div><strong>Console URL:</strong> <code>http://{{ bind_address or '127.0.0.1:8000' }}/sales</code></div>
+    <div><strong>Local Server Address:</strong> <code>{{ bind_address or '127.0.0.1:8000' }}</code></div>
+    <div><strong>Console URL:</strong> <code>http://{{ '127.0.0.1' if bind_address and bind_address.startswith('0.0.0.0') else (bind_address or '127.0.0.1:8000') }}/sales</code></div>
+    {% if lan_ip %}
+    <div><strong>LAN URL (Wi-Fi):</strong> <code>http://{{ lan_ip }}:{{ bind_address.split(':')[1] if bind_address and ':' in bind_address else '8000' }}/sales</code></div>
+    {% endif %}
     <div><strong>Database File:</strong> <code>{{ db_path }}</code></div>
     <div><strong>Email Sending Status:</strong> 
       <span class="badge {% if email_send_enabled %}badge-danger{% else %}badge-warning{% endif %}">

@@ -20,13 +20,20 @@ import uvicorn
 
 
 def get_local_ips():
-    """Retrieve local network IPv4 addresses."""
+    """Retrieve local network RFC 1918 private IPv4 addresses."""
+    import ipaddress
     ips = []
     try:
         hostname = socket.gethostname()
         for ip in socket.gethostbyname_ex(hostname)[2]:
-            if not ip.startswith("127.") and not ip.startswith("169.254"):
-                ips.append(ip)
+            if ip.startswith("127.") or ip.startswith("169.254."):
+                continue
+            try:
+                addr = ipaddress.ip_address(ip)
+                if addr.is_private and isinstance(addr, ipaddress.IPv4Address):
+                    ips.append(ip)
+            except ValueError:
+                pass
     except Exception:
         pass
     return ips
@@ -45,17 +52,32 @@ def find_cloudflared():
 
 
 def main():
-    print("=" * 70)
-    print("🚀 SalesAI Server - Local Lead Intelligence Gateway")
-    print("=" * 70)
-
     bind_host = os.getenv("SALESAI_HOST", "127.0.0.1")
     bind_port = int(os.getenv("SALESAI_PORT", "8000"))
+    local_ips = get_local_ips()
+    primary_lan_ip = os.getenv("SALESAI_LAN_IP") or (local_ips[0] if local_ips else None)
+
+    print("=" * 70)
+    print("Sales-AI Server")
+    print("Local (this laptop):")
+    print(f"http://127.0.0.1:{bind_port}/sales")
+    print("\nLAN (share with another laptop on the same Wi-Fi):")
+    if primary_lan_ip:
+        if bind_host == "0.0.0.0":
+            print(f"http://{primary_lan_ip}:{bind_port}/sales")
+        else:
+            print(f"http://{primary_lan_ip}:{bind_port}/sales (Inactive - server bound to 127.0.0.1)")
+    else:
+        print("[No private LAN IPv4 detected]")
+    print("\nAccess Scope: Private Local Network (No public internet exposure)")
+    print("=" * 70)
 
     print("\n📍 Connectivity Details:")
-    print(f"  • Sales Operator Console:      http://{bind_host}:{bind_port}/sales")
-    print(f"  • Swagger API Documentation:   http://{bind_host}:{bind_port}/docs")
-    print(f"  • Health Check:                http://{bind_host}:{bind_port}/health")
+    print(f"  • Sales Operator Console:      http://127.0.0.1:{bind_port}/sales")
+    if primary_lan_ip and bind_host == "0.0.0.0":
+        print(f"  • LAN Operator Console:        http://{primary_lan_ip}:{bind_port}/sales")
+    print(f"  • Swagger API Documentation:   http://127.0.0.1:{bind_port}/docs")
+    print(f"  • Health Check:                http://127.0.0.1:{bind_port}/health")
 
     enable_tunnel = os.environ.get("ENABLE_PUBLIC_TUNNEL", "").lower() in ("1", "true", "yes") or "--tunnel" in sys.argv
     cloudflared_path = find_cloudflared()
