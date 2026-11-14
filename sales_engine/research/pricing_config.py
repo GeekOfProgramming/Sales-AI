@@ -18,19 +18,49 @@ import os
 import secrets
 import threading
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Tuple, Set
 
 logger = logging.getLogger(__name__)
 
-# Server-side authorization secret: require explicit environment variable or generate
-# a secure process-lifetime ephemeral secret. NEVER fall back to a hardcoded shared string.
+# Server-side authorization secret:
+# 1. Prioritize explicit SALESAI_ANALYSIS_AUTH_SECRET environment variable.
+# 2. If absent, retrieve or generate a persistent, installation-specific 32-byte secret
+#    stored in data/.analysis_auth_secret (outside Git, with restricted permissions).
+# 3. Fallback to process-lifetime ephemeral secret ONLY if local disk write fails.
 _EPHEMERAL_SECRET = secrets.token_hex(32)
-def get_auth_secret() -> str:
+
+def get_auth_secret(secret_file_override: Optional[Path] = None) -> str:
+    """
+    Returns the HMAC key used to sign and verify Research LLM analysis authorization tokens.
+    Guarantees stability across Uvicorn code reloads, worker recycles, and server restarts.
+    """
     sec = os.environ.get("SALESAI_ANALYSIS_AUTH_SECRET")
     if sec and sec.strip():
         return sec.strip()
-    return _EPHEMERAL_SECRET
+
+    secret_file = secret_file_override or Path("data/.analysis_auth_secret")
+    if secret_file.exists():
+        try:
+            stored = secret_file.read_text(encoding="utf-8").strip()
+            if stored and len(stored) >= 32:
+                return stored
+        except Exception as e:
+            logger.warning(f"Failed to read existing analysis auth secret file: {e}")
+
+    try:
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+        new_secret = secrets.token_hex(32)
+        secret_file.write_text(new_secret, encoding="utf-8")
+        try:
+            os.chmod(str(secret_file), 0o600)
+        except Exception:
+            pass
+        return new_secret
+    except Exception as e:
+        logger.error(f"Failed to persist analysis auth secret to {secret_file}: {e}")
+        return _EPHEMERAL_SECRET
 
 # Nonce replay protection set: tracks used nonce tokens to prevent token reuse
 # Guarded by thread lock for concurrency-safe single-use nonce consumption

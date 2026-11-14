@@ -29,6 +29,12 @@ chroma_db/
 .env
 .env.local
 .env.*.local
+*.key
+*.secret
+data/.*_key
+data/.*_secret
+data/.preview_signing_key
+data/.analysis_auth_secret
 
 # IDEs & Editors
 .vscode/
