@@ -734,3 +734,12 @@ class InboxStore:
                 (send_key,),
             ).fetchone()
             return row is not None
+
+    def get_mailbox_repository(self) -> "MailboxRepository":
+        """
+        MAIL-DATA-01: Lazy-loaded accessor for multi-mailbox foundation repository.
+        Shares the exact underlying database connection path.
+        """
+        from sales_engine.inbox.mailbox_repository import MailboxRepository
+        return MailboxRepository(db_path=self.db_path)
+
