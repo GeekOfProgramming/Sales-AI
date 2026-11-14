@@ -288,6 +288,8 @@ class CandidateStore:
                     buyer_role_match TEXT,
                     contact_score INTEGER DEFAULT 0,
                     created_at TEXT,
+                    ownership_type TEXT DEFAULT 'owned',
+                    notes TEXT,
                     FOREIGN KEY (candidate_id) REFERENCES candidate_companies(candidate_id) ON DELETE CASCADE
                 );
 
@@ -391,6 +393,9 @@ class CandidateStore:
         _add_col("candidate_companies", "manual_reviewed_at TEXT")
         _add_col("candidate_companies", "manual_reviewed_by TEXT")
         _add_col("candidate_companies", "manual_review_notes TEXT")
+
+        _add_col("candidate_contacts", "ownership_type TEXT DEFAULT 'owned'")
+        _add_col("candidate_contacts", "notes TEXT")
 
         _add_col("pilot_search_attempts", "idempotency_token TEXT")
         try:

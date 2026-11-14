@@ -809,6 +809,37 @@ class HistoricalImporter:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS historical_reconciliation_corrections (
+                    correction_id TEXT PRIMARY KEY,
+                    email_id INTEGER NOT NULL,
+                    message_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    previous_candidate_id TEXT,
+                    previous_company_name TEXT,
+                    new_candidate_id TEXT,
+                    new_company_name TEXT,
+                    corrected_by TEXT NOT NULL,
+                    corrected_at TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    evidence TEXT,
+                    FOREIGN KEY (email_id) REFERENCES historical_sent_emails(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_reconcil_corr_email
+                ON historical_reconciliation_corrections(email_id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_reconcil_corr_msg
+                ON historical_reconciliation_corrections(message_id)
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS historical_sent_emails (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     message_id TEXT NOT NULL,
@@ -831,6 +862,10 @@ class HistoricalImporter:
                     matched_candidate_id TEXT,
                     matched_company_name TEXT,
                     reconciliation_status TEXT NOT NULL DEFAULT 'unmatched',
+                    match_evidence TEXT,
+                    proposed_candidate_id TEXT,
+                    proposed_company_name TEXT,
+                    proposal_status TEXT,
                     imported_at TEXT NOT NULL,
                     UNIQUE(sender_account, message_id)
                 )
@@ -877,6 +912,18 @@ class HistoricalImporter:
                 cols = [r[1] for r in conn.execute("PRAGMA table_info(historical_meeting_activities);").fetchall()]
                 if "raw_row_json" not in cols:
                     conn.execute("ALTER TABLE historical_meeting_activities ADD COLUMN raw_row_json TEXT;")
+            except Exception:
+                pass
+            try:
+                sent_cols = [r[1] for r in conn.execute("PRAGMA table_info(historical_sent_emails);").fetchall()]
+                for c_name, c_type in [
+                    ("match_evidence", "TEXT"),
+                    ("proposed_candidate_id", "TEXT"),
+                    ("proposed_company_name", "TEXT"),
+                    ("proposal_status", "TEXT"),
+                ]:
+                    if c_name not in sent_cols:
+                        conn.execute(f"ALTER TABLE historical_sent_emails ADD COLUMN {c_name} {c_type};")
             except Exception:
                 pass
             conn.execute(
@@ -2472,27 +2519,68 @@ class HistoricalImporter:
         reconciled = []
         cand_contacts_map: Dict[str, Set[str]] = {}
         cand_names: Dict[str, str] = {}
+        cand_domains: Dict[str, Set[str]] = {}
 
         with self.store._get_connection() as conn:
-            # Candidate names and ID mapping
-            name_rows = conn.execute("SELECT candidate_id, company_name FROM candidate_companies").fetchall()
+            # Candidate names, established domains, and ID mapping
+            name_rows = conn.execute("SELECT candidate_id, company_name, company_domain, aliases_json FROM candidate_companies").fetchall()
             name_to_cid: Dict[str, str] = {}
             for r in name_rows:
                 cid_str = str(r[0])
                 cname = str(r[1] or "")
+                cdom = str(r[2] or "").strip().lower()
                 cand_names[cid_str] = cname
                 if cname:
                     name_to_cid[cname.strip().lower()] = cid_str
+                doms = set()
+                if cdom:
+                    canon_d = self.store.canonicalize_domain(cdom)
+                    if canon_d:
+                        doms.add(canon_d)
+                if r[3]:
+                    try:
+                        al_list = json.loads(r[3])
+                        for al in al_list:
+                            for token in re.findall(r"[\w.-]+\.[a-zA-Z]{2,}", al):
+                                t_dom = self.store.canonicalize_domain(token.strip(" .()[]'\",;:").lower())
+                                if t_dom and t_dom not in GENERIC_OR_FREE_EMAIL_DOMAINS and not is_disallowed_or_unsafe_host(t_dom):
+                                    doms.add(t_dom)
+                    except Exception:
+                        pass
+                cand_domains[cid_str] = doms
 
             # 1. candidate_contacts
-            c_rows = conn.execute("SELECT work_email, candidate_id FROM candidate_contacts WHERE work_email IS NOT NULL").fetchall()
+            # DATA-01 Contact Ownership Guard:
+            # An exact email match requires established contact ownership:
+            # - Explicit ownership_type in ('owned', 'verified_alias')
+            # - OR email domain matches candidate's established domain / verified alias
+            # - OR email is generic/free domain (e.g. gmail/pec) where ownership is registered to candidate
+            # Contacts explicitly marked as 'project_partner', 'external_mention', or cross-domain without alias
+            # are excluded from automatic authoritative email matching.
+            c_rows = conn.execute(
+                "SELECT work_email, candidate_id, ownership_type FROM candidate_contacts WHERE work_email IS NOT NULL"
+            ).fetchall()
             for r in c_rows:
                 em = (r[0] or "").strip().lower()
                 cid = str(r[1] or "").strip()
+                own_type = (r[2] or "owned").strip().lower()
                 if em and cid:
+                    if own_type in ("project_partner", "external_mention", "unverified_third_party"):
+                        continue
+                    if "@" in em:
+                        e_dom = self.store.canonicalize_domain(em.split("@")[-1].strip().lower())
+                        c_doms = cand_domains.get(cid, set())
+                        # If email is non-generic domain and does NOT match candidate domain/aliases, check if cross-domain
+                        is_own_domain = any(e_dom == cd or e_dom.endswith("." + cd) or cd.endswith("." + e_dom) for cd in c_doms)
+                        is_generic = e_dom in GENERIC_OR_FREE_EMAIL_DOMAINS or "pec" in e_dom
+                        if not is_own_domain and not is_generic and own_type != "verified_alias":
+                            # Cross-domain contact without verified alias is NOT considered an owned contact
+                            continue
                     cand_contacts_map.setdefault(em, set()).add(cid)
 
             # 2. historical_contacts & historical_imports
+            # DATA-01: Only accept historical contacts where email domain matches the imported canonical_domain
+            # or is a legitimate generic/PEC email. Third-party mentions in research are excluded.
             h_rows = conn.execute(
                 """
                 SELECT hc.email, hi.canonical_domain, hi.company_name
@@ -2506,10 +2594,14 @@ class HistoricalImporter:
                 dom = str(r[1] or "").strip().lower()
                 cname = str(r[2] or "").strip().lower()
                 if em:
-                    if dom:
-                        cand_contacts_map.setdefault(em, set()).add(f"cand:domain:{dom}")
-                    elif cname and cname in name_to_cid:
-                        cand_contacts_map.setdefault(em, set()).add(name_to_cid[cname])
+                    cid = f"cand:domain:{dom}" if dom else (name_to_cid.get(cname) if cname else None)
+                    if cid and "@" in em:
+                        e_dom = self.store.canonicalize_domain(em.split("@")[-1].strip().lower())
+                        is_generic = e_dom in GENERIC_OR_FREE_EMAIL_DOMAINS or "pec" in e_dom
+                        c_doms = cand_domains.get(cid, {dom} if dom else set())
+                        is_own_dom = any(e_dom == cd or e_dom.endswith("." + cd) or cd.endswith("." + e_dom) for cd in c_doms)
+                        if is_own_dom or is_generic:
+                            cand_contacts_map.setdefault(em, set()).add(cid)
 
         # 3. Incorporate staged company records if available (e.g. during pre-import inspection or import)
         if staged_records:
@@ -2568,15 +2660,42 @@ class HistoricalImporter:
                                 staged_domain_map.setdefault(em_dom, set()).add(cid)
 
         for m in sent_emails:
-            # If the record has already been explicitly reconciled/matched, preserve it
-            if m.matched_candidate_id and m.reconciliation_status == "matched":
-                reconciled.append(m)
-                continue
-
+            # Check if this message was previously manually corrected/preserved by operator
+            # If so, keep the operator's decision intact
             matched_cids = set()
             for recip in m.recipient_emails:
                 cids = cand_contacts_map.get(recip.lower(), set())
                 matched_cids.update(cids)
+
+            # DATA-01 Verification:
+            # If m was already matched, verify whether the match is still supported under ownership rules
+            if m.matched_candidate_id and m.reconciliation_status == "matched":
+                # Check if recipient email belongs to matched_candidate_id under cand_contacts_map
+                # or matches candidate's domain/alias
+                recip_matches = any(m.matched_candidate_id in cand_contacts_map.get(r.lower(), set()) for r in m.recipient_emails)
+                cand_dom_matches = False
+                c_doms = cand_domains.get(m.matched_candidate_id, set())
+                for r in m.recipient_emails:
+                    if "@" in r:
+                        r_dom = self.store.canonicalize_domain(r.split("@")[-1].strip().lower())
+                        if any(r_dom == cd or r_dom.endswith("." + cd) or cd.endswith("." + r_dom) for cd in c_doms):
+                            cand_dom_matches = True
+                            break
+                        if r_dom in GENERIC_OR_FREE_EMAIL_DOMAINS or "pec" in r_dom:
+                            cand_dom_matches = True
+                            break
+                if recip_matches or cand_dom_matches:
+                    reconciled.append(m)
+                    continue
+                else:
+                    # Previous match violated ownership rules! Mark as needing review / proposed
+                    m.reconciliation_status = "unmatched"
+                    m.proposed_candidate_id = m.matched_candidate_id
+                    m.proposed_company_name = m.matched_company_name
+                    m.matched_candidate_id = None
+                    m.matched_company_name = None
+                    m.match_evidence = "unverified_cross_domain_ownership_requires_review"
+                    m.proposal_status = "proposed"
 
             if len(matched_cids) == 1:
                 cid = list(matched_cids)[0]
@@ -2678,8 +2797,9 @@ class HistoricalImporter:
                             from_address, to_address, recipient_emails_json, cc, bcc,
                             sent_date, sent_time, subject, email_body, body_truncated,
                             gmail_link, source_file, source_sheet, matched_candidate_id,
-                            matched_company_name, reconciliation_status, imported_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            matched_company_name, reconciliation_status, match_evidence,
+                            proposed_candidate_id, proposed_company_name, proposal_status, imported_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             m.message_id,
@@ -2702,6 +2822,10 @@ class HistoricalImporter:
                             m.matched_candidate_id,
                             m.matched_company_name,
                             m.reconciliation_status,
+                            getattr(m, "match_evidence", None),
+                            getattr(m, "proposed_candidate_id", None),
+                            getattr(m, "proposed_company_name", None),
+                            getattr(m, "proposal_status", None),
                             now_iso,
                         ),
                     )
@@ -2838,6 +2962,10 @@ class HistoricalImporter:
                     "matched_candidate_id": r["matched_candidate_id"],
                     "matched_company_name": r["matched_company_name"],
                     "reconciliation_status": r["reconciliation_status"],
+                    "match_evidence": r["match_evidence"] if "match_evidence" in r.keys() else None,
+                    "proposed_candidate_id": r["proposed_candidate_id"] if "proposed_candidate_id" in r.keys() else None,
+                    "proposed_company_name": r["proposed_company_name"] if "proposed_company_name" in r.keys() else None,
+                    "proposal_status": r["proposal_status"] if "proposal_status" in r.keys() else None,
                     "imported_at": r["imported_at"],
                 })
             return results
@@ -2858,6 +2986,183 @@ class HistoricalImporter:
                 "unmatched": unmatched,
                 "unique_threads": unique_threads,
                 "unique_messages": unique_messages,
+            }
+
+    def correct_sent_email_reconciliation(
+        self,
+        email_id: int,
+        action: str,  # 'reassign', 'unmatch', 'preserve'
+        new_candidate_id: Optional[str] = None,
+        reason: str = "",
+        acting_user: str = "admin",
+    ) -> Dict[str, Any]:
+        """
+        DATA-01: Idempotent and transactional operator reconciliation correction workflow.
+        Allows an authenticated ADMIN to reassign a historical email to another candidate,
+        mark it as unmatched, or explicitly preserve an existing match with audited reason.
+        Updates surviving CandidateCompany outreach statuses and records an audit log.
+        """
+        import uuid
+        if not reason or not reason.strip():
+            raise ValueError("Audited rationale is required for reconciliation correction.")
+
+        clean_reason = reason.strip()
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        with self.store._get_connection() as conn:
+            # Check existing message
+            row = conn.execute("SELECT * FROM historical_sent_emails WHERE id = ?", (email_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Historical sent email with ID {email_id} not found.")
+
+            prev_cid = row["matched_candidate_id"]
+            prev_name = row["matched_company_name"]
+            msg_id = row["message_id"]
+
+            new_cid = None
+            new_name = None
+
+            if action == "reassign":
+                if not new_candidate_id:
+                    raise ValueError("Target candidate_id is required for reassignment.")
+                cand_row = conn.execute("SELECT candidate_id, company_name FROM candidate_companies WHERE candidate_id = ?", (new_candidate_id,)).fetchone()
+                if not cand_row:
+                    raise ValueError(f"Target candidate {new_candidate_id} not found.")
+                new_cid = str(cand_row[0])
+                new_name = str(cand_row[1] or "")
+                new_status = "matched"
+                new_evidence = f"reassigned_by_operator:{acting_user}"
+            elif action == "unmatch":
+                new_cid = None
+                new_name = None
+                new_status = "unmatched"
+                new_evidence = f"unmatched_by_operator:{acting_user}"
+            elif action == "preserve":
+                new_cid = prev_cid
+                new_name = prev_name
+                new_status = "matched"
+                new_evidence = f"preserved_by_operator:{acting_user}"
+            else:
+                raise ValueError(f"Unsupported correction action '{action}'. Must be 'reassign', 'unmatch', or 'preserve'.")
+
+            # 1. Update historical_sent_emails record
+            conn.execute(
+                """
+                UPDATE historical_sent_emails
+                SET matched_candidate_id = ?,
+                    matched_company_name = ?,
+                    reconciliation_status = ?,
+                    match_evidence = ?,
+                    proposed_candidate_id = NULL,
+                    proposed_company_name = NULL,
+                    proposal_status = 'approved'
+                WHERE id = ?
+                """,
+                (new_cid, new_name, new_status, new_evidence, email_id),
+            )
+
+            # 2. Record audit log in historical_reconciliation_corrections
+            corr_id = f"corr_{uuid.uuid4().hex[:16]}"
+            conn.execute(
+                """
+                INSERT INTO historical_reconciliation_corrections (
+                    correction_id, email_id, message_id, action,
+                    previous_candidate_id, previous_company_name,
+                    new_candidate_id, new_company_name,
+                    corrected_by, corrected_at, reason, evidence
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    corr_id, email_id, msg_id, action,
+                    prev_cid, prev_name, new_cid, new_name,
+                    acting_user, now_iso, clean_reason, new_evidence,
+                ),
+            )
+
+            # 3. Clean up / transfer outreach event if moving away from prev_cid
+            if prev_cid and prev_cid != new_cid:
+                # Remove or transfer the gmail outreach event for this message
+                ev_to_remove = conn.execute(
+                    "SELECT event_id, contacted_at, contact_email FROM historical_outreach_events WHERE candidate_id = ? AND (raw_row_hash LIKE ? OR notes LIKE ?)",
+                    (prev_cid, f"%{msg_id}%", f"%{msg_id}%"),
+                ).fetchall()
+                for er in ev_to_remove:
+                    conn.execute("DELETE FROM historical_outreach_events WHERE event_id = ?", (er["event_id"],))
+
+                # Recalculate prior contact status for prev_cid
+                surviving_events = conn.execute(
+                    "SELECT COUNT(*) FROM historical_outreach_events WHERE candidate_id = ?",
+                    (prev_cid,),
+                ).fetchone()[0]
+                has_manual_table = bool(conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='manual_outreach_log'").fetchone())
+                if has_manual_table:
+                    surviving_manual = conn.execute(
+                        "SELECT COUNT(*) FROM manual_outreach_log WHERE candidate_id = ? AND (is_voided IS NULL OR is_voided = 0)",
+                        (prev_cid,),
+                    ).fetchone()[0]
+                else:
+                    surviving_manual = 0
+                surviving_gmail = conn.execute(
+                    "SELECT COUNT(*) FROM historical_sent_emails WHERE matched_candidate_id = ? AND reconciliation_status = 'matched'",
+                    (prev_cid,),
+                ).fetchone()[0]
+
+                # If no surviving outreach events at all, restore uncontacted status
+                # (Safety Guard: do not enable cold outreach if company is suppressed or in known state)
+                if surviving_events == 0 and surviving_manual == 0 and surviving_gmail == 0:
+                    cand = conn.execute("SELECT suppressed FROM candidate_companies WHERE candidate_id = ?", (prev_cid,)).fetchone()
+                    is_supp = bool(cand[0]) if cand else False
+                    conn.execute(
+                        """
+                        UPDATE candidate_companies
+                        SET historical_contact_status = 'uncontacted',
+                            cold_outreach_allowed = CASE WHEN ? = 1 THEN 0 ELSE 1 END,
+                            last_contacted_at = NULL
+                        WHERE candidate_id = ?
+                        """,
+                        (1 if is_supp else 0, prev_cid),
+                    )
+
+            # 4. If reassigned to new_cid, create outreach event on new_cid
+            if new_cid and new_cid != prev_cid:
+                raw_hash = f"gmail:{row['sender_account']}:{msg_id}"
+                contact_email = (json.loads(row["recipient_emails_json"])[0] if row["recipient_emails_json"] else row["to_address"]).strip().lower()
+                gmail_note = f"Gmail message {msg_id} (Thread {row['thread_id']}) | Subject: {row['subject'] or 'No Subject'} [Reassigned by {acting_user}]"
+
+                self.store.record_historical_outreach(
+                    candidate_id=new_cid,
+                    source_ref=f"gmail:{row['sender_account']}",
+                    contact_name=row["to_address"],
+                    contact_email=contact_email,
+                    contacted_at=row["sent_date"],
+                    channel="gmail_sent",
+                    reply_status="contacted",
+                    notes=gmail_note,
+                    raw_row_hash=raw_hash,
+                )
+                conn.execute(
+                    """
+                    UPDATE candidate_companies
+                    SET cold_outreach_allowed = 0,
+                        historical_contact_status = CASE
+                            WHEN historical_contact_status IN ('replied', 'converted', 'dnc') THEN historical_contact_status
+                            ELSE 'contacted'
+                        END,
+                        last_contacted_at = COALESCE(last_contacted_at, ?)
+                    WHERE candidate_id = ?
+                    """,
+                    (row["sent_date"], new_cid),
+                )
+
+            return {
+                "success": True,
+                "correction_id": corr_id,
+                "email_id": email_id,
+                "message_id": msg_id,
+                "action": action,
+                "previous_candidate_id": prev_cid,
+                "new_candidate_id": new_cid,
+                "corrected_by": acting_user,
             }
 
     def reconcile_meeting_activities(

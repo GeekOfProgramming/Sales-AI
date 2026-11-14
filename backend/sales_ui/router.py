@@ -8826,8 +8826,61 @@ async def get_historical_email_detail(email_id: int):
             "matched_candidate_id": row["matched_candidate_id"],
             "matched_company_name": row["matched_company_name"],
             "reconciliation_status": row["reconciliation_status"],
+            "match_evidence": row["match_evidence"] if "match_evidence" in row.keys() else None,
+            "proposed_candidate_id": row["proposed_candidate_id"] if "proposed_candidate_id" in row.keys() else None,
+            "proposed_company_name": row["proposed_company_name"] if "proposed_company_name" in row.keys() else None,
+            "proposal_status": row["proposal_status"] if "proposal_status" in row.keys() else None,
             "imported_at": row["imported_at"],
         })
+
+
+@router.post("/historical-emails/{email_id}/correct")
+async def correct_historical_email_reconciliation_endpoint(
+    request: Request,
+    email_id: int,
+    action: str = Form(...),  # 'reassign', 'unmatch', 'preserve'
+    new_candidate_id: Optional[str] = Form(None),
+    reason: str = Form(...),
+    return_to: Optional[str] = Form(None),
+    admin: OperatorUser = Depends(require_admin_operator),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    DATA-01: Admin operator reconciliation correction endpoint.
+    Restricted to authenticated ADMIN operators (SEC-01).
+    Supports reassign, unmatch, and preserve actions with an audited rationale.
+    """
+    if not reason or not reason.strip():
+        target_url = return_to or f"/sales/sent?error={quote('A non-empty audited reason is required for reconciliation correction.')}"
+        return RedirectResponse(target_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    clean_action = action.strip().lower()
+    if clean_action not in ("reassign", "unmatch", "preserve"):
+        target_url = return_to or f"/sales/sent?error={quote('Invalid reconciliation action specified.')}"
+        return RedirectResponse(target_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    clean_new_cid = new_candidate_id.strip() if new_candidate_id else None
+
+    svcs = get_console_services()
+    importer = HistoricalImporter(store=svcs["cand_store"])
+
+    try:
+        res = importer.correct_sent_email_reconciliation(
+            email_id=email_id,
+            action=clean_action,
+            new_candidate_id=clean_new_cid,
+            reason=reason.strip(),
+            acting_user=admin.username,
+        )
+        success_msg = f"Reconciliation updated successfully: action '{clean_action}' recorded by {admin.username}."
+        target_url = return_to or "/sales/sent"
+        sep = "&" if "?" in target_url else "?"
+        return RedirectResponse(f"{target_url}{sep}message={quote(success_msg)}", status_code=status.HTTP_303_SEE_OTHER)
+    except Exception as exc:
+        logger.error(f"Failed reconciliation correction for email {email_id}: {exc}")
+        target_url = return_to or "/sales/sent"
+        sep = "&" if "?" in target_url else "?"
+        return RedirectResponse(f"{target_url}{sep}error={quote(str(exc))}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------
