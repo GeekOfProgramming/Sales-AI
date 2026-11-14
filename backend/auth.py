@@ -13,11 +13,13 @@ from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Security configuration
-SECRET_KEY = os.getenv("PYBIM_SECRET_KEY", "pybim-enterprise-secret-key-2026-offline-guard")
+# In production, PYBIM_SECRET_KEY should be set explicitly. If absent, generate a random ephemeral key.
+# For backward-compatible tests, honor PYBIM_SECRET_KEY or fallback to a secured runtime secret.
+SECRET_KEY = os.getenv("PYBIM_SECRET_KEY") or secrets.token_hex(32)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("PYBIM_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 Hours
 
-# Default Admin Credentials (Configurable via Environment Variables)
+# Configurable Admin Credentials (Environment Variable Driven)
 ADMIN_USERNAME = os.getenv("PYBIM_ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.getenv("PYBIM_ADMIN_PASSWORD", "pybim-admin2026")
 
@@ -52,15 +54,30 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-# Generate pre-hashed admin password at startup
-STORED_ADMIN_HASH = hash_password(ADMIN_PASSWORD)
-
-
 def authenticate_admin(username: str, password: str) -> bool:
     """Check username and verify password for administrative access."""
-    if username != ADMIN_USERNAME:
-        return False
-    return verify_password(password, STORED_ADMIN_HASH)
+    # 1. First check database-backed operator users (SEC-01)
+    try:
+        from backend.operator_auth import get_auth_service
+        svc = get_auth_service()
+        # Only if database has configured users
+        if svc.get_user_count() > 0:
+            user = svc.authenticate_user(username, password)
+            if user and user.is_admin:
+                return True
+            # If database users exist, do not fall back to default password
+            if not os.getenv("PYBIM_ALLOW_LEGACY_ADMIN") and not os.getenv("PYBIM_ADMIN_PASSWORD"):
+                return False
+    except Exception:
+        pass
+
+    # 2. Check environment or legacy test fallback
+    env_user = os.getenv("PYBIM_ADMIN_USER", ADMIN_USERNAME)
+    env_pass = os.getenv("PYBIM_ADMIN_PASSWORD", ADMIN_PASSWORD)
+    if env_user and env_pass and username == env_user:
+        return verify_password(password, hash_password(env_pass))
+
+    return False
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

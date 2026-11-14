@@ -38,6 +38,14 @@ from fastapi import APIRouter, Request, Form, Query, HTTPException, status, Depe
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response, FileResponse
 from fastapi.templating import Jinja2Templates
 
+from backend.operator_auth import (
+    OperatorUser,
+    get_auth_service,
+    require_authenticated_operator,
+    require_admin_operator,
+    SESSION_COOKIE_NAME,
+    get_client_ip,
+)
 from backend.sales_ui.view_models import (
     DashboardSummary,
     CompanyTimelineEvent,
@@ -55,8 +63,6 @@ from backend.sales_ui.view_models import (
 )
 from backend.sales_ui.dashboard_service import DashboardService
 from backend.sales_ui.timeline_service import TimelineService
-
-# Authoritative Domain Services from Phase 9 & Phase 10
 from sales_engine.candidates.candidate_store import CandidateStore, canonicalize_domain, normalize_company_name
 from sales_engine.leads.register_models import LeadRegisterRecord, FieldReviewRecord
 from sales_engine.leads.register_store import LeadRegisterStore, compute_field_checksum
@@ -606,6 +612,134 @@ async def validate_csrf(request: Request):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
 
 
+# ==============================================================================
+# SEC-01 Authentication Routes (/sales/login, /sales/logout)
+# ==============================================================================
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, next: Optional[str] = "/sales/dashboard", error: Optional[str] = None):
+    """Renders operator login page. If already authenticated, redirects to next."""
+    auth_svc = get_auth_service()
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token and auth_svc.validate_session(token):
+        clean_next = next if next and next.startswith("/sales") else "/sales/dashboard"
+        return RedirectResponse(url=clean_next, status_code=status.HTTP_303_SEE_OTHER)
+
+    csrf_token = get_or_create_csrf_token(request)
+    resp = templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={
+            "request": request,
+            "csrf_token": csrf_token,
+            "next_url": next or "/sales/dashboard",
+            "error": error,
+        },
+    )
+    resp.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=True, samesite="lax")
+    return resp
+
+
+@router.post("/login")
+async def login_action(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: Optional[str] = Form("/sales/dashboard"),
+    csrf: None = Depends(validate_csrf),
+):
+    """Processes operator credentials, sets session cookie on success."""
+    auth_svc = get_auth_service()
+    client_ip = get_client_ip(request)
+
+    try:
+        user = auth_svc.authenticate_user(username=username, password=password, client_ip=client_ip)
+    except HTTPException as he:
+        # Rate limiting or security exception
+        csrf_token = get_or_create_csrf_token(request)
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "request": request,
+                "csrf_token": csrf_token,
+                "next_url": next or "/sales/dashboard",
+                "error": he.detail,
+            },
+            status_code=he.status_code,
+        )
+
+    if not user:
+        csrf_token = get_or_create_csrf_token(request)
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "request": request,
+                "csrf_token": csrf_token,
+                "next_url": next or "/sales/dashboard",
+                "error": "Invalid username or password.",
+            },
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    # Issue session
+    user_agent = request.headers.get("user-agent", "")[:250]
+    raw_token = auth_svc.create_session(user_id=user.user_id, client_ip=client_ip, user_agent=user_agent)
+
+    clean_next = next if next and next.startswith("/sales") and not next.startswith("/sales/login") else "/sales/dashboard"
+    redirect_resp = RedirectResponse(url=clean_next, status_code=status.HTTP_303_SEE_OTHER)
+
+    is_https = request.url.scheme == "https"
+    redirect_resp.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=raw_token,
+        httponly=True,
+        samesite="lax",
+        secure=is_https,
+        path="/",
+        max_age=24 * 3600,
+    )
+    return redirect_resp
+
+
+@router.post("/logout")
+async def logout_action(
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+):
+    """Revokes session and removes cookie."""
+    auth_svc = get_auth_service()
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token:
+        auth_svc.revoke_session(token)
+
+    redirect_resp = RedirectResponse(url="/sales/login", status_code=status.HTTP_303_SEE_OTHER)
+    redirect_resp.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return redirect_resp
+
+
+@router.get("/users")
+async def list_users_view(
+    request: Request,
+    admin: OperatorUser = Depends(require_admin_operator),
+):
+    """
+    SEC-01: Admin-only operator account overview.
+    Displays configured operator accounts and role status.
+    """
+    auth_svc = get_auth_service()
+    users = auth_svc.list_users()
+    return render_console_template(
+        request,
+        "users.html",
+        {
+            "users": users,
+            "active_tab": "users",
+        },
+    )
+
+
 def _get_navigation_badge_counts() -> Dict[str, int]:
     """
     Computes real pending work counts for top-level navigation badges:
@@ -666,6 +800,8 @@ def render_console_template(request: Request, name: str, context: Dict[str, Any]
     """Renders Jinja2 template ensuring CSRF token is provided in context and cookie."""
     csrf_token = get_or_create_csrf_token(request)
     context["csrf_token"] = csrf_token
+    if "current_user" not in context:
+        context["current_user"] = getattr(request.state, "current_user", None)
     if "nav_badges" not in context:
         # Optimization: Reuse already available authoritative lifecycle queue counts or summary if present in context
         nav_counts = None
@@ -6043,6 +6179,7 @@ async def save_candidate_research_action(
 
 @router.post("/candidates/{candidate_id}/research/finalize")
 async def finalize_candidate_research_action(
+    request: Request,
     candidate_id: str,
     csrf: None = Depends(validate_csrf),
 ):
@@ -6051,6 +6188,8 @@ async def finalize_candidate_research_action(
     Performs server-side validation against all minimum criteria before promoting
     the record to OPERATOR_REVIEWED and achieving 'Research Ready'.
     """
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "operator"
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -6101,6 +6240,8 @@ async def finalize_candidate_research_action(
     # Update candidate metadata & lifecycle status:
     # Ensure finalized candidate appears in Qualified Leads if suitable (not rejected/suppressed/watchlist)
     cand.last_researched_at = datetime.now(timezone.utc).isoformat()
+    cand.manual_reviewed_by = acting_user
+    cand.manual_reviewed_at = datetime.now(timezone.utc).isoformat()
     raw_outcome = getattr(cand, "qualification_outcome", None)
     if hasattr(raw_outcome, "value"):
         raw_outcome = raw_outcome.value
@@ -6119,6 +6260,7 @@ async def finalize_candidate_research_action(
 
 @router.post("/candidates/{candidate_id}/verify-field")
 async def verify_candidate_field_action(
+    request: Request,
     candidate_id: str,
     field_name: str = Form(...),
     verified_value: str = Form(...),
@@ -6256,8 +6398,11 @@ async def verify_candidate_field_action(
 
     latest_snap = snap_store.get_latest_snapshot(candidate_id)
     chk = compute_field_checksum(val)
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "operator"
+    default_verify_note = f"Independently verified by {acting_user} via {src} ({source_class_str})"
     note_text = operator_note_str.strip() if operator_note_str and operator_note_str.strip() else (
-        f"Independently verified via {src} ({source_class_str})" if is_verify else "Manual draft saved by operator"
+        default_verify_note if is_verify else f"Manual draft saved by {acting_user}"
     )
 
     reviews_to_save: List[FieldReviewRecord] = []
@@ -6419,6 +6564,7 @@ async def suppress_candidate_action(
 
 @router.post("/candidates/{candidate_id}/review")
 async def review_candidate_action(
+    request: Request,
     candidate_id: str,
     decision: str = Form(...),
     notes: Optional[str] = Form(None),
@@ -6428,6 +6574,8 @@ async def review_candidate_action(
     Operator manual review decision: approve, reject, duplicate, needs_research.
     Preserves prior outreach history, meeting status, and email dates.
     """
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "operator"
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -6438,7 +6586,7 @@ async def review_candidate_action(
     note_text = f"Manual Operator Review ({decision_clean}): {notes.strip()}" if notes and notes.strip() else f"Manual Operator Review: {decision_clean}"
 
     cand.manual_reviewed_at = now_iso
-    cand.manual_reviewed_by = "operator"
+    cand.manual_reviewed_by = acting_user
     cand.manual_review_notes = notes.strip() if notes and notes.strip() else None
 
     if decision_clean in ("approve", "approve_outreach", "approve_for_outreach"):
@@ -6495,6 +6643,7 @@ async def review_candidate_action(
 
 @router.post("/candidates/{candidate_id}/lifecycle")
 async def candidate_lifecycle_action(
+    request: Request,
     candidate_id: str,
     action: str = Form(...),
     notes: Optional[str] = Form(None),
@@ -6506,6 +6655,8 @@ async def candidate_lifecycle_action(
     - 'needs_correction': Explicitly mark candidate as requiring operator correction.
     - 'finalize_historical': Reconcile and finalize historical communication, archiving from Active Work.
     """
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "operator"
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -6516,7 +6667,7 @@ async def candidate_lifecycle_action(
     note_text = f"Lifecycle Action ({action_clean}): {notes.strip()}" if notes and notes.strip() else f"Lifecycle Action: {action_clean}"
 
     cand.manual_reviewed_at = now_iso
-    cand.manual_reviewed_by = "operator"
+    cand.manual_reviewed_by = acting_user
     if notes and notes.strip():
         cand.manual_review_notes = notes.strip()
 
@@ -8204,6 +8355,7 @@ async def suppress_draft_recipient_action(
 
 @router.post("/drafts/{draft_id}/log-manual-send")
 async def log_manual_send_action(
+    request: Request,
     draft_id: str,
     channel: str = Form("email"),
     external_ref: Optional[str] = Form(None),
@@ -8214,6 +8366,8 @@ async def log_manual_send_action(
 ):
     """Records an explicit operator manual dispatch event for an existing draft with strict safety and duplicate guards.
     Distinguishes newly initiated outreach from retrospective logging of completed historical events."""
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "local_operator"
     svcs = get_console_services()
     rev_store = svcs["rev_store"]
     draft = rev_store.get_draft(draft_id)
@@ -8277,7 +8431,7 @@ async def log_manual_send_action(
         contact_id=draft.contact_id,
         recipient_name=draft.recipient_name,
         channel=clean_channel,
-        logged_by="local_operator",
+        logged_by=acting_user,
         external_ref=external_ref,
         operator_notes=operator_notes,
         confirmed_sent_externally=True,
@@ -8323,6 +8477,7 @@ async def log_manual_send_action(
 @router.post("/candidates/{candidate_id}/mark-sent")
 @router.post("/leads/{candidate_id}/mark-sent")
 async def mark_candidate_sent_action(
+    request: Request,
     candidate_id: str,
     sender_account: str = Form(...),
     recipient_email: str = Form(...),
@@ -8338,6 +8493,8 @@ async def mark_candidate_sent_action(
     FLOW-02: Operator manual sent confirmation without requiring a draft or SMTP configuration.
     Records confirmed Thunderbird outbound message with exact sender, recipient, and Europe/Rome timestamp.
     """
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "local_operator"
     svcs = get_console_services()
     cand = svcs["cand_store"].get_by_id(candidate_id)
     if not cand:
@@ -8397,6 +8554,7 @@ async def mark_candidate_sent_action(
         recipient_name=getattr(cand, "company_name", None) or "Recipient",
         client_app="thunderbird",
         idempotency_token=idempotency_token,
+        logged_by=acting_user,
     )
 
     if log_res.get("duplicate"):
@@ -8425,6 +8583,7 @@ async def mark_candidate_sent_action(
 
 @router.post("/manual-sent/{log_id}/void")
 async def void_manual_sent_action(
+    request: Request,
     log_id: str,
     void_reason: str = Form(...),
     return_to: Optional[str] = Form(None),
@@ -8435,6 +8594,8 @@ async def void_manual_sent_action(
     Marks the manual dispatch record as voided with operator rationale.
     Never silently deletes sent history.
     """
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "local_operator"
     svcs = get_console_services()
     rev_store = svcs["rev_store"]
     clean_reason = void_reason.strip() if void_reason else ""
@@ -8448,7 +8609,7 @@ async def void_manual_sent_action(
     if not log_entry:
         raise HTTPException(status_code=404, detail="Manual outreach log not found")
 
-    rev_store.void_manual_outreach_log(log_id, void_reason=clean_reason)
+    rev_store.void_manual_outreach_log(log_id, void_reason=clean_reason, voided_by=acting_user)
     cand_id = log_entry["candidate_id"]
     cand = svcs["cand_store"].get_by_id(cand_id)
 

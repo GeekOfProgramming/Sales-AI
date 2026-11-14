@@ -22,7 +22,7 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
 from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 
 # Safe lazy import guards for heavy optional AI/scraping dependencies (ChromaDB, Scrapling, Ollama)
 try:
@@ -112,6 +112,62 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# SEC-01: Global Operator Authentication & Access Control Middleware
+@app.middleware("http")
+async def operator_security_middleware(request: Request, call_next):
+    from backend.operator_auth import (
+        get_auth_service,
+        SESSION_COOKIE_NAME,
+        get_current_user_optional,
+    )
+
+    path = request.url.path
+
+    # 1. Exempt public endpoints: login, logout, static files, health check, and legacy ingest/status
+    is_public = (
+        path in ("/health", "/sales/login", "/sales/logout")
+        or path.startswith("/static")
+        or path.startswith("/api/auth/login")
+        or path.startswith("/api/ingest")  # Knowledge queue submissions and public tracking
+    )
+
+    # 2. Check authentication if users exist in the database
+    auth_svc = get_auth_service()
+    user_count = auth_svc.get_user_count()
+
+    # If operator accounts have been set up, enforce authentication on all non-public routes
+    if user_count > 0 and not is_public:
+        user = await get_current_user_optional(request)
+        if not user:
+            # Check if this is a browser navigation to HTML view
+            accept = request.headers.get("accept", "").lower()
+            is_html_req = "text/html" in accept or path.startswith("/sales") and not path.startswith("/api/")
+            
+            if is_html_req and request.method == "GET":
+                next_url = path
+                if request.url.query:
+                    next_url += f"?{request.url.query}"
+                return RedirectResponse(
+                    url=f"/sales/login?next={next_url}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            
+            # API or non-GET requests receive 401 Unauthorized
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Authentication required. Please log in."},
+                headers={"WWW-Authenticate": "Cookie"},
+            )
+
+        # Attach authenticated user to request.state for downstream views & audits
+        request.state.current_user = user
+    else:
+        # If no accounts exist yet (initial setup mode), attempt session lookup without blocking
+        request.state.current_user = await get_current_user_optional(request)
+
+    response = await call_next(request)
+    return response
 
 static_path = Path(__file__).parent / "static"
 if static_path.exists():

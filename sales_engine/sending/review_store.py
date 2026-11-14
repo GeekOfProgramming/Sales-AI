@@ -798,6 +798,7 @@ class ReviewStore:
         contact_id: Optional[str] = None,
         client_app: str = "thunderbird",
         idempotency_token: Optional[str] = None,
+        logged_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         FLOW-02: Record an auditable operator-confirmed manual external email transmission
@@ -833,6 +834,7 @@ class ReviewStore:
             log_id = f"log_man_{uuid.uuid4().hex[:16]}"
             now = datetime.now(timezone.utc).isoformat()
             ext_ref = idempotency_token.strip() if idempotency_token and idempotency_token.strip() else f"{client_app}:{clean_sender}:{clean_email}:{sent_at}"
+            actor = logged_by.strip() if logged_by and logged_by.strip() else "local_operator"
 
             conn.execute(
                 """
@@ -843,14 +845,14 @@ class ReviewStore:
                     is_voided, imap_reconciliation_status
                 ) VALUES (
                     ?, ?, NULL, NULL, ?, ?, ?,
-                    ?, 'email', 'local_operator', ?, ?, 1,
+                    ?, 'email', ?, ?, ?, 1,
                     ?, ?, ?, 'operator_manual_confirmation', 'manually_confirmed', ?,
                     0, 'pending_sync'
                 )
                 """,
                 (
                     log_id, candidate_id, contact_id, clean_email, recipient_name,
-                    clean_subj, ext_ref, clean_notes,
+                    clean_subj, actor, ext_ref, clean_notes,
                     now, clean_sender, sent_at, client_app,
                 ),
             )
@@ -863,7 +865,7 @@ class ReviewStore:
                 "sent_at": sent_at,
                 "subject": clean_subj,
                 "channel": "email",
-                "logged_by": "local_operator",
+                "logged_by": actor,
                 "external_ref": ext_ref,
                 "operator_notes": clean_notes,
                 "confirmed_sent_externally": True,

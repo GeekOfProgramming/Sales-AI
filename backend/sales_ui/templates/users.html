@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}User Management — pyBIM Sales-AI{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-light"><i class="bi bi-people me-2 text-primary"></i>Operator Accounts</h1>
+            <p class="text-muted small mb-0">Authorized operators and roles (SEC-01). To create or update accounts, run <code>python scripts/setup_operators.py</code> on the host server.</p>
+        </div>
+        <span class="badge bg-primary px-3 py-2 text-uppercase fs-6">Admin Console</span>
+    </div>
+
+    <div class="card bg-dark border-secondary shadow-sm">
+        <div class="card-header bg-dark border-secondary py-3 d-flex justify-content-between align-items-center">
+            <h5 class="card-title text-light mb-0"><i class="bi bi-shield-lock me-2 text-warning"></i>Configured Operators</h5>
+            <span class="badge bg-secondary">{{ users|length }} active</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover table-striped mb-0 align-middle">
+                    <thead class="table-dark text-secondary small text-uppercase">
+                        <tr>
+                            <th class="ps-4">Username</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Created (UTC)</th>
+                            <th>Last Login (UTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td class="ps-4 fw-bold text-light">
+                                <i class="bi bi-person-circle me-2 text-secondary"></i>{{ u.username }}
+                                {% if current_user and current_user.username == u.username %}
+                                <span class="badge bg-info text-dark ms-2">You</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.role == 'admin' %}
+                                <span class="badge bg-danger text-uppercase px-2 py-1"><i class="bi bi-shield-fill-check me-1"></i>ADMIN</span>
+                                {% else %}
+                                <span class="badge bg-success text-uppercase px-2 py-1"><i class="bi bi-person-badge me-1"></i>OPERATOR</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if u.is_active %}
+                                <span class="badge bg-success-subtle text-success border border-success px-2 py-1">Active</span>
+                                {% else %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1">Disabled</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-secondary small">{{ u.created_at }}</td>
+                            <td class="text-secondary small">{{ u.last_login_at or 'Never' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer bg-dark border-secondary text-muted small py-3">
+            <i class="bi bi-info-circle me-1 text-info"></i>
+            User administration requires host-level shell access via <code>scripts/setup_operators.py</code> to ensure no unauthenticated web bootstrapping is permitted.
+        </div>
+    </div>
+</div>
+{% endblock %}
