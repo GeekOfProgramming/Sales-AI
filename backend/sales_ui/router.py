@@ -3104,26 +3104,50 @@ async def update_source_action(
 
 @router.post("/sources/manual-seed")
 async def manual_seed_action(
+    request: Request,
     company_name: str = Form(...),
     domain: Optional[str] = Form(None),
     country: Optional[str] = Form(None),
     source_url: Optional[str] = Form(None),
     csrf: None = Depends(validate_csrf),
 ):
+    clean_name = company_name.strip()
+    clean_domain = domain.strip().lower() if domain and domain.strip() else None
+    clean_country = country.strip() if country and country.strip() else None
+    clean_url = source_url.strip() if source_url and source_url.strip() else None
+
+    # Derive canonical domain from domain or source_url if not explicitly provided
+    if not clean_domain and clean_url:
+        parsed_d = canonicalize_domain(clean_url)
+        if parsed_d:
+            clean_domain = parsed_d
+
     svcs = get_console_services()
-    store = svcs["cand_store"]
-    cid = store._generate_candidate_id(domain, company_name, country)
-    cand = CandidateCompany(
-        candidate_id=cid,
-        name=company_name,
-        domain=domain,
-        country=country,
-        first_seen_at=datetime.now(timezone.utc).isoformat(),
-        discovery_status="new",
+    store: CandidateStore = svcs["cand_store"]
+
+    # Deduplicate via safe domain-first or name-based lookup (get_or_create_candidate)
+    # A repeated submission must NOT overwrite an existing researched, reviewed,
+    # or previously contacted candidate with an empty seed.
+    cand, is_new = store.get_or_create_candidate(
+        company_name=clean_name,
+        company_domain=clean_domain,
+        country=clean_country,
+        source_id=clean_url or "manual_seed",
     )
-    saved = store.save_candidate(cand)
-    msg = f"Candidate seed '{saved.name}' saved and enqueued for research."
-    return RedirectResponse(f"/sales/candidates/{saved.candidate_id}?message={msg}", status_code=status.HTTP_303_SEE_OTHER)
+
+    current_user = getattr(request.state, "current_user", None)
+    acting_user = current_user.username if current_user else "operator"
+
+    c_name = cand.company_name or clean_name
+    if is_new:
+        msg = f"Candidate seed '{c_name}' saved and enqueued for research by {acting_user}."
+    else:
+        msg = f"Candidate '{c_name}' already exists ({cand.candidate_id}). Existing research and outreach status preserved."
+
+    return RedirectResponse(
+        f"/sales/candidates/{cand.candidate_id}?message={quote(msg)}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 def evaluate_import_readiness(
