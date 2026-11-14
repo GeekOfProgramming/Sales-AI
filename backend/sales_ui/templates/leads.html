@@ -40,11 +40,19 @@
     <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_research_ready }}</span>
   </a>
 
-  <a href="/sales/leads?queue=draft_ready{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
-     class="btn btn-sm {% if selected_queue == 'draft_ready' %}btn-primary{% else %}btn-secondary{% endif %}" 
+  <a href="/sales/leads?queue=ready_to_email{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue in ('draft_ready', 'ready_to_email') %}btn-primary{% else %}btn-secondary{% endif %}" 
+     style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;"
+     title="Ready to Email — Eligible for Manual Draft">
+    <span>Ready to Email</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_ready_to_email or count_draft_ready }}</span>
+  </a>
+
+  <a href="/sales/leads?queue=sent_manually{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
+     class="btn btn-sm {% if selected_queue == 'sent_manually' %}btn-primary{% else %}btn-secondary{% endif %}" 
      style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; padding: 0.4rem 0.75rem;">
-    <span>Ready for Manual Draft</span>
-    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_draft_ready }}</span>
+    <span>Sent Manually</span>
+    <span class="badge" style="background: rgba(0,0,0,0.15); font-size: 0.75rem;">{{ count_sent_manually or 0 }}</span>
   </a>
 
   <a href="/sales/leads?queue=verification_required{% if query %}&q={{ query }}{% endif %}{% if selected_country %}&country={{ selected_country }}{% endif %}{% if selected_city %}&city={{ selected_city }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_tier %}&tier={{ selected_tier }}{% endif %}&page_size={{ page_size }}" 
@@ -90,9 +98,9 @@
   </div>
 
   <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #10b981;">
-    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Ready for Manual Draft</div>
-    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #10b981;">{{ count_draft_ready }}</div>
-    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Eligible with verified recipient</div>
+    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Ready to Email</div>
+    <div style="font-size: 1.85rem; font-weight: 700; margin-top: 0.25rem; color: #10b981;">{{ count_ready_to_email or count_draft_ready }}</div>
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Eligible for Manual Draft &amp; Thunderbird send</div>
   </div>
 
   <div class="card" style="margin-bottom: 0; padding: 1rem 1.25rem; border-top: 3px solid #f59e0b;">
@@ -336,6 +344,11 @@
             <span class="badge {{ l.readiness_badge }}" title="{{ l.readiness_title }}">
               {{ l.readiness_label }}
             </span>
+            {% if l.verified_recipient_email %}
+              <div style="font-size: 0.72rem; color: #059669; margin-top: 3px; word-break: break-all;">
+                ✉️ <code>{{ l.verified_recipient_email }}</code>
+              </div>
+            {% endif %}
           </td>
 
           <!-- Actions & Phase 5 AI Handoff -->
@@ -371,11 +384,12 @@
                 <a href="/sales/candidates/{{ l.candidate_id }}/research" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Review Company Research and 13 fields">Research</a>
                 <a href="/sales/candidates/{{ l.candidate_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Open Company Workspace">Workspace</a>
 
-                {% if l.effective_readiness == 'draft_ready' %}
-                  <a href="/sales/candidates/{{ l.candidate_id }}#manual-draft" class="btn btn-success btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background-color: #10b981; color: white; border: none;" title="Prepare Offline Manual Draft in Composer">Draft Composer</a>
+                {% if l.effective_readiness in ('draft_ready', 'ready_to_email') %}
+                  <button type="button" class="btn btn-primary btn-sm" onclick="openMarkSentModal('{{ l.candidate_id }}', '{{ l.company_name | escape }}', '{{ l.verified_recipient_email }}')" style="font-size: 0.72rem; padding: 0.25rem 0.5rem; background-color: #059669; color: white; border: none; font-weight: 700;" title="Confirm manual email sent in Thunderbird">✉️ Mark as Sent</button>
+                  <a href="/sales/candidates/{{ l.candidate_id }}#manual-draft" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem;" title="Optional: Prepare Draft in Composer">Draft Composer</a>
                 {% elif l.effective_readiness == 'verification_required' %}
                   <a href="/sales/candidates/{{ l.candidate_id }}#contacts" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #f59e0b;" title="Verify Contact Evidence">Verify Contact</a>
-                {% elif l.is_previously_contacted %}
+                {% elif l.has_manual_sent or l.is_previously_contacted %}
                   <a href="/sales/sent" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; color: #6366f1;" title="View in Sent &amp; History">Sent History</a>
                 {% endif %}
               </div>
@@ -455,4 +469,6 @@ function fallbackCopy(text, successMsg) {
   document.body.removeChild(tempTextarea);
 }
 </script>
+
+{% include "mark_sent_modal.html" %}
 {% endblock %}

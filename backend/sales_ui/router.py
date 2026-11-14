@@ -1368,6 +1368,36 @@ def generate_ai_brief_text(
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# FLOW-02: Manual Dispatch Metadata & Europe/Rome Time Helpers
+# ---------------------------------------------------------------------------
+AUTHORIZED_MANUAL_SENDER_ACCOUNTS = [
+    "info@pybim.com",
+    "info@pybim.it",
+    "careers@pybim.com",
+    "support@pybim.com",
+    "hamed.sharifi@pybim.it",
+    "hamid.lotfalian@pybim.it",
+]
+
+def get_europe_rome_now() -> datetime:
+    """Returns current date/time in Europe/Rome timezone."""
+    try:
+        import dateutil.tz
+        tz = dateutil.tz.gettz("Europe/Rome")
+        if tz:
+            return datetime.now(tz)
+    except Exception:
+        pass
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Europe/Rome"))
+    except Exception:
+        pass
+    from datetime import timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=1)))
+
+
 def evaluate_candidate_readiness(
     cand: Any,
     cand_store: Any,
@@ -1637,12 +1667,30 @@ def evaluate_candidate_readiness(
             "reason": "No recipient contact on file",
         }
 
-    # 6. Determine effective readiness with strict priority:
-    # 1. Suppressed / DNC (authoritative suppression overrides all positive states)
-    # 2. Prior Contact / Active Conversation
-    # 3. Ineligible (policy, cold_outreach_allowed=False, or empty candidate_id)
-    # 4. Contact Verification Required (qualified, clear, but missing verified recipient)
-    # 5. Eligible for Manual Draft / Ready for Manual Draft (qualified, clear, explicitly verified recipient available)
+    # FLOW-02 Authoritative validation:
+    # A company becomes Ready to Email only when:
+    # 1. Research finalization passes authoritative validation (13-field review: OPERATOR_REVIEWED or VERIFIED)
+    # 2. Operator explicitly approves suitability ("Approve for Outreach")
+    # 3. Recipient email has verified evidence (has_usable_recipient)
+    # 4. Not suppressed / DNC, not previously contacted, outreach eligible
+    #
+    # Unresearched candidate cannot become Ready to Email merely by clicking Approve Lead.
+    # Existing verified records are not downgraded.
+    is_actively_researching = bool(
+        (company_lead_record is None and (
+            str(getattr(cand, "discovery_status", "")).lower() in ("researching", "new")
+            or str(getattr(cand, "qualification_outcome", "")).lower() in ("research_more", "new")
+            or getattr(cand, "manual_review_decision", None) == "NEEDS_RESEARCH"
+            or getattr(cand, "research_status", None) in ("unresearched", "in_progress", "pending", None)
+        ))
+        or (company_lead_record and company_lead_record.verification_status not in ("OPERATOR_REVIEWED", "VERIFIED"))
+    )
+
+    is_suitability_approved = bool(
+        getattr(cand, "manual_review_decision", None) in ("APPROVED", "OPERATOR_APPROVED")
+        or (company_lead_record and company_lead_record.verification_status in ("OPERATOR_REVIEWED", "VERIFIED") and getattr(cand, "manual_review_decision", None) not in ("REJECTED", "NEEDS_RESEARCH"))
+    )
+
     if is_supp:
         effective_readiness = "suppressed"
         readiness_label = "Suppressed"
@@ -1658,16 +1706,26 @@ def evaluate_candidate_readiness(
         readiness_label = "Ineligible"
         readiness_badge = "badge-muted"
         readiness_title = "Candidate does not meet outreach eligibility criteria or has invalid ID"
+    elif is_actively_researching:
+        effective_readiness = "needs_research"
+        readiness_label = "Needs Research"
+        readiness_badge = "badge-secondary"
+        readiness_title = "Research must be completed and finalized before company can become Ready to Email"
+    elif not is_suitability_approved:
+        effective_readiness = "needs_approval"
+        readiness_label = "Needs Approval"
+        readiness_badge = "badge-warning"
+        readiness_title = "13-Field research is finalized, but operator suitability approval (Approve for Outreach) is required"
     elif not has_usable_recipient:
         effective_readiness = "verification_required"
         readiness_label = "Contact Verification Required"
         readiness_badge = "badge-warning"
-        readiness_title = "Company is qualified, but no verified contact is on file. Lead Register documentation alone requires human verification."
+        readiness_title = "Company is approved and research is finalized, but verified recipient is required"
     else:
         effective_readiness = "draft_ready"
-        readiness_label = "Eligible for Manual Draft"
+        readiness_label = "Ready to Email"
         readiness_badge = "badge-success"
-        readiness_title = "Qualified and verified recipient available for manual draft preparation"
+        readiness_title = "Ready to Email — Eligible for Manual Draft with verified recipient"
 
     can_generate_draft = (effective_readiness == "draft_ready")
 
@@ -1682,6 +1740,7 @@ def evaluate_candidate_readiness(
         "has_verified_recipient": has_usable_recipient,
         "can_generate_draft": can_generate_draft,
         "usable_recipients": usable_recipients,
+        "verified_recipient_email": (usable_recipients[0].get("work_email") or usable_recipients[0].get("email")) if usable_recipients else None,
         "all_workspace_recipients": all_workspace_recipients,
         "recipient_readiness": recipient_readiness,
     }
@@ -5116,6 +5175,9 @@ async def candidate_detail_view(
             "hist_sent_emails": hist_sent_emails,
             "hist_meetings": hist_meetings,
             "email_send_enabled": is_email_send_enabled(),
+            "authorized_sender_accounts": AUTHORIZED_MANUAL_SENDER_ACCOUNTS,
+            "default_verified_recipient": (readiness_info.get("usable_recipients") or [{}])[0].get("work_email") or "",
+            "current_rome_time": get_europe_rome_now().strftime("%Y-%m-%d %H:%M:%S"),
             "company_outreach_eligible": company_outreach_eligible,
             "has_verified_or_documented_recipient": has_verified_recipient,
             "has_verified_recipient": has_verified_recipient,
@@ -6379,17 +6441,17 @@ async def review_candidate_action(
     cand.manual_reviewed_by = "operator"
     cand.manual_review_notes = notes.strip() if notes and notes.strip() else None
 
-    if decision_clean == "approve":
+    if decision_clean in ("approve", "approve_outreach", "approve_for_outreach"):
         cand.manual_review_decision = "APPROVED"
         cand.qualification_outcome = QualificationOutcome.qualified_for_enrichment
         cand.discovery_status = DiscoveryStatus.qualified
-        cand.fit_assessment = "high"
+        # NOTE (FLOW-02): Do not automatically set fit_assessment="high" merely because operator clicks Approve Lead
         # Only allow cold outreach if company was NOT previously contacted and NOT suppressed
         if not cand.previous_outreach_detected and cand.historical_contact_status in ("uncontacted", None, "") and not cand.suppressed:
             cand.cold_outreach_allowed = True
         else:
             cand.cold_outreach_allowed = False
-        msg = f"Candidate '{cand.name}' manually APPROVED as qualified lead."
+        msg = f"Candidate '{cand.name}' explicitly approved for outreach."
     elif decision_clean == "reject":
         cand.manual_review_decision = "REJECTED"
         cand.qualification_outcome = QualificationOutcome.reject
@@ -7277,6 +7339,7 @@ async def leads_view(
     prefetched_snapshots_by_cid = {}
     prefetched_analyses_by_cid = {}
     prefetched_history_cids = set()
+    prefetched_manual_sent_cids = set()
     prefetched_supp_domains = set()
     prefetched_supp_emails = set()
 
@@ -7338,6 +7401,12 @@ async def leads_view(
             prefetched_field_reviews_by_cid = reg_store.get_field_reviews_for_candidates(
                 all_candidate_ids, field_name="contact_email_addresses"
             )
+            # 6. FLOW-02 Confirmed manual sent logs batch
+            if _chk_table(conn, "manual_outreach_log"):
+                m_rows = conn.execute("SELECT DISTINCT candidate_id FROM manual_outreach_log WHERE (is_voided IS NULL OR is_voided = 0)").fetchall()
+                for mr in m_rows:
+                    if mr[0]:
+                        prefetched_manual_sent_cids.add(str(mr[0]))
     except Exception:
         prefetched_field_reviews_by_cid = {}
 
@@ -7480,6 +7549,10 @@ async def leads_view(
         else:
             copy_13_fields_label = "Copy 13 Fields (Unreviewed)"
 
+        usable_recs = readiness_info.get("usable_recipients") or []
+        verified_recip_email = usable_recs[0]["work_email"] if usable_recs else ""
+        has_manual_sent = (c.candidate_id in prefetched_manual_sent_cids)
+
         evaluated_leads.append({
             "lead_id": f"domain:{dom}" if dom else c.candidate_id,
             "company_name": clean_company_name,
@@ -7512,6 +7585,8 @@ async def leads_view(
             "is_suppressed": readiness_info["is_suppressed"],
             "can_generate_draft": readiness_info["can_generate_draft"],
             "has_verified_recipient": readiness_info["has_verified_recipient"],
+            "verified_recipient_email": verified_recip_email,
+            "has_manual_sent": has_manual_sent,
             "is_invalid_id": is_invalid_id,
             "candidate_id": c.candidate_id or "",
             "can_generate_cold_brief": can_generate_cold_brief,
@@ -7527,12 +7602,14 @@ async def leads_view(
             "copy_ai_brief_text": "",
         })
 
-    # Summary Queue Counts (8 clearly separated queues)
+    # Summary Queue Counts (FLOW-02: Clear operational CRM queues)
     total_qualified = len(evaluated_leads)
     count_needs_research = sum(1 for l in evaluated_leads if l["research_status"] == "unresearched")
-    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence"))
+    count_review_required = sum(1 for l in evaluated_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence") or l["effective_readiness"] == "needs_approval")
     count_research_ready = sum(1 for l in evaluated_leads if l["research_status"] == "research_ready")
-    count_draft_ready = sum(1 for l in evaluated_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"])
+    count_ready_to_email = sum(1 for l in evaluated_leads if l["effective_readiness"] in ("draft_ready", "ready_to_email") and not l["is_invalid_id"])
+    count_draft_ready = count_ready_to_email
+    count_sent_manually = sum(1 for l in evaluated_leads if l.get("has_manual_sent"))
     count_verification_required = sum(1 for l in evaluated_leads if l["effective_readiness"] == "verification_required")
     count_previously_contacted = sum(1 for l in evaluated_leads if l["effective_readiness"] == "prior_contact")
     count_suppressed_or_ineligible = sum(1 for l in evaluated_leads if l["effective_readiness"] in ("suppressed", "not_eligible"))
@@ -7543,17 +7620,19 @@ async def leads_view(
 
     if target_queue == "needs_research":
         filtered_leads = [l for l in filtered_leads if l["research_status"] == "unresearched"]
-    elif target_queue == "review_required":
-        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence")]
+    elif target_queue in ("needs_review", "review_required"):
+        filtered_leads = [l for l in filtered_leads if l["research_status"] in ("review_required", "partially_reviewed", "missing_evidence") or l["effective_readiness"] == "needs_approval"]
     elif target_queue == "research_ready":
         filtered_leads = [l for l in filtered_leads if l["research_status"] == "research_ready"]
-    elif target_queue == "draft_ready":
-        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "draft_ready" and not l["is_invalid_id"]]
+    elif target_queue in ("ready_to_email", "draft_ready"):
+        filtered_leads = [l for l in filtered_leads if l["effective_readiness"] in ("draft_ready", "ready_to_email") and not l["is_invalid_id"]]
+    elif target_queue == "sent_manually":
+        filtered_leads = [l for l in filtered_leads if l.get("has_manual_sent")]
     elif target_queue == "verification_required":
         filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "verification_required"]
     elif target_queue == "previously_contacted":
         filtered_leads = [l for l in filtered_leads if l["effective_readiness"] == "prior_contact"]
-    elif target_queue == "suppressed_or_ineligible":
+    elif target_queue in ("restricted_dnc", "suppressed_or_ineligible"):
         filtered_leads = [l for l in filtered_leads if l["effective_readiness"] in ("suppressed", "not_eligible")]
 
     # 1. Search Query
@@ -7703,11 +7782,15 @@ async def leads_view(
             "count_needs_research": count_needs_research,
             "count_review_required": count_review_required,
             "count_research_ready": count_research_ready,
+            "count_ready_to_email": count_ready_to_email,
             "count_draft_ready": count_draft_ready,
+            "count_sent_manually": count_sent_manually,
             "count_verification_required": count_verification_required,
             "count_prior_contact": count_previously_contacted,
             "count_previously_contacted": count_previously_contacted,
             "count_suppressed_or_ineligible": count_suppressed_or_ineligible,
+            "authorized_sender_accounts": AUTHORIZED_MANUAL_SENDER_ACCOUNTS,
+            "current_rome_time": get_europe_rome_now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_filtered": total_filtered,
             "page": page,
             "page_size": page_size,
@@ -8232,6 +8315,164 @@ async def log_manual_send_action(
         f"/sales/drafts/{draft_id}?message={urllib.parse.quote(msg)}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+# ---------------------------------------------------------------------------
+# FLOW-02: Manual Sent Confirmation Without Draft & Audited Correction
+# ---------------------------------------------------------------------------
+@router.post("/candidates/{candidate_id}/mark-sent")
+@router.post("/leads/{candidate_id}/mark-sent")
+async def mark_candidate_sent_action(
+    candidate_id: str,
+    sender_account: str = Form(...),
+    recipient_email: str = Form(...),
+    sent_at: Optional[str] = Form(None),
+    subject: Optional[str] = Form(None),
+    operator_notes: Optional[str] = Form(None),
+    confirm_thunderbird_sent: Optional[str] = Form(None),
+    idempotency_token: Optional[str] = Form(None),
+    return_to: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    FLOW-02: Operator manual sent confirmation without requiring a draft or SMTP configuration.
+    Records confirmed Thunderbird outbound message with exact sender, recipient, and Europe/Rome timestamp.
+    """
+    svcs = get_console_services()
+    cand = svcs["cand_store"].get_by_id(candidate_id)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    target_redirect = return_to if return_to and return_to.startswith("/sales/") else f"/sales/candidates/{candidate_id}?tab=outreach"
+
+    # 1. P0 Safety: Explicit confirmation of Thunderbird transmission required
+    if not confirm_thunderbird_sent or confirm_thunderbird_sent.strip().lower() not in ("1", "true", "yes", "on"):
+        err = "Explicit operator confirmation that the email was actually sent in Thunderbird is required."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # 2. Validate sender account is one of the 6 authorized pyBIM company accounts
+    clean_sender = sender_account.strip().lower() if sender_account else ""
+    if clean_sender not in AUTHORIZED_MANUAL_SENDER_ACCOUNTS:
+        err = f"Invalid sender account '{sender_account}'. Must be one of the authorized pyBIM company accounts: {', '.join(AUTHORIZED_MANUAL_SENDER_ACCOUNTS)}."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # 3. Validate recipient email syntax and suppression
+    clean_recipient = recipient_email.strip().lower() if recipient_email else ""
+    if not clean_recipient or not EMAIL_REGEX.match(clean_recipient):
+        err = f"Invalid recipient email format: '{recipient_email}'."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    cand_domain = getattr(cand, "company_domain", None) or getattr(cand, "domain", None)
+    if check_authoritative_suppression(svcs["suppression_svc"], email=clean_recipient, domain=cand_domain):
+        err = "Recipient email or company domain is suppressed (DNC). Manual dispatch is blocked."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    c_name = getattr(cand, "company_name", None) or getattr(cand, "name", "")
+    if svcs["exclusion_store"].is_company_excluded(candidate_id=candidate_id, company_domain=cand_domain, company_name=c_name):
+        err = "Company is on the Excluded Companies Registry. Manual dispatch is blocked."
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote(err)}", status_code=status.HTTP_303_SEE_OTHER)
+
+    # 4. Determine sent timestamp in Europe/Rome
+    clean_sent_at = sent_at.strip() if sent_at and sent_at.strip() else ""
+    if not clean_sent_at:
+        clean_sent_at = get_europe_rome_now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 5. Record manual dispatch event in review store (draft-less)
+    rev_store = svcs["rev_store"]
+    clean_subj = subject.strip() if subject and subject.strip() else f"Manual Outreach via Thunderbird ({clean_sender})"
+    clean_notes = operator_notes.strip() if operator_notes and operator_notes.strip() else None
+
+    log_res = rev_store.log_operator_manual_sent(
+        candidate_id=candidate_id,
+        sender_account=clean_sender,
+        recipient_email=clean_recipient,
+        sent_at=clean_sent_at,
+        subject=clean_subj,
+        operator_notes=clean_notes,
+        recipient_name=getattr(cand, "company_name", None) or "Recipient",
+        client_app="thunderbird",
+        idempotency_token=idempotency_token,
+    )
+
+    if log_res.get("duplicate"):
+        msg = f"Notice: Duplicate manual dispatch event detected ({log_res.get('log_id')}). Preserved existing record without creating duplicate."
+    else:
+        # Record into candidate store historical outreach atomically
+        svcs["cand_store"].record_historical_outreach(
+            candidate_id=candidate_id,
+            source_ref="operator_manual_confirmation:thunderbird",
+            contact_email=clean_recipient,
+            contacted_at=clean_sent_at,
+            channel="email",
+            notes=f"Thunderbird manual dispatch by {clean_sender} to {clean_recipient}. Subject: {clean_subj}. Notes: {clean_notes or 'None'}",
+            raw_row_hash=log_res.get("log_id"),
+        )
+        # Transition candidate outreach lifecycle states
+        cand.historical_contact_status = "contacted"
+        cand.previous_outreach_detected = True
+        cand.cold_outreach_allowed = False
+        svcs["cand_store"].save_candidate(cand)
+        msg = f"Manual dispatch via Thunderbird ({clean_sender} → {clean_recipient}) successfully confirmed and logged."
+
+    sep = "&" if "?" in target_redirect else "?"
+    return RedirectResponse(f"{target_redirect}{sep}message={urllib.parse.quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/manual-sent/{log_id}/void")
+async def void_manual_sent_action(
+    log_id: str,
+    void_reason: str = Form(...),
+    return_to: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+):
+    """
+    FLOW-02: Audited correction path for accidental manual confirmations.
+    Marks the manual dispatch record as voided with operator rationale.
+    Never silently deletes sent history.
+    """
+    svcs = get_console_services()
+    rev_store = svcs["rev_store"]
+    clean_reason = void_reason.strip() if void_reason else ""
+    target_redirect = return_to if return_to and return_to.startswith("/sales/") else "/sales/sent"
+
+    if not clean_reason:
+        sep = "&" if "?" in target_redirect else "?"
+        return RedirectResponse(f"{target_redirect}{sep}error={urllib.parse.quote('Audited void rationale is required to correct manual dispatch.')}", status_code=status.HTTP_303_SEE_OTHER)
+
+    log_entry = rev_store.get_manual_outreach_log(log_id)
+    if not log_entry:
+        raise HTTPException(status_code=404, detail="Manual outreach log not found")
+
+    rev_store.void_manual_outreach_log(log_id, void_reason=clean_reason)
+    cand_id = log_entry["candidate_id"]
+    cand = svcs["cand_store"].get_by_id(cand_id)
+
+    # Check if candidate has any remaining active (non-voided) manual logs
+    all_logs = rev_store.list_manual_outreach_logs(cand_id, limit=50)
+    active_logs = [m for m in all_logs if not m.get("is_voided")]
+    if not active_logs and cand:
+        # Check historical outreach events that are NOT from the voided manual log
+        hist_events = svcs["cand_store"].get_historical_outreach_for_candidate(cand_id)
+        other_events = [e for e in hist_events if not (e.get("raw_row_hash") == log_id or "thunderbird" in (e.get("source_ref") or "").lower())]
+        if not other_events:
+            with svcs["cand_store"]._get_connection() as conn:
+                conn.execute(
+                    "UPDATE candidate_companies SET cold_outreach_allowed = 1, historical_contact_status = 'uncontacted' WHERE candidate_id = ?",
+                    (cand_id,)
+                )
+                conn.execute(
+                    "DELETE FROM historical_outreach_events WHERE candidate_id = ? AND (raw_row_hash = ? OR source_ref LIKE '%thunderbird%')",
+                    (cand_id, log_id)
+                )
+
+    msg = f"Manual dispatch record {log_id} voided with audited reason: '{clean_reason}'."
+    sep = "&" if "?" in target_redirect else "?"
+    return RedirectResponse(f"{target_redirect}{sep}message={urllib.parse.quote(msg)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # ---------------------------------------------------------------------------

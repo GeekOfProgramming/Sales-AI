@@ -182,6 +182,36 @@ class ReviewStore:
             except sqlite3.OperationalError:
                 pass
 
+            # FLOW-02 Additive migration: columns for manual Thunderbird dispatches and future IMAP sync
+            try:
+                cur_ml = conn.execute("PRAGMA table_info(manual_outreach_log)")
+                ml_cols = [r["name"] for r in cur_ml.fetchall()]
+                new_cols = [
+                    ("sender_account", "TEXT"),
+                    ("sent_at", "TEXT"),
+                    ("source", "TEXT DEFAULT 'operator_manual_confirmation'"),
+                    ("verification_status", "TEXT DEFAULT 'manually_confirmed'"),
+                    ("client_app", "TEXT DEFAULT 'thunderbird'"),
+                    ("is_voided", "INTEGER DEFAULT 0"),
+                    ("voided_reason", "TEXT"),
+                    ("voided_at", "TEXT"),
+                    ("voided_by", "TEXT"),
+                    ("imap_reconciliation_status", "TEXT DEFAULT 'pending_sync'"),
+                    ("imap_message_id", "TEXT"),
+                    ("imap_uid", "TEXT"),
+                    ("imap_folder", "TEXT"),
+                    ("imap_uidvalidity", "TEXT"),
+                    ("imap_matched_at", "TEXT"),
+                    ("conversation_id", "TEXT"),
+                    ("actual_subject", "TEXT"),
+                    ("actual_body", "TEXT"),
+                ]
+                for col_name, col_def in new_cols:
+                    if col_name not in ml_cols:
+                        conn.execute(f"ALTER TABLE manual_outreach_log ADD COLUMN {col_name} {col_def}")
+            except Exception:
+                pass
+
     def save_draft(self, draft: StoredDraft) -> StoredDraft:
         with self._lock, self._get_connection() as conn:
             # Immutability and conflict verification
@@ -755,3 +785,127 @@ class ReviewStore:
                 )
             rows = cur.fetchall()
             return [dict(r) for r in rows]
+
+    def log_operator_manual_sent(
+        self,
+        candidate_id: str,
+        sender_account: str,
+        recipient_email: str,
+        sent_at: str,
+        subject: Optional[str] = None,
+        operator_notes: Optional[str] = None,
+        recipient_name: Optional[str] = None,
+        contact_id: Optional[str] = None,
+        client_app: str = "thunderbird",
+        idempotency_token: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        FLOW-02: Record an auditable operator-confirmed manual external email transmission
+        sent via Thunderbird without requiring a draft or SMTP configuration.
+        """
+        import uuid
+        from datetime import datetime, timezone
+
+        clean_sender = sender_account.strip().lower()
+        clean_email = recipient_email.strip().lower()
+        clean_subj = subject.strip() if subject and subject.strip() else f"Manual Outreach via {client_app}"
+        clean_notes = operator_notes.strip() if operator_notes and operator_notes.strip() else None
+
+        with self._lock, self._get_connection() as conn:
+            # Check duplicate / double-click protection:
+            # If an active (non-voided) manual log exists for this candidate, recipient, and sender
+            # with matching sent_at or matching idempotency_token, prevent duplicate insertion.
+            existing = conn.execute(
+                """
+                SELECT * FROM manual_outreach_log
+                WHERE candidate_id = ? AND recipient_email = ? AND sender_account = ?
+                  AND (is_voided IS NULL OR is_voided = 0)
+                  AND (sent_at = ? OR (external_ref IS NOT NULL AND external_ref = ?))
+                LIMIT 1
+                """,
+                (candidate_id, clean_email, clean_sender, sent_at, idempotency_token or ""),
+            ).fetchone()
+            if existing:
+                res = dict(existing)
+                res["duplicate"] = True
+                return res
+
+            log_id = f"log_man_{uuid.uuid4().hex[:16]}"
+            now = datetime.now(timezone.utc).isoformat()
+            ext_ref = idempotency_token.strip() if idempotency_token and idempotency_token.strip() else f"{client_app}:{clean_sender}:{clean_email}:{sent_at}"
+
+            conn.execute(
+                """
+                INSERT INTO manual_outreach_log (
+                    log_id, candidate_id, draft_id, revision, contact_id, recipient_email, recipient_name,
+                    subject, channel, logged_by, external_ref, operator_notes, confirmed_sent_externally,
+                    logged_at, sender_account, sent_at, source, verification_status, client_app,
+                    is_voided, imap_reconciliation_status
+                ) VALUES (
+                    ?, ?, NULL, NULL, ?, ?, ?,
+                    ?, 'email', 'local_operator', ?, ?, 1,
+                    ?, ?, ?, 'operator_manual_confirmation', 'manually_confirmed', ?,
+                    0, 'pending_sync'
+                )
+                """,
+                (
+                    log_id, candidate_id, contact_id, clean_email, recipient_name,
+                    clean_subj, ext_ref, clean_notes,
+                    now, clean_sender, sent_at, client_app,
+                ),
+            )
+            return {
+                "duplicate": False,
+                "log_id": log_id,
+                "candidate_id": candidate_id,
+                "recipient_email": clean_email,
+                "sender_account": clean_sender,
+                "sent_at": sent_at,
+                "subject": clean_subj,
+                "channel": "email",
+                "logged_by": "local_operator",
+                "external_ref": ext_ref,
+                "operator_notes": clean_notes,
+                "confirmed_sent_externally": True,
+                "logged_at": now,
+                "source": "operator_manual_confirmation",
+                "verification_status": "manually_confirmed",
+                "client_app": client_app,
+                "is_voided": 0,
+            }
+
+    def void_manual_outreach_log(
+        self,
+        log_id: str,
+        void_reason: str,
+        voided_by: str = "local_operator",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        FLOW-02: Audited correction path for accidental manual confirmations.
+        Marks the record as voided without deleting sent history.
+        """
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM manual_outreach_log WHERE log_id = ?", (log_id,)).fetchone()
+            if not row:
+                return None
+            conn.execute(
+                """
+                UPDATE manual_outreach_log
+                SET is_voided = 1,
+                    verification_status = 'voided',
+                    voided_reason = ?,
+                    voided_at = ?,
+                    voided_by = ?
+                WHERE log_id = ?
+                """,
+                (void_reason.strip(), now, voided_by, log_id),
+            )
+            updated = conn.execute("SELECT * FROM manual_outreach_log WHERE log_id = ?", (log_id,)).fetchone()
+            return dict(updated) if updated else None
+
+    def get_manual_outreach_log(self, log_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock, self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM manual_outreach_log WHERE log_id = ?", (log_id,)).fetchone()
+            return dict(row) if row else None
