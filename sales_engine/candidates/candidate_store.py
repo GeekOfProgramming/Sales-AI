@@ -1625,45 +1625,29 @@ class CandidateStore:
         Creates a consistent, timestamped SQLite backup using SQLite's online backup API.
         Does not disrupt concurrent readers. Returns (backup_path, backup_sha256).
         """
-        import hashlib
-        source_path = Path(self.db_path)
-        dest_dir = Path(backup_dir) if backup_dir else source_path.parent / "backups"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        dest_path = dest_dir / f"{source_path.stem}_backup_{timestamp}{source_path.suffix}"
-
-        # Execute consistent online backup
-        with self._get_connection() as src_conn:
-            dest_conn = sqlite3.connect(str(dest_path))
-            try:
-                src_conn.backup(dest_conn)
-            finally:
-                dest_conn.close()
-
-        # Compute SHA-256
-        content = dest_path.read_bytes()
-        backup_sha = hashlib.sha256(content).hexdigest()
-        return dest_path, backup_sha
+        from sales_engine.candidates.backup_engine import (
+            create_sqlite_online_backup,
+            compute_streaming_sha256,
+        )
+        dest_d = Path(backup_dir) if backup_dir else Path(self.db_path).resolve().parent / "backups"
+        res = create_sqlite_online_backup(
+            source_db_path=self.db_path,
+            dest_dir=dest_d,
+            mode="manual",
+        )
+        if not res.success:
+            raise RuntimeError(f"CandidateStore.create_backup failed: {res.error_message}")
+        return Path(res.backup_path), res.sha256_checksum
 
     def verify_backup(self, backup_path: Union[str, Path]) -> Tuple[bool, Optional[str]]:
         """
-        Verifies SQLite backup file integrity using PRAGMA quick_check and foreign_key_check.
+        Verifies SQLite backup file integrity using PRAGMA integrity_check and foreign_key_check.
         Returns (is_valid: bool, error: Optional[str]).
         """
-        path = Path(backup_path)
-        if not path.exists():
-            return False, f"Backup file does not exist: {path}"
-        try:
-            conn = sqlite3.connect(str(path))
-            cursor = conn.cursor()
-            res = cursor.execute("PRAGMA quick_check;").fetchone()
-            if not res or res[0] != "ok":
-                conn.close()
-                return False, f"Integrity check failed: {res[0] if res else 'no response'}"
-            conn.close()
+        from sales_engine.candidates.backup_engine import verify_sqlite_backup_integrity
+        integrity_status, fk_violations = verify_sqlite_backup_integrity(backup_path)
+        if integrity_status == "ok":
             return True, None
-        except Exception as e:
-            return False, f"Failed to verify backup integrity: {str(e)}"
+        return False, f"Integrity check failed: {integrity_status}"
 
 
