@@ -507,6 +507,50 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
             return int(m.group(1))
         return None
 
+    def fetch_message_flags(
+        self,
+        folder_name: str,
+        uids: List[int],
+        client: Optional[imaplib.IMAP4_SSL] = None,
+    ) -> Dict[int, List[str]]:
+        """
+        Inspect message flags using strictly read-only EXAMINE and UID FETCH FLAGS.
+        Returns a mapping of UID -> list of flags (e.g. ['\\Seen', '\\Answered']).
+        Never issues STORE, never modifies flags.
+        """
+        if not uids:
+            return {}
+
+        owns_client = False
+        if client is None:
+            client = self.connect()
+            owns_client = True
+
+        import re
+        flags_map: Dict[int, List[str]] = {}
+
+        try:
+            self.examine_folder(client, folder_name)
+            uid_str = ",".join(str(u) for u in uids)
+            typ, data = client.uid("FETCH", uid_str, "(UID FLAGS)")
+            if typ == "OK" and data:
+                for item in data:
+                    if isinstance(item, (bytes, bytearray)):
+                        s = item.decode("utf-8", errors="replace")
+                        m_uid = re.search(r"UID\s+(\d+)", s, re.IGNORECASE)
+                        m_flags = re.search(r"FLAGS\s+\((.*?)\)", s, re.IGNORECASE)
+                        if m_uid:
+                            uid = int(m_uid.group(1))
+                            flags = m_flags.group(1).split() if m_flags and m_flags.group(1) else []
+                            flags_map[uid] = flags
+            return flags_map
+        finally:
+            if owns_client and client:
+                try:
+                    client.logout()
+                except Exception:
+                    pass
+
     # -----------------------------------------------------------------------
     # MIME Parsing & Normalization
     # -----------------------------------------------------------------------
