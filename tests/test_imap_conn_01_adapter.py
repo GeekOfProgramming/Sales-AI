@@ -182,8 +182,9 @@ def test_05b_real_imaplib_wire_command_is_examine(pilot_account, temp_cred_store
 
 def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_cred_store):
     """
-    P0 SAFETY RULE: Verify messages are fetched using RFC822.PEEK or BODY.PEEK[],
-    preventing alteration of remote \\Seen flags.
+    P0 SAFETY RULE: Verify messages are fetched using BODY.PEEK[],
+    preventing alteration of remote \\Seen flags. Specifically verify RFC822.PEEK
+    is NEVER sent (as Register.it rejects it with BAD).
     """
     temp_cred_store.set_credential("win_cred_info_com", "dummy_pass")
     provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
@@ -211,7 +212,7 @@ def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_c
     mock_client.uid.side_effect = [
         ("OK", [b"105"]),  # SEARCH response
         ("OK", [b"1 (UID 105 RFC822.SIZE 150)"]),  # RFC822.SIZE response
-        ("OK", [(b"1 (UID 105 RFC822 {150})", sample_email)]),  # RFC822.PEEK response
+        ("OK", [(b"1 (UID 105 BODY[] {150})", sample_email)]),  # BODY.PEEK[] response from server
     ]
 
     messages, new_highest_uid, uv = provider.fetch_messages_by_uid(
@@ -224,9 +225,65 @@ def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_c
     assert uv == 12345
     assert messages[0].from_address == "studio@piuarch.it"
 
-    # Assert that UID FETCH used PEEK command
-    peek_call = [call for call in mock_client.uid.call_args_list if len(call[0]) > 2 and ("RFC822.PEEK" in call[0][2] or "BODY.PEEK" in call[0][2])]
-    assert len(peek_call) >= 1
+    # Assert that UID FETCH used BODY.PEEK[] and never RFC822.PEEK
+    peek_calls = [call for call in mock_client.uid.call_args_list if len(call[0]) > 2 and "BODY.PEEK[]" in call[0][2]]
+    assert len(peek_calls) == 1
+    rfc_peek_calls = [call for call in mock_client.uid.call_args_list if len(call[0]) > 2 and "RFC822.PEEK" in call[0][2]]
+    assert len(rfc_peek_calls) == 0
+
+
+def test_06b_register_it_rejects_rfc822_peek_and_provider_uses_body_peek(pilot_account, temp_cred_store):
+    """
+    Regression test: Register.it returns BAD for RFC822.PEEK:
+    "UID command error: BAD [b'Error in IMAP command UID FETCH: Unknown parameter RFC822.PEEK']"
+    Verify the provider dispatches standards-compliant BODY.PEEK[] which Register.it accepts.
+    """
+    temp_cred_store.set_credential("win_cred_info_com", "dummy_pass")
+    provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
+
+    folder = MailboxFolderRecord(
+        folder_id="fld_inbox",
+        account_id=pilot_account.account_id,
+        folder_name="INBOX",
+        folder_role="inbox",
+    )
+
+    sample_email = (
+        b"From: client@example.com\r\n"
+        b"To: info@pybim.com\r\n"
+        b"Subject: Test\r\n"
+        b"\r\n"
+        b"Hello"
+    )
+
+    mock_client = MagicMock()
+    mock_client.select.return_value = ("OK", [b"1"])
+    mock_client.response.return_value = ("OK", [b"12345"])
+
+    def uid_side_effect(cmd, *args):
+        if cmd == "SEARCH":
+            return ("OK", [b"201"])
+        if cmd == "FETCH":
+            target_uids, fetch_param = args[0], args[1]
+            if "RFC822.PEEK" in fetch_param:
+                # Simulate Register.it exact server rejection
+                import imaplib
+                raise imaplib.IMAP4.error("UID command error: BAD [b'Error in IMAP command UID FETCH: Unknown parameter RFC822.PEEK (0.001 + 0.000 secs).']")
+            if "RFC822.SIZE" in fetch_param:
+                return ("OK", [b"1 (UID 201 RFC822.SIZE 120)"])
+            if "BODY.PEEK[]" in fetch_param:
+                return ("OK", [(b"1 (UID 201 BODY[] {120})", sample_email)])
+        raise ValueError(f"Unexpected mock call: {cmd} {args}")
+
+    mock_client.uid.side_effect = uid_side_effect
+
+    messages, new_highest_uid, uv = provider.fetch_messages_by_uid(
+        pilot_account, folder, since_uid=200, client=mock_client
+    )
+
+    assert len(messages) == 1
+    assert messages[0].imap_uid == 201
+    assert messages[0].from_address == "client@example.com"
 
 
 def test_07_mime_parsing_unicode_and_headers(pilot_account):

@@ -416,10 +416,10 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
             messages: List[MailboxMessageRecord] = []
             highest_uid = since_uid
 
-            # 1. Fetch normal messages using full RFC822.PEEK
+            # 1. Fetch normal messages using full BODY.PEEK[]
             if normal_uids:
                 norm_str = ",".join(str(u) for u in normal_uids)
-                fetch_cmd = "(UID RFC822.PEEK)"
+                fetch_cmd = "(UID BODY.PEEK[])"
                 typ, fetch_data = client.uid("FETCH", norm_str, fetch_cmd)
                 if typ == "OK" and fetch_data:
                     for item in fetch_data:
@@ -427,7 +427,8 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
                             continue
 
                         raw_header, raw_bytes = item[0], item[1]
-                        uid_val = self._extract_uid_from_fetch_header(raw_header.decode("utf-8", errors="replace"))
+                        header_str = raw_header.decode("utf-8", errors="replace") if isinstance(raw_header, (bytes, bytearray)) else str(raw_header)
+                        uid_val = self._extract_uid_from_fetch_header(header_str)
                         if not uid_val:
                             continue
 
@@ -457,7 +458,8 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
                             continue
 
                         raw_header, raw_bytes = item[0], item[1]
-                        uid_val = self._extract_uid_from_fetch_header(raw_header.decode("utf-8", errors="replace"))
+                        header_str = raw_header.decode("utf-8", errors="replace") if isinstance(raw_header, (bytes, bytearray)) else str(raw_header)
+                        uid_val = self._extract_uid_from_fetch_header(header_str)
                         if not uid_val:
                             continue
 

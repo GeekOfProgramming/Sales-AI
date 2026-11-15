@@ -972,9 +972,9 @@ def test_17_no_remote_flag_mutations(isolated_dbs, sample_account, sample_inbox_
         ("OK", [b"1 (UID 1 RFC822.SIZE 1024)", b"2 (UID 2 RFC822.SIZE 2048)"]),
         # PEEK fetch
         ("OK", [
-            (b"1 (UID 1 RFC822.PEEK[] {40}", b"From: a@b.com\r\nSubject: Hi\r\n\r\nTest 1"),
+            (b"1 (UID 1 BODY[] {40}", b"From: a@b.com\r\nSubject: Hi\r\n\r\nTest 1"),
             b")",
-            (b"2 (UID 2 RFC822.PEEK[] {40}", b"From: a@b.com\r\nSubject: Hi\r\n\r\nTest 2"),
+            (b"2 (UID 2 BODY[] {40}", b"From: a@b.com\r\nSubject: Hi\r\n\r\nTest 2"),
             b")",
         ]),
     ]
