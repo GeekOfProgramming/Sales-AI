@@ -68,6 +68,19 @@ class MailboxIngestionService:
                 logger.error(f"Failed to ingest message {getattr(msg, 'message_id', 'unknown')}: {e}")
                 error_count += 1
 
+        # Safety check: refuse to ingest or advance checkpoints with non-positive UIDVALIDITY
+        if uidvalidity <= 0:
+            raise ValueError(
+                f"Refusing ingestion and checkpoint advancement for folder '{folder.folder_id}' with non-positive UIDVALIDITY: {uidvalidity}"
+            )
+
+        # Keep folder record updated with last_uidvalidity and last_seen_uid
+        if folder.last_uidvalidity != uidvalidity or folder.last_seen_uid < new_highest_uid:
+            folder.last_uidvalidity = uidvalidity
+            if new_highest_uid > folder.last_seen_uid:
+                folder.last_seen_uid = new_highest_uid
+            self.repo.save_folder(folder)
+
         # Advance durable folder sync checkpoint if messages were processed
         # Only advance monotonically for matching UIDVALIDITY
         current_state = self.repo.get_folder_sync_state(account.account_id, folder.folder_id)

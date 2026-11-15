@@ -198,6 +198,15 @@ class MailboxSyncOrchestrator:
             client = p.connect(account)
             # EXAMINE folder read-only
             remote_count, remote_uv = p.examine_folder(client, folder.folder_name)
+            if remote_uv <= 0:
+                raise ValueError(
+                    f"Refusing to sync folder '{folder.folder_name}' with non-positive UIDVALIDITY: {remote_uv}"
+                )
+
+            # Keep folder record in sync with server's UIDVALIDITY
+            if folder.last_uidvalidity != remote_uv:
+                folder.last_uidvalidity = remote_uv
+                self.repo.save_folder(folder)
 
             # Detect UIDVALIDITY rollover
             if last_uv > 0 and remote_uv != last_uv:

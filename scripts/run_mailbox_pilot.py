@@ -520,21 +520,26 @@ class MailboxPilotRunner:
             client = provider.connect(self.account)
 
             # 3. Setup Folders
+            # Inspect actual remote UIDVALIDITY prior to saving folder records
+            _, inbox_uv = provider.examine_folder(client, inbox_folder_name)
             inbox_fld = MailboxFolderRecord(
                 folder_id=f"fld_{self.account.account_id}_inbox",
                 account_id=self.account.account_id,
                 folder_name=inbox_folder_name,
                 folder_role="inbox",
+                last_uidvalidity=inbox_uv,
             )
             self.repo.save_folder(inbox_fld)
 
             sent_fld = None
             if sent_folder_name:
+                _, sent_uv = provider.examine_folder(client, sent_folder_name)
                 sent_fld = MailboxFolderRecord(
                     folder_id=f"fld_{self.account.account_id}_sent",
                     account_id=self.account.account_id,
                     folder_name=sent_folder_name,
                     folder_role="sent",
+                    last_uidvalidity=sent_uv,
                 )
                 self.repo.save_folder(sent_fld)
 

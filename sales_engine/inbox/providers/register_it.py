@@ -345,18 +345,64 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
         which issues the IMAP 'EXAMINE' command on the wire.
         Guarantees that writeable SELECT is never sent and messages cannot be altered.
         Returns (message_count, uidvalidity).
+
+        Mandated RFC 3501 UIDVALIDITY parsing:
+        - In Python imaplib, client.response('UIDVALIDITY') returns ('UIDVALIDITY', [b'123456'])
+          (NOT 'OK').
+        - As a robust fallback, inspects untagged 'OK' response lines matching [UIDVALIDITY <num>].
+        - Validates that UIDVALIDITY is a positive integer (> 0).
+        - Raises ValueError if UIDVALIDITY is missing, zero, or non-numeric.
         """
         clean_folder = folder_name.strip()
         typ, data = client.select(mailbox=clean_folder, readonly=True)
         if typ != "OK":
             raise imaplib.IMAP4.error(f"Failed to EXAMINE folder {folder_name}: {data}")
 
-        count = int(data[0]) if data and data[0] and str(data[0]).isdigit() else (int(data[0].decode()) if isinstance(data[0], (bytes, bytearray)) and data[0].isdigit() else 0)
+        count = (
+            int(data[0])
+            if data and data[0] and str(data[0]).isdigit()
+            else (int(data[0].decode()) if isinstance(data[0], (bytes, bytearray)) and data[0].isdigit() else 0)
+        )
 
-        # Retrieve UIDVALIDITY from response
-        # client.response('UIDVALIDITY') returns e.g. ('OK', [b'123456'])
+        # 1. Retrieve UIDVALIDITY via imaplib.response('UIDVALIDITY')
+        # Note: imaplib returns (code, [data]), where code is 'UIDVALIDITY' or 'OK'
+        uidvalidity = 0
         uv_typ, uv_data = client.response("UIDVALIDITY")
-        uidvalidity = int(uv_data[0]) if uv_typ == "OK" and uv_data and uv_data[0] else 0
+        if uv_data and uv_data[0] is not None:
+            raw_val = uv_data[0]
+            val_str = raw_val.decode("utf-8", errors="replace").strip() if isinstance(raw_val, (bytes, bytearray)) else str(raw_val).strip()
+            if val_str.isdigit():
+                uidvalidity = int(val_str)
+
+        # 2. Fallback: inspect untagged OK responses e.g. [UIDVALIDITY 1698765432]
+        if uidvalidity <= 0:
+            ok_typ, ok_data = client.response("OK")
+            if ok_data:
+                import re
+                for ok_item in ok_data:
+                    if not ok_item:
+                        continue
+                    item_str = ok_item.decode("utf-8", errors="replace") if isinstance(ok_item, (bytes, bytearray)) else str(ok_item)
+                    m = re.search(r"\[UIDVALIDITY\s+(\d+)\]", item_str, re.IGNORECASE)
+                    if m:
+                        uidvalidity = int(m.group(1))
+                        break
+
+        # 3. Direct inspection of untagged_responses if available on client
+        if uidvalidity <= 0 and hasattr(client, "untagged_responses"):
+            ur_val = client.untagged_responses.get("UIDVALIDITY")
+            if ur_val and ur_val[0]:
+                raw_u = ur_val[0]
+                u_str = raw_u.decode("utf-8", errors="replace").strip() if isinstance(raw_u, (bytes, bytearray)) else str(raw_u).strip()
+                if u_str.isdigit():
+                    uidvalidity = int(u_str)
+
+        # 4. Strictly fail closed: UIDVALIDITY must be a positive integer per RFC 3501
+        if uidvalidity <= 0:
+            raise ValueError(
+                f"Missing or invalid server UIDVALIDITY for folder '{folder_name}'. "
+                f"Received: {uidvalidity}. Refusing to proceed with ingestion or checkpoint advance."
+            )
 
         return count, uidvalidity
 

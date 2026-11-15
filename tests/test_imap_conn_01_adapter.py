@@ -180,6 +180,90 @@ def test_05b_real_imaplib_wire_command_is_examine(pilot_account, temp_cred_store
     assert "INBOX.Sent" in commands_sent[0][1]
 
 
+def test_05c_realistic_imaplib_examine_uidvalidity_parsing(pilot_account, temp_cred_store):
+    """
+    Test realistic imaplib EXAMINE response where response('UIDVALIDITY') returns
+    ('UIDVALIDITY', [b'1712345678']) per Python standard library implementation,
+    and verify distinct UIDVALIDITY values for different folders.
+    """
+    provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
+
+    mock_client = MagicMock()
+    mock_client.select.side_effect = lambda mailbox, readonly: ("OK", [b"15"] if mailbox == "INBOX" else [b"7"])
+
+    def mock_response(code):
+        if code == "UIDVALIDITY":
+            # Real imaplib returns ('UIDVALIDITY', [b'...'])
+            # We simulate INBOX = 1712345678, Sent = 1898765432
+            current_fld = mock_client.select.call_args[1].get("mailbox") or mock_client.select.call_args[0][0]
+            val = b"1712345678" if current_fld == "INBOX" else b"1898765432"
+            return ("UIDVALIDITY", [val])
+        if code == "OK":
+            return ("OK", [None])
+        return (code, [None])
+
+    mock_client.response.side_effect = mock_response
+
+    # Examine INBOX
+    inbox_cnt, inbox_uv = provider.examine_folder(mock_client, "INBOX")
+    assert inbox_cnt == 15
+    assert inbox_uv == 1712345678
+
+    # Examine INBOX.Sent
+    sent_cnt, sent_uv = provider.examine_folder(mock_client, "INBOX.Sent")
+    assert sent_cnt == 7
+    assert sent_uv == 1898765432
+    assert inbox_uv != sent_uv
+
+
+def test_05d_missing_or_zero_uidvalidity_fails_closed(pilot_account, temp_cred_store):
+    """Verify missing, zero, or non-numeric UIDVALIDITY strictly raises ValueError."""
+    provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
+
+    # 1. Missing UIDVALIDITY
+    mock_client1 = MagicMock()
+    mock_client1.select.return_value = ("OK", [b"5"])
+    mock_client1.response.side_effect = lambda code: (code, [None])
+    if hasattr(mock_client1, "untagged_responses"):
+        del mock_client1.untagged_responses
+
+    with pytest.raises(ValueError, match="Missing or invalid server UIDVALIDITY"):
+        provider.examine_folder(mock_client1, "INBOX")
+
+    # 2. Zero UIDVALIDITY
+    mock_client2 = MagicMock()
+    mock_client2.select.return_value = ("OK", [b"5"])
+    mock_client2.response.side_effect = lambda code: (code, [b"0"] if code == "UIDVALIDITY" else [None])
+
+    with pytest.raises(ValueError, match="Missing or invalid server UIDVALIDITY"):
+        provider.examine_folder(mock_client2, "INBOX")
+
+    # 3. Non-numeric UIDVALIDITY
+    mock_client3 = MagicMock()
+    mock_client3.select.return_value = ("OK", [b"5"])
+    mock_client3.response.side_effect = lambda code: (code, [b"invalid"] if code == "UIDVALIDITY" else [None])
+
+    with pytest.raises(ValueError, match="Missing or invalid server UIDVALIDITY"):
+        provider.examine_folder(mock_client3, "INBOX")
+
+
+def test_05e_untagged_ok_bracket_fallback_uidvalidity_parsing(pilot_account, temp_cred_store):
+    """Verify fallback parses [UIDVALIDITY 1698765432] from untagged OK line."""
+    provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
+
+    mock_client = MagicMock()
+    mock_client.select.return_value = ("OK", [b"12"])
+    mock_client.response.side_effect = lambda code: (
+        ("UIDVALIDITY", [None])
+        if code == "UIDVALIDITY"
+        else ("OK", [b"[UIDVALIDITY 1698765432] UIDs valid", b"[UIDNEXT 15] Predicted next UID"])
+    )
+
+    count, uv = provider.examine_folder(mock_client, "INBOX")
+    assert count == 12
+    assert uv == 1698765432
+
+
 def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_cred_store):
     """
     P0 SAFETY RULE: Verify messages are fetched using BODY.PEEK[],
