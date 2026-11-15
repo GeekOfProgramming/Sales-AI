@@ -626,6 +626,320 @@ class MailboxPilotRunner:
                 except Exception:
                     pass
 
+    # -----------------------------------------------------------------------
+    # Step 6: Read-Only Verification of Existing Pilot Messages (IMAP-UV-REPAIR-01A)
+    # -----------------------------------------------------------------------
+
+    def verify_existing_pilot_messages(
+        self,
+        inbox_folder_name: str = "INBOX",
+        sent_folder_name: str = "INBOX.Sent",
+    ) -> Dict[str, Any]:
+        """
+        Narrowly scoped, read-only verification of existing pilot messages.
+        
+        Strict Safety Guarantees:
+          - Restricted to info@pybim.com (PILOT_EMAIL_ADDRESS).
+          - Uses read-only SQLite queries to inspect existing records.
+          - Opens remote folders in strictly read-only mode via EXAMINE.
+          - Retrieves positive server UIDVALIDITY independently for INBOX and Sent.
+          - Fetches remote message headers using UID FETCH (UID BODY.PEEK[HEADER]).
+          - Never downloads message bodies or attachments.
+          - Zero SQLite modifications (no UPDATE, INSERT, or DELETE).
+          - Zero remote flag changes.
+          - Does not invoke sync or advance checkpoints.
+        """
+        # 1. Target restriction: info@pybim.com only
+        if self.account.email_address != PILOT_EMAIL_ADDRESS:
+            return {
+                "success": False,
+                "error": f"Verification is strictly restricted to {PILOT_EMAIL_ADDRESS}. Target was: {self.account.email_address}",
+                "error_category": "UNAUTHORIZED_TARGET",
+            }
+
+        # 2. Validate pre-flight and credentials
+        preflight = self.validate_preflight(check_credential=True)
+        if not preflight["safety_passed"]:
+            return {
+                "success": False,
+                "error": "Pre-flight validation failed",
+                "details": preflight,
+                "error_category": "PREFLIGHT_VALIDATION_FAILED",
+            }
+
+        # 3. Read existing operational records from SQLite in strictly read-only mode
+        import sqlite3
+        con_ro = sqlite3.connect(f"file:{os.path.abspath(self.db_path).replace(os.sep, '/')}?mode=ro", uri=True)
+        con_ro.row_factory = sqlite3.Row
+        cur = con_ro.cursor()
+
+        inbox_records = [
+            dict(r)
+            for r in cur.execute(
+                "SELECT * FROM mailbox_messages WHERE account_id = ? AND folder_role = 'inbox' ORDER BY imap_uid ASC;",
+                (self.account.account_id,),
+            ).fetchall()
+        ]
+        sent_records = [
+            dict(r)
+            for r in cur.execute(
+                "SELECT * FROM mailbox_messages WHERE account_id = ? AND folder_role = 'sent' ORDER BY imap_uid ASC;",
+                (self.account.account_id,),
+            ).fetchall()
+        ]
+
+        # Get folder checkpoints
+        inbox_sync = cur.execute(
+            "SELECT * FROM mailbox_folder_sync_state WHERE account_id = ? AND folder_id = ? LIMIT 1;",
+            (self.account.account_id, f"fld_{self.account.account_id}_inbox"),
+        ).fetchone()
+        sent_sync = cur.execute(
+            "SELECT * FROM mailbox_folder_sync_state WHERE account_id = ? AND folder_id = ? LIMIT 1;",
+            (self.account.account_id, f"fld_{self.account.account_id}_sent"),
+        ).fetchone()
+
+        con_ro.close()
+
+        # 4. Connect to IMAP server and verify headers
+        provider = self.provider_factory(self.account)
+        client = None
+
+        report: Dict[str, Any] = {
+            "success": True,
+            "account": self.account.email_address,
+            "actual_inbox_uidvalidity": None,
+            "actual_sent_uidvalidity": None,
+            "inbox_verified_count": 0,
+            "inbox_mismatched_count": 0,
+            "inbox_missing_count": 0,
+            "inbox_uncertain_count": 0,
+            "sent_verified_count": 0,
+            "sent_mismatched_count": 0,
+            "sent_missing_count": 0,
+            "sent_uncertain_count": 0,
+            "checkpoint_consistency": {
+                "inbox_checkpoint_uid": inbox_sync["last_synced_uid"] if inbox_sync else None,
+                "sent_checkpoint_uid": sent_sync["last_synced_uid"] if sent_sync else None,
+                "inbox_max_stored_uid": max([r["imap_uid"] for r in inbox_records]) if inbox_records else None,
+                "sent_max_stored_uid": max([r["imap_uid"] for r in sent_records]) if sent_records else None,
+                "is_consistent": False,
+            },
+            "safe_repair_eligible": False,
+            "verifications": {
+                "inbox": [],
+                "sent": [],
+            },
+        }
+
+        try:
+            client = provider.connect(self.account)
+
+            # --- A. Verify INBOX ---
+            _, inbox_uv = provider.examine_folder(client, inbox_folder_name)
+            report["actual_inbox_uidvalidity"] = inbox_uv
+
+            inbox_verifs = self._verify_folder_messages(
+                client=client,
+                provider=provider,
+                folder_name=inbox_folder_name,
+                stored_records=inbox_records,
+            )
+            report["verifications"]["inbox"] = inbox_verifs
+            for v in inbox_verifs:
+                st = v["status"]
+                if st == "VERIFIED":
+                    report["inbox_verified_count"] += 1
+                elif st == "MISMATCH":
+                    report["inbox_mismatched_count"] += 1
+                elif st == "MISSING":
+                    report["inbox_missing_count"] += 1
+                else:
+                    report["inbox_uncertain_count"] += 1
+
+            # --- B. Verify INBOX.Sent ---
+            _, sent_uv = provider.examine_folder(client, sent_folder_name)
+            report["actual_sent_uidvalidity"] = sent_uv
+
+            sent_verifs = self._verify_folder_messages(
+                client=client,
+                provider=provider,
+                folder_name=sent_folder_name,
+                stored_records=sent_records,
+            )
+            report["verifications"]["sent"] = sent_verifs
+            for v in sent_verifs:
+                st = v["status"]
+                if st == "VERIFIED":
+                    report["sent_verified_count"] += 1
+                elif st == "MISMATCH":
+                    report["sent_mismatched_count"] += 1
+                elif st == "MISSING":
+                    report["sent_missing_count"] += 1
+                else:
+                    report["sent_uncertain_count"] += 1
+
+            # --- C. Consistency & Repair Eligibility ---
+            cp = report["checkpoint_consistency"]
+            inbox_cp_ok = cp["inbox_checkpoint_uid"] == cp["inbox_max_stored_uid"] == 11
+            sent_cp_ok = cp["sent_checkpoint_uid"] == cp["sent_max_stored_uid"] == 17
+            cp["is_consistent"] = inbox_cp_ok and sent_cp_ok
+
+            report["safe_repair_eligible"] = (
+                report["inbox_verified_count"] == 10
+                and report["sent_verified_count"] == 10
+                and report["inbox_mismatched_count"] == 0
+                and report["sent_mismatched_count"] == 0
+                and report["inbox_missing_count"] == 0
+                and report["sent_missing_count"] == 0
+                and report["inbox_uncertain_count"] == 0
+                and report["sent_uncertain_count"] == 0
+                and cp["is_consistent"]
+                and inbox_uv > 0
+                and sent_uv > 0
+            )
+
+            return report
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_category": type(e).__name__,
+                "details": report,
+            }
+        finally:
+            if client:
+                try:
+                    client.logout()
+                except Exception:
+                    pass
+
+    def _verify_folder_messages(
+        self,
+        client: Any,
+        provider: RegisterItReadOnlyIMAPProvider,
+        folder_name: str,
+        stored_records: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch remote headers via UID FETCH (UID BODY.PEEK[HEADER]) and compare
+        with stored SQLite records.
+        """
+        import email
+        import re
+
+        if not stored_records:
+            return []
+
+        uids = [r["imap_uid"] for r in stored_records]
+        uid_str = ",".join(str(u) for u in uids)
+
+        typ, fetch_data = client.uid("FETCH", uid_str, "(UID BODY.PEEK[HEADER])")
+        remote_headers_by_uid: Dict[int, Any] = {}
+
+        if typ == "OK" and fetch_data:
+            for item in fetch_data:
+                if not isinstance(item, tuple) or len(item) < 2:
+                    continue
+                raw_hdr, raw_bytes = item[0], item[1]
+                hdr_str = raw_hdr.decode("utf-8", errors="replace") if isinstance(raw_hdr, (bytes, bytearray)) else str(raw_hdr)
+                m_uid = re.search(r"UID\s+(\d+)", hdr_str, re.IGNORECASE)
+                if m_uid:
+                    uid = int(m_uid.group(1))
+                    parsed_email = email.message_from_bytes(raw_bytes)
+                    remote_headers_by_uid[uid] = parsed_email
+
+        verifications: List[Dict[str, Any]] = []
+
+        for rec in stored_records:
+            uid = rec["imap_uid"]
+            if uid not in remote_headers_by_uid:
+                verifications.append({
+                    "uid": uid,
+                    "status": "MISSING",
+                    "details": "Remote message UID not found on server",
+                })
+                continue
+
+            r_msg = remote_headers_by_uid[uid]
+
+            # Extract normalized remote headers
+            remote_rfc_id = provider._clean_header(r_msg.get("Message-ID"))
+            remote_subject = provider._decode_mime_words(r_msg.get("Subject", ""))
+            remote_from_raw = provider._decode_mime_words(r_msg.get("From", ""))
+            remote_from_addr, _ = provider._parse_address_and_name(remote_from_raw)
+            remote_date_raw = r_msg.get("Date")
+            remote_date_utc = provider._normalize_date_to_utc(remote_date_raw)
+
+            stored_rfc_id = rec.get("rfc_message_id")
+            stored_subject = rec.get("subject")
+            stored_from = rec.get("from_address")
+            stored_date_utc = rec.get("date_utc")
+
+            # Evidence comparison
+            has_rfc_id = bool(stored_rfc_id and remote_rfc_id)
+            rfc_id_matches = has_rfc_id and (stored_rfc_id.strip() == remote_rfc_id.strip())
+
+            # Subject comparison (strip whitespace)
+            subject_matches = (stored_subject or "").strip() == (remote_subject or "").strip()
+
+            # From comparison
+            from_matches = (stored_from or "").strip().lower() == (remote_from_addr or "").strip().lower()
+
+            # Date comparison (timestamps normalized to UTC ISO format)
+            # Compare prefixes up to seconds e.g. YYYY-MM-DDTHH:MM:SS
+            def _clean_ts(ts: Optional[str]) -> str:
+                if not ts:
+                    return ""
+                return ts.split(".")[0].replace("Z", "+00:00")
+
+            date_matches = _clean_ts(stored_date_utc) == _clean_ts(remote_date_utc)
+
+            if has_rfc_id:
+                if rfc_id_matches and subject_matches and from_matches:
+                    verifications.append({
+                        "uid": uid,
+                        "status": "VERIFIED",
+                        "rfc_message_id": remote_rfc_id,
+                        "evidence": "RFC Message-ID, Subject, and From address match",
+                    })
+                elif not rfc_id_matches:
+                    verifications.append({
+                        "uid": uid,
+                        "status": "MISMATCH",
+                        "stored_rfc_id": stored_rfc_id,
+                        "remote_rfc_id": remote_rfc_id,
+                        "evidence": "RFC Message-ID mismatch on server",
+                    })
+                else:
+                    verifications.append({
+                        "uid": uid,
+                        "status": "MISMATCH",
+                        "evidence": f"Subject/From divergence despite RFC Message-ID match: stored_from={stored_from}, remote_from={remote_from_addr}",
+                    })
+            else:
+                # No RFC Message-ID: evaluate multi-attribute consensus
+                if subject_matches and from_matches and date_matches and stored_subject:
+                    verifications.append({
+                        "uid": uid,
+                        "status": "VERIFIED",
+                        "evidence": "Multi-attribute consensus: Subject, From, and Date match",
+                    })
+                elif subject_matches and from_matches:
+                    verifications.append({
+                        "uid": uid,
+                        "status": "INSUFFICIENT_EVIDENCE",
+                        "evidence": "Subject and From match but Date inconclusive or RFC Message-ID missing",
+                    })
+                else:
+                    verifications.append({
+                        "uid": uid,
+                        "status": "MISMATCH",
+                        "evidence": "Header divergence on Subject, From, or Date without RFC Message-ID",
+                    })
+
+        return verifications
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -680,6 +994,12 @@ Examples:
     stage_parser.add_argument("--dry-run", action="store_true", help="Test fetch and parsing without committing database records")
     stage_parser.add_argument("--limit-inbox", type=int, default=PILOT_MAX_INBOX_MESSAGES, help="Max inbox messages to stage (max 10)")
     stage_parser.add_argument("--limit-sent", type=int, default=PILOT_MAX_SENT_MESSAGES, help="Max sent messages to stage (max 10)")
+
+    # Command: verify-messages (IMAP-UV-REPAIR-01A)
+    verif_parser = subparsers.add_parser("verify-messages", help="Read-only verification of existing pilot messages against remote headers")
+    verif_parser.add_argument("--live-connect", action="store_true", help="Explicit authorization to open live IMAP connection")
+    verif_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
+    verif_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
 
     # Global options
     parser.add_argument(
@@ -839,6 +1159,45 @@ Examples:
                 flags_stat = res.get("flag_preservation", {})
                 print(f"Flag Preservation:  {'PASS (Zero remote flags mutated)' if flags_stat.get('verified') else 'FLAG DIVERGENCE DETECTED'}")
                 print("Live CRM Safety:    Zero mutations to candidate_companies, candidate_contacts, or historical records.")
+            print("=" * 70 + "\n")
+        sys.exit(0 if res["success"] else 2)
+
+    elif args.command == "verify-messages":
+        res = runner.verify_existing_pilot_messages(
+            inbox_folder_name=args.inbox_folder,
+            sent_folder_name=args.sent_folder,
+        )
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            print("pyBIM Sales-AI: Read-Only Verification of Existing Pilot Messages (IMAP-UV-REPAIR-01A)")
+            print("=" * 70)
+            if not res["success"]:
+                print(f"ERROR: {res.get('error')}")
+                print(f"Category: {res.get('error_category')}")
+            else:
+                print(f"Target Account:          {res['account']}")
+                print(f"Actual INBOX UIDVALIDITY:      {res['actual_inbox_uidvalidity']}")
+                print(f"Actual INBOX.Sent UIDVALIDITY: {res['actual_sent_uidvalidity']}")
+                print("-" * 70)
+                print(f"INBOX Messages (Stored: 10):")
+                print(f"  Verified:             {res['inbox_verified_count']}")
+                print(f"  Mismatched:           {res['inbox_mismatched_count']}")
+                print(f"  Missing:              {res['inbox_missing_count']}")
+                print(f"  Uncertain:            {res['inbox_uncertain_count']}")
+                print(f"INBOX.Sent Messages (Stored: 10):")
+                print(f"  Verified:             {res['sent_verified_count']}")
+                print(f"  Mismatched:           {res['sent_mismatched_count']}")
+                print(f"  Missing:              {res['sent_missing_count']}")
+                print(f"  Uncertain:            {res['sent_uncertain_count']}")
+                print("-" * 70)
+                cp = res["checkpoint_consistency"]
+                print(f"Checkpoint Consistency:  {'PASS (Consistent with max stored UIDs)' if cp['is_consistent'] else 'FAIL (Inconsistent checkpoints)'}")
+                print(f"  INBOX: Checkpoint={cp['inbox_checkpoint_uid']}, Max Stored UID={cp['inbox_max_stored_uid']}")
+                print(f"  Sent:  Checkpoint={cp['sent_checkpoint_uid']}, Max Stored UID={cp['sent_max_stored_uid']}")
+                print("-" * 70)
+                print(f"Safe Repair Eligibility: {'ELIGIBLE (100% verified, positive UIDVALIDITY, consistent checkpoints)' if res['safe_repair_eligible'] else 'NOT ELIGIBLE (Discrepancies detected)'}")
             print("=" * 70 + "\n")
         sys.exit(0 if res["success"] else 2)
 
