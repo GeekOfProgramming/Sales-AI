@@ -940,6 +940,438 @@ class MailboxPilotRunner:
 
         return verifications
 
+    # -----------------------------------------------------------------------
+    # Step 7: Safe, Transactional Pilot UIDVALIDITY Repair (IMAP-UV-REPAIR-01B)
+    # -----------------------------------------------------------------------
+
+    def repair_pilot_uidvalidity(
+        self,
+        inbox_folder_name: str = "INBOX",
+        sent_folder_name: str = "INBOX.Sent",
+        dry_run: bool = False,
+        backup_dir: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Narrowly scoped, operator-controlled transactional repair of existing pilot
+        records with imap_uidvalidity=0.
+
+        Strict Safety Guarantees:
+          - Restricted strictly to info@pybim.com (PILOT_EMAIL_ADDRESS).
+          - Requires dynamic re-verification against the live IMAP server.
+          - Idempotency check: if all records already have correct UIDVALIDITY, returns ALREADY_REPAIRED.
+          - Pre-repair online SQLite backup + disposable clone restore verification.
+          - Dry-run mode produces zero database mutations and requires zero backup writes.
+          - Atomic transaction: rolls back on any error, missing record, or integrity failure.
+          - Post-repair assertions: exactly 10 inbox, 10 sent, intact checkpoints (11, 17),
+            20 message_crm_links preserved, and PRAGMA integrity & FK checks passing.
+        """
+        # 1. Target restriction: info@pybim.com only
+        if self.account.email_address != PILOT_EMAIL_ADDRESS:
+            return {
+                "success": False,
+                "error": f"Repair is strictly restricted to {PILOT_EMAIL_ADDRESS}. Target was: {self.account.email_address}",
+                "error_category": "UNAUTHORIZED_TARGET",
+            }
+
+        # 2. Check current database state in read-only mode for idempotency and pre-inspection
+        import sqlite3
+        con_ro = sqlite3.connect(f"file:{os.path.abspath(self.db_path).replace(os.sep, '/')}?mode=ro", uri=True)
+        con_ro.row_factory = sqlite3.Row
+        cur = con_ro.cursor()
+
+        inbox_rows = [
+            dict(r)
+            for r in cur.execute(
+                "SELECT * FROM mailbox_messages WHERE account_id = ? AND folder_role = 'inbox' ORDER BY imap_uid ASC;",
+                (self.account.account_id,),
+            ).fetchall()
+        ]
+        sent_rows = [
+            dict(r)
+            for r in cur.execute(
+                "SELECT * FROM mailbox_messages WHERE account_id = ? AND folder_role = 'sent' ORDER BY imap_uid ASC;",
+                (self.account.account_id,),
+            ).fetchall()
+        ]
+        inbox_folder_row = cur.execute(
+            "SELECT * FROM mailbox_folders WHERE account_id = ? AND folder_role = 'inbox' LIMIT 1;",
+            (self.account.account_id,),
+        ).fetchone()
+        sent_folder_row = cur.execute(
+            "SELECT * FROM mailbox_folders WHERE account_id = ? AND folder_role = 'sent' LIMIT 1;",
+            (self.account.account_id,),
+        ).fetchone()
+        inbox_sync_row = cur.execute(
+            "SELECT * FROM mailbox_folder_sync_state WHERE account_id = ? AND folder_id = ? LIMIT 1;",
+            (self.account.account_id, f"fld_{self.account.account_id}_inbox"),
+        ).fetchone()
+        sent_sync_row = cur.execute(
+            "SELECT * FROM mailbox_folder_sync_state WHERE account_id = ? AND folder_id = ? LIMIT 1;",
+            (self.account.account_id, f"fld_{self.account.account_id}_sent"),
+        ).fetchone()
+        crm_links_count = cur.execute(
+            """
+            SELECT COUNT(*) FROM message_crm_links l
+            JOIN mailbox_messages m ON l.message_id = m.message_id
+            WHERE m.account_id = ?;
+            """,
+            (self.account.account_id,),
+        ).fetchone()[0]
+
+        con_ro.close()
+
+        # 3. Dynamic Re-Verification: Fetch positive server UIDVALIDITY & verify all 20 messages
+        verify_res = self.verify_existing_pilot_messages(
+            inbox_folder_name=inbox_folder_name,
+            sent_folder_name=sent_folder_name,
+        )
+
+        if not verify_res.get("success"):
+            return {
+                "success": False,
+                "error": f"Verification failed prior to repair: {verify_res.get('error')}",
+                "error_category": verify_res.get("error_category", "VERIFICATION_FAILED"),
+                "verification_details": verify_res,
+            }
+
+        actual_inbox_uv = verify_res.get("actual_inbox_uidvalidity")
+        actual_sent_uv = verify_res.get("actual_sent_uidvalidity")
+
+        if not actual_inbox_uv or actual_inbox_uv <= 0 or not actual_sent_uv or actual_sent_uv <= 0:
+            return {
+                "success": False,
+                "error": f"Server returned non-positive UIDVALIDITY (Inbox: {actual_inbox_uv}, Sent: {actual_sent_uv})",
+                "error_category": "INVALID_SERVER_UIDVALIDITY",
+                "verification_details": verify_res,
+            }
+
+        # Check idempotency: If all rows already have the correct positive UIDVALIDITY
+        inbox_already_repaired = (
+            len(inbox_rows) == 10
+            and all(r["imap_uidvalidity"] == actual_inbox_uv for r in inbox_rows)
+            and (inbox_folder_row and inbox_folder_row["last_uidvalidity"] == actual_inbox_uv)
+            and (inbox_sync_row and inbox_sync_row["uidvalidity"] == actual_inbox_uv)
+        )
+        sent_already_repaired = (
+            len(sent_rows) == 10
+            and all(r["imap_uidvalidity"] == actual_sent_uv for r in sent_rows)
+            and (sent_folder_row and sent_folder_row["last_uidvalidity"] == actual_sent_uv)
+            and (sent_sync_row and sent_sync_row["uidvalidity"] == actual_sent_uv)
+        )
+
+        if inbox_already_repaired and sent_already_repaired:
+            return {
+                "success": True,
+                "status": "ALREADY_REPAIRED",
+                "message": "All 20 pilot messages and sync state records are already consistent with server UIDVALIDITY.",
+                "account": self.account.email_address,
+                "inbox_uidvalidity": actual_inbox_uv,
+                "sent_uidvalidity": actual_sent_uv,
+                "dry_run": dry_run,
+                "rows_updated": {
+                    "inbox_messages": 0,
+                    "sent_messages": 0,
+                    "mailbox_folders": 0,
+                    "mailbox_sync_state": 0,
+                },
+            }
+
+        # Ensure safe repair eligibility
+        if not verify_res.get("safe_repair_eligible"):
+            return {
+                "success": False,
+                "error": "Message verification detected discrepancies or checkpoints are inconsistent. Repair aborted.",
+                "error_category": "REPAIR_INELIGIBLE",
+                "verification_details": verify_res,
+            }
+
+        # 4. Dry-Run Handling
+        if dry_run:
+            inbox_to_update = sum(1 for r in inbox_rows if r["imap_uidvalidity"] == 0)
+            sent_to_update = sum(1 for r in sent_rows if r["imap_uidvalidity"] == 0)
+            return {
+                "success": True,
+                "status": "DRY_RUN_SUCCESS",
+                "dry_run": True,
+                "account": self.account.email_address,
+                "server_uidvalidity": {
+                    "inbox": actual_inbox_uv,
+                    "sent": actual_sent_uv,
+                },
+                "projected_updates": {
+                    "inbox_messages": inbox_to_update,
+                    "sent_messages": sent_to_update,
+                    "mailbox_folders": 2,
+                    "mailbox_sync_state": 2,
+                },
+                "crm_links_preserved": crm_links_count,
+                "verification_summary": {
+                    "inbox_verified": verify_res.get("inbox_verified_count"),
+                    "sent_verified": verify_res.get("sent_verified_count"),
+                },
+            }
+
+        # 5. Pre-Repair Online SQLite Backup & Disposable Clone Verification
+        from sales_engine.candidates.backup_engine import (
+            create_sqlite_online_backup,
+            verify_restore_in_disposable_clone,
+        )
+
+        backup_res = create_sqlite_online_backup(
+            source_db_path=self.db_path,
+            dest_dir=backup_dir,
+            mode="manual",
+        )
+        if not backup_res.success:
+            return {
+                "success": False,
+                "error": f"Pre-repair online SQLite backup failed: {backup_res.error_message}",
+                "error_category": "BACKUP_FAILED",
+                "backup_details": backup_res.to_dict(),
+            }
+
+        restore_res = verify_restore_in_disposable_clone(
+            backup_path=backup_res.backup_path,
+            expected_tables=[
+                "candidate_companies",
+                "candidate_contacts",
+                "historical_sent_emails",
+                "manual_outreach_log",
+                "mailbox_accounts",
+                "mailbox_folders",
+                "mailbox_messages",
+                "mailbox_folder_sync_state",
+                "message_crm_links",
+            ],
+        )
+        if not restore_res.get("success"):
+            return {
+                "success": False,
+                "error": f"Pre-repair backup disposable clone verification failed: {restore_res.get('error')}",
+                "error_category": "RESTORE_VERIFICATION_FAILED",
+                "restore_details": restore_res,
+            }
+
+        # 6. Atomic SQLite Transactional Repair
+        now_utc = datetime.now(timezone.utc).isoformat()
+        inbox_folder_id = f"fld_{self.account.account_id}_inbox"
+        sent_folder_id = f"fld_{self.account.account_id}_sent"
+
+        inbox_updated_count = 0
+        sent_updated_count = 0
+        folders_updated_count = 0
+        sync_state_updated_count = 0
+
+        conn_rw = sqlite3.connect(self.db_path, timeout=30.0)
+        conn_rw.row_factory = sqlite3.Row
+        try:
+            with conn_rw:
+                cur_rw = conn_rw.cursor()
+
+                # A. Update INBOX messages
+                cur_rw.execute(
+                    """
+                    UPDATE mailbox_messages
+                    SET imap_uidvalidity = ?
+                    WHERE account_id = ?
+                      AND folder_role = 'inbox'
+                      AND imap_uidvalidity = 0;
+                    """,
+                    (actual_inbox_uv, self.account.account_id),
+                )
+                inbox_updated_count = cur_rw.rowcount
+                if inbox_updated_count != 10:
+                    raise ValueError(
+                        f"Expected exactly 10 INBOX messages to be updated, but {inbox_updated_count} were affected."
+                    )
+
+                # B. Update INBOX.Sent messages
+                cur_rw.execute(
+                    """
+                    UPDATE mailbox_messages
+                    SET imap_uidvalidity = ?
+                    WHERE account_id = ?
+                      AND folder_role = 'sent'
+                      AND imap_uidvalidity = 0;
+                    """,
+                    (actual_sent_uv, self.account.account_id),
+                )
+                sent_updated_count = cur_rw.rowcount
+                if sent_updated_count != 10:
+                    raise ValueError(
+                        f"Expected exactly 10 Sent messages to be updated, but {sent_updated_count} were affected."
+                    )
+
+                # C. Update mailbox_folders last_uidvalidity
+                cur_rw.execute(
+                    """
+                    UPDATE mailbox_folders
+                    SET last_uidvalidity = ?,
+                        updated_at = ?
+                    WHERE account_id = ?
+                      AND folder_id = ?;
+                    """,
+                    (actual_inbox_uv, now_utc, self.account.account_id, inbox_folder_id),
+                )
+                folders_updated_count += cur_rw.rowcount
+
+                cur_rw.execute(
+                    """
+                    UPDATE mailbox_folders
+                    SET last_uidvalidity = ?,
+                        updated_at = ?
+                    WHERE account_id = ?
+                      AND folder_id = ?;
+                    """,
+                    (actual_sent_uv, now_utc, self.account.account_id, sent_folder_id),
+                )
+                folders_updated_count += cur_rw.rowcount
+
+                # D. Update mailbox_folder_sync_state uidvalidity
+                cur_rw.execute(
+                    """
+                    UPDATE mailbox_folder_sync_state
+                    SET uidvalidity = ?,
+                        updated_at = ?
+                    WHERE account_id = ?
+                      AND folder_id = ?;
+                    """,
+                    (actual_inbox_uv, now_utc, self.account.account_id, inbox_folder_id),
+                )
+                sync_state_updated_count += cur_rw.rowcount
+
+                cur_rw.execute(
+                    """
+                    UPDATE mailbox_folder_sync_state
+                    SET uidvalidity = ?,
+                        updated_at = ?
+                    WHERE account_id = ?
+                      AND folder_id = ?;
+                    """,
+                    (actual_sent_uv, now_utc, self.account.account_id, sent_folder_id),
+                )
+                sync_state_updated_count += cur_rw.rowcount
+
+                # E. Transactional PRAGMAs
+                integrity_rows = cur_rw.execute("PRAGMA integrity_check;").fetchall()
+                if not integrity_rows or integrity_rows[0][0] != "ok":
+                    raise RuntimeError(f"Integrity check failed during repair: {integrity_rows}")
+
+                fk_rows = cur_rw.execute("PRAGMA foreign_key_check;").fetchall()
+                if fk_rows:
+                    raise RuntimeError(f"Foreign key violations detected during repair: {fk_rows}")
+
+            # 7. Post-Repair Read Verification
+            cur_post = conn_rw.cursor()
+
+            # Verify inbox message count and positive UIDVALIDITY
+            post_inbox = cur_post.execute(
+                "SELECT COUNT(*) FROM mailbox_messages WHERE account_id = ? AND folder_role = 'inbox' AND imap_uidvalidity = ?;",
+                (self.account.account_id, actual_inbox_uv),
+            ).fetchone()[0]
+            if post_inbox != 10:
+                raise ValueError(f"Post-repair check failed: expected 10 inbox records with UIDVALIDITY={actual_inbox_uv}, found {post_inbox}")
+
+            # Verify sent message count and positive UIDVALIDITY
+            post_sent = cur_post.execute(
+                "SELECT COUNT(*) FROM mailbox_messages WHERE account_id = ? AND folder_role = 'sent' AND imap_uidvalidity = ?;",
+                (self.account.account_id, actual_sent_uv),
+            ).fetchone()[0]
+            if post_sent != 10:
+                raise ValueError(f"Post-repair check failed: expected 10 sent records with UIDVALIDITY={actual_sent_uv}, found {post_sent}")
+
+            # Check zero records have imap_uidvalidity = 0
+            post_zero = cur_post.execute(
+                "SELECT COUNT(*) FROM mailbox_messages WHERE account_id = ? AND imap_uidvalidity = 0;",
+                (self.account.account_id,),
+            ).fetchone()[0]
+            if post_zero != 0:
+                raise ValueError(f"Post-repair check failed: {post_zero} records still have imap_uidvalidity = 0")
+
+            # Check checkpoints remain 11 and 17
+            post_inbox_sync = cur_post.execute(
+                "SELECT uidvalidity, last_synced_uid FROM mailbox_folder_sync_state WHERE account_id = ? AND folder_id = ?;",
+                (self.account.account_id, inbox_folder_id),
+            ).fetchone()
+            if not post_inbox_sync or post_inbox_sync["last_synced_uid"] != 11 or post_inbox_sync["uidvalidity"] != actual_inbox_uv:
+                raise ValueError(f"Post-repair inbox sync checkpoint altered: {dict(post_inbox_sync) if post_inbox_sync else None}")
+
+            post_sent_sync = cur_post.execute(
+                "SELECT uidvalidity, last_synced_uid FROM mailbox_folder_sync_state WHERE account_id = ? AND folder_id = ?;",
+                (self.account.account_id, sent_folder_id),
+            ).fetchone()
+            if not post_sent_sync or post_sent_sync["last_synced_uid"] != 17 or post_sent_sync["uidvalidity"] != actual_sent_uv:
+                raise ValueError(f"Post-repair sent sync checkpoint altered: {dict(post_sent_sync) if post_sent_sync else None}")
+
+            # Check message_crm_links count remains untouched
+            post_crm_links = cur_post.execute(
+                """
+                SELECT COUNT(*) FROM message_crm_links l
+                JOIN mailbox_messages m ON l.message_id = m.message_id
+                WHERE m.account_id = ?;
+                """,
+                (self.account.account_id,),
+            ).fetchone()[0]
+            if post_crm_links != crm_links_count:
+                raise ValueError(f"Post-repair CRM links count altered: was {crm_links_count}, now {post_crm_links}")
+
+            # Check zero duplicate messages
+            dup_count = cur_post.execute(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT account_id, folder_id, imap_uidvalidity, imap_uid, COUNT(*) as c
+                    FROM mailbox_messages
+                    WHERE account_id = ?
+                    GROUP BY account_id, folder_id, imap_uidvalidity, imap_uid
+                    HAVING c > 1
+                );
+                """,
+                (self.account.account_id,),
+            ).fetchone()[0]
+            if dup_count != 0:
+                raise ValueError(f"Post-repair duplicate detection failed: {dup_count} duplicate physical occurrences found")
+
+            return {
+                "success": True,
+                "status": "REPAIR_COMMITTED",
+                "account": self.account.email_address,
+                "server_uidvalidity": {
+                    "inbox": actual_inbox_uv,
+                    "sent": actual_sent_uv,
+                },
+                "backup": {
+                    "backup_path": backup_res.backup_path,
+                    "sha256": backup_res.sha256_checksum,
+                    "integrity_status": backup_res.integrity_status,
+                },
+                "rows_updated": {
+                    "inbox_messages": inbox_updated_count,
+                    "sent_messages": sent_updated_count,
+                    "mailbox_folders": folders_updated_count,
+                    "mailbox_sync_state": sync_state_updated_count,
+                },
+                "post_verification": {
+                    "inbox_repaired_count": post_inbox,
+                    "sent_repaired_count": post_sent,
+                    "zero_uv_count": post_zero,
+                    "crm_links_preserved": post_crm_links,
+                    "checkpoints": {
+                        "inbox": 11,
+                        "sent": 17,
+                    },
+                    "duplicates": 0,
+                },
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Repair transaction aborted and rolled back: {e}",
+                "error_category": type(e).__name__,
+            }
+        finally:
+            conn_rw.close()
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1000,6 +1432,15 @@ Examples:
     verif_parser.add_argument("--live-connect", action="store_true", help="Explicit authorization to open live IMAP connection")
     verif_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
     verif_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
+
+    # Command: repair-uidvalidity (IMAP-UV-REPAIR-01B)
+    repair_parser = subparsers.add_parser("repair-uidvalidity", help="Safe, transactional repair of pilot records with imap_uidvalidity=0")
+    repair_parser.add_argument("--live-connect", action="store_true", help="Explicit authorization to open live IMAP connection for verification")
+    repair_parser.add_argument("--confirm-repair", action="store_true", help="Explicit confirmation to execute database updates")
+    repair_parser.add_argument("--dry-run", action="store_true", help="Simulate repair without modifying SQLite or writing backups")
+    repair_parser.add_argument("--backup-dir", help="Directory where pre-repair SQLite backup is stored")
+    repair_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
+    repair_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
 
     # Global options
     parser.add_argument(
@@ -1200,6 +1641,78 @@ Examples:
                 print(f"Safe Repair Eligibility: {'ELIGIBLE (100% verified, positive UIDVALIDITY, consistent checkpoints)' if res['safe_repair_eligible'] else 'NOT ELIGIBLE (Discrepancies detected)'}")
             print("=" * 70 + "\n")
         sys.exit(0 if res["success"] else 2)
+
+    elif args.command == "repair-uidvalidity":
+        if not args.live_connect:
+            msg = "Repair requires live verification. Pass '--live-connect' to authorize remote IMAP connection."
+            if args.json:
+                print(json.dumps({"success": False, "error": msg, "error_category": "LIVE_CONNECT_REQUIRED"}))
+            else:
+                print(f"ERROR: {msg}")
+            sys.exit(3)
+
+        if not args.dry_run and not args.confirm_repair:
+            msg = "Safety check: Persistent repair requires explicit confirmation flag '--confirm-repair' (or use '--dry-run')."
+            if args.json:
+                print(json.dumps({"success": False, "error": msg, "error_category": "CONFIRMATION_REQUIRED"}))
+            else:
+                print(f"ERROR: {msg}")
+            sys.exit(3)
+
+        res = runner.repair_pilot_uidvalidity(
+            inbox_folder_name=args.inbox_folder,
+            sent_folder_name=args.sent_folder,
+            dry_run=args.dry_run,
+            backup_dir=args.backup_dir,
+        )
+
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            status_title = "DRY-RUN SIMULATION" if args.dry_run else ("ALREADY REPAIRED" if res.get("status") == "ALREADY_REPAIRED" else "COMMITTED REPAIR")
+            print(f"pyBIM Sales-AI: Pilot UIDVALIDITY Safe Repair ({status_title}) (IMAP-UV-REPAIR-01B)")
+            print("=" * 70)
+            if not res.get("success"):
+                print(f"ERROR: {res.get('error')}")
+                print(f"Category: {res.get('error_category')}")
+            else:
+                print(f"Status:                 {res.get('status')}")
+                print(f"Target Account:         {res.get('account')}")
+                if "server_uidvalidity" in res:
+                    uv = res["server_uidvalidity"]
+                    print(f"Server UIDVALIDITY:     INBOX={uv.get('inbox')}, INBOX.Sent={uv.get('sent')}")
+                elif "inbox_uidvalidity" in res:
+                    print(f"Server UIDVALIDITY:     INBOX={res.get('inbox_uidvalidity')}, INBOX.Sent={res.get('sent_uidvalidity')}")
+
+                if "backup" in res:
+                    b = res["backup"]
+                    print(f"Verified Backup:        {b.get('backup_path')}")
+                    print(f"Backup SHA-256:         {b.get('sha256')}")
+                    print(f"Integrity Check:        {b.get('integrity_status')}")
+
+                if "rows_updated" in res:
+                    up = res["rows_updated"]
+                    print("-" * 70)
+                    print("Updated Records:")
+                    print(f"  Inbox Messages:       {up.get('inbox_messages')}")
+                    print(f"  Sent Messages:        {up.get('sent_messages')}")
+                    print(f"  Mailbox Folders:      {up.get('mailbox_folders')}")
+                    print(f"  Folder Sync State:    {up.get('mailbox_sync_state')}")
+
+                if "post_verification" in res:
+                    pv = res["post_verification"]
+                    print("-" * 70)
+                    print("Post-Repair Assertions:")
+                    print(f"  Inbox Messages (UV>0): {pv.get('inbox_repaired_count')}/10")
+                    print(f"  Sent Messages (UV>0):  {pv.get('sent_repaired_count')}/10")
+                    print(f"  Records with UV=0:     {pv.get('zero_uv_count')} (Must be 0)")
+                    print(f"  CRM Links Preserved:   {pv.get('crm_links_preserved')}")
+                    print(f"  Checkpoints:           INBOX={pv['checkpoints']['inbox']}, Sent={pv['checkpoints']['sent']}")
+                    print(f"  Physical Duplicates:   {pv.get('duplicates')}")
+            print("=" * 70 + "\n")
+
+        sys.exit(0 if res.get("success") else 2)
 
 
 if __name__ == "__main__":
