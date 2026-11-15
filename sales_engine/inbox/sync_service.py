@@ -84,6 +84,7 @@ class MailboxSyncOrchestrator:
         max_batches_per_folder: int = 10,
         auto_reconcile: bool = True,
         dry_run: bool = False,
+        fail_on_uidvalidity_change: bool = False,
     ) -> Dict[str, Any]:
         """
         Synchronize specified folders (default: inbox, sent) for an account.
@@ -124,6 +125,7 @@ class MailboxSyncOrchestrator:
                 auto_reconcile=auto_reconcile,
                 dry_run=dry_run,
                 provider=provider,
+                fail_on_uidvalidity_change=fail_on_uidvalidity_change,
             )
             results["folders_synced"][folder.folder_name] = folder_res
             results["total_messages_ingested"] += folder_res.get("messages_ingested", 0)
@@ -143,6 +145,7 @@ class MailboxSyncOrchestrator:
         auto_reconcile: bool = True,
         dry_run: bool = False,
         provider: Optional[RegisterItReadOnlyIMAPProvider] = None,
+        fail_on_uidvalidity_change: bool = False,
     ) -> Dict[str, Any]:
         """
         Synchronize a single folder with strict checkpoint monotonicity and interruption recovery.
@@ -167,6 +170,7 @@ class MailboxSyncOrchestrator:
                 auto_reconcile=auto_reconcile,
                 dry_run=dry_run,
                 provider=provider,
+                fail_on_uidvalidity_change=fail_on_uidvalidity_change,
             )
         finally:
             with self._lock:
@@ -181,6 +185,7 @@ class MailboxSyncOrchestrator:
         auto_reconcile: bool,
         dry_run: bool,
         provider: Optional[RegisterItReadOnlyIMAPProvider],
+        fail_on_uidvalidity_change: bool = False,
     ) -> Dict[str, Any]:
         p = provider or self.provider_factory(account)
 
@@ -210,6 +215,34 @@ class MailboxSyncOrchestrator:
 
             # Detect UIDVALIDITY rollover
             if last_uv > 0 and remote_uv != last_uv:
+                if fail_on_uidvalidity_change:
+                    err_msg = (
+                        f"CRITICAL: UIDVALIDITY rollover detected during unattended sync for "
+                        f"{account.account_id}/{folder.folder_name}: stored {last_uv}, remote {remote_uv}. "
+                        f"Failing closed to prevent automatic re-download. Human operator intervention required."
+                    )
+                    logger.error(err_msg)
+                    fail_state = MailboxFolderSyncStateRecord(
+                        sync_state_id=f"sync_{account.account_id}_{folder.folder_id}",
+                        account_id=account.account_id,
+                        folder_id=folder.folder_id,
+                        uidvalidity=last_uv,
+                        last_synced_uid=last_uid,
+                        last_status="failed_uidvalidity_rollover",
+                        last_error_message=err_msg,
+                    )
+                    self.repo.update_folder_sync_state(fail_state)
+                    return {
+                        "folder_id": folder.folder_id,
+                        "folder_name": folder.folder_name,
+                        "starting_uid": last_uid,
+                        "ending_uid": last_uid,
+                        "messages_ingested": 0,
+                        "messages_deferred": 0,
+                        "status": "failed_uidvalidity_rollover",
+                        "error": err_msg,
+                    }
+
                 logger.warning(
                     f"UIDVALIDITY rollover detected for {account.account_id}/{folder.folder_name}: "
                     f"was {last_uv}, remote is {remote_uv}. Resetting cursor safely to 0."

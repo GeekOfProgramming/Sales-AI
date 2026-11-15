@@ -46,6 +46,12 @@ from sales_engine.inbox.credential_store import MailboxCredentialStore, WindowsD
 from sales_engine.inbox.providers.register_it import RegisterItReadOnlyIMAPProvider
 from sales_engine.inbox.sync_service import MailboxSyncOrchestrator
 from sales_engine.inbox.reconciliation_service import MailboxReconciliationService
+from sales_engine.inbox.scheduled_sync import (
+    ScheduledSyncRunner,
+    calculate_next_scheduled_run,
+    get_europe_rome_tz,
+    AUTHORIZED_SCHEDULED_ACCOUNTS,
+)
 from sales_engine.candidates.candidate_store import CandidateStore
 from sales_engine.sending.review_store import ReviewStore
 from sales_engine.candidates.backup_engine import (
@@ -1812,6 +1818,17 @@ Examples:
     backfill_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
     backfill_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
 
+    # Command: scheduled-sync (IMAP-AUTO-SYNC-01A)
+    sched_parser = subparsers.add_parser("scheduled-sync", help="Safe scheduled synchronization engine (unattended or manual Sync Now)")
+    sched_parser.add_argument("--live-connect", action="store_true", help="Explicit authorization to connect to remote IMAP server")
+    sched_parser.add_argument("--sync-now", action="store_true", help="Manual operator trigger ('Sync Now' override)")
+    sched_parser.add_argument("--dry-run", action="store_true", help="Simulate sync without committing records or updating checkpoints")
+    sched_parser.add_argument("--max-batches", type=int, default=2, help="Max batches of 50 messages per folder (default: 2)")
+    sched_parser.add_argument("--batch-size", type=int, default=50, help="Messages per batch (default: 50)")
+
+    # Command: scheduler-status (IMAP-AUTO-SYNC-01A)
+    sched_stat_parser = subparsers.add_parser("scheduler-status", help="Read-only status of scheduled sync windows, locks, and account readiness")
+
     # Global options
     parser.add_argument(
         "--account",
@@ -1893,7 +1910,45 @@ Examples:
             print("=" * 70 + "\n")
         sys.exit(0 if res["success"] else 1)
 
-    # All other commands beyond check and status require --live-connect
+    # Command: scheduler-status (offline status report)
+    if args.command == "scheduler-status":
+        sched_runner = ScheduledSyncRunner(mailbox_repo=runner.repo, credential_store=runner.cred_store)
+        res = sched_runner.get_scheduler_status()
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            print("pyBIM Sales-AI: Scheduled Mailbox Synchronization Status (IMAP-AUTO-SYNC-01A)")
+            print("=" * 70)
+            sch = res["schedule"]
+            print(f"Current Time (Rome):    {sch['current_time_rome']}")
+            print(f"Current Time (UTC):     {sch['current_time_utc']}")
+            print(f"Next Scheduled Window:  {sch['scheduled_window']}")
+            print(f"Next Run Time (Rome):   {sch['next_scheduled_run_rome']}")
+            print(f"Next Run Time (UTC):    {sch['next_scheduled_run_utc']}")
+            print(f"Seconds Until Next Run: {sch['seconds_until_next_run']:.0f}s")
+            print("-" * 70)
+            lock = res["concurrency_lock"]
+            print(f"Concurrency Lock:       {'ACTIVE' if lock['active'] else 'IDLE'} ({lock['lock_path']})")
+            print("-" * 70)
+            print("Authorized Primary Sales Mailboxes:")
+            for acc_id, acc_info in res["authorized_accounts"].items():
+                print(f"  Account: {acc_info['email']} ({acc_id})")
+                print(f"    Registered in DB: {'YES' if acc_info.get('registered') else 'NO'}")
+                print(f"    Enabled for Sync: {'YES (1)' if acc_info.get('is_enabled') else 'NO (0 - Unattended sync skipped)'}")
+                folders = acc_info.get("folders", {})
+                for role in ["inbox", "sent"]:
+                    f_st = folders.get(role)
+                    if f_st:
+                        print(f"    [{role.upper()}] Checkpoint UID: {f_st['last_synced_uid']}, UV: {f_st['uidvalidity']}, Status: {f_st['last_status']}")
+                    else:
+                        print(f"    [{role.upper()}] Not initialized")
+            print("-" * 70)
+            print("Permitted Daily Schedules: " + ", ".join(res["permitted_operating_windows"]))
+            print("=" * 70 + "\n")
+        sys.exit(0)
+
+    # All other commands beyond check, status, and scheduler-status require --live-connect
     if not getattr(args, "live_connect", False):
         msg = "Refusing connection: Live connection commands require explicit '--live-connect' flag."
         if args.json:
@@ -2180,6 +2235,94 @@ Examples:
             print("=" * 70 + "\n")
 
         sys.exit(0 if res.get("success") else 2)
+
+    elif args.command == "scheduler-status":
+        sched_runner = ScheduledSyncRunner(mailbox_repo=runner.repo, credential_store=runner.credential_store)
+        res = sched_runner.get_scheduler_status()
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            print("pyBIM Sales-AI: Scheduled Mailbox Synchronization Status (IMAP-AUTO-SYNC-01A)")
+            print("=" * 70)
+            sch = res["schedule"]
+            print(f"Current Time (Rome):    {sch['current_time_rome']}")
+            print(f"Current Time (UTC):     {sch['current_time_utc']}")
+            print(f"Next Scheduled Window:  {sch['scheduled_window']}")
+            print(f"Next Run Time (Rome):   {sch['next_scheduled_run_rome']}")
+            print(f"Next Run Time (UTC):    {sch['next_scheduled_run_utc']}")
+            print(f"Seconds Until Next Run: {sch['seconds_until_next_run']:.0f}s")
+            print("-" * 70)
+            lock = res["concurrency_lock"]
+            print(f"Concurrency Lock:       {'ACTIVE' if lock['active'] else 'IDLE'} ({lock['lock_path']})")
+            print("-" * 70)
+            print("Authorized Primary Sales Mailboxes:")
+            for acc_id, acc_info in res["authorized_accounts"].items():
+                print(f"  Account: {acc_info['email']} ({acc_id})")
+                print(f"    Registered in DB: {'YES' if acc_info.get('registered') else 'NO'}")
+                print(f"    Enabled for Sync: {'YES (1)' if acc_info.get('is_enabled') else 'NO (0 - Unattended sync skipped)'}")
+                folders = acc_info.get("folders", {})
+                for role in ["inbox", "sent"]:
+                    f_st = folders.get(role)
+                    if f_st:
+                        print(f"    [{role.upper()}] Checkpoint UID: {f_st['last_synced_uid']}, UV: {f_st['uidvalidity']}, Status: {f_st['last_status']}")
+                    else:
+                        print(f"    [{role.upper()}] Not initialized")
+            print("-" * 70)
+            print("Permitted Daily Schedules: " + ", ".join(res["permitted_operating_windows"]))
+            print("=" * 70 + "\n")
+        sys.exit(0)
+
+    elif args.command == "scheduled-sync":
+        if not args.live_connect:
+            msg = "Scheduled synchronization requires live connection. Pass '--live-connect' to authorize remote IMAP connection."
+            if args.json:
+                print(json.dumps({"success": False, "error": msg, "error_category": "LIVE_CONNECT_REQUIRED"}))
+            else:
+                print(f"ERROR: {msg}")
+            sys.exit(3)
+
+        sched_runner = ScheduledSyncRunner(mailbox_repo=runner.repo, credential_store=runner.cred_store)
+        res = sched_runner.execute_scheduled_sync(
+            target_account_id=args.account if args.account != PILOT_EMAIL_ADDRESS else None,
+            max_batches_per_folder=args.max_batches,
+            batch_size=args.batch_size,
+            dry_run=args.dry_run,
+            is_manual_sync_now=args.sync_now,
+        )
+
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            mode_title = "MANUAL SYNC NOW" if args.sync_now else "UNATTENDED SCHEDULED"
+            if args.dry_run:
+                mode_title += " (DRY-RUN)"
+            print(f"pyBIM Sales-AI: Mailbox Sync Engine ({mode_title}) (IMAP-AUTO-SYNC-01A)")
+            print("=" * 70)
+            print(f"Overall Status:          {res.get('status')}")
+            print(f"Execution Mode:          {res.get('execution_mode')}")
+            print(f"Total Messages Ingested: {res.get('total_messages_ingested')}")
+            print(f"Total Deferred:          {res.get('total_messages_deferred')}")
+            print("-" * 70)
+            for acc_id, acc_res in res.get("accounts", {}).items():
+                print(f"Account: {acc_id} ({acc_res.get('email_address')})")
+                print(f"  Status: {acc_res.get('status')}")
+                if "reason" in acc_res:
+                    print(f"  Reason: {acc_res.get('reason')}")
+                if "folders_synced" in acc_res:
+                    for f_name, f_res in acc_res["folders_synced"].items():
+                        print(f"  Folder {f_name}: Ingested={f_res.get('messages_ingested')}, StartingUID={f_res.get('starting_uid')}, EndingUID={f_res.get('ending_uid')}, UV={f_res.get('uidvalidity')}")
+                if "error" in acc_res:
+                    print(f"  Error: {acc_res.get('error')}")
+            if res.get("errors"):
+                print("-" * 70)
+                print("Errors:")
+                for err in res["errors"]:
+                    print(f"  [!] {err}")
+            print("=" * 70 + "\n")
+
+        sys.exit(0 if res.get("status") in ["success", "skipped_disabled"] else 2)
 
 
 if __name__ == "__main__":

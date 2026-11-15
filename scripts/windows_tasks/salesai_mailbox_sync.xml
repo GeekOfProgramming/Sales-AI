@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Date>2026-11-15T20:00:00</Date>
+    <Author>pyBIM\SalesAI</Author>
+    <Description>pyBIM Sales-AI: Automated Read-Only Mailbox Synchronization (IMAP-AUTO-SYNC-01A). Runs daily at 12:15 and 18:00 Europe/Rome for authorized primary sales mailboxes (info@pybim.com, info@pybim.it). Zero CRM mutations, read-only IMAP retrieval, DPAPI credential protection.</Description>
+    <URI>\pyBIM\SalesAI_MailboxSync</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <!-- Daily Trigger 1: 12:15 CET/CEST -->
+    <CalendarTrigger>
+      <StartBoundary>2026-11-16T12:15:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+    <!-- Daily Trigger 2: 18:00 CET/CEST -->
+    <CalendarTrigger>
+      <StartBoundary>2026-11-16T18:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>C:\Sales-AI\SalesAI\.venv\Scripts\python.exe</Command>
+      <Arguments>scripts\run_mailbox_pilot.py scheduled-sync --live-connect</Arguments>
+      <WorkingDirectory>C:\Sales-AI\SalesAI</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

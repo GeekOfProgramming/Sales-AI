@@ -213,7 +213,7 @@ class MailboxSyncSummary(BaseModel):
 
 FolderRole = Literal["inbox", "sent", "drafts", "archive", "trash", "junk", "other"]
 MessageDirection = Literal["inbound", "outbound"]
-SyncStatus = Literal["idle", "syncing", "success", "failed", "interrupted", "uidvalidity_reset"]
+SyncStatus = Literal["idle", "syncing", "success", "failed", "interrupted", "uidvalidity_reset", "failed_uidvalidity_rollover"]
 LinkStatus = Literal["suggested_pending_review", "verified", "unlinked", "rejected"]
 LinkMethod = Literal[
     "rfc_in_reply_to",
