@@ -575,9 +575,14 @@ def test_12_windows_task_xml_structure(disposable_sync_env):
     assert "<StartBoundary>2026-11-16T12:15:00</StartBoundary>" in content
     assert "<StartBoundary>2026-11-16T18:00:00</StartBoundary>" in content
     assert "<RunLevel>LeastPrivilege</RunLevel>" in content
+    assert "<LogonType>InteractiveToken</LogonType>" in content
     assert "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>" in content
     assert "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" in content
     assert "<StartWhenAvailable>true</StartWhenAvailable>" in content
+    assert "<Enabled>false</Enabled>" in content
+    assert r"<Command>C:\Sales-AI\SalesAI\.venv\Scripts\python.exe</Command>" in content
+    assert r"<WorkingDirectory>C:\Sales-AI\SalesAI</WorkingDirectory>" in content
+    assert r"<Arguments>C:\Sales-AI\SalesAI\scripts\run_mailbox_pilot.py scheduled-sync --live-connect</Arguments>" in content
     assert "scheduled-sync --live-connect" in content
 
 
@@ -657,6 +662,35 @@ def populated_production_like_env(tmp_path, monkeypatch):
         sync_priority=2,
     )
     repo.save_account(acc_it)
+
+    # Seed authoritative folder IDs exactly matching production
+    acc_careers = MailboxAccountRecord(
+        account_id="acc_careers_com",
+        email_address="careers@pybim.com",
+        display_name="pyBIM Careers",
+        provider="register_it",
+        imap_host="pop.securemail.pro",
+        imap_port=993,
+        use_ssl=True,
+        credential_ref="win_cred_acc_careers_com",
+        is_enabled=False,
+        sync_priority=3,
+    )
+    repo.save_account(acc_careers)
+
+    acc_support = MailboxAccountRecord(
+        account_id="acc_support_com",
+        email_address="support@pybim.com",
+        display_name="pyBIM Support",
+        provider="register_it",
+        imap_host="pop.securemail.pro",
+        imap_port=993,
+        use_ssl=True,
+        credential_ref="win_cred_acc_support_com",
+        is_enabled=False,
+        sync_priority=4,
+    )
+    repo.save_account(acc_support)
 
     # Seed authoritative folder IDs exactly matching production
     fld_com_inbox = MailboxFolderRecord(
@@ -977,4 +1011,95 @@ def test_15_idempotent_repeated_sync(populated_production_like_env):
     with sqlite3.connect(populated_production_like_env["db_path"]) as conn:
         fkv = conn.execute("PRAGMA foreign_key_check;").fetchall()
         assert len(fkv) == 0
+
+
+def test_16_safe_account_activation_and_disable(populated_production_like_env):
+    """
+    16. Safe activation enables ONLY acc_info_com and acc_info_it via targeted transactional UPDATE.
+        Preserves existing account rows, folder records, message foreign keys, and checkpoints.
+        Explicit disable returns them to is_enabled=0. Secondary accounts remain untouched.
+    """
+    repo = populated_production_like_env["repo"]
+    db_path = populated_production_like_env["db_path"]
+
+    # Verify initial state: all disabled
+    for acc in repo.list_accounts():
+        assert acc.is_enabled is False
+
+    # Perform activation of primary sales accounts
+    ok1 = repo.set_account_enabled("acc_info_com", True)
+    ok2 = repo.set_account_enabled("acc_info_it", True)
+    assert ok1 is True
+    assert ok2 is True
+
+    # Verify primary are enabled, secondary remain disabled
+    acc_com = repo.get_account("acc_info_com")
+    acc_it = repo.get_account("acc_info_it")
+    acc_careers = repo.get_account("acc_careers_com")
+    acc_support = repo.get_account("acc_support_com")
+
+    assert acc_com.is_enabled is True
+    assert acc_it.is_enabled is True
+    assert acc_careers.is_enabled is False
+    assert acc_support.is_enabled is False
+
+    # Foreign key checks on SQLite
+    with sqlite3.connect(db_path) as conn:
+        fkv = conn.execute("PRAGMA foreign_key_check;").fetchall()
+        assert len(fkv) == 0, "Activation must never corrupt foreign keys!"
+        # Checkpoint counts and message counts must remain intact
+        msg_count = conn.execute("SELECT COUNT(*) FROM mailbox_messages;").fetchone()[0]
+        assert msg_count == 689
+        folder_count = conn.execute("SELECT COUNT(*) FROM mailbox_folders;").fetchone()[0]
+        assert folder_count == 4
+
+    # Perform rollback / disable
+    repo.set_account_enabled("acc_info_com", False)
+    repo.set_account_enabled("acc_info_it", False)
+
+    assert repo.get_account("acc_info_com").is_enabled is False
+    assert repo.get_account("acc_info_it").is_enabled is False
+
+    with sqlite3.connect(db_path) as conn:
+        fkv = conn.execute("PRAGMA foreign_key_check;").fetchall()
+        assert len(fkv) == 0
+
+
+def test_17_sync_now_result_formatting_explicit_account_status(populated_production_like_env):
+    """
+    17. Successful manual Sync Now run reports explicit 'no_new_messages' or 'success' account status,
+        never 'None'.
+    """
+    repo = populated_production_like_env["repo"]
+
+    def make_mock_provider(acc):
+        p = MagicMock()
+        p.discover_folders.return_value = [
+            MailboxFolderRecord(
+                folder_id=f"fld_{acc.account_id}_inbox",
+                account_id=acc.account_id,
+                folder_name="INBOX",
+                folder_role="inbox",
+            ),
+        ]
+        p.examine_folder.return_value = (56, 1791495722)
+        p.fetch_messages_by_uid.return_value = ([], 56, 1791495722)
+        return p
+
+    orchestrator = MailboxSyncOrchestrator(
+        mailbox_repo=repo,
+        provider_factory=make_mock_provider,
+    )
+    runner = ScheduledSyncRunner(
+        mailbox_repo=repo,
+        sync_orchestrator=orchestrator,
+        lock_dir=populated_production_like_env["lock_dir"],
+    )
+
+    res = runner.execute_scheduled_sync(target_account_id="acc_info_com", is_manual_sync_now=True)
+    assert res["status"] == "success"
+    acc_res = res["accounts"]["acc_info_com"]
+    # Account status must be explicitly 'no_new_messages' rather than None
+    assert acc_res.get("status") == "no_new_messages"
+    assert acc_res.get("status") is not None
 

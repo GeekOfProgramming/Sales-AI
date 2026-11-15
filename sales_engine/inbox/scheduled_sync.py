@@ -308,13 +308,19 @@ class ScheduledSyncRunner:
                     fail_on_uidvalidity_change=not is_manual_sync_now,
                 )
                 
+                # Ensure explicit account-level status reporting
+                if acc_result.get("errors"):
+                    acc_result["status"] = "partial_failure"
+                    report["errors"].extend(acc_result["errors"])
+                    report["status"] = "partial_failure"
+                elif acc_result.get("total_messages_ingested", 0) > 0:
+                    acc_result["status"] = "success"
+                else:
+                    acc_result["status"] = "no_new_messages"
+
                 report["accounts"][acc_id] = acc_result
                 report["total_messages_ingested"] += acc_result.get("total_messages_ingested", 0)
                 report["total_messages_deferred"] += acc_result.get("total_messages_deferred", 0)
-                
-                if acc_result.get("errors"):
-                    report["errors"].extend(acc_result["errors"])
-                    report["status"] = "partial_failure"
 
             except Exception as e:
                 err_msg = f"Failed sync for {acc_id}: {str(e)}"

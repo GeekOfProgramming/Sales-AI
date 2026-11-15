@@ -49,13 +49,36 @@ switch ($Action) {
             Write-Host "Task Status: NOT INSTALLED" -ForegroundColor Yellow
             Write-Host "To install, run: .\scripts\manage_scheduled_sync.ps1 install"
         } else {
-            Write-Host "Task Status: INSTALLED" -ForegroundColor Green
-            Write-Host "State:       $($task.State)"
-            Write-Host "Enabled:     $($task.Settings.Enabled)"
+            Write-Host "Task Status:       INSTALLED" -ForegroundColor Green
+            Write-Host "State:             $($task.State)"
+            Write-Host "Settings Enabled:  $($task.Settings.Enabled)"
+            
+            # Action and Context Details
+            $action = $task.Actions | Select-Object -First 1
+            if ($action) {
+                Write-Host "Executable:        $($action.Execute)"
+                Write-Host "Arguments:         $($action.Arguments)"
+                Write-Host "Working Directory: $($action.WorkingDirectory)"
+            }
+            
+            # Principal / Identity Details
+            $principal = $task.Principal
+            if ($principal) {
+                Write-Host "User Context:      $($principal.UserId)"
+                Write-Host "Logon Type:        $($principal.LogonType)"
+                Write-Host "Run Level:         $($principal.RunLevel)"
+            }
+
+            # Triggers Details
+            Write-Host "Configured Triggers:"
+            foreach ($trig in $task.Triggers) {
+                Write-Host "  - StartBoundary: $($trig.StartBoundary) | Enabled: $($trig.Enabled)"
+            }
+
             $taskInfo = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction SilentlyContinue
             if ($taskInfo) {
-                Write-Host "Last Run:    $($taskInfo.LastRunTime) (Result: $($taskInfo.LastTaskResult))"
-                Write-Host "Next Run:    $($taskInfo.NextRunTime)"
+                Write-Host "Last Run Time:     $($taskInfo.LastRunTime) (Result: $($taskInfo.LastTaskResult))"
+                Write-Host "Next Run Time:     $($taskInfo.NextRunTime)"
             }
         }
     }

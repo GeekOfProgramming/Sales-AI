@@ -335,6 +335,24 @@ class MailboxRepository:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_account(r) for r in rows]
 
+    def set_account_enabled(self, account_id: str, is_enabled: bool) -> bool:
+        """
+        Safely update account enablement status in-place without replacing or deleting rows.
+        Guarantees foreign key integrity for related folders, messages, and sync checkpoints.
+        Returns True if an existing account was updated, False if account not found.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock, self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE mailbox_accounts
+                SET is_enabled = ?, updated_at = ?
+                WHERE account_id = ?;
+                """,
+                (1 if is_enabled else 0, now_iso, account_id),
+            )
+            return cursor.rowcount > 0
+
     def _row_to_account(self, row: sqlite3.Row) -> MailboxAccountRecord:
         return MailboxAccountRecord(
             account_id=row["account_id"],

@@ -42,7 +42,7 @@
       <RestartOnIdle>false</RestartOnIdle>
     </IdleSettings>
     <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
+    <Enabled>false</Enabled>
     <Hidden>false</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
@@ -52,7 +52,7 @@
   <Actions Context="Author">
     <Exec>
       <Command>C:\Sales-AI\SalesAI\.venv\Scripts\python.exe</Command>
-      <Arguments>scripts\run_mailbox_pilot.py scheduled-sync --live-connect</Arguments>
+      <Arguments>C:\Sales-AI\SalesAI\scripts\run_mailbox_pilot.py scheduled-sync --live-connect</Arguments>
       <WorkingDirectory>C:\Sales-AI\SalesAI</WorkingDirectory>
     </Exec>
   </Actions>

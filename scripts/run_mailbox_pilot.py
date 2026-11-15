@@ -1829,6 +1829,14 @@ Examples:
     # Command: scheduler-status (IMAP-AUTO-SYNC-01A)
     sched_stat_parser = subparsers.add_parser("scheduler-status", help="Read-only status of scheduled sync windows, locks, and account readiness")
 
+    # Command: activate-scheduled (IMAP-AUTO-SYNC-01B-ACTIVATION-PREP)
+    act_parser = subparsers.add_parser("activate-scheduled", help="Operator activation/enablement of primary sales mailboxes for scheduled sync")
+    act_parser.add_argument("--confirm-activation", action="store_true", help="Explicit confirmation to update SQLite is_enabled=1 for primary accounts")
+
+    # Command: disable-scheduled (IMAP-AUTO-SYNC-01B-ACTIVATION-PREP)
+    dis_parser = subparsers.add_parser("disable-scheduled", help="Operator rollback/disablement of primary sales mailboxes for scheduled sync")
+    dis_parser.add_argument("--confirm-disable", action="store_true", help="Explicit confirmation to update SQLite is_enabled=0 for primary accounts")
+
     # Global options
     parser.add_argument(
         "--account",
@@ -1948,8 +1956,8 @@ Examples:
             print("=" * 70 + "\n")
         sys.exit(0)
 
-    # All other commands beyond check, status, and scheduler-status require --live-connect
-    if not getattr(args, "live_connect", False):
+    # All other commands beyond check, status, scheduler-status, activate-scheduled, and disable-scheduled require --live-connect
+    if args.command not in ("check", "status", "scheduler-status", "activate-scheduled", "disable-scheduled") and not getattr(args, "live_connect", False):
         msg = "Refusing connection: Live connection commands require explicit '--live-connect' flag."
         if args.json:
             print(json.dumps({"success": False, "error": msg}))
@@ -2323,6 +2331,81 @@ Examples:
             print("=" * 70 + "\n")
 
         sys.exit(0 if res.get("status") in ["success", "skipped_disabled"] else 2)
+
+    elif args.command == "activate-scheduled":
+        target_accounts = ["acc_info_com", "acc_info_it"]
+        if not args.confirm_activation:
+            print("\n" + "=" * 70)
+            print("pyBIM Sales-AI: Account Activation Check (IMAP-AUTO-SYNC-01B)")
+            print("=" * 70)
+            print("DRY-RUN / PRE-ACTIVATION VALIDATION:")
+            print("The following PRIMARY SALES accounts will be enabled (is_enabled = 1):")
+            for aid in target_accounts:
+                acc = runner.repo.get_account(aid)
+                if acc:
+                    print(f"  [+] {aid}: {acc.email_address} (Current is_enabled: {acc.is_enabled})")
+                else:
+                    print(f"  [!] {aid}: NOT FOUND in database")
+            print("\nSecondary accounts remain strictly disabled (is_enabled = 0).")
+            print("To execute activation, re-run with '--confirm-activation'.")
+            print("=" * 70 + "\n")
+            sys.exit(0)
+
+        # Validate accounts exist before updating
+        updated = []
+        for aid in target_accounts:
+            acc = runner.repo.get_account(aid)
+            if not acc:
+                print(f"ERROR: Cannot activate account {aid} - not found in mailbox repository.")
+                sys.exit(1)
+            ok = runner.repo.set_account_enabled(aid, True)
+            if ok:
+                updated.append(aid)
+
+        print("\n" + "=" * 70)
+        print("pyBIM Sales-AI: Primary Mailboxes Activated (IMAP-AUTO-SYNC-01B)")
+        print("=" * 70)
+        for aid in updated:
+            acc = runner.repo.get_account(aid)
+            print(f"  [ENABLED] {aid} ({acc.email_address}) -> is_enabled={acc.is_enabled}")
+        print("All secondary mailboxes remain disabled.")
+        print("=" * 70 + "\n")
+        sys.exit(0)
+
+    elif args.command == "disable-scheduled":
+        target_accounts = ["acc_info_com", "acc_info_it"]
+        if not args.confirm_disable:
+            print("\n" + "=" * 70)
+            print("pyBIM Sales-AI: Account Disable Check (IMAP-AUTO-SYNC-01B)")
+            print("=" * 70)
+            print("DRY-RUN / PRE-DISABLE VALIDATION:")
+            print("The following PRIMARY SALES accounts will be disabled (is_enabled = 0):")
+            for aid in target_accounts:
+                acc = runner.repo.get_account(aid)
+                if acc:
+                    print(f"  [-] {aid}: {acc.email_address} (Current is_enabled: {acc.is_enabled})")
+                else:
+                    print(f"  [!] {aid}: NOT FOUND in database")
+            print("\nTo execute rollback/disable, re-run with '--confirm-disable'.")
+            print("=" * 70 + "\n")
+            sys.exit(0)
+
+        updated = []
+        for aid in target_accounts:
+            acc = runner.repo.get_account(aid)
+            if acc:
+                runner.repo.set_account_enabled(aid, False)
+                updated.append(aid)
+
+        print("\n" + "=" * 70)
+        print("pyBIM Sales-AI: Primary Mailboxes Disabled (IMAP-AUTO-SYNC-01B)")
+        print("=" * 70)
+        for aid in updated:
+            acc = runner.repo.get_account(aid)
+            print(f"  [DISABLED] {aid} ({acc.email_address}) -> is_enabled={acc.is_enabled}")
+        print("Scheduled synchronization will skip these accounts.")
+        print("=" * 70 + "\n")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
