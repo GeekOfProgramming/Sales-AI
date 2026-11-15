@@ -56,7 +56,65 @@ from sales_engine.candidates.backup_engine import (
 
 logger = logging.getLogger(__name__)
 
-# Constants strictly enforcing IMAP-SYNC-02B constraints
+# Approved Mailbox Targets Configuration
+AUTHORIZED_MAILBOX_CONFIGS: Dict[str, Dict[str, Any]] = {
+    "info@pybim.com": {
+        "account_id": "acc_info_com",
+        "email_address": "info@pybim.com",
+        "display_name": "pyBIM Info (COM)",
+        "credential_ref": "win_cred_acc_info_com",
+        "imap_host": "pop.securemail.pro",
+        "imap_port": 993,
+        "sync_priority": 1,
+    },
+    "info@pybim.it": {
+        "account_id": "acc_info_it",
+        "email_address": "info@pybim.it",
+        "display_name": "pyBIM Info (IT)",
+        "credential_ref": "win_cred_acc_info_it",
+        "imap_host": "pop.securemail.pro",
+        "imap_port": 993,
+        "sync_priority": 2,
+    },
+    "careers@pybim.com": {
+        "account_id": "acc_careers_com",
+        "email_address": "careers@pybim.com",
+        "display_name": "pyBIM Careers",
+        "credential_ref": "win_cred_acc_careers_com",
+        "imap_host": "pop.securemail.pro",
+        "imap_port": 993,
+        "sync_priority": 3,
+    },
+    "support@pybim.com": {
+        "account_id": "acc_support_com",
+        "email_address": "support@pybim.com",
+        "display_name": "pyBIM Support",
+        "credential_ref": "win_cred_acc_support_com",
+        "imap_host": "pop.securemail.pro",
+        "imap_port": 993,
+        "sync_priority": 4,
+    },
+    "hamed.sharifi@pybim.it": {
+        "account_id": "acc_hamed_it",
+        "email_address": "hamed.sharifi@pybim.it",
+        "display_name": "Hamed Sharifi",
+        "credential_ref": "win_cred_acc_hamed_it",
+        "imap_host": "pop.securemail.pro",
+        "imap_port": 993,
+        "sync_priority": 5,
+    },
+    "hamid.lotfalian@pybim.it": {
+        "account_id": "acc_hamid_it",
+        "email_address": "hamid.lotfalian@pybim.it",
+        "display_name": "Hamid Lotfalian",
+        "credential_ref": "win_cred_acc_hamid_it",
+        "imap_host": "pop.securemail.pro",
+        "imap_port": 993,
+        "sync_priority": 6,
+    },
+}
+
+# Constants strictly enforcing IMAP-SYNC-02B constraints for default/pilot account
 PILOT_ACCOUNT_ID = "acc_info_com"
 PILOT_EMAIL_ADDRESS = "info@pybim.com"
 PILOT_DISPLAY_NAME = "pyBIM Info (COM)"
@@ -69,24 +127,39 @@ PILOT_MAX_SENT_MESSAGES = 10
 
 def get_pilot_account_config() -> MailboxAccountRecord:
     """Returns the immutable MailboxAccountRecord for the approved pilot account."""
+    return get_account_config_by_email(PILOT_EMAIL_ADDRESS)
+
+
+def get_account_config_by_email(email_address: str) -> MailboxAccountRecord:
+    """
+    Returns the MailboxAccountRecord for one of the six authorized Register.it accounts.
+    Raises ValueError if email is not in the authorized list.
+    """
+    clean_email = email_address.strip().lower()
+    if clean_email not in AUTHORIZED_MAILBOX_CONFIGS:
+        raise ValueError(
+            f"Unauthorized account: '{email_address}'. "
+            f"Authorized accounts: {list(AUTHORIZED_MAILBOX_CONFIGS.keys())}"
+        )
+    cfg = AUTHORIZED_MAILBOX_CONFIGS[clean_email]
     return MailboxAccountRecord(
-        account_id=PILOT_ACCOUNT_ID,
-        email_address=PILOT_EMAIL_ADDRESS,
-        display_name=PILOT_DISPLAY_NAME,
+        account_id=cfg["account_id"],
+        email_address=cfg["email_address"],
+        display_name=cfg["display_name"],
         provider="register_it",
-        imap_host=PILOT_IMAP_HOST,
-        imap_port=PILOT_IMAP_PORT,
+        imap_host=cfg["imap_host"],
+        imap_port=cfg["imap_port"],
         use_ssl=True,
-        credential_ref=PILOT_CREDENTIAL_REF,
-        is_enabled=False,  # Disabled by default
-        sync_priority=1,
+        credential_ref=cfg["credential_ref"],
+        is_enabled=False,  # Disabled by default until individually authorized
+        sync_priority=cfg["sync_priority"],
         connection_status="configured",
     )
 
 
 class MailboxPilotRunner:
     """
-    Operator-controlled runner for the single-mailbox read-only pilot.
+    Operator-controlled runner for single-mailbox read-only pilot and sequential rollouts.
     Encapsulates diagnostic checks, remote folder discovery, metadata preview,
     and optional controlled sample staging.
     """
@@ -96,11 +169,12 @@ class MailboxPilotRunner:
         db_path: Optional[str] = None,
         cred_store: Optional[MailboxCredentialStore] = None,
         provider_factory: Optional[Any] = None,
+        account: Optional[MailboxAccountRecord] = None,
     ):
         self.db_path = db_path or str(resolve_configured_db_path())
         self.cred_store = cred_store or MailboxCredentialStore()
         self.repo = MailboxRepository(db_path=self.db_path)
-        self.account = get_pilot_account_config()
+        self.account = account or get_pilot_account_config()
         self.provider_factory = provider_factory or (
             lambda acc: RegisterItReadOnlyIMAPProvider(account=acc, credential_store=self.cred_store)
         )
@@ -128,11 +202,19 @@ class MailboxPilotRunner:
             "errors": [],
         }
 
-        # 1. Target Account Lock
-        if self.account.email_address != PILOT_EMAIL_ADDRESS:
+        # 1. Target Account Lock: Must be in authorized accounts
+        clean_email = (self.account.email_address or "").strip().lower()
+        if clean_email not in AUTHORIZED_MAILBOX_CONFIGS:
             report["errors"].append(
-                f"Unauthorized pilot target: {self.account.email_address}. Only {PILOT_EMAIL_ADDRESS} is authorized."
+                f"Unauthorized pilot target: {self.account.email_address}. "
+                f"Authorized accounts: {list(AUTHORIZED_MAILBOX_CONFIGS.keys())}"
             )
+        else:
+            expected_cfg = AUTHORIZED_MAILBOX_CONFIGS[clean_email]
+            if self.account.credential_ref != expected_cfg["credential_ref"]:
+                report["errors"].append(
+                    f"Credential reference mismatch for {clean_email}: expected '{expected_cfg['credential_ref']}', got '{self.account.credential_ref}'"
+                )
 
         # 2. Credential Check
         if check_credential:
@@ -595,12 +677,27 @@ Examples:
     stage_parser.add_argument("--limit-sent", type=int, default=PILOT_MAX_SENT_MESSAGES, help="Max sent messages to stage (max 10)")
 
     # Global options
+    parser.add_argument(
+        "--account",
+        default=PILOT_EMAIL_ADDRESS,
+        help=f"Target Register.it mailbox address (default: {PILOT_EMAIL_ADDRESS}). Authorized: {list(AUTHORIZED_MAILBOX_CONFIGS.keys())}",
+    )
     parser.add_argument("--db-path", help="Path to SQLite database (default: data/sales_outreach.db)")
     parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
     args = parser.parse_args()
 
-    runner = MailboxPilotRunner(db_path=args.db_path)
+    # Resolve account configuration
+    try:
+        account_cfg = get_account_config_by_email(args.account)
+    except ValueError as e:
+        if args.json:
+            print(json.dumps({"success": False, "error": str(e)}))
+        else:
+            print(f"ERROR: {e}")
+        sys.exit(1)
+
+    runner = MailboxPilotRunner(db_path=args.db_path, account=account_cfg)
 
     if not args.command or args.command == "check":
         res = runner.validate_preflight()
@@ -608,7 +705,7 @@ Examples:
             print(json.dumps(res, indent=2))
         else:
             print("\n" + "=" * 70)
-            print("pyBIM Sales-AI: Single-Mailbox Pilot Pre-Flight Check (OFFLINE)")
+            print("pyBIM Sales-AI: Mailbox Pre-Flight Check (OFFLINE)")
             print("=" * 70)
             print(f"Target Account:     {res['email_address']} ({res['account_id']})")
             print(f"IMAP Endpoint:      {res['imap_host']}:{res['imap_port']} (TLS 993)")

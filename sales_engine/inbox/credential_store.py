@@ -102,8 +102,8 @@ class MailboxCredentialStore:
     Stores an encrypted JSON blob in a local file protected with 0o600.
     """
 
-    def __init__(self, store_path: Optional[Path] = None):
-        self.store_path = store_path or DEFAULT_CREDENTIAL_STORE_PATH
+    def __init__(self, store_path: Optional[Any] = None):
+        self.store_path = Path(store_path) if store_path else DEFAULT_CREDENTIAL_STORE_PATH
         self._cache: Dict[str, str] = {}
 
     def set_credential(self, credential_ref: str, password: str) -> None:

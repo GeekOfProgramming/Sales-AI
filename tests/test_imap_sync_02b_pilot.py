@@ -129,13 +129,13 @@ def test_01_default_invocation_makes_zero_network_connections(disposable_pilot_e
 # 2. Wrong or unauthorized account is rejected
 # ---------------------------------------------------------------------------
 def test_02_wrong_or_unauthorized_account_is_rejected(disposable_pilot_env):
-    """Piloting must strictly reject any account other than info@pybim.com."""
+    """Piloting must strictly reject any unauthorized account outside the 6 approved addresses."""
     cred_store = disposable_pilot_env["cred_store"]
     db_path = disposable_pilot_env["db_path"]
 
     runner = MailboxPilotRunner(db_path=db_path, cred_store=cred_store)
-    # Attempt to swap account to info@pybim.it
-    runner.account = runner.account.model_copy(update={"email_address": "info@pybim.it"})
+    # Attempt to swap account to an unauthorized domain/email
+    runner.account = runner.account.model_copy(update={"email_address": "unauthorized@evil.com"})
 
     report = runner.validate_preflight()
     assert report["safety_passed"] is False
