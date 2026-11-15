@@ -75,6 +75,9 @@
         </a>
         <a href="/sales/approved" class="nav-link {% if active_tab == 'approved' %}active{% endif %}">Approved</a>
         <a href="/sales/sent" class="nav-link {% if active_tab == 'sent' %}active{% endif %}">Sent &amp; History</a>
+        <a href="/sales/mail-operations" class="nav-link {% if active_tab == 'mail_ops' %}active{% endif %}">
+          <span>Mailbox Operations</span>
+        </a>
         <a href="/sales/replies" class="nav-link {% if active_tab == 'replies' %}active{% endif %}">
           <span>Replies</span>
           {% if nav_badges and nav_badges.get('replies', 0) > 0 %}

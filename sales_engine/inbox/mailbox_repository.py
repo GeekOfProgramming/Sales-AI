@@ -744,13 +744,16 @@ class MailboxRepository:
     def list_messages(
         self,
         account_id: Optional[str] = None,
+        account_ids: Optional[List[str]] = None,
         folder_id: Optional[str] = None,
+        folder_role: Optional[str] = None,
         direction: Optional[str] = None,
         since_date_utc: Optional[str] = None,
+        search_query: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[MailboxMessageRecord]:
-        """Query staged mailbox messages with optional filtering."""
+        """Query staged mailbox messages with optional filtering and search."""
         with self.get_connection() as conn:
             clauses = []
             params: List[Any] = []
@@ -758,15 +761,28 @@ class MailboxRepository:
             if account_id:
                 clauses.append("account_id = ?")
                 params.append(account_id)
+            elif account_ids:
+                placeholders = ",".join("?" for _ in account_ids)
+                clauses.append(f"account_id IN ({placeholders})")
+                params.extend(account_ids)
             if folder_id:
                 clauses.append("folder_id = ?")
                 params.append(folder_id)
+            if folder_role:
+                clauses.append("folder_role = ?")
+                params.append(folder_role)
             if direction:
                 clauses.append("direction = ?")
                 params.append(direction)
             if since_date_utc:
                 clauses.append("date_utc >= ?")
                 params.append(since_date_utc)
+            if search_query:
+                q_like = f"%{search_query.strip()}%"
+                clauses.append(
+                    "(subject LIKE ? OR from_address LIKE ? OR to_addresses_json LIKE ? OR body_plain_text LIKE ?)"
+                )
+                params.extend([q_like, q_like, q_like, q_like])
 
             query = "SELECT * FROM mailbox_messages"
             if clauses:
@@ -776,6 +792,100 @@ class MailboxRepository:
 
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_message(r) for r in rows]
+
+    def count_messages(
+        self,
+        account_id: Optional[str] = None,
+        account_ids: Optional[List[str]] = None,
+        folder_id: Optional[str] = None,
+        folder_role: Optional[str] = None,
+        direction: Optional[str] = None,
+        since_date_utc: Optional[str] = None,
+        search_query: Optional[str] = None,
+    ) -> int:
+        """Count staged mailbox messages matching filter criteria for pagination."""
+        with self.get_connection() as conn:
+            clauses = []
+            params: List[Any] = []
+
+            if account_id:
+                clauses.append("account_id = ?")
+                params.append(account_id)
+            elif account_ids:
+                placeholders = ",".join("?" for _ in account_ids)
+                clauses.append(f"account_id IN ({placeholders})")
+                params.extend(account_ids)
+            if folder_id:
+                clauses.append("folder_id = ?")
+                params.append(folder_id)
+            if folder_role:
+                clauses.append("folder_role = ?")
+                params.append(folder_role)
+            if direction:
+                clauses.append("direction = ?")
+                params.append(direction)
+            if since_date_utc:
+                clauses.append("date_utc >= ?")
+                params.append(since_date_utc)
+            if search_query:
+                q_like = f"%{search_query.strip()}%"
+                clauses.append(
+                    "(subject LIKE ? OR from_address LIKE ? OR to_addresses_json LIKE ? OR body_plain_text LIKE ?)"
+                )
+                params.extend([q_like, q_like, q_like, q_like])
+
+            query = "SELECT COUNT(*) FROM mailbox_messages"
+            if clauses:
+                query += " WHERE " + " AND ".join(clauses)
+
+            row = conn.execute(query, params).fetchone()
+            return row[0] if row else 0
+
+    def get_crm_link_for_message(self, message_id: str) -> Optional[MessageCrmLinkRecord]:
+        """Fetch CRM link for a specific message, if any proposal exists."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM message_crm_links WHERE message_id = ? LIMIT 1;",
+                (message_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_crm_link(row)
+
+    def get_thread_for_message(self, message: MailboxMessageRecord) -> List[MailboxMessageRecord]:
+        """
+        Retrieve related messages in the same thread using RFC Message-ID, In-Reply-To,
+        and References headers. Strictly evidence-based without speculative matching.
+        """
+        ref_ids = set()
+        if message.rfc_message_id:
+            ref_ids.add(message.rfc_message_id.strip("<>"))
+        if message.in_reply_to:
+            ref_ids.add(message.in_reply_to.strip("<>"))
+        for ref in message.references:
+            if ref:
+                ref_ids.add(ref.strip("<>"))
+
+        if not ref_ids:
+            return [message]
+
+        with self.get_connection() as conn:
+            # Match messages where rfc_message_id, in_reply_to, or references mention any thread key
+            clauses = []
+            params = []
+            for r_id in ref_ids:
+                clauses.append("rfc_message_id = ? OR rfc_message_id = ? OR in_reply_to = ? OR in_reply_to = ? OR references_json LIKE ?")
+                params.extend([r_id, f"<{r_id}>", r_id, f"<{r_id}>", f'%"{r_id}"%'])
+
+            query = f"SELECT * FROM mailbox_messages WHERE {' OR '.join(clauses)} ORDER BY date_utc ASC;"
+            rows = conn.execute(query, params).fetchall()
+            found = [self._row_to_message(r) for r in rows]
+
+            # Ensure current message is present
+            if not any(m.message_id == message.message_id for m in found):
+                found.append(message)
+                found.sort(key=lambda m: m.date_utc or "")
+            return found
 
     def _row_to_message(self, row: sqlite3.Row) -> MailboxMessageRecord:
         return MailboxMessageRecord(

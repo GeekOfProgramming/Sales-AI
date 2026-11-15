@@ -9686,3 +9686,195 @@ async def console_reject_recommendation(
     svcs = get_console_services()
     svcs["analytics_recommender"].reject_recommendation(recommendation_id, reviewed_by="operator")
     return RedirectResponse(url="/sales/analytics?tab=recommendations", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------------------------------------------------------------------------
+# 13. MAILBOX OPERATIONS (MAIL-OPS-01A READ-ONLY DASHBOARD)
+# ---------------------------------------------------------------------------
+@router.get("/mail-operations", response_class=HTMLResponse)
+async def mail_operations_view(
+    request: Request,
+    account: str = Query(default="all"),
+    folder: str = Query(default="all"),
+    q: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=30, ge=1, le=100),
+    message_id: Optional[str] = Query(default=None),
+):
+    """
+    Operator Mailbox Operations Read-Only Dashboard.
+    Scrapes primary sales mailboxes (info@pybim.com, info@pybim.it), server folder checkpoints,
+    staged message headers, and evidence-based CRM matching proposals.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+    from sales_engine.inbox.html_sanitizer import sanitize_email_html
+    from sales_engine.inbox.scheduled_sync import ScheduledSyncRunner
+    import math
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    # Authorized primary sales accounts
+    primary_account_ids = ["acc_info_com", "acc_info_it"]
+
+    # Account scoping: restrict to authorized primary sales mailboxes
+    if account in primary_account_ids:
+        active_account_id = account
+        target_account_ids = None
+    else:
+        active_account_id = None
+        target_account_ids = primary_account_ids
+        account = "all"
+
+    # Folder role scoping
+    active_folder_role = folder if folder in ("inbox", "sent") else None
+    if folder not in ("inbox", "sent"):
+        folder = "all"
+
+    # Search query
+    clean_q = q.strip() if q and q.strip() else None
+
+    # Count total matching messages for pagination
+    total_count = repo.count_messages(
+        account_id=active_account_id,
+        account_ids=target_account_ids,
+        folder_role=active_folder_role,
+        search_query=clean_q,
+    )
+
+    offset = (page - 1) * limit
+    total_pages = max(1, math.ceil(total_count / limit))
+    if page > total_pages:
+        page = total_pages
+        offset = (page - 1) * limit
+
+    # Fetch paginated message records
+    raw_messages = repo.list_messages(
+        account_id=active_account_id,
+        account_ids=target_account_ids,
+        folder_role=active_folder_role,
+        search_query=clean_q,
+        limit=limit,
+        offset=offset,
+    )
+
+    # Attach CRM matching proposals for message list
+    messages_with_links = []
+    for m in raw_messages:
+        crm_link = repo.get_crm_link_for_message(m.message_id)
+        # Convert MailboxMessageRecord to viewable dict or proxy
+        m_dict = {
+            "message_id": m.message_id,
+            "account_id": m.account_id,
+            "folder_id": m.folder_id,
+            "folder_role": m.folder_role,
+            "direction": m.direction,
+            "imap_uid": m.imap_uid,
+            "imap_uidvalidity": m.imap_uidvalidity,
+            "rfc_message_id": m.rfc_message_id,
+            "from_address": m.from_address,
+            "from_name": m.from_name,
+            "to_addresses": m.to_addresses,
+            "subject": m.subject,
+            "date_utc": m.date_utc,
+            "has_attachments": m.has_attachments,
+            "parse_status": m.parse_status,
+            "crm_link": crm_link,
+        }
+        messages_with_links.append(m_dict)
+
+    # Selected message inspection
+    selected_message = None
+    selected_crm_link = None
+    selected_sanitized_html = ""
+    thread_messages = []
+    selected_account_email = ""
+    selected_folder_name = ""
+
+    if message_id:
+        msg_obj = repo.get_message(message_id)
+        # Ensure selected message belongs to primary sales accounts
+        if msg_obj and msg_obj.account_id in primary_account_ids:
+            selected_message = msg_obj
+            selected_crm_link = repo.get_crm_link_for_message(msg_obj.message_id)
+            if msg_obj.has_html and msg_obj.body_html_sanitized:
+                selected_sanitized_html = sanitize_email_html(msg_obj.body_html_sanitized)
+            elif msg_obj.has_html and not msg_obj.body_html_sanitized and msg_obj.body_plain_text:
+                # If plain text exists but html empty, leave html empty
+                selected_sanitized_html = ""
+
+            # Fetch verifiable thread evidence
+            thread_objs = repo.get_thread_for_message(msg_obj)
+            thread_messages = [t for t in thread_objs if t.account_id in primary_account_ids]
+
+            acc_rec = repo.get_account(msg_obj.account_id)
+            selected_account_email = acc_rec.email_address if acc_rec else msg_obj.account_id
+
+            fld_rec = repo.get_folder(msg_obj.folder_id)
+            selected_folder_name = fld_rec.folder_name if fld_rec else msg_obj.folder_role
+
+    # Aggregate operational stats
+    info_com_total = repo.count_messages(account_id="acc_info_com")
+    info_it_total = repo.count_messages(account_id="acc_info_it")
+    total_primary = info_com_total + info_it_total
+
+    # Scheduler and checkpoint metadata for status modal
+    accounts_meta = {}
+    for aid in primary_account_ids:
+        acc_rec = repo.get_account(aid)
+        if not acc_rec:
+            continue
+        folders_map = {}
+        for f in repo.list_folders(aid):
+            st = repo.get_folder_sync_state(aid, f.folder_id)
+            folders_map[f.folder_id] = {
+                "name": f.folder_name,
+                "role": f.folder_role,
+                "last_synced_uid": st.last_synced_uid if st else 0,
+                "uidvalidity": st.uidvalidity if st else (f.last_uidvalidity or 0),
+                "last_status": st.last_status if st else "idle",
+                "last_error": st.last_error_message if st else None,
+            }
+        accounts_meta[aid] = {
+            "email": acc_rec.email_address,
+            "is_enabled": acc_rec.is_enabled,
+            "folders": folders_map,
+        }
+
+    # Scheduler info
+    sched_runner = ScheduledSyncRunner(mailbox_repo=repo)
+    sched_status = sched_runner.get_scheduler_status()
+    scheduler_info = {
+        "next_scheduled_window": sched_status.get("schedule", {}).get("next_window_local"),
+        "lock_status": "LOCKED" if sched_status.get("concurrency_lock", {}).get("is_locked") else "IDLE",
+    }
+
+    return render_console_template(
+        request=request,
+        name="mail_operations.html",
+        context={
+            "request": request,
+            "active_tab": "mail_ops",
+            "account_filter": account,
+            "folder_role": folder,
+            "search_query": clean_q or "",
+            "messages": messages_with_links,
+            "total_count": total_count,
+            "current_page": page,
+            "total_pages": total_pages,
+            "limit": limit,
+            "selected_message": selected_message,
+            "selected_crm_link": selected_crm_link,
+            "selected_sanitized_html": selected_sanitized_html,
+            "selected_account_email": selected_account_email,
+            "selected_folder_name": selected_folder_name,
+            "thread_messages": thread_messages,
+            "stats": {
+                "total_primary_messages": total_primary,
+                "info_com_messages": info_com_total,
+                "info_it_messages": info_it_total,
+            },
+            "accounts_meta": accounts_meta,
+            "scheduler_info": scheduler_info,
+        },
+    )
