@@ -477,22 +477,45 @@ class MailboxReconciliationService:
                 confidence = 0.0
                 evidence_parts = [f"Recipient match: {recipient}"]
 
+                # 1. Subject match (if both available)
                 if log_subj and norm_subj:
                     if log_subj == norm_subj:
-                        confidence += 0.6
+                        confidence += 0.5
                         evidence_parts.append("Exact subject match")
                     elif log_subj in norm_subj or norm_subj in log_subj:
-                        confidence += 0.4
+                        confidence += 0.35
                         evidence_parts.append("Partial subject match")
+                elif not log_subj:
+                    # Operational reality: manual sent record may have no subject recorded
+                    confidence += 0.3
+                    evidence_parts.append("Manual record has no subject recorded (subject neutral)")
 
-                # Sender match if recorded in manual log
+                # 2. Sender match
                 logged_sender = (r["sender_account"] or "").lower().strip()
                 if logged_sender and logged_sender == sender:
                     confidence += 0.3
                     evidence_parts.append(f"Sender account match: {sender}")
                 elif not logged_sender:
                     # If operator didn't specify sender, slight neutral confidence
-                    confidence += 0.1
+                    confidence += 0.15
+                    evidence_parts.append("Sender account unspecified in manual log")
+
+                # 3. Time proximity evidence
+                logged_at_str = r["logged_at"]
+                if logged_at_str and message.date_utc:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        log_dt = datetime.fromisoformat(logged_at_str.replace("Z", "+00:00"))
+                        msg_dt = datetime.fromisoformat(message.date_utc.replace("Z", "+00:00"))
+                        time_diff_hours = abs((msg_dt - log_dt).total_seconds()) / 3600.0
+                        if time_diff_hours <= 24:
+                            confidence += 0.2
+                            evidence_parts.append(f"Time proximity alignment ({time_diff_hours:.1f}h window)")
+                        elif time_diff_hours <= 72:
+                            confidence += 0.1
+                            evidence_parts.append(f"Time proximity alignment ({time_diff_hours:.1f}h window)")
+                    except Exception:
+                        pass
 
                 if confidence > best_confidence:
                     best_confidence = confidence
@@ -508,7 +531,7 @@ class MailboxReconciliationService:
                     recipient_email=recipient,
                     sender_account=sender,
                 )
-            elif best_match:
+            elif best_match and best_confidence >= 0.4:
                 return ManualOutreachReconciliationResult(
                     matched_log_id=best_match["log_id"],
                     reconciliation_status="probable_match",

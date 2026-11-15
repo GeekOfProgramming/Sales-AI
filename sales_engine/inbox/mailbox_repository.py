@@ -570,7 +570,35 @@ class MailboxRepository:
             ).fetchone()
 
             if existing:
-                # Existing exact occurrence: idempotent no-op
+                # Existing exact occurrence: allow updating parse_status / body if recovering deferred message
+                if existing["message_id"] == message.message_id or message.parse_status != "deferred_oversized":
+                    conn.execute(
+                        """
+                        UPDATE mailbox_messages
+                        SET body_plain_text = ?,
+                            body_html_sanitized = ?,
+                            has_html = ?,
+                            has_attachments = ?,
+                            attachments_meta_json = ?,
+                            parse_status = ?,
+                            raw_headers_json = ?,
+                            body_truncated = ?,
+                            content_size_bytes = ?
+                        WHERE message_id = ?;
+                        """,
+                        (
+                            body_plain,
+                            body_html,
+                            1 if message.has_html else 0,
+                            1 if message.has_attachments else 0,
+                            json.dumps(message.attachments_metadata, ensure_ascii=False),
+                            message.parse_status,
+                            json.dumps(message.raw_headers, ensure_ascii=False),
+                            1 if truncated else 0,
+                            size_bytes,
+                            existing["message_id"],
+                        ),
+                    )
                 return False, existing["message_id"]
 
             conn.execute(

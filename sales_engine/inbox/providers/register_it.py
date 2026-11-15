@@ -54,6 +54,7 @@ from sales_engine.inbox.credential_store import MailboxCredentialStore
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 20.0
+DEFAULT_MAX_MESSAGE_BYTES = 10 * 1024 * 1024  # 10 MB threshold per IMAP-SYNC-02A
 
 
 class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
@@ -67,10 +68,12 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
         account: Optional[MailboxAccountRecord] = None,
         credential_store: Optional[MailboxCredentialStore] = None,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
     ):
         self.account = account
         self.credential_store = credential_store or MailboxCredentialStore()
         self.timeout = timeout
+        self.max_message_bytes = max_message_bytes
 
     @property
     def provider_name(self) -> str:
@@ -392,40 +395,94 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
             batch_uids = sorted(new_uids)[:batch_size]
             uid_str = ",".join(str(u) for u in batch_uids)
 
-            # Strictly use BODY.PEEK[] or RFC822.PEEK
-            fetch_cmd = "(UID RFC822.PEEK)"
-            typ, fetch_data = client.uid("FETCH", uid_str, fetch_cmd)
-            if typ != "OK" or not fetch_data:
-                return [], since_uid, uidvalidity
+            # IMAP-SYNC-02A: Pre-flight size gating with RFC822.SIZE
+            # Query message sizes first to protect against downloading huge binary attachments
+            typ, size_data = client.uid("FETCH", uid_str, "(UID RFC822.SIZE)")
+            uid_sizes: Dict[int, int] = {}
+            if typ == "OK" and size_data:
+                for s_item in size_data:
+                    if isinstance(s_item, (bytes, bytearray)):
+                        s_str = s_item.decode("utf-8", errors="replace")
+                        u_val = self._extract_uid_from_fetch_header(s_str)
+                        m_sz = self._extract_size_from_fetch_header(s_str)
+                        if u_val and m_sz is not None:
+                            uid_sizes[u_val] = m_sz
+
+            # Segregate UIDs into normal vs oversized
+            normal_uids = [u for u in batch_uids if uid_sizes.get(u, 0) <= self.max_message_bytes]
+            oversized_uids = [u for u in batch_uids if uid_sizes.get(u, 0) > self.max_message_bytes]
 
             messages: List[MailboxMessageRecord] = []
             highest_uid = since_uid
 
-            # Parse fetch response
-            for item in fetch_data:
-                if not isinstance(item, tuple) or len(item) < 2:
-                    continue
+            # 1. Fetch normal messages using full RFC822.PEEK
+            if normal_uids:
+                norm_str = ",".join(str(u) for u in normal_uids)
+                fetch_cmd = "(UID RFC822.PEEK)"
+                typ, fetch_data = client.uid("FETCH", norm_str, fetch_cmd)
+                if typ == "OK" and fetch_data:
+                    for item in fetch_data:
+                        if not isinstance(item, tuple) or len(item) < 2:
+                            continue
 
-                raw_header, raw_bytes = item[0], item[1]
-                # Extract UID from response header
-                uid_val = self._extract_uid_from_fetch_header(raw_header.decode("utf-8", errors="replace"))
-                if not uid_val:
-                    continue
+                        raw_header, raw_bytes = item[0], item[1]
+                        uid_val = self._extract_uid_from_fetch_header(raw_header.decode("utf-8", errors="replace"))
+                        if not uid_val:
+                            continue
 
-                if uid_val > highest_uid:
-                    highest_uid = uid_val
+                        if uid_val > highest_uid:
+                            highest_uid = uid_val
 
-                direction = "outbound" if folder.folder_role == "sent" else "inbound"
-                msg_rec = self.parse_raw_email(
-                    account_id=account.account_id,
-                    folder_id=folder.folder_id,
-                    folder_role=folder.folder_role,
-                    direction=direction,
-                    imap_uid=uid_val,
-                    imap_uidvalidity=uidvalidity,
-                    raw_bytes=raw_bytes,
-                )
-                messages.append(msg_rec)
+                        direction = "outbound" if folder.folder_role == "sent" else "inbound"
+                        msg_rec = self.parse_raw_email(
+                            account_id=account.account_id,
+                            folder_id=folder.folder_id,
+                            folder_role=folder.folder_role,
+                            direction=direction,
+                            imap_uid=uid_val,
+                            imap_uidvalidity=uidvalidity,
+                            raw_bytes=raw_bytes,
+                        )
+                        messages.append(msg_rec)
+
+            # 2. Fetch oversized messages safely: retrieve headers only using BODY.PEEK[HEADER]
+            # Does NOT download the large binary payload. Marks message with parse_status='deferred_oversized'.
+            if oversized_uids:
+                over_str = ",".join(str(u) for u in oversized_uids)
+                typ, header_data = client.uid("FETCH", over_str, "(UID BODY.PEEK[HEADER])")
+                if typ == "OK" and header_data:
+                    for item in header_data:
+                        if not isinstance(item, tuple) or len(item) < 2:
+                            continue
+
+                        raw_header, raw_bytes = item[0], item[1]
+                        uid_val = self._extract_uid_from_fetch_header(raw_header.decode("utf-8", errors="replace"))
+                        if not uid_val:
+                            continue
+
+                        if uid_val > highest_uid:
+                            highest_uid = uid_val
+
+                        direction = "outbound" if folder.folder_role == "sent" else "inbound"
+                        recorded_size = uid_sizes.get(uid_val, self.max_message_bytes)
+                        msg_rec = self.parse_raw_email(
+                            account_id=account.account_id,
+                            folder_id=folder.folder_id,
+                            folder_role=folder.folder_role,
+                            direction=direction,
+                            imap_uid=uid_val,
+                            imap_uidvalidity=uidvalidity,
+                            raw_bytes=raw_bytes,
+                        )
+                        # Explicitly mark as deferred oversized with actual size
+                        msg_rec.parse_status = "deferred_oversized"
+                        msg_rec.content_size_bytes = recorded_size
+                        msg_rec.body_truncated = True
+                        msg_rec.body_plain_text = (
+                            f"[OVERSIZED MESSAGE DEFERRED: {recorded_size / (1024*1024):.2f} MB exceeds "
+                            f"{self.max_message_bytes / (1024*1024):.1f} MB threshold. Headers preserved; body download deferred.]"
+                        )
+                        messages.append(msg_rec)
 
             return messages, highest_uid, uidvalidity
 
@@ -439,6 +496,13 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
     def _extract_uid_from_fetch_header(self, header_str: str) -> Optional[int]:
         import re
         m = re.search(r"UID\s+(\d+)", header_str, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        return None
+
+    def _extract_size_from_fetch_header(self, header_str: str) -> Optional[int]:
+        import re
+        m = re.search(r"RFC822\.SIZE\s+(\d+)", header_str, re.IGNORECASE)
         if m:
             return int(m.group(1))
         return None

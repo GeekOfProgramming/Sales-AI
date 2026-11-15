@@ -180,7 +180,8 @@ def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_c
     mock_client.response.return_value = ("OK", [b"12345"])
     mock_client.uid.side_effect = [
         ("OK", [b"105"]),  # SEARCH response
-        ("OK", [(b"1 (UID 105 RFC822 {150})", sample_email)]),  # FETCH response
+        ("OK", [b"1 (UID 105 RFC822.SIZE 150)"]),  # RFC822.SIZE response
+        ("OK", [(b"1 (UID 105 RFC822 {150})", sample_email)]),  # RFC822.PEEK response
     ]
 
     messages, new_highest_uid, uv = provider.fetch_messages_by_uid(
@@ -194,9 +195,8 @@ def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_c
     assert messages[0].from_address == "studio@piuarch.it"
 
     # Assert that UID FETCH used PEEK command
-    fetch_call_args = mock_client.uid.call_args_list[1]
-    assert "FETCH" in fetch_call_args[0]
-    assert "RFC822.PEEK" in fetch_call_args[0][2] or "BODY.PEEK" in fetch_call_args[0][2]
+    peek_call = [call for call in mock_client.uid.call_args_list if len(call[0]) > 2 and ("RFC822.PEEK" in call[0][2] or "BODY.PEEK" in call[0][2])]
+    assert len(peek_call) >= 1
 
 
 def test_07_mime_parsing_unicode_and_headers(pilot_account):
