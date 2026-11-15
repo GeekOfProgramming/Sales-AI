@@ -9763,6 +9763,11 @@ async def mail_operations_view(
     for m in raw_messages:
         crm_link = repo.get_crm_link_for_message(m.message_id)
         # Convert MailboxMessageRecord to viewable dict or proxy
+        to_addrs = m.to_addresses or []
+        first_to = to_addrs[0] if to_addrs else ""
+        from_display = m.from_name if m.from_name else m.from_address
+        to_display = first_to
+
         m_dict = {
             "message_id": m.message_id,
             "account_id": m.account_id,
@@ -9774,7 +9779,9 @@ async def mail_operations_view(
             "rfc_message_id": m.rfc_message_id,
             "from_address": m.from_address,
             "from_name": m.from_name,
-            "to_addresses": m.to_addresses,
+            "from_display": from_display,
+            "to_addresses": to_addrs,
+            "to_display": to_display,
             "subject": m.subject,
             "date_utc": m.date_utc,
             "has_attachments": m.has_attachments,

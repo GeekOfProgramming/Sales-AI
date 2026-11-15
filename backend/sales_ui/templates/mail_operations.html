@@ -3,429 +3,979 @@
 {% block title %}Mailbox Operations | Email Led{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
-  <div>
-    <h1 class="page-title" style="margin: 0; font-size: 1.75rem; font-weight: 700;">📬 Mailbox Operations</h1>
-    <p class="page-subtitle" style="margin: 0.25rem 0 0; color: #6b7280; font-size: 0.875rem;">
-      Authoritative read-only inspection of Register.it primary sales mailboxes, IMAP sync status, and evidence-based CRM matching proposals.
-    </p>
-  </div>
-  <div style="display: flex; gap: 0.5rem; align-items: center;">
-    <button class="btn btn-secondary btn-sm" onclick="toggleSyncStatusModal()" style="font-weight: 600;">
-      ⚙️ Sync &amp; Checkpoints Status
-    </button>
-  </div>
-</div>
+<style>
+  /* Scoped Styles for Mailbox Operations (MAIL-OPS-01A-UI-POLISH) */
+  .mail-ops-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
 
-<!-- Account & Folder Filter Navigation Bar -->
-<div class="card" style="margin-bottom: 1.5rem; padding: 1rem 1.25rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">
-  <form method="GET" action="/sales/mail-operations" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; margin: 0;">
-    
-    <!-- Account Selector -->
-    <div style="display: flex; gap: 0.5rem; align-items: center;">
-      <span style="font-size: 0.8125rem; font-weight: 600; color: #374151;">Account:</span>
-      <div class="btn-group" role="group">
+  .mail-ops-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .mail-ops-filters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.875rem 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .mail-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .mail-filter-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.25rem;
+  }
+
+  .mail-btn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    transition: all 0.15s ease-in-out;
+  }
+
+  .mail-btn-pill:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-focus);
+  }
+
+  .mail-btn-pill.active {
+    background-color: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-hover);
+    font-weight: 600;
+  }
+
+  .mail-search-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .mail-search-input {
+    width: 260px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8125rem;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+  }
+
+  .mail-search-input:focus {
+    outline: none;
+    border-color: var(--border-focus);
+  }
+
+  /* Master-Detail Grid */
+  .mail-layout-grid {
+    display: grid;
+    grid-template-columns: {% if selected_message %}1fr 1.35fr{% else %}1fr{% endif %};
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  @media (max-width: 1200px) {
+    .mail-layout-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Message List Table Card */
+  .mail-list-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .mail-list-header {
+    padding: 0.875rem 1.25rem;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .mail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    text-align: left;
+  }
+
+  .mail-table th {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+  }
+
+  .mail-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+    color: var(--text-primary);
+  }
+
+  .mail-row {
+    cursor: pointer;
+    transition: background-color 0.12s ease-in-out;
+  }
+
+  .mail-row:hover {
+    background-color: var(--bg-hover) !important;
+  }
+
+  .mail-row.selected {
+    background-color: rgba(37, 99, 235, 0.18) !important;
+    border-left: 3px solid #38bdf8;
+  }
+
+  .mail-row.selected td {
+    font-weight: 500;
+  }
+
+  /* Identity Cell */
+  .party-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    max-width: 220px;
+  }
+
+  .party-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .party-email {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Subject Cell */
+  .subject-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    max-width: 320px;
+  }
+
+  .subject-text {
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Badges */
+  .badge-com {
+    background: #1e3a8a;
+    color: #bfdbfe;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-it {
+    background: #064e3b;
+    color: #a7f3d0;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-inbox {
+    color: #38bdf8;
+    background: rgba(2, 132, 199, 0.15);
+    border: 1px solid rgba(2, 132, 199, 0.3);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-sent {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-crm-verified {
+    background: #064e3b;
+    color: #a7f3d0;
+    border: 1px solid #059669;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .badge-crm-review {
+    background: #78350f;
+    color: #fde68a;
+    border: 1px solid #d97706;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  /* Inspector Card (Right Pane) */
+  .inspector-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .inspector-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+  }
+
+  .inspector-subject {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.35;
+    margin-bottom: 0.35rem;
+    word-break: break-word;
+  }
+
+  .inspector-submeta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .inspector-close-btn {
+    text-decoration: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--text-muted);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    transition: all 0.12s ease-in-out;
+  }
+
+  .inspector-close-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-focus);
+    background: var(--bg-hover);
+  }
+
+  /* Inspector High-Contrast Metadata Grid */
+  .metadata-panel {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    row-gap: 0.65rem;
+    column-gap: 1rem;
+    font-size: 0.8125rem;
+  }
+
+  .meta-label {
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    align-self: center;
+  }
+
+  .meta-value {
+    color: #ffffff;
+    font-weight: 500;
+    word-break: break-all;
+  }
+
+  .meta-value code {
+    background: var(--bg-input);
+    color: #38bdf8;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+
+  /* CRM Proposal Card Inside Inspector */
+  .crm-proposal-card {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .crm-proposal-card.verified {
+    border-color: #059669;
+    background: rgba(6, 78, 59, 0.25);
+  }
+
+  .crm-proposal-card.review {
+    border-color: #d97706;
+    background: rgba(120, 53, 15, 0.25);
+  }
+
+  /* Body Content Tabs & Viewer */
+  .body-tabs-nav {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+  }
+
+  .body-tab-btn {
+    padding: 0.35rem 0.875rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    transition: all 0.15s ease-in-out;
+  }
+
+  .body-tab-btn.active {
+    background-color: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-hover);
+  }
+
+  .email-body-viewer {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    min-height: 220px;
+    max-height: 520px;
+    overflow-y: auto;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  .email-body-plain {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+
+  .email-body-html {
+    word-break: break-word;
+  }
+
+  .email-body-html a {
+    color: #38bdf8;
+    text-decoration: underline;
+  }
+
+  /* Thread Hierarchy Panel */
+  .thread-panel {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: var(--shadow);
+  }
+
+  .thread-item {
+    padding: 0.875rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    transition: border-color 0.15s ease-in-out;
+  }
+
+  .thread-item.active {
+    border-color: #38bdf8;
+    background-color: rgba(37, 99, 235, 0.15);
+  }
+
+  /* Modal High Contrast */
+  .sync-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(2px);
+  }
+
+  .sync-modal-content {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    max-width: 680px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 1.75rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  }
+</style>
+
+<div class="mail-ops-container">
+
+  <!-- Header -->
+  <div class="mail-ops-header">
+    <div>
+      <h1 class="page-title" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0;">
+        📬 Mailbox Operations
+      </h1>
+      <p class="page-subtitle" style="color: var(--text-muted); font-size: 0.875rem; margin: 0.25rem 0 0;">
+        Authoritative read-only monitoring of Register.it primary sales mailboxes, IMAP sync status, and evidence-based CRM matching proposals.
+      </p>
+    </div>
+    <div>
+      <button class="btn btn-secondary btn-sm" onclick="toggleSyncStatusModal()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>⚙️</span> Sync &amp; Checkpoints Status
+      </button>
+    </div>
+  </div>
+
+  <!-- Filters & Search Toolbar -->
+  <div class="mail-ops-filters-bar">
+    <form method="GET" action="/sales/mail-operations" style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; width: 100%; margin: 0;">
+
+      <!-- Account Filter -->
+      <div class="mail-filter-group">
+        <span class="mail-filter-label">Account:</span>
         <a href="/sales/mail-operations?account=all&folder={{ folder_role }}&q={{ search_query }}"
-           class="btn btn-sm {% if account_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-           style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
-          All Primary ({{ stats.total_primary_messages }})
+           class="mail-btn-pill {% if account_filter == 'all' %}active{% endif %}"
+           title="All Primary Sales Mailboxes">
+          All Primary <span style="opacity: 0.85; font-size: 0.75rem;">({{ stats.total_primary_messages }})</span>
         </a>
         <a href="/sales/mail-operations?account=acc_info_com&folder={{ folder_role }}&q={{ search_query }}"
-           class="btn btn-sm {% if account_filter == 'acc_info_com' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-           style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
-          info@pybim.com ({{ stats.info_com_messages }})
+           class="mail-btn-pill {% if account_filter == 'acc_info_com' %}active{% endif %}"
+           title="info@pybim.com (COM)">
+          info@pybim.com <span style="opacity: 0.85; font-size: 0.75rem;">({{ stats.info_com_messages }})</span>
         </a>
         <a href="/sales/mail-operations?account=acc_info_it&folder={{ folder_role }}&q={{ search_query }}"
-           class="btn btn-sm {% if account_filter == 'acc_info_it' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-           style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
-          info@pybim.it ({{ stats.info_it_messages }})
+           class="mail-btn-pill {% if account_filter == 'acc_info_it' %}active{% endif %}"
+           title="info@pybim.it (IT)">
+          info@pybim.it <span style="opacity: 0.85; font-size: 0.75rem;">({{ stats.info_it_messages }})</span>
         </a>
       </div>
-    </div>
 
-    <!-- Folder Role Selector -->
-    <div style="display: flex; gap: 0.5rem; align-items: center;">
-      <span style="font-size: 0.8125rem; font-weight: 600; color: #374151;">Folder:</span>
-      <div class="btn-group" role="group">
+      <!-- Folder Filter -->
+      <div class="mail-filter-group">
+        <span class="mail-filter-label">Folder:</span>
         <a href="/sales/mail-operations?account={{ account_filter }}&folder=all&q={{ search_query }}"
-           class="btn btn-sm {% if folder_role == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-           style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
+           class="mail-btn-pill {% if folder_role == 'all' %}active{% endif %}">
           All Folders
         </a>
         <a href="/sales/mail-operations?account={{ account_filter }}&folder=inbox&q={{ search_query }}"
-           class="btn btn-sm {% if folder_role == 'inbox' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-           style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
+           class="mail-btn-pill {% if folder_role == 'inbox' %}active{% endif %}">
           📥 Inbox
         </a>
         <a href="/sales/mail-operations?account={{ account_filter }}&folder=sent&q={{ search_query }}"
-           class="btn btn-sm {% if folder_role == 'sent' %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-           style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
+           class="mail-btn-pill {% if folder_role == 'sent' %}active{% endif %}">
           📤 Sent
         </a>
       </div>
-    </div>
 
-    <!-- Search Box -->
-    <div style="display: flex; gap: 0.5rem; align-items: center; margin-left: auto;">
-      <input type="hidden" name="account" value="{{ account_filter }}">
-      <input type="hidden" name="folder" value="{{ folder_role }}">
-      <input type="text" name="q" value="{{ search_query }}" placeholder="Search subject, sender, body..."
-             class="form-control" style="width: 260px; padding: 0.35rem 0.75rem; font-size: 0.8125rem; border: 1px solid #d1d5db; border-radius: 6px;">
-      <button type="submit" class="btn btn-sm btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8125rem;">
-        🔍 Search
-      </button>
-      {% if search_query %}
-      <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}"
-         class="btn btn-sm btn-outline-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.8125rem;" title="Clear search">
-        ✕
-      </a>
-      {% endif %}
-    </div>
-
-  </form>
-</div>
-
-<!-- Master-Detail Split Layout -->
-<div style="display: grid; grid-template-columns: {% if selected_message %}1fr 1.25fr{% else %}1fr{% endif %}; gap: 1.5rem; align-items: start;">
-
-  <!-- Left Column: Message List Table -->
-  <div class="card" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-    <div style="padding: 0.75rem 1.25rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb;">
-      <span style="font-weight: 600; font-size: 0.875rem; color: #1f2937;">
-        Staged Messages ({{ total_count }})
-      </span>
-      <span style="font-size: 0.75rem; color: #6b7280;">
-        Page {{ current_page }} of {{ total_pages }} (Limit: {{ limit }})
-      </span>
-    </div>
-
-    {% if messages %}
-    <div class="table-responsive">
-      <table class="data-table" style="width: 100%; font-size: 0.8125rem; border-collapse: collapse;">
-        <thead>
-          <tr style="background: #f3f4f6; text-align: left; border-bottom: 1px solid #e5e7eb;">
-            <th style="padding: 0.6rem 0.75rem;">Account</th>
-            <th style="padding: 0.6rem 0.75rem;">Folder</th>
-            <th style="padding: 0.6rem 0.75rem;">From / To</th>
-            <th style="padding: 0.6rem 0.75rem;">Subject</th>
-            <th style="padding: 0.6rem 0.75rem;">Date (UTC)</th>
-            <th style="padding: 0.6rem 0.75rem;">CRM Proposal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for m in messages %}
-          <tr style="border-bottom: 1px solid #f3f4f6; cursor: pointer; {% if selected_message and selected_message.message_id == m.message_id %}background: #eff6ff; font-weight: 500;{% endif %}"
-              onclick="window.location.href='/sales/mail-operations?message_id={{ m.message_id }}&account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page }}'">
-            
-            <!-- Account Badge -->
-            <td style="padding: 0.6rem 0.75rem; white-space: nowrap;">
-              {% if m.account_id == 'acc_info_com' %}
-              <span class="badge" style="background: #e0e7ff; color: #3730a3; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">info@pybim.com</span>
-              {% elif m.account_id == 'acc_info_it' %}
-              <span class="badge" style="background: #dcfce7; color: #166534; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">info@pybim.it</span>
-              {% else %}
-              <span class="badge" style="background: #f3f4f6; color: #4b5563; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">{{ m.account_id }}</span>
-              {% endif %}
-            </td>
-
-            <!-- Folder Badge -->
-            <td style="padding: 0.6rem 0.75rem; white-space: nowrap;">
-              {% if m.folder_role == 'inbox' %}
-              <span style="color: #0284c7; font-weight: 600;">📥 INBOX</span>
-              {% elif m.folder_role == 'sent' %}
-              <span style="color: #059669; font-weight: 600;">📤 Sent</span>
-              {% else %}
-              <span style="color: #6b7280;">📁 {{ m.folder_role }}</span>
-              {% endif %}
-            </td>
-
-            <!-- From / To -->
-            <td style="padding: 0.6rem 0.75rem; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ m.from_address }}">
-              {% if m.direction == 'outbound' %}
-                <span style="color: #6b7280;">To:</span> {{ m.to_addresses[0] if m.to_addresses else 'N/A' }}
-              {% else %}
-                <span style="color: #6b7280;">From:</span> {{ m.from_name or m.from_address }}
-              {% endif %}
-            </td>
-
-            <!-- Subject & Indicators -->
-            <td style="padding: 0.6rem 0.75rem; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-              <span style="font-weight: 600; color: #111827;">{{ m.subject or '(No Subject)' }}</span>
-              {% if m.has_attachments %}
-              <span title="Has attachments" style="margin-left: 0.25rem;">📎</span>
-              {% endif %}
-              {% if m.parse_status == 'deferred_oversized' %}
-              <span class="badge badge-warning" style="font-size: 0.65rem; padding: 0.15rem 0.35rem; margin-left: 0.25rem;">Oversized Deferred</span>
-              {% endif %}
-            </td>
-
-            <!-- Date -->
-            <td style="padding: 0.6rem 0.75rem; white-space: nowrap; color: #4b5563; font-size: 0.75rem;">
-              {{ m.date_utc[:16].replace('T', ' ') if m.date_utc else 'N/A' }}
-            </td>
-
-            <!-- CRM Proposal -->
-            <td style="padding: 0.6rem 0.75rem; white-space: nowrap;">
-              {% if m.crm_link and m.crm_link.link_status == 'verified' %}
-                <span class="badge" style="background: #d1fae5; color: #065f46; font-size: 0.7rem; padding: 0.2rem 0.4rem; border-radius: 4px;" title="{{ m.crm_link.evidence_summary }}">
-                  ✓ {{ m.crm_link.candidate_id or 'Matched' }}
-                </span>
-              {% elif m.crm_link and m.crm_link.link_status == 'suggested_pending_review' %}
-                <span class="badge" style="background: #fef3c7; color: #92400e; font-size: 0.7rem; padding: 0.2rem 0.4rem; border-radius: 4px;" title="{{ m.crm_link.evidence_summary }}">
-                  ⏳ Review: {{ m.crm_link.candidate_id }}
-                </span>
-              {% else %}
-                <span style="color: #9ca3af; font-size: 0.75rem;">—</span>
-              {% endif %}
-            </td>
-
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Pagination Controls -->
-    {% if total_pages > 1 %}
-    <div style="padding: 0.75rem 1.25rem; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #f9fafb;">
-      <div>
-        {% if current_page > 1 %}
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page - 1 }}"
-           class="btn btn-sm btn-outline-secondary" style="font-size: 0.8125rem;">
-          ← Previous
+      <!-- Search Input -->
+      <div class="mail-search-box">
+        <input type="hidden" name="account" value="{{ account_filter }}">
+        <input type="hidden" name="folder" value="{{ folder_role }}">
+        <input type="text" name="q" value="{{ search_query }}" placeholder="Search sender, recipient, subject, body..."
+               class="mail-search-input">
+        <button type="submit" class="btn btn-sm btn-secondary" style="font-weight: 600;">
+          Search
+        </button>
+        {% if search_query %}
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}"
+           class="btn btn-sm btn-secondary" style="padding: 0.35rem 0.55rem;" title="Clear search filter">
+          ✕
         </a>
         {% endif %}
       </div>
-      <span style="font-size: 0.8125rem; color: #6b7280;">
-        Showing {{ ((current_page - 1) * limit) + 1 }}–{{ [current_page * limit, total_count]|min }} of {{ total_count }}
-      </span>
-      <div>
-        {% if current_page < total_pages %}
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page + 1 }}"
-           class="btn btn-sm btn-outline-secondary" style="font-size: 0.8125rem;">
-          Next →
-        </a>
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
 
-    {% else %}
-    <div style="padding: 3rem 1.5rem; text-align: center; color: #6b7280;">
-      <p style="font-size: 1.125rem; margin-bottom: 0.5rem;">No messages found.</p>
-      <p style="font-size: 0.875rem;">Try adjusting the account, folder, or search query filter.</p>
-    </div>
-    {% endif %}
-
+    </form>
   </div>
 
-  <!-- Right Column: Message Detail Inspection & Thread View -->
-  {% if selected_message %}
-  <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+  <!-- Master-Detail Content Layout -->
+  <div class="mail-layout-grid">
 
-    <!-- Message Detail Card -->
-    <div class="card" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
-      
-      <!-- Card Header -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; border-bottom: 1px solid #f3f4f6; padding-bottom: 0.75rem;">
+    <!-- Left Column: Staged Message List Table -->
+    <div class="mail-list-card">
+      <div class="mail-list-header">
+        <div style="font-weight: 600; font-size: 0.875rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+          <span>Staged Messages</span>
+          <span style="background: var(--bg-input); color: var(--text-secondary); font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 9999px;">
+            {{ total_count }}
+          </span>
+        </div>
+        <div style="font-size: 0.78rem; color: var(--text-muted);">
+          Page {{ current_page }} of {{ total_pages }} (Limit: {{ limit }})
+        </div>
+      </div>
+
+      {% if messages %}
+      <div class="table-responsive" style="border: none; border-radius: 0;">
+        <table class="mail-table">
+          <thead>
+            <tr>
+              <th style="width: 130px;">Account</th>
+              <th style="width: 90px;">Folder</th>
+              <th style="width: 220px;">Sender / Recipient</th>
+              <th>Subject</th>
+              <th style="width: 125px;">Date (UTC)</th>
+              <th style="width: 130px;">CRM Proposal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in messages %}
+            <tr class="mail-row {% if selected_message and selected_message.message_id == m.message_id %}selected{% endif %}"
+                onclick="window.location.href='/sales/mail-operations?message_id={{ m.message_id }}&account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page }}'">
+              
+              <!-- Account -->
+              <td>
+                {% if m.account_id == 'acc_info_com' %}
+                <span class="badge-com" title="info@pybim.com">info@pybim.com</span>
+                {% elif m.account_id == 'acc_info_it' %}
+                <span class="badge-it" title="info@pybim.it">info@pybim.it</span>
+                {% else %}
+                <span class="badge" style="background: var(--bg-input); color: var(--text-secondary);">{{ m.account_id }}</span>
+                {% endif %}
+              </td>
+
+              <!-- Folder Role -->
+              <td>
+                {% if m.folder_role == 'inbox' %}
+                <span class="badge-inbox">📥 INBOX</span>
+                {% elif m.folder_role == 'sent' %}
+                <span class="badge-sent">📤 Sent</span>
+                {% else %}
+                <span style="color: var(--text-muted); font-size: 0.75rem;">📁 {{ m.folder_role }}</span>
+                {% endif %}
+              </td>
+
+              <!-- Sender / Recipient -->
+              <td>
+                <div class="party-cell">
+                  {% if m.direction == 'outbound' %}
+                    <span class="party-name" title="{{ m.to_display }}">
+                      <span style="color: var(--text-muted); font-weight: 500;">To:</span> {{ m.to_display or 'N/A' }}
+                    </span>
+                  {% else %}
+                    <span class="party-name" title="{{ m.from_display }}">
+                      {{ m.from_name or m.from_address }}
+                    </span>
+                    {% if m.from_name and m.from_address %}
+                    <span class="party-email" title="{{ m.from_address }}">&lt;{{ m.from_address }}&gt;</span>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+
+              <!-- Subject & Badges -->
+              <td>
+                <div class="subject-cell">
+                  <span class="subject-text" title="{{ m.subject }}">
+                    {{ m.subject or '(No Subject)' }}
+                  </span>
+                  <div style="display: flex; gap: 0.35rem; align-items: center;">
+                    {% if m.has_attachments %}
+                    <span title="Has attachments" style="font-size: 0.75rem;">📎</span>
+                    {% endif %}
+                    {% if m.parse_status == 'deferred_oversized' %}
+                    <span class="badge badge-warning" style="font-size: 0.65rem; padding: 0.1rem 0.35rem;">Oversized Deferred</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+
+              <!-- Date -->
+              <td style="white-space: nowrap; font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">
+                {{ m.date_utc[:16].replace('T', ' ') if m.date_utc else 'N/A' }}
+              </td>
+
+              <!-- CRM Match Proposal -->
+              <td style="white-space: nowrap;">
+                {% if m.crm_link and m.crm_link.link_status == 'verified' %}
+                  <span class="badge-crm-verified" title="{{ m.crm_link.evidence_summary }}">
+                    ✓ {{ m.crm_link.candidate_id or 'Matched' }}
+                  </span>
+                {% elif m.crm_link and m.crm_link.link_status == 'suggested_pending_review' %}
+                  <span class="badge-crm-review" title="{{ m.crm_link.evidence_summary }}">
+                    ⏳ Review: {{ m.crm_link.candidate_id }}
+                  </span>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 0.75rem;">—</span>
+                {% endif %}
+              </td>
+
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {% if total_pages > 1 %}
+      <div style="padding: 0.75rem 1.25rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary);">
         <div>
-          <h2 style="font-size: 1.125rem; font-weight: 700; margin: 0 0 0.25rem; color: #111827;">
-            {{ selected_message.subject or '(No Subject)' }}
-          </h2>
-          <div style="font-size: 0.75rem; color: #6b7280;">
-            Message ID: <code>{{ selected_message.message_id }}</code> | UID: <code>{{ selected_message.imap_uid }}</code> (UV: {{ selected_message.imap_uidvalidity }})
-          </div>
-        </div>
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page }}"
-           style="text-decoration: none; font-size: 1.25rem; color: #9ca3af;" title="Close Inspector">✕</a>
-      </div>
-
-      <!-- Metadata Grid -->
-      <div style="display: grid; grid-template-columns: 80px 1fr; gap: 0.5rem; font-size: 0.8125rem; margin-bottom: 1.25rem; background: #f9fafb; padding: 0.75rem; border-radius: 6px;">
-        <span style="font-weight: 600; color: #4b5563;">Account:</span>
-        <span><code>{{ selected_message.account_id }}</code> ({{ selected_account_email }})</span>
-
-        <span style="font-weight: 600; color: #4b5563;">Folder:</span>
-        <span>{{ selected_message.folder_role|upper }} ({{ selected_folder_name }})</span>
-
-        <span style="font-weight: 600; color: #4b5563;">From:</span>
-        <span><strong>{{ selected_message.from_name }}</strong> &lt;{{ selected_message.from_address }}&gt;</span>
-
-        <span style="font-weight: 600; color: #4b5563;">To:</span>
-        <span>{{ selected_message.to_addresses|join(', ') }}</span>
-
-        {% if selected_message.cc_addresses %}
-        <span style="font-weight: 600; color: #4b5563;">CC:</span>
-        <span>{{ selected_message.cc_addresses|join(', ') }}</span>
-        {% endif %}
-
-        <span style="font-weight: 600; color: #4b5563;">Date (UTC):</span>
-        <span>{{ selected_message.date_utc }}</span>
-
-        <span style="font-weight: 600; color: #4b5563;">RFC Msg-ID:</span>
-        <span style="word-break: break-all; font-family: monospace; font-size: 0.75rem;">{{ selected_message.rfc_message_id or 'None' }}</span>
-      </div>
-
-      <!-- CRM Reconciliation Proposal Box -->
-      <div style="margin-bottom: 1.25rem; padding: 0.75rem 1rem; border-radius: 6px; border: 1px solid {% if selected_crm_link and selected_crm_link.link_status == 'verified' %}#a7f3d0; background: #ecfdf5;{% elif selected_crm_link and selected_crm_link.link_status == 'suggested_pending_review' %}#fde68a; background: #fffbeb;{% else %}#e5e7eb; background: #f9fafb;{% endif %}">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-          <span style="font-size: 0.8125rem; font-weight: 700; color: #1f2937;">
-            🔗 CRM Match Proposal (Read-Only)
-          </span>
-          {% if selected_crm_link %}
-          <span class="badge" style="font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; {% if selected_crm_link.link_status == 'verified' %}background: #10b981; color: #ffffff;{% elif selected_crm_link.link_status == 'suggested_pending_review' %}background: #f59e0b; color: #ffffff;{% else %}background: #6b7280; color: #ffffff;{% endif %}">
-            {{ selected_crm_link.link_status|upper }} (Confidence: {{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
-          </span>
-          {% else %}
-          <span class="badge" style="background: #9ca3af; color: #ffffff; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px;">UNPROPOSED</span>
-          {% endif %}
-        </div>
-
-        {% if selected_crm_link and selected_crm_link.candidate_id %}
-        <div style="font-size: 0.8125rem; color: #374151; margin-bottom: 0.25rem;">
-          <strong>Target Company:</strong>
-          <a href="/sales/candidates/{{ selected_crm_link.candidate_id }}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">
-            {{ selected_crm_link.candidate_id }}
+          {% if current_page > 1 %}
+          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page - 1 }}"
+             class="btn btn-sm btn-secondary" style="font-size: 0.8125rem;">
+            ← Previous
           </a>
-          {% if selected_crm_link.contact_id %}
-          | <strong>Contact:</strong> <code>{{ selected_crm_link.contact_id }}</code>
           {% endif %}
         </div>
-        <div style="font-size: 0.75rem; color: #4b5563;">
-          <strong>Evidence:</strong> {{ selected_crm_link.evidence_summary }}
-        </div>
-        {% else %}
-        <div style="font-size: 0.75rem; color: #6b7280;">
-          {{ selected_crm_link.evidence_summary if selected_crm_link else 'No matching company or contact proposed for this message.' }}
-        </div>
-        {% endif %}
-        <div style="margin-top: 0.35rem; font-size: 0.7rem; color: #6b7280; font-style: italic;">
-          * Note: Manual approval, rejection, and reassignment actions belong to Phase MAIL-OPS-01B.
+        <span style="font-size: 0.8125rem; color: var(--text-secondary);">
+          Showing {{ ((current_page - 1) * limit) + 1 }}–{{ [current_page * limit, total_count]|min }} of {{ total_count }}
+        </span>
+        <div>
+          {% if current_page < total_pages %}
+          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page + 1 }}"
+             class="btn btn-sm btn-secondary" style="font-size: 0.8125rem;">
+            Next →
+          </a>
+          {% endif %}
         </div>
       </div>
+      {% endif %}
 
-      <!-- Email Body Tabs -->
-      <div style="border-bottom: 1px solid #e5e7eb; margin-bottom: 0.75rem; display: flex; gap: 0.5rem;">
-        <button id="btn-tab-plain" class="btn btn-sm btn-secondary" onclick="showBodyTab('plain')" style="font-size: 0.75rem; font-weight: 600;">
-          Plain Text
-        </button>
-        {% if selected_message.has_html and selected_sanitized_html %}
-        <button id="btn-tab-html" class="btn btn-sm btn-outline-secondary" onclick="showBodyTab('html')" style="font-size: 0.75rem; font-weight: 600;">
-          HTML Preview (Sanitized)
-        </button>
-        {% endif %}
-      </div>
-
-      <!-- Plain Text Content -->
-      <div id="body-tab-plain" style="padding: 0.75rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; font-family: monospace; font-size: 0.8125rem; white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto;">
-        {% if selected_message.body_plain_text %}
-          {{ selected_message.body_plain_text }}
-        {% else %}
-          <span style="color: #9ca3af; font-style: italic;">(No plain text body content stored)</span>
-        {% endif %}
-      </div>
-
-      <!-- Sanitized HTML Content -->
-      {% if selected_message.has_html and selected_sanitized_html %}
-      <div id="body-tab-html" style="display: none; padding: 1rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; max-height: 400px; overflow-y: auto;">
-        <div style="font-size: 0.75rem; color: #b45309; background: #fffbeb; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.75rem; border: 1px solid #fde68a;">
-          🛡️ Untrusted scripts, embedded objects, and remote tracking pixels have been securely blocked.
-        </div>
-        <div class="sanitized-email-html">
-          {{ selected_sanitized_html|safe }}
-        </div>
+      {% else %}
+      <div style="padding: 3.5rem 1.5rem; text-align: center; color: var(--text-muted);">
+        <p style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-secondary);">No messages found.</p>
+        <p style="font-size: 0.85rem;">Try adjusting the account, folder, or search query filter.</p>
       </div>
       {% endif %}
 
     </div>
 
-    <!-- Conversation / Thread Card -->
-    {% if thread_messages and thread_messages|length > 1 %}
-    <div class="card" style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem;">
-      <h3 style="font-size: 0.9375rem; font-weight: 700; margin: 0 0 0.75rem; color: #111827;">
-        🧵 Related Thread Evidence ({{ thread_messages|length }} Messages)
-      </h3>
-      <p style="font-size: 0.75rem; color: #6b7280; margin: 0 0 1rem;">
-        Grouped strictly via verifiable RFC Message-ID, In-Reply-To, and References evidence.
-      </p>
+    <!-- Right Column: High-Contrast Message Inspector & Conversation Thread -->
+    {% if selected_message %}
+    <div style="display: flex; flex-direction: column; gap: 1.25rem;">
 
-      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-        {% for tm in thread_messages %}
-        <div style="padding: 0.75rem; border-radius: 6px; border: 1px solid {% if tm.message_id == selected_message.message_id %}#3b82f6; background: #eff6ff;{% else %}#e5e7eb; background: #f9fafb;{% endif %}; font-size: 0.8125rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
-            <span>
-              {% if tm.folder_role == 'inbox' %}📥 INBOX{% else %}📤 SENT{% endif %}
-              <strong>{{ tm.from_name or tm.from_address }}</strong>
+      <!-- Inspector Card -->
+      <div class="inspector-card">
+
+        <!-- Subject & Header Controls -->
+        <div class="inspector-header">
+          <div>
+            <h2 class="inspector-subject">{{ selected_message.subject or '(No Subject)' }}</h2>
+            <div class="inspector-submeta">
+              <span>Msg-ID: <code>{{ selected_message.message_id }}</code></span>
+              <span>UID: <code>{{ selected_message.imap_uid }}</code></span>
+              <span>UIDVALIDITY: <code>{{ selected_message.imap_uidvalidity }}</code></span>
+            </div>
+          </div>
+          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page }}"
+             class="inspector-close-btn" title="Close inspector">✕</a>
+        </div>
+
+        <!-- High-Contrast Metadata Grid -->
+        <div class="metadata-panel">
+          <span class="meta-label">Account:</span>
+          <span class="meta-value">
+            <code>{{ selected_message.account_id }}</code> ({{ selected_account_email }})
+          </span>
+
+          <span class="meta-label">Folder:</span>
+          <span class="meta-value">
+            {{ selected_message.folder_role|upper }} ({{ selected_folder_name }})
+          </span>
+
+          <span class="meta-label">From:</span>
+          <span class="meta-value">
+            <strong>{{ selected_message.from_name }}</strong> &lt;{{ selected_message.from_address }}&gt;
+          </span>
+
+          <span class="meta-label">To:</span>
+          <span class="meta-value">{{ selected_message.to_addresses|join(', ') }}</span>
+
+          {% if selected_message.cc_addresses %}
+          <span class="meta-label">CC:</span>
+          <span class="meta-value">{{ selected_message.cc_addresses|join(', ') }}</span>
+          {% endif %}
+
+          <span class="meta-label">Date (UTC):</span>
+          <span class="meta-value" style="font-family: monospace;">{{ selected_message.date_utc }}</span>
+
+          <span class="meta-label">RFC Msg-ID:</span>
+          <span class="meta-value" style="font-family: monospace; font-size: 0.75rem; color: #38bdf8;">
+            {{ selected_message.rfc_message_id or 'None' }}
+          </span>
+        </div>
+
+        <!-- CRM Matching Proposal Card -->
+        <div class="crm-proposal-card {% if selected_crm_link and selected_crm_link.link_status == 'verified' %}verified{% elif selected_crm_link and selected_crm_link.link_status == 'suggested_pending_review' %}review{% endif %}">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.8125rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;">
+              <span>🔗</span> CRM Match Proposal (Read-Only)
             </span>
-            <span style="font-size: 0.75rem; color: #6b7280;">{{ tm.date_utc[:16].replace('T', ' ') if tm.date_utc else '' }}</span>
+            {% if selected_crm_link %}
+              {% if selected_crm_link.link_status == 'verified' %}
+              <span class="badge-crm-verified">
+                VERIFIED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
+              </span>
+              {% elif selected_crm_link.link_status == 'suggested_pending_review' %}
+              <span class="badge-crm-review">
+                REVIEW REQUIRED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
+              </span>
+              {% else %}
+              <span class="badge" style="background: var(--bg-input); color: var(--text-secondary);">
+                {{ selected_crm_link.link_status|upper }}
+              </span>
+              {% endif %}
+            {% else %}
+              <span class="badge" style="background: var(--bg-input); color: var(--text-muted);">UNPROPOSED</span>
+            {% endif %}
           </div>
-          <div style="font-size: 0.8125rem; font-weight: 600; color: #1f2937; margin-bottom: 0.25rem;">
-            {{ tm.subject }}
-          </div>
-          {% if tm.message_id != selected_message.message_id %}
-          <div style="margin-top: 0.25rem;">
-            <a href="/sales/mail-operations?message_id={{ tm.message_id }}&account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page }}"
-               style="font-size: 0.75rem; color: #2563eb; text-decoration: underline;">
-              Inspect this message →
+
+          {% if selected_crm_link and selected_crm_link.candidate_id %}
+          <div style="font-size: 0.8125rem; color: var(--text-primary); margin-top: 0.25rem;">
+            <strong style="color: var(--text-secondary);">Proposed Company:</strong>
+            <a href="/sales/candidates/{{ selected_crm_link.candidate_id }}" target="_blank"
+               style="color: #38bdf8; text-decoration: underline; font-weight: 600; margin-left: 0.25rem;">
+              {{ selected_crm_link.candidate_id }}
             </a>
+            {% if selected_crm_link.contact_id %}
+            <span style="margin-left: 0.75rem; color: var(--text-secondary);">| <strong>Contact:</strong> <code>{{ selected_crm_link.contact_id }}</code></span>
+            {% endif %}
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4;">
+            <strong>Matching Evidence:</strong> {{ selected_crm_link.evidence_summary }}
           </div>
           {% else %}
-          <div style="margin-top: 0.25rem; font-size: 0.75rem; color: #1d4ed8; font-weight: 600;">
-            Currently viewing
+          <div style="font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+            {{ selected_crm_link.evidence_summary if selected_crm_link else 'No matching company or contact proposed for this message.' }}
           </div>
           {% endif %}
+
+          <div style="font-size: 0.7rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 0.35rem; margin-top: 0.25rem;">
+            * Read-Only Notice: This proposal does not mutate candidate ownership or CRM lead state. Match approval and reassignment actions belong to MAIL-OPS-01B.
+          </div>
         </div>
-        {% endfor %}
+
+        <!-- Body Viewer Tabs -->
+        <div class="body-tabs-nav">
+          <button id="btn-tab-plain" class="body-tab-btn active" onclick="showBodyTab('plain')">
+            Plain Text
+          </button>
+          {% if selected_message.has_html and selected_sanitized_html %}
+          <button id="btn-tab-html" class="body-tab-btn" onclick="showBodyTab('html')">
+            HTML Preview (Sanitized)
+          </button>
+          {% endif %}
+        </div>
+
+        <!-- Plain Text Viewer -->
+        <div id="body-tab-plain" class="email-body-viewer">
+          {% if selected_message.body_plain_text %}
+          <pre class="email-body-plain">{{ selected_message.body_plain_text }}</pre>
+          {% else %}
+          <span style="color: var(--text-muted); font-style: italic;">(No plain text body content stored for this message)</span>
+          {% endif %}
+        </div>
+
+        <!-- Sanitized HTML Viewer -->
+        {% if selected_message.has_html and selected_sanitized_html %}
+        <div id="body-tab-html" class="email-body-viewer" style="display: none;">
+          <div style="font-size: 0.75rem; color: #fde68a; background: rgba(120, 53, 15, 0.4); padding: 0.5rem 0.75rem; border-radius: 4px; margin-bottom: 0.875rem; border: 1px solid rgba(245, 158, 11, 0.3);">
+            🛡️ <strong>Read-Only Sandbox:</strong> Untrusted scripts, embedded objects, and remote tracking images have been defanged.
+          </div>
+          <div class="email-body-html">
+            {{ selected_sanitized_html|safe }}
+          </div>
+        </div>
+        {% endif %}
+
       </div>
+
+      <!-- Verified Conversation / Thread Hierarchy -->
+      {% if thread_messages and thread_messages|length > 1 %}
+      <div class="thread-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin: 0;">
+            🧵 Related Thread Evidence ({{ thread_messages|length }} Messages)
+          </h3>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-family: monospace;">RFC-Evidence Linked</span>
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">
+          Grouped strictly via verifiable RFC Message-ID and In-Reply-To evidence.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
+          {% for tm in thread_messages %}
+          <div class="thread-item {% if tm.message_id == selected_message.message_id %}active{% endif %}">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>
+                {% if tm.folder_role == 'inbox' %}
+                <span class="badge-inbox">📥 INBOX</span>
+                {% else %}
+                <span class="badge-sent">📤 SENT</span>
+                {% endif %}
+                <strong style="color: var(--text-primary); margin-left: 0.35rem;">{{ tm.from_name or tm.from_address }}</strong>
+              </span>
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-family: monospace;">
+                {{ tm.date_utc[:16].replace('T', ' ') if tm.date_utc else '' }}
+              </span>
+            </div>
+            <div style="font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary);">
+              {{ tm.subject }}
+            </div>
+            {% if tm.message_id != selected_message.message_id %}
+            <div style="margin-top: 0.25rem;">
+              <a href="/sales/mail-operations?message_id={{ tm.message_id }}&account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page }}"
+                 style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline;">
+                Inspect this message →
+              </a>
+            </div>
+            {% else %}
+            <div style="margin-top: 0.25rem; font-size: 0.72rem; color: #38bdf8; font-weight: 600;">
+              ✓ Currently selected
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
     </div>
     {% endif %}
 
   </div>
-  {% endif %}
 
 </div>
 
-<!-- Read-Only Sync & Checkpoints Modal -->
-<div id="sync-status-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center;">
-  <div style="background: #ffffff; border-radius: 8px; max-width: 650px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+<!-- Sync Status & Checkpoints Modal -->
+<div id="sync-status-modal" class="sync-modal-overlay">
+  <div class="sync-modal-content">
     
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.75rem;">
-      <h3 style="margin: 0; font-size: 1.125rem; font-weight: 700; color: #111827;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">
         ⚙️ Mailbox Sync &amp; Windows Scheduler Status
       </h3>
-      <button onclick="toggleSyncStatusModal()" style="border: none; background: none; font-size: 1.25rem; cursor: pointer; color: #6b7280;">✕</button>
+      <button onclick="toggleSyncStatusModal()" style="border: none; background: none; font-size: 1.25rem; cursor: pointer; color: var(--text-muted);">✕</button>
     </div>
 
-    <!-- Windows Schedule Info -->
-    <div style="margin-bottom: 1.25rem; background: #f9fafb; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.8125rem; border: 1px solid #e5e7eb;">
-      <div style="font-weight: 700; color: #111827; margin-bottom: 0.25rem;">Daily Windows Scheduled Task (IMAP-AUTO-SYNC-01A)</div>
-      <div style="color: #4b5563;">Task Name: <code>pyBIM_SalesAI_MailboxSync</code> (Windows Task Scheduler)</div>
-      <div style="color: #4b5563;">Permitted Daily Windows: <strong>12:15</strong> and <strong>18:00</strong> Europe/Rome</div>
-      <div style="color: #4b5563; margin-top: 0.25rem;">Next Scheduled Run: <strong>{{ scheduler_info.next_scheduled_window or '12:15 Europe/Rome' }}</strong></div>
-      <div style="color: #4b5563;">Concurrency Lock: <code>{{ scheduler_info.lock_status }}</code></div>
+    <!-- Windows Task Scheduler Parameters -->
+    <div style="margin-bottom: 1.25rem; background: var(--bg-secondary); padding: 0.875rem 1rem; border-radius: var(--radius-md); font-size: 0.8125rem; border: 1px solid var(--border-color);">
+      <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.35rem;">Daily Windows Scheduled Task (IMAP-AUTO-SYNC-01A)</div>
+      <div style="color: var(--text-secondary); margin-bottom: 0.2rem;">Task Name: <code>pyBIM_SalesAI_MailboxSync</code></div>
+      <div style="color: var(--text-secondary); margin-bottom: 0.2rem;">Permitted Operating Windows: <strong>12:15</strong> and <strong>18:00</strong> Europe/Rome</div>
+      <div style="color: var(--text-secondary); margin-bottom: 0.2rem;">Next Scheduled Run: <strong>{{ scheduler_info.next_scheduled_window or '12:15 Europe/Rome' }}</strong></div>
+      <div style="color: var(--text-secondary);">Concurrency Lock Status: <code>{{ scheduler_info.lock_status }}</code></div>
     </div>
 
-    <!-- Account Details Table -->
-    <h4 style="font-size: 0.875rem; font-weight: 700; margin: 0 0 0.5rem; color: #374151;">Primary Sales Mailboxes &amp; Checkpoints</h4>
-    <div class="table-responsive">
-      <table class="data-table" style="width: 100%; font-size: 0.75rem; margin-bottom: 1rem;">
+    <!-- Accounts and Checkpoints Table -->
+    <h4 style="font-size: 0.875rem; font-weight: 700; margin: 0 0 0.5rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em;">
+      Primary Mailbox Checkpoints
+    </h4>
+    <div class="table-responsive" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); margin-bottom: 1.25rem;">
+      <table class="mail-table" style="font-size: 0.75rem;">
         <thead>
-          <tr style="background: #f3f4f6;">
+          <tr>
             <th>Account</th>
             <th>Enabled</th>
             <th>Folder</th>
             <th>Last Synced UID</th>
             <th>UIDVALIDITY</th>
-            <th>Check Status</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {% for aid, acc in accounts_meta.items() %}
             {% for fid, f in acc.folders.items() %}
             <tr>
-              <td>{{ acc.email }}</td>
+              <td><strong style="color: var(--text-primary);">{{ acc.email }}</strong></td>
               <td>
-                <span class="badge" style="{% if acc.is_enabled %}background: #dcfce7; color: #166534;{% else %}background: #fee2e2; color: #991b1b;{% endif %}">
+                <span class="badge" style="{% if acc.is_enabled %}background: #064e3b; color: #a7f3d0;{% else %}background: #7f1d1d; color: #fecaca;{% endif %}">
                   {{ 'YES (1)' if acc.is_enabled else 'NO (0)' }}
                 </span>
               </td>
@@ -433,7 +983,9 @@
               <td><code>{{ f.last_synced_uid }}</code></td>
               <td><code>{{ f.uidvalidity }}</code></td>
               <td>
-                <span class="badge" style="background: #e0e7ff; color: #3730a3;">{{ f.last_status }}</span>
+                <span class="badge" style="background: rgba(37, 99, 235, 0.2); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.4);">
+                  {{ f.last_status }}
+                </span>
               </td>
             </tr>
             {% endfor %}
@@ -442,8 +994,8 @@
       </table>
     </div>
 
-    <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 0.75rem; border-radius: 6px; font-size: 0.75rem; color: #1e40af; margin-bottom: 1rem;">
-      🛡️ <strong>Sync Now Security Guard:</strong> Automatic background synchronization is triggered exclusively by Windows Task Scheduler. User-facing manual Sync Now operations are disabled in this read-only phase until role-based authorization and session concurrency verification are completed in MAIL-OPS-01B.
+    <div style="background: rgba(37, 99, 235, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 0.875rem; border-radius: var(--radius-md); font-size: 0.78rem; color: #bfdbfe; margin-bottom: 1.25rem; line-height: 1.45;">
+      🛡️ <strong>Sync Now Security Guard:</strong> Unattended synchronization is triggered exclusively by Windows Task Scheduler. User-facing manual Sync Now operations are disabled in this read-only phase until role-based authorization and session concurrency verification are completed in MAIL-OPS-01B.
     </div>
 
     <div style="text-align: right;">
@@ -463,13 +1015,13 @@ function showBodyTab(tabName) {
   if (tabName === 'plain') {
     if (plainDiv) plainDiv.style.display = 'block';
     if (htmlDiv) htmlDiv.style.display = 'none';
-    if (plainBtn) { plainBtn.className = 'btn btn-sm btn-secondary'; }
-    if (htmlBtn) { htmlBtn.className = 'btn btn-sm btn-outline-secondary'; }
+    if (plainBtn) { plainBtn.className = 'body-tab-btn active'; }
+    if (htmlBtn) { htmlBtn.className = 'body-tab-btn'; }
   } else {
     if (plainDiv) plainDiv.style.display = 'none';
     if (htmlDiv) htmlDiv.style.display = 'block';
-    if (plainBtn) { plainBtn.className = 'btn btn-sm btn-outline-secondary'; }
-    if (htmlBtn) { htmlBtn.className = 'btn btn-sm btn-secondary'; }
+    if (plainBtn) { plainBtn.className = 'body-tab-btn'; }
+    if (htmlBtn) { htmlBtn.className = 'body-tab-btn active'; }
   }
 }
 
