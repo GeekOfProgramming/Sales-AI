@@ -215,7 +215,20 @@ FolderRole = Literal["inbox", "sent", "drafts", "archive", "trash", "junk", "oth
 MessageDirection = Literal["inbound", "outbound"]
 SyncStatus = Literal["idle", "syncing", "success", "failed", "interrupted", "uidvalidity_reset"]
 LinkStatus = Literal["suggested_pending_review", "verified", "unlinked", "rejected"]
-LinkMethod = Literal["rfc_in_reply_to", "manual_outreach_match", "contact_email", "manual_operator"]
+LinkMethod = Literal[
+    "rfc_in_reply_to",
+    "manual_outreach_match",
+    "contact_email",
+    "verified_contact_email",
+    "verified_domain",
+    "verified_domain_alias",
+    "operator_correction",
+    "manual_operator",
+    "unmatched",
+    "ambiguous_multi_candidate_contact",
+    "ambiguous_domain_collision",
+    "ambiguous_alias_collision",
+]
 
 
 class MailboxAccountRecord(BaseModel):

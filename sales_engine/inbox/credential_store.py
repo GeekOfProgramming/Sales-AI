@@ -133,10 +133,26 @@ class MailboxCredentialStore:
 
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
         self.store_path.write_bytes(encrypted)
+        self._restrict_file_permissions(self.store_path)
+
+    def _restrict_file_permissions(self, target_path: Path) -> None:
+        """Enforce strict file ACLs on Windows using icacls and POSIX 0o600 elsewhere."""
         try:
-            os.chmod(str(self.store_path), 0o600)
-        except Exception:
-            pass
+            if sys.platform == "win32":
+                import subprocess
+                user = os.environ.get("USERNAME")
+                if user:
+                    # Remove inheritance and grant only current user full access (F = read, write, execute, delete)
+                    subprocess.run(
+                        ["icacls", str(target_path), "/inheritance:r", "/grant:r", f"{user}:(F)"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5.0,
+                    )
+            else:
+                os.chmod(str(target_path), 0o600)
+        except Exception as e:
+            logger.debug(f"Could not apply strict ACLs to {target_path}: {e}")
 
     def get_credential(self, credential_ref: str) -> Optional[str]:
         """
