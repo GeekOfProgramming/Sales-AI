@@ -157,6 +157,14 @@ def get_account_config_by_email(email_address: str) -> MailboxAccountRecord:
     )
 
 
+# Primary Sales Mailboxes authorized for historical backfill (IMAP-BACKFILL-01A)
+HISTORICAL_BACKFILL_ALLOWED_ACCOUNTS: List[str] = [
+    "info@pybim.com",
+    "info@pybim.it",
+]
+MAX_HISTORICAL_BATCH_LIMIT = 50
+
+
 class MailboxPilotRunner:
     """
     Operator-controlled runner for single-mailbox read-only pilot and sequential rollouts.
@@ -1372,6 +1380,353 @@ class MailboxPilotRunner:
         finally:
             conn_rw.close()
 
+    # -----------------------------------------------------------------------
+    # Step 8: Historical Sync & Status Reporting (IMAP-BACKFILL-01A)
+    # -----------------------------------------------------------------------
+
+    def report_mailbox_status(
+        self,
+        inbox_folder_name: str = "INBOX",
+        sent_folder_name: str = "INBOX.Sent",
+        live_connect: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Read-only status reporting for the selected primary mailbox account:
+        - Local stored message counts, UID ranges, deferred counts
+        - Current local checkpoints and stored UIDVALIDITY
+        - Optional remote inspection (if live_connect=True):
+          remote message counts, remote UID ranges (min/max), remote UIDVALIDITY
+        - Strictly read-only, zero mutations.
+        """
+        import sqlite3
+
+        # 1. Inspect local database records in strictly read-only mode
+        con_ro = sqlite3.connect(f"file:{os.path.abspath(self.db_path).replace(os.sep, '/')}?mode=ro", uri=True)
+        con_ro.row_factory = sqlite3.Row
+        cur = con_ro.cursor()
+
+        acc_row = cur.execute(
+            "SELECT * FROM mailbox_accounts WHERE account_id = ? LIMIT 1;",
+            (self.account.account_id,),
+        ).fetchone()
+
+        # Folders
+        folders = [
+            dict(r)
+            for r in cur.execute(
+                "SELECT * FROM mailbox_folders WHERE account_id = ? ORDER BY folder_role ASC;",
+                (self.account.account_id,),
+            ).fetchall()
+        ]
+
+        # Sync states
+        sync_states = [
+            dict(r)
+            for r in cur.execute(
+                "SELECT * FROM mailbox_folder_sync_state WHERE account_id = ? ORDER BY folder_id ASC;",
+                (self.account.account_id,),
+            ).fetchall()
+        ]
+
+        # Messages stats per folder_role
+        stats_rows = cur.execute(
+            """
+            SELECT folder_role,
+                   COUNT(*) as message_count,
+                   MIN(imap_uid) as min_uid,
+                   MAX(imap_uid) as max_uid,
+                   MIN(imap_uidvalidity) as min_uv,
+                   MAX(imap_uidvalidity) as max_uv,
+                   SUM(CASE WHEN parse_status = 'deferred_oversized' THEN 1 ELSE 0 END) as deferred_count
+            FROM mailbox_messages
+            WHERE account_id = ?
+            GROUP BY folder_role;
+            """,
+            (self.account.account_id,),
+        ).fetchall()
+
+        msg_stats: Dict[str, Dict[str, Any]] = {}
+        for r in stats_rows:
+            msg_stats[r["folder_role"]] = {
+                "message_count": r["message_count"],
+                "min_uid": r["min_uid"],
+                "max_uid": r["max_uid"],
+                "min_uidvalidity": r["min_uv"],
+                "max_uidvalidity": r["max_uv"],
+                "deferred_count": r["deferred_count"] or 0,
+            }
+
+        con_ro.close()
+
+        status_report: Dict[str, Any] = {
+            "success": True,
+            "account_id": self.account.account_id,
+            "email_address": self.account.email_address,
+            "is_primary_sales_mailbox": self.account.email_address in HISTORICAL_BACKFILL_ALLOWED_ACCOUNTS,
+            "account_configured": bool(acc_row),
+            "is_enabled": bool(acc_row["is_enabled"]) if acc_row else False,
+            "folders": {
+                "inbox": {
+                    "folder_name": inbox_folder_name,
+                    "stored_messages": msg_stats.get("inbox", {}).get("message_count", 0),
+                    "stored_min_uid": msg_stats.get("inbox", {}).get("min_uid"),
+                    "stored_max_uid": msg_stats.get("inbox", {}).get("max_uid"),
+                    "stored_uidvalidity": msg_stats.get("inbox", {}).get("max_uidvalidity"),
+                    "stored_deferred": msg_stats.get("inbox", {}).get("deferred_count", 0),
+                    "checkpoint_uid": None,
+                    "checkpoint_uidvalidity": None,
+                    "remote_count": None,
+                    "remote_uidvalidity": None,
+                    "remote_min_uid": None,
+                    "remote_max_uid": None,
+                },
+                "sent": {
+                    "folder_name": sent_folder_name,
+                    "stored_messages": msg_stats.get("sent", {}).get("message_count", 0),
+                    "stored_min_uid": msg_stats.get("sent", {}).get("min_uid"),
+                    "stored_max_uid": msg_stats.get("sent", {}).get("max_uid"),
+                    "stored_uidvalidity": msg_stats.get("sent", {}).get("max_uidvalidity"),
+                    "stored_deferred": msg_stats.get("sent", {}).get("deferred_count", 0),
+                    "checkpoint_uid": None,
+                    "checkpoint_uidvalidity": None,
+                    "remote_count": None,
+                    "remote_uidvalidity": None,
+                    "remote_min_uid": None,
+                    "remote_max_uid": None,
+                },
+            },
+        }
+
+        # Populate checkpoint info from sync_states
+        inbox_fld_id = f"fld_{self.account.account_id}_inbox"
+        sent_fld_id = f"fld_{self.account.account_id}_sent"
+
+        for s in sync_states:
+            if s["folder_id"] == inbox_fld_id:
+                status_report["folders"]["inbox"]["checkpoint_uid"] = s["last_synced_uid"]
+                status_report["folders"]["inbox"]["checkpoint_uidvalidity"] = s["uidvalidity"]
+            elif s["folder_id"] == sent_fld_id:
+                status_report["folders"]["sent"]["checkpoint_uid"] = s["last_synced_uid"]
+                status_report["folders"]["sent"]["checkpoint_uidvalidity"] = s["uidvalidity"]
+
+        # 2. Remote inspection if live_connect is enabled
+        if live_connect:
+            provider = self.provider_factory(self.account)
+            client = None
+            try:
+                client = provider.connect(self.account)
+
+                # Inbox
+                cnt_inbox, uv_inbox = provider.examine_folder(client, inbox_folder_name)
+                status_report["folders"]["inbox"]["remote_count"] = cnt_inbox
+                status_report["folders"]["inbox"]["remote_uidvalidity"] = uv_inbox
+                typ, sdata = client.uid("SEARCH", "ALL")
+                if typ == "OK" and sdata and sdata[0]:
+                    uids = [int(u) for u in sdata[0].split() if u.isdigit()]
+                    if uids:
+                        status_report["folders"]["inbox"]["remote_min_uid"] = min(uids)
+                        status_report["folders"]["inbox"]["remote_max_uid"] = max(uids)
+
+                # Sent
+                if sent_folder_name:
+                    cnt_sent, uv_sent = provider.examine_folder(client, sent_folder_name)
+                    status_report["folders"]["sent"]["remote_count"] = cnt_sent
+                    status_report["folders"]["sent"]["remote_uidvalidity"] = uv_sent
+                    typ, sdata = client.uid("SEARCH", "ALL")
+                    if typ == "OK" and sdata and sdata[0]:
+                        uids = [int(u) for u in sdata[0].split() if u.isdigit()]
+                        if uids:
+                            status_report["folders"]["sent"]["remote_min_uid"] = min(uids)
+                            status_report["folders"]["sent"]["remote_max_uid"] = max(uids)
+
+            except Exception as e:
+                status_report["remote_inspection_error"] = str(e)
+            finally:
+                if client:
+                    try:
+                        client.logout()
+                    except Exception:
+                        pass
+
+        return status_report
+
+    def execute_historical_backfill(
+        self,
+        inbox_folder_name: str = "INBOX",
+        sent_folder_name: str = "INBOX.Sent",
+        batch_size: int = MAX_HISTORICAL_BATCH_LIMIT,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Controlled, resumable historical backfill for the selected primary sales mailbox.
+        Strict Safety Guarantees:
+          - Restricted strictly to info@pybim.com and info@pybim.it.
+          - Batch size capped at 50 messages per folder per execution.
+          - Resumes strictly from existing checkpoints (does not reimport initial messages).
+          - Uses EXAMINE and BODY.PEEK[] (strictly read-only on server).
+          - Enforces RFC822.SIZE preflight (10 MB threshold; oversized are marked deferred).
+          - Generates evidence-based CRM proposals without mutating operational tables.
+          - Leaves unattended synchronization disabled.
+        """
+        # 1. Target Account Authorization: info@pybim.com and info@pybim.it ONLY
+        if self.account.email_address not in HISTORICAL_BACKFILL_ALLOWED_ACCOUNTS:
+            return {
+                "success": False,
+                "error": (
+                    f"Historical backfill is restricted strictly to primary sales accounts: "
+                    f"{HISTORICAL_BACKFILL_ALLOWED_ACCOUNTS}. Target '{self.account.email_address}' is rejected."
+                ),
+                "error_category": "UNAUTHORIZED_TARGET",
+            }
+
+        # 2. Bound batch size strictly to max 50
+        effective_batch = max(1, min(batch_size, MAX_HISTORICAL_BATCH_LIMIT))
+
+        # 3. Pre-flight check
+        preflight = self.validate_preflight(check_credential=True)
+        if not preflight["safety_passed"]:
+            return {
+                "success": False,
+                "error": "Pre-flight validation failed",
+                "details": preflight,
+                "error_category": "PREFLIGHT_VALIDATION_FAILED",
+            }
+
+        # 4. Orchestrate sync using existing MailboxSyncOrchestrator
+        cand_store = CandidateStore(db_path=self.db_path)
+        rev_store = ReviewStore(db_path=self.db_path)
+        recon_svc = MailboxReconciliationService(
+            mailbox_repo=self.repo,
+            candidate_store=cand_store,
+            review_store=rev_store,
+        )
+
+        orchestrator = MailboxSyncOrchestrator(
+            mailbox_repo=self.repo,
+            reconciliation_service=recon_svc,
+            provider_factory=self.provider_factory,
+        )
+
+        provider = self.provider_factory(self.account)
+        client = None
+
+        flags_before: Dict[str, Dict[int, List[str]]] = {}
+        flags_after: Dict[str, Dict[int, List[str]]] = {}
+
+        try:
+            client = provider.connect(self.account)
+
+            # Examine folders to retrieve remote UIDVALIDITY and counts
+            inbox_count, inbox_uv = provider.examine_folder(client, inbox_folder_name)
+            if inbox_uv <= 0:
+                raise ValueError(f"Server returned non-positive UIDVALIDITY for {inbox_folder_name}: {inbox_uv}")
+
+            # Ensure Inbox folder record exists in repository
+            inbox_fld = MailboxFolderRecord(
+                folder_id=f"fld_{self.account.account_id}_inbox",
+                account_id=self.account.account_id,
+                folder_name=inbox_folder_name,
+                folder_role="inbox",
+                last_uidvalidity=inbox_uv,
+            )
+            if not dry_run:
+                self.repo.save_folder(inbox_fld)
+
+            sent_fld = None
+            sent_uv = None
+            if sent_folder_name:
+                sent_count, sent_uv = provider.examine_folder(client, sent_folder_name)
+                if sent_uv <= 0:
+                    raise ValueError(f"Server returned non-positive UIDVALIDITY for {sent_folder_name}: {sent_uv}")
+                sent_fld = MailboxFolderRecord(
+                    folder_id=f"fld_{self.account.account_id}_sent",
+                    account_id=self.account.account_id,
+                    folder_name=sent_folder_name,
+                    folder_role="sent",
+                    last_uidvalidity=sent_uv,
+                )
+                if not dry_run:
+                    self.repo.save_folder(sent_fld)
+
+            # Retrieve starting checkpoints before execution
+            inbox_state = self.repo.get_folder_sync_state(self.account.account_id, inbox_fld.folder_id)
+            inbox_starting_checkpoint = inbox_state.last_synced_uid if inbox_state else 0
+
+            sent_starting_checkpoint = 0
+            if sent_fld:
+                sent_state = self.repo.get_folder_sync_state(self.account.account_id, sent_fld.folder_id)
+                sent_starting_checkpoint = sent_state.last_synced_uid if sent_state else 0
+
+            # Execute 1 bounded batch per folder (max 50 messages)
+            inbox_res = orchestrator.sync_folder(
+                account=self.account,
+                folder=inbox_fld,
+                batch_size=effective_batch,
+                max_batches=1,
+                auto_reconcile=True,
+                dry_run=dry_run,
+                provider=provider,
+            )
+
+            sent_res = None
+            if sent_fld:
+                sent_res = orchestrator.sync_folder(
+                    account=self.account,
+                    folder=sent_fld,
+                    batch_size=effective_batch,
+                    max_batches=1,
+                    auto_reconcile=True,
+                    dry_run=dry_run,
+                    provider=provider,
+                )
+
+            # Ensure account remains disabled for unattended sync
+            if not dry_run:
+                acc_rec = self.repo.get_account(self.account.account_id)
+                if acc_rec and acc_rec.is_enabled:
+                    acc_rec.is_enabled = False
+                    self.repo.save_account(acc_rec)
+
+            return {
+                "success": (inbox_res.get("status") == "success") and (sent_res is None or sent_res.get("status") == "success"),
+                "account": self.account.email_address,
+                "account_id": self.account.account_id,
+                "dry_run": dry_run,
+                "batch_size_limit": effective_batch,
+                "inbox_sync": {
+                    "folder_name": inbox_folder_name,
+                    "starting_checkpoint": inbox_starting_checkpoint,
+                    "ending_checkpoint": inbox_res.get("ending_uid"),
+                    "messages_ingested": inbox_res.get("messages_ingested", 0),
+                    "messages_deferred": inbox_res.get("messages_deferred", 0),
+                    "uidvalidity": inbox_res.get("uidvalidity", inbox_uv),
+                    "status": inbox_res.get("status"),
+                },
+                "sent_sync": {
+                    "folder_name": sent_folder_name,
+                    "starting_checkpoint": sent_starting_checkpoint,
+                    "ending_checkpoint": sent_res.get("ending_uid") if sent_res else None,
+                    "messages_ingested": sent_res.get("messages_ingested", 0) if sent_res else 0,
+                    "messages_deferred": sent_res.get("messages_deferred", 0) if sent_res else 0,
+                    "uidvalidity": sent_res.get("uidvalidity", sent_uv) if sent_res else None,
+                    "status": sent_res.get("status") if sent_res else None,
+                } if sent_res else None,
+                "unattended_sync_disabled": True,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "error_category": type(e).__name__,
+            }
+        finally:
+            if client:
+                try:
+                    client.logout()
+                except Exception:
+                    pass
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1442,6 +1797,21 @@ Examples:
     repair_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
     repair_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
 
+    # Command: status (IMAP-BACKFILL-01A)
+    status_parser = subparsers.add_parser("status", help="Read-only status reporting for the selected mailbox account")
+    status_parser.add_argument("--live-connect", action="store_true", help="Include live remote message counts and UID ranges")
+    status_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
+    status_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
+
+    # Command: backfill (IMAP-BACKFILL-01A)
+    backfill_parser = subparsers.add_parser("backfill", help="Controlled, bounded historical backfill for primary Sales mailboxes")
+    backfill_parser.add_argument("--live-connect", action="store_true", help="Explicit authorization to connect to remote IMAP server")
+    backfill_parser.add_argument("--confirm-backfill", action="store_true", help="Explicit confirmation to persist backfilled messages to SQLite")
+    backfill_parser.add_argument("--dry-run", action="store_true", help="Simulate historical backfill without committing database records")
+    backfill_parser.add_argument("--limit-batch", type=int, default=MAX_HISTORICAL_BATCH_LIMIT, help=f"Max messages per folder per batch (capped at {MAX_HISTORICAL_BATCH_LIMIT})")
+    backfill_parser.add_argument("--inbox-folder", default="INBOX", help="Remote Inbox folder name (default: INBOX)")
+    backfill_parser.add_argument("--sent-folder", default="INBOX.Sent", help="Remote Sent folder name (default: INBOX.Sent)")
+
     # Global options
     parser.add_argument(
         "--account",
@@ -1488,7 +1858,42 @@ Examples:
             print("=" * 70 + "\n")
         sys.exit(0 if res["safety_passed"] else 1)
 
-    # All commands beyond check require --live-connect
+    # Command: status (can be run offline or with --live-connect)
+    if args.command == "status":
+        res = runner.report_mailbox_status(
+            inbox_folder_name=args.inbox_folder,
+            sent_folder_name=args.sent_folder,
+            live_connect=getattr(args, "live_connect", False),
+        )
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            print("pyBIM Sales-AI: Read-Only Mailbox Status Report (IMAP-BACKFILL-01A)")
+            print("=" * 70)
+            print(f"Target Account:     {res['email_address']} ({res['account_id']})")
+            print(f"Primary Sales:      {'YES (Authorized for Historical Backfill)' if res['is_primary_sales_mailbox'] else 'NO (Secondary - Excluded from Historical Backfill)'}")
+            print(f"Account Enabled:    {'YES' if res['is_enabled'] else 'NO (Disabled for unattended sync)'}")
+            print("-" * 70)
+            for role in ["inbox", "sent"]:
+                f_info = res["folders"][role]
+                print(f"Folder [{role.upper()}] ({f_info['folder_name']}):")
+                print(f"  Stored Messages:      {f_info['stored_messages']}")
+                print(f"  Stored UID Range:     {f_info['stored_min_uid']} -> {f_info['stored_max_uid']}")
+                print(f"  Stored UIDVALIDITY:   {f_info['stored_uidvalidity']}")
+                print(f"  Deferred (Oversized): {f_info['stored_deferred']}")
+                print(f"  Sync Checkpoint:      UID {f_info['checkpoint_uid']} (UV: {f_info['checkpoint_uidvalidity']})")
+                if getattr(args, "live_connect", False):
+                    print(f"  Remote Message Count: {f_info['remote_count']}")
+                    print(f"  Remote UID Range:     {f_info['remote_min_uid']} -> {f_info['remote_max_uid']}")
+                    print(f"  Remote UIDVALIDITY:   {f_info['remote_uidvalidity']}")
+                print("-" * 70)
+            if "remote_inspection_error" in res:
+                print(f"Remote Inspection Error: {res['remote_inspection_error']}")
+            print("=" * 70 + "\n")
+        sys.exit(0 if res["success"] else 1)
+
+    # All other commands beyond check and status require --live-connect
     if not getattr(args, "live_connect", False):
         msg = "Refusing connection: Live connection commands require explicit '--live-connect' flag."
         if args.json:
@@ -1710,6 +2115,68 @@ Examples:
                     print(f"  CRM Links Preserved:   {pv.get('crm_links_preserved')}")
                     print(f"  Checkpoints:           INBOX={pv['checkpoints']['inbox']}, Sent={pv['checkpoints']['sent']}")
                     print(f"  Physical Duplicates:   {pv.get('duplicates')}")
+            print("=" * 70 + "\n")
+
+        sys.exit(0 if res.get("success") else 2)
+
+    elif args.command == "backfill":
+        if not args.live_connect:
+            msg = "Backfill requires live connection. Pass '--live-connect' to authorize remote IMAP connection."
+            if args.json:
+                print(json.dumps({"success": False, "error": msg, "error_category": "LIVE_CONNECT_REQUIRED"}))
+            else:
+                print(f"ERROR: {msg}")
+            sys.exit(3)
+
+        if not args.dry_run and not args.confirm_backfill:
+            msg = "Safety check: Persistent backfill requires explicit confirmation flag '--confirm-backfill' (or use '--dry-run')."
+            if args.json:
+                print(json.dumps({"success": False, "error": msg, "error_category": "CONFIRMATION_REQUIRED"}))
+            else:
+                print(f"ERROR: {msg}")
+            sys.exit(3)
+
+        res = runner.execute_historical_backfill(
+            inbox_folder_name=args.inbox_folder,
+            sent_folder_name=args.sent_folder,
+            batch_size=args.limit_batch,
+            dry_run=args.dry_run,
+        )
+
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "=" * 70)
+            status_title = "DRY-RUN SIMULATION" if args.dry_run else "COMMITTED BATCH"
+            print(f"pyBIM Sales-AI: Historical Mailbox Backfill ({status_title}) (IMAP-BACKFILL-01A)")
+            print("=" * 70)
+            if not res.get("success"):
+                print(f"ERROR: {res.get('error')}")
+                print(f"Category: {res.get('error_category')}")
+            else:
+                print(f"Target Account:         {res.get('account')} ({res.get('account_id')})")
+                print(f"Batch Limit per Folder: {res.get('batch_size_limit')}")
+                print(f"Unattended Sync:        {'DISABLED (Safety enforced)' if res.get('unattended_sync_disabled') else 'ENABLED'}")
+                print("-" * 70)
+                inbox_s = res.get("inbox_sync", {})
+                print(f"Inbox Folder:           {inbox_s.get('folder_name')}")
+                print(f"  Checkpoint Movement:  UID {inbox_s.get('starting_checkpoint')} -> {inbox_s.get('ending_checkpoint')}")
+                print(f"  Messages Ingested:    {inbox_s.get('messages_ingested')}")
+                print(f"  Deferred (Oversized): {inbox_s.get('messages_deferred')}")
+                print(f"  Folder UIDVALIDITY:   {inbox_s.get('uidvalidity')}")
+                print(f"  Sync Status:          {inbox_s.get('status')}")
+
+                sent_s = res.get("sent_sync")
+                if sent_s:
+                    print("-" * 70)
+                    print(f"Sent Folder:            {sent_s.get('folder_name')}")
+                    print(f"  Checkpoint Movement:  UID {sent_s.get('starting_checkpoint')} -> {sent_s.get('ending_checkpoint')}")
+                    print(f"  Messages Ingested:    {sent_s.get('messages_ingested')}")
+                    print(f"  Deferred (Oversized): {sent_s.get('messages_deferred')}")
+                    print(f"  Folder UIDVALIDITY:   {sent_s.get('uidvalidity')}")
+                    print(f"  Sync Status:          {sent_s.get('status')}")
+                print("-" * 70)
+                print("Operational CRM Safety: Zero mutations to candidate_companies, candidate_contacts, or historical records.")
             print("=" * 70 + "\n")
 
         sys.exit(0 if res.get("success") else 2)
