@@ -35,6 +35,8 @@ data/.*_key
 data/.*_secret
 data/.preview_signing_key
 data/.analysis_auth_secret
+data/.mailbox_credentials.enc
+*.enc
 
 # IDEs & Editors
 .vscode/

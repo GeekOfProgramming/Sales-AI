@@ -341,16 +341,17 @@ class RegisterItReadOnlyIMAPProvider(BaseMailboxProvider):
         folder_name: str,
     ) -> Tuple[int, int]:
         """
-        Selects a folder in strictly READ-ONLY mode using EXAMINE.
+        Selects a folder in strictly READ-ONLY mode using standard imaplib select(readonly=True),
+        which issues the IMAP 'EXAMINE' command on the wire.
+        Guarantees that writeable SELECT is never sent and messages cannot be altered.
         Returns (message_count, uidvalidity).
         """
-        # Ensure folder name is quoted if containing spaces or special characters
-        quoted = f'"{folder_name}"' if " " in folder_name and not folder_name.startswith('"') else folder_name
-        typ, data = client.examine(quoted)
+        clean_folder = folder_name.strip()
+        typ, data = client.select(mailbox=clean_folder, readonly=True)
         if typ != "OK":
             raise imaplib.IMAP4.error(f"Failed to EXAMINE folder {folder_name}: {data}")
 
-        count = int(data[0]) if data and data[0] else 0
+        count = int(data[0]) if data and data[0] and str(data[0]).isdigit() else (int(data[0].decode()) if isinstance(data[0], (bytes, bytearray)) and data[0].isdigit() else 0)
 
         # Retrieve UIDVALIDITY from response
         # client.response('UIDVALIDITY') returns e.g. ('OK', [b'123456'])

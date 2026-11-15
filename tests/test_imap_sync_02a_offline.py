@@ -960,10 +960,9 @@ def test_17_no_remote_flag_mutations(isolated_dbs, sample_account, sample_inbox_
     Never calls SELECT, store('+FLAGS'), or store('-FLAGS').
     """
     mock_imap = MagicMock()
-    mock_imap.select.side_effect = AssertionError("SELECT must never be called in read-only mode")
     mock_imap.store.side_effect = AssertionError("STORE must never be called on remote mailbox")
 
-    mock_imap.examine.return_value = ("OK", [b"10"])
+    mock_imap.select.return_value = ("OK", [b"10"])
     mock_imap.response.return_value = ("OK", [b"12345"])
     mock_imap.search.return_value = ("OK", [b"1 2"])
     mock_imap.uid.side_effect = [
@@ -994,8 +993,10 @@ def test_17_no_remote_flag_mutations(isolated_dbs, sample_account, sample_inbox_
     assert len(msgs) == 2
     assert highest_uid == 2
 
-    # Assert no forbidden methods were called
-    assert mock_imap.select.call_count == 0
+    # Assert select was called strictly with readonly=True (which sends EXAMINE on the wire)
+    for c in mock_imap.select.call_args_list:
+        assert c[1].get("readonly") is True
+        assert c[1].get("mailbox") == "INBOX"
     assert mock_imap.store.call_count == 0
 
 

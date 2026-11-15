@@ -131,23 +131,53 @@ def test_04_folder_discovery_preserves_paths_and_delimiters(pilot_account, temp_
 
 def test_05_examine_mode_is_used_instead_of_select(pilot_account, temp_cred_store):
     """
-    P0 SAFETY RULE: Verify EXAMINE is strictly called instead of SELECT
-    to guarantee read-only folder selection.
+    P0 SAFETY RULE: Verify EXAMINE is strictly called via select(readonly=True)
+    to guarantee read-only folder selection on the IMAP wire.
     """
     temp_cred_store.set_credential("win_cred_info_com", "dummy_pass")
     provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
 
     mock_client = MagicMock()
-    mock_client.examine.return_value = ("OK", [b"42"])
+    mock_client.select.return_value = ("OK", [b"42"])
     mock_client.response.return_value = ("OK", [b"987654"])
 
     count, uidvalidity = provider.examine_folder(mock_client, "INBOX")
     assert count == 42
     assert uidvalidity == 987654
 
-    # Assert EXAMINE was invoked and SELECT was NEVER called
-    mock_client.examine.assert_called_once_with("INBOX")
-    mock_client.select.assert_not_called()
+    # Assert select was invoked with readonly=True (which sends EXAMINE on the wire)
+    mock_client.select.assert_called_once_with(mailbox="INBOX", readonly=True)
+
+
+def test_05b_real_imaplib_wire_command_is_examine(pilot_account, temp_cred_store):
+    """
+    Verify with real standard-library imaplib.IMAP4 instance that select(readonly=True)
+    dispatches the 'EXAMINE' command to _simple_command, NOT 'SELECT'.
+    """
+    import imaplib
+    real_client = imaplib.IMAP4.__new__(imaplib.IMAP4)
+    commands_sent = []
+
+    def mock_simple_command(cmd_name, arg):
+        commands_sent.append((cmd_name, arg))
+        real_client.untagged_responses["EXISTS"] = [b"42"]
+        real_client.untagged_responses["UIDVALIDITY"] = [b"987654"]
+        return ("OK", [b"42"])
+
+    real_client._simple_command = mock_simple_command
+    real_client._astring = lambda s: f'"{s}"' if " " in s else s
+    real_client.state = "AUTH"
+    real_client.response = lambda code: ("OK", real_client.untagged_responses.get(code, []))
+
+    provider = RegisterItReadOnlyIMAPProvider(account=pilot_account, credential_store=temp_cred_store)
+    count, uidvalidity = provider.examine_folder(real_client, "INBOX.Sent")
+
+    assert count == 42
+    assert uidvalidity == 987654
+    assert len(commands_sent) == 1
+    # Verify exact command sent over wire
+    assert commands_sent[0][0] == "EXAMINE"
+    assert "INBOX.Sent" in commands_sent[0][1]
 
 
 def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_cred_store):
@@ -176,7 +206,7 @@ def test_06_uid_fetch_uses_peek_semantics_preserving_flags(pilot_account, temp_c
     )
 
     mock_client = MagicMock()
-    mock_client.examine.return_value = ("OK", [b"1"])
+    mock_client.select.return_value = ("OK", [b"1"])
     mock_client.response.return_value = ("OK", [b"12345"])
     mock_client.uid.side_effect = [
         ("OK", [b"105"]),  # SEARCH response
