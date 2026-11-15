@@ -563,14 +563,17 @@ def test_12_windows_task_xml_structure(disposable_sync_env):
         - Run with LeastPrivilege
         - Battery execution allowed
         - Disallow overlapping instances
+        - Encoded as UTF-16 LE with BOM (for Windows schtasks XML compatibility)
     """
     xml_path = os.path.join(
         os.path.dirname(__file__), "..", "scripts", "windows_tasks", "salesai_mailbox_sync.xml"
     )
     assert os.path.exists(xml_path), f"Task XML missing at: {xml_path}"
 
-    with open(xml_path, "r", encoding="utf-8") as f:
+    with open(xml_path, "r", encoding="utf-16") as f:
         content = f.read()
+
+    assert 'encoding="utf-16"' in content
 
     assert "<StartBoundary>2026-11-16T12:15:00</StartBoundary>" in content
     assert "<StartBoundary>2026-11-16T18:00:00</StartBoundary>" in content

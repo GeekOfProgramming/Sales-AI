@@ -54,11 +54,11 @@ switch ($Action) {
             Write-Host "Settings Enabled:  $($task.Settings.Enabled)"
             
             # Action and Context Details
-            $action = $task.Actions | Select-Object -First 1
-            if ($action) {
-                Write-Host "Executable:        $($action.Execute)"
-                Write-Host "Arguments:         $($action.Arguments)"
-                Write-Host "Working Directory: $($action.WorkingDirectory)"
+            $taskExecAction = $task.Actions | Select-Object -First 1
+            if ($taskExecAction) {
+                Write-Host "Executable:        $($taskExecAction.Execute)"
+                Write-Host "Arguments:         $($taskExecAction.Arguments)"
+                Write-Host "Working Directory: $($taskExecAction.WorkingDirectory)"
             }
             
             # Principal / Identity Details
