@@ -95,11 +95,13 @@ class MailboxSyncOrchestrator:
 
         # 1. Discover remote folders
         discovered_folders = provider.discover_folders(account)
+        persisted_folders: List[MailboxFolderRecord] = []
         for f in discovered_folders:
-            self.repo.save_folder(f)
+            persisted = self.repo.save_folder(f)
+            persisted_folders.append(persisted or f)
 
         # Filter discovered folders matching target roles
-        eligible_folders = [f for f in discovered_folders if f.folder_role in target_roles]
+        eligible_folders = [f for f in persisted_folders if f.folder_role in target_roles]
         if not eligible_folders:
             # Fallback to any active folders in repo
             eligible_folders = [f for f in self.repo.list_folders(account.account_id) if f.folder_role in target_roles]

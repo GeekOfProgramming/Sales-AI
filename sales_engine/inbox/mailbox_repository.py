@@ -358,39 +358,71 @@ class MailboxRepository:
     # Folder Operations
     # -----------------------------------------------------------------------
 
-    def save_folder(self, folder: MailboxFolderRecord) -> None:
-        """Create or update a MailboxFolderRecord."""
+    def save_folder(self, folder: MailboxFolderRecord) -> MailboxFolderRecord:
+        """
+        Create or update a MailboxFolderRecord.
+        If a folder with the same (account_id, folder_name) already exists,
+        its existing folder_id is preserved and returned to protect foreign key integrity.
+        """
         with self._lock, self.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO mailbox_folders (
-                    folder_id, account_id, folder_name, folder_delimiter, folder_role,
-                    imap_flags_json, is_active, last_uidvalidity, last_seen_uid,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(account_id, folder_name) DO UPDATE SET
-                    folder_delimiter = excluded.folder_delimiter,
-                    folder_role = excluded.folder_role,
-                    imap_flags_json = excluded.imap_flags_json,
-                    is_active = excluded.is_active,
-                    last_uidvalidity = excluded.last_uidvalidity,
-                    last_seen_uid = excluded.last_seen_uid,
-                    updated_at = excluded.updated_at;
-                """,
-                (
-                    folder.folder_id,
-                    folder.account_id,
-                    folder.folder_name,
-                    folder.folder_delimiter,
-                    folder.folder_role,
-                    json.dumps(folder.imap_flags, ensure_ascii=False),
-                    1 if folder.is_active else 0,
-                    folder.last_uidvalidity,
-                    folder.last_seen_uid,
-                    folder.created_at,
-                    folder.updated_at,
-                ),
-            )
+            existing = conn.execute(
+                "SELECT folder_id, created_at FROM mailbox_folders WHERE account_id = ? AND folder_name = ? LIMIT 1;",
+                (folder.account_id, folder.folder_name),
+            ).fetchone()
+
+            if existing:
+                # Retain authoritative primary key folder_id already referenced by child tables
+                persisted_folder_id = existing["folder_id"]
+                created_at = existing["created_at"]
+                conn.execute(
+                    """
+                    UPDATE mailbox_folders SET
+                        folder_delimiter = ?,
+                        folder_role = ?,
+                        imap_flags_json = ?,
+                        is_active = ?,
+                        last_uidvalidity = ?,
+                        last_seen_uid = ?,
+                        updated_at = ?
+                    WHERE folder_id = ?;
+                    """,
+                    (
+                        folder.folder_delimiter,
+                        folder.folder_role,
+                        json.dumps(folder.imap_flags, ensure_ascii=False),
+                        1 if folder.is_active else 0,
+                        folder.last_uidvalidity,
+                        folder.last_seen_uid,
+                        folder.updated_at,
+                        persisted_folder_id,
+                    ),
+                )
+                folder.folder_id = persisted_folder_id
+                folder.created_at = created_at
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO mailbox_folders (
+                        folder_id, account_id, folder_name, folder_delimiter, folder_role,
+                        imap_flags_json, is_active, last_uidvalidity, last_seen_uid,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        folder.folder_id,
+                        folder.account_id,
+                        folder.folder_name,
+                        folder.folder_delimiter,
+                        folder.folder_role,
+                        json.dumps(folder.imap_flags, ensure_ascii=False),
+                        1 if folder.is_active else 0,
+                        folder.last_uidvalidity,
+                        folder.last_seen_uid,
+                        folder.created_at,
+                        folder.updated_at,
+                    ),
+                )
+            return folder
 
     def get_folder(self, folder_id: str) -> Optional[MailboxFolderRecord]:
         """Fetch folder by folder_id."""

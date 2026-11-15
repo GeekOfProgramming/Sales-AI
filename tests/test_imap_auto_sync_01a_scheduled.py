@@ -579,3 +579,402 @@ def test_12_windows_task_xml_structure(disposable_sync_env):
     assert "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" in content
     assert "<StartWhenAvailable>true</StartWhenAvailable>" in content
     assert "scheduled-sync --live-connect" in content
+
+
+# ============================================================================
+# IMAP-AUTO-SYNC-01B-FK-HOTFIX: Realistic Pre-Populated Database Regressions
+# ============================================================================
+
+@pytest.fixture
+def populated_production_like_env(tmp_path, monkeypatch):
+    """
+    Creates a disposable SQLite database mirroring the exact pre-existing
+    production database state before manual scheduled sync:
+      - 2 primary sales accounts (info@pybim.com, info@pybim.it) with is_enabled=0
+      - Authoritative folder IDs:
+          fld_acc_info_com_inbox (INBOX)
+          fld_acc_info_com_sent (INBOX.Sent)
+          fld_acc_info_it_inbox (INBOX)
+          fld_acc_info_it_sent (INBOX.Sent)
+      - Checkpoints:
+          info@pybim.com: INBOX checkpoint 56 (UV: 1791495722), Sent checkpoint 330 (UV: 1791495724)
+          info@pybim.it:  INBOX checkpoint 45 (UV: 1791468594), Sent checkpoint 276 (UV: 1791468596)
+      - Existing messages:
+          info@pybim.com: 54 inbox msgs, 321 sent msgs
+          info@pybim.it:  39 inbox msgs, 275 sent msgs
+          Total: 689 messages
+    """
+    test_db = str(tmp_path / "populated_production_like_sales_outreach.db")
+    monkeypatch.setenv("SALES_OUTREACH_DB", test_db)
+    monkeypatch.setenv("SALESAI_DB_PATH", test_db)
+
+    from sales_engine.candidates.candidate_store import CandidateStore
+    from sales_engine.sending.review_store import ReviewStore
+
+    CandidateStore(db_path=test_db)
+    ReviewStore(db_path=test_db)
+
+    with sqlite3.connect(test_db) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS historical_sent_emails (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_name TEXT NOT NULL,
+                contact_email TEXT NOT NULL,
+                subject TEXT,
+                date_sent TEXT NOT NULL
+            );
+        """)
+        conn.commit()
+
+    repo = MailboxRepository(db_path=test_db)
+    repo.apply_migrations()
+
+    # Seed accounts
+    acc_com = MailboxAccountRecord(
+        account_id="acc_info_com",
+        email_address="info@pybim.com",
+        display_name="pyBIM Info (COM)",
+        provider="register_it",
+        imap_host="pop.securemail.pro",
+        imap_port=993,
+        use_ssl=True,
+        credential_ref="win_cred_acc_info_com",
+        is_enabled=False,
+        sync_priority=1,
+    )
+    repo.save_account(acc_com)
+
+    acc_it = MailboxAccountRecord(
+        account_id="acc_info_it",
+        email_address="info@pybim.it",
+        display_name="pyBIM Info (IT)",
+        provider="register_it",
+        imap_host="pop.securemail.pro",
+        imap_port=993,
+        use_ssl=True,
+        credential_ref="win_cred_acc_info_it",
+        is_enabled=False,
+        sync_priority=2,
+    )
+    repo.save_account(acc_it)
+
+    # Seed authoritative folder IDs exactly matching production
+    fld_com_inbox = MailboxFolderRecord(
+        folder_id="fld_acc_info_com_inbox",
+        account_id="acc_info_com",
+        folder_name="INBOX",
+        folder_delimiter=".",
+        folder_role="inbox",
+        last_uidvalidity=1791495722,
+        last_seen_uid=56,
+    )
+    repo.save_folder(fld_com_inbox)
+
+    fld_com_sent = MailboxFolderRecord(
+        folder_id="fld_acc_info_com_sent",
+        account_id="acc_info_com",
+        folder_name="INBOX.Sent",
+        folder_delimiter=".",
+        folder_role="sent",
+        last_uidvalidity=1791495724,
+        last_seen_uid=330,
+    )
+    repo.save_folder(fld_com_sent)
+
+    fld_it_inbox = MailboxFolderRecord(
+        folder_id="fld_acc_info_it_inbox",
+        account_id="acc_info_it",
+        folder_name="INBOX",
+        folder_delimiter=".",
+        folder_role="inbox",
+        last_uidvalidity=1791468594,
+        last_seen_uid=45,
+    )
+    repo.save_folder(fld_it_inbox)
+
+    fld_it_sent = MailboxFolderRecord(
+        folder_id="fld_acc_info_it_sent",
+        account_id="acc_info_it",
+        folder_name="INBOX.Sent",
+        folder_delimiter=".",
+        folder_role="sent",
+        last_uidvalidity=1791468596,
+        last_seen_uid=276,
+    )
+    repo.save_folder(fld_it_sent)
+
+    # Seed checkpoints
+    repo.update_folder_sync_state(MailboxFolderSyncStateRecord(
+        sync_state_id="sync_acc_info_com_fld_acc_info_com_inbox",
+        account_id="acc_info_com",
+        folder_id="fld_acc_info_com_inbox",
+        uidvalidity=1791495722,
+        last_synced_uid=56,
+        messages_fetched_total=54,
+        last_status="success",
+    ))
+    repo.update_folder_sync_state(MailboxFolderSyncStateRecord(
+        sync_state_id="sync_acc_info_com_fld_acc_info_com_sent",
+        account_id="acc_info_com",
+        folder_id="fld_acc_info_com_sent",
+        uidvalidity=1791495724,
+        last_synced_uid=330,
+        messages_fetched_total=321,
+        last_status="success",
+    ))
+    repo.update_folder_sync_state(MailboxFolderSyncStateRecord(
+        sync_state_id="sync_acc_info_it_fld_acc_info_it_inbox",
+        account_id="acc_info_it",
+        folder_id="fld_acc_info_it_inbox",
+        uidvalidity=1791468594,
+        last_synced_uid=45,
+        messages_fetched_total=39,
+        last_status="success",
+    ))
+    repo.update_folder_sync_state(MailboxFolderSyncStateRecord(
+        sync_state_id="sync_acc_info_it_fld_acc_info_it_sent",
+        account_id="acc_info_it",
+        folder_id="fld_acc_info_it_sent",
+        uidvalidity=1791468596,
+        last_synced_uid=276,
+        messages_fetched_total=275,
+        last_status="success",
+    ))
+
+    # Pre-populate existing 689 messages
+    with sqlite3.connect(test_db) as conn:
+        for u in range(1, 55):
+            conn.execute("""
+                INSERT INTO mailbox_messages (
+                    message_id, account_id, folder_id, folder_role, direction,
+                    imap_uid, imap_uidvalidity, rfc_message_id, from_address, to_addresses_json,
+                    subject, body_plain_text, date_utc, ingested_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f"msg_com_inbox_{u}", "acc_info_com", "fld_acc_info_com_inbox", "inbox", "inbound",
+                  u, 1791495722, f"<msg_com_inbox_{u}@ex.com>", "client@example.com", '["info@pybim.com"]',
+                  f"COM Inbox {u}", "body", "2026-11-10T10:00:00Z", "2026-11-10T10:00:00Z"))
+        for u in range(1, 322):
+            conn.execute("""
+                INSERT INTO mailbox_messages (
+                    message_id, account_id, folder_id, folder_role, direction,
+                    imap_uid, imap_uidvalidity, rfc_message_id, from_address, to_addresses_json,
+                    subject, body_plain_text, date_utc, ingested_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f"msg_com_sent_{u}", "acc_info_com", "fld_acc_info_com_sent", "sent", "outbound",
+                  u, 1791495724, f"<msg_com_sent_{u}@ex.com>", "info@pybim.com", '["client@example.com"]',
+                  f"COM Sent {u}", "body", "2026-11-10T10:00:00Z", "2026-11-10T10:00:00Z"))
+        for u in range(1, 40):
+            conn.execute("""
+                INSERT INTO mailbox_messages (
+                    message_id, account_id, folder_id, folder_role, direction,
+                    imap_uid, imap_uidvalidity, rfc_message_id, from_address, to_addresses_json,
+                    subject, body_plain_text, date_utc, ingested_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f"msg_it_inbox_{u}", "acc_info_it", "fld_acc_info_it_inbox", "inbox", "inbound",
+                  u, 1791468594, f"<msg_it_inbox_{u}@ex.com>", "client@example.com", '["info@pybim.it"]',
+                  f"IT Inbox {u}", "body", "2026-11-10T10:00:00Z", "2026-11-10T10:00:00Z"))
+        for u in range(1, 276):
+            conn.execute("""
+                INSERT INTO mailbox_messages (
+                    message_id, account_id, folder_id, folder_role, direction,
+                    imap_uid, imap_uidvalidity, rfc_message_id, from_address, to_addresses_json,
+                    subject, body_plain_text, date_utc, ingested_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (f"msg_it_sent_{u}", "acc_info_it", "fld_acc_info_it_sent", "sent", "outbound",
+                  u, 1791468596, f"<msg_it_sent_{u}@ex.com>", "info@pybim.it", '["client@example.com"]',
+                  f"IT Sent {u}", "body", "2026-11-10T10:00:00Z", "2026-11-10T10:00:00Z"))
+        conn.commit()
+
+    return {
+        "db_path": test_db,
+        "repo": repo,
+        "lock_dir": str(tmp_path),
+    }
+
+
+def test_13_fk_fix_manual_sync_now_zero_new_messages(populated_production_like_env):
+    """
+    13. Verify that manual Sync Now executes with ZERO foreign key errors when
+        there are zero new messages on the remote server.
+        The exact failing command previously raised IntegrityError on save_folder/sync_state.
+    """
+    repo = populated_production_like_env["repo"]
+
+    def make_mock_provider(acc):
+        p = MagicMock()
+        # IMAP LIST discovers folders with dynamically generated names/hashes
+        p.discover_folders.return_value = [
+            MailboxFolderRecord(
+                folder_id=f"fld_{acc.account_id}_dynamic_inbox_hash",
+                account_id=acc.account_id,
+                folder_name="INBOX",
+                folder_role="inbox",
+            ),
+            MailboxFolderRecord(
+                folder_id=f"fld_{acc.account_id}_dynamic_sent_hash",
+                account_id=acc.account_id,
+                folder_name="INBOX.Sent",
+                folder_role="sent",
+            ),
+        ]
+        if acc.account_id == "acc_info_com":
+            p.examine_folder.side_effect = [(56, 1791495722), (330, 1791495724)]
+            # Zero new messages: highest UIDs equal checkpoints
+            p.fetch_messages_by_uid.side_effect = [([], 56, 1791495722), ([], 330, 1791495724)]
+        else:
+            p.examine_folder.side_effect = [(45, 1791468594), (276, 1791468596)]
+            p.fetch_messages_by_uid.side_effect = [([], 45, 1791468594), ([], 276, 1791468596)]
+        return p
+
+    orchestrator = MailboxSyncOrchestrator(
+        mailbox_repo=repo,
+        provider_factory=make_mock_provider,
+    )
+    runner = ScheduledSyncRunner(
+        mailbox_repo=repo,
+        sync_orchestrator=orchestrator,
+        lock_dir=populated_production_like_env["lock_dir"],
+    )
+
+    # Run manual sync now across both primary accounts
+    res = runner.execute_scheduled_sync(is_manual_sync_now=True)
+
+    assert res["status"] == "success"
+    assert res["total_messages_ingested"] == 0
+    assert len(res["errors"]) == 0
+
+    # Ensure authorative folder IDs were preserved
+    folders = repo.list_folders("acc_info_com")
+    f_ids = {f.folder_name: f.folder_id for f in folders}
+    assert f_ids["INBOX"] == "fld_acc_info_com_inbox"
+    assert f_ids["INBOX.Sent"] == "fld_acc_info_com_sent"
+
+    # Verify SQLite PRAGMA foreign_key_check passes with zero violations
+    with sqlite3.connect(populated_production_like_env["db_path"]) as conn:
+        fkv = conn.execute("PRAGMA foreign_key_check;").fetchall()
+        assert len(fkv) == 0
+
+
+def test_14_fk_fix_manual_sync_now_with_new_messages(populated_production_like_env):
+    """
+    14. Verify manual Sync Now with new Inbox and Sent messages:
+        - Acc info_com receives UID 57 (Inbox) and UID 331 (Sent)
+        - Acc info_it receives UID 46 (Inbox) and UID 277 (Sent)
+        - Messages are staged with the correct foreign key parent folder_id
+        - Checkpoints advance monotonically to 57/331 and 46/277
+        - Zero foreign key violations
+    """
+    repo = populated_production_like_env["repo"]
+
+    def make_mock_provider(acc):
+        p = MagicMock()
+        p.discover_folders.return_value = [
+            MailboxFolderRecord(
+                folder_id=f"fld_{acc.account_id}_transient_inbox_123",
+                account_id=acc.account_id,
+                folder_name="INBOX",
+                folder_role="inbox",
+            ),
+            MailboxFolderRecord(
+                folder_id=f"fld_{acc.account_id}_transient_sent_456",
+                account_id=acc.account_id,
+                folder_name="INBOX.Sent",
+                folder_role="sent",
+            ),
+        ]
+        if acc.account_id == "acc_info_com":
+            p.examine_folder.side_effect = lambda client, name: (57, 1791495722) if name == "INBOX" else (331, 1791495724)
+            new_inbox = _make_dummy_message("acc_info_com", "fld_acc_info_com_inbox", 57, 1791495722, "New Inbound COM")
+            new_sent = _make_dummy_message("acc_info_com", "fld_acc_info_com_sent", 331, 1791495724, "New Outbound COM")
+            p.fetch_messages_by_uid.side_effect = lambda account, folder, since_uid, batch_size, client: (
+                ([new_inbox], 57, 1791495722) if folder.folder_role == "inbox" and since_uid < 57
+                else (([new_sent], 331, 1791495724) if folder.folder_role == "sent" and since_uid < 331
+                else ([], since_uid, 1791495722 if folder.folder_role == "inbox" else 1791495724))
+            )
+        else:
+            p.examine_folder.side_effect = lambda client, name: (46, 1791468594) if name == "INBOX" else (277, 1791468596)
+            new_inbox_it = _make_dummy_message("acc_info_it", "fld_acc_info_it_inbox", 46, 1791468594, "New Inbound IT")
+            new_sent_it = _make_dummy_message("acc_info_it", "fld_acc_info_it_sent", 277, 1791468596, "New Outbound IT")
+            p.fetch_messages_by_uid.side_effect = lambda account, folder, since_uid, batch_size, client: (
+                ([new_inbox_it], 46, 1791468594) if folder.folder_role == "inbox" and since_uid < 46
+                else (([new_sent_it], 277, 1791468596) if folder.folder_role == "sent" and since_uid < 277
+                else ([], since_uid, 1791468594 if folder.folder_role == "inbox" else 1791468596))
+            )
+        return p
+
+    orchestrator = MailboxSyncOrchestrator(
+        mailbox_repo=repo,
+        provider_factory=make_mock_provider,
+    )
+    runner = ScheduledSyncRunner(
+        mailbox_repo=repo,
+        sync_orchestrator=orchestrator,
+        lock_dir=populated_production_like_env["lock_dir"],
+    )
+
+    res = runner.execute_scheduled_sync(is_manual_sync_now=True)
+
+    assert res["status"] == "success"
+    # 2 messages per account = 4 total new messages
+    assert res["total_messages_ingested"] == 4
+
+    # Checkpoints advanced
+    st_com_inbox = repo.get_folder_sync_state("acc_info_com", "fld_acc_info_com_inbox")
+    st_com_sent = repo.get_folder_sync_state("acc_info_com", "fld_acc_info_com_sent")
+    assert st_com_inbox.last_synced_uid == 57
+    assert st_com_sent.last_synced_uid == 331
+
+    st_it_inbox = repo.get_folder_sync_state("acc_info_it", "fld_acc_info_it_inbox")
+    st_it_sent = repo.get_folder_sync_state("acc_info_it", "fld_acc_info_it_sent")
+    assert st_it_inbox.last_synced_uid == 46
+    assert st_it_sent.last_synced_uid == 277
+
+    # Ensure SQLite foreign key integrity check is 100% clean
+    with sqlite3.connect(populated_production_like_env["db_path"]) as conn:
+        fkv = conn.execute("PRAGMA foreign_key_check;").fetchall()
+        assert len(fkv) == 0
+
+
+def test_15_idempotent_repeated_sync(populated_production_like_env):
+    """
+    15. Idempotent repeated sync produces zero duplicate insertions and preserves foreign keys.
+    """
+    repo = populated_production_like_env["repo"]
+
+    def make_mock_provider(acc):
+        p = MagicMock()
+        p.discover_folders.return_value = [
+            MailboxFolderRecord(
+                folder_id=f"fld_{acc.account_id}_dynamic",
+                account_id=acc.account_id,
+                folder_name="INBOX",
+                folder_role="inbox",
+            ),
+        ]
+        p.examine_folder.return_value = (56, 1791495722)
+        p.fetch_messages_by_uid.return_value = ([], 56, 1791495722)
+        return p
+
+    orchestrator = MailboxSyncOrchestrator(
+        mailbox_repo=repo,
+        provider_factory=make_mock_provider,
+    )
+    runner = ScheduledSyncRunner(
+        mailbox_repo=repo,
+        sync_orchestrator=orchestrator,
+        lock_dir=populated_production_like_env["lock_dir"],
+    )
+
+    # Run twice
+    res1 = runner.execute_scheduled_sync(target_account_id="acc_info_com", is_manual_sync_now=True)
+    res2 = runner.execute_scheduled_sync(target_account_id="acc_info_com", is_manual_sync_now=True)
+
+    assert res1["status"] == "success"
+    assert res2["status"] == "success"
+    assert res1["total_messages_ingested"] == 0
+    assert res2["total_messages_ingested"] == 0
+
+    with sqlite3.connect(populated_production_like_env["db_path"]) as conn:
+        fkv = conn.execute("PRAGMA foreign_key_check;").fetchall()
+        assert len(fkv) == 0
+
