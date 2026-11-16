@@ -346,3 +346,32 @@ class MessageCrmLinkRecord(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+
+ReconciliationActionType = Literal[
+    "approve",
+    "reject",
+    "reassign",
+    "associate_contact",
+    "clear",
+]
+
+
+class MailboxReconciliationAuditRecord(BaseModel):
+    """
+    Additive, immutable audit log entry for manual reconciliation actions.
+    Preserves complete provenance of operator decisions and evidence.
+    """
+    audit_id: str = Field(default_factory=lambda: f"mra_{uuid.uuid4().hex[:12]}")
+    message_id: str
+    actor_username: str
+    action_type: ReconciliationActionType
+    previous_candidate_id: Optional[str] = None
+    previous_contact_id: Optional[str] = None
+    new_candidate_id: Optional[str] = None
+    new_contact_id: Optional[str] = None
+    previous_status: Optional[str] = None
+    new_status: Optional[str] = None
+    reason: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+

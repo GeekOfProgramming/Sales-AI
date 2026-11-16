@@ -9696,15 +9696,16 @@ async def mail_operations_view(
     request: Request,
     account: str = Query(default="all"),
     folder: str = Query(default="all"),
+    review: str = Query(default="all"),
     q: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=30, ge=1, le=100),
     message_id: Optional[str] = Query(default=None),
 ):
     """
-    Operator Mailbox Operations Read-Only Dashboard.
-    Scrapes primary sales mailboxes (info@pybim.com, info@pybim.it), server folder checkpoints,
-    staged message headers, and evidence-based CRM matching proposals.
+    Operator Mailbox Operations Read-Only Dashboard & Reconciliation Console (MAIL-OPS-01B).
+    Browses primary sales mailboxes (info@pybim.com, info@pybim.it), server folder checkpoints,
+    staged message headers, review status filtering, and evidence-based CRM matching proposals.
     """
     from sales_engine.inbox.mailbox_repository import MailboxRepository
     from sales_engine.inbox.html_sanitizer import sanitize_email_html
@@ -9731,6 +9732,12 @@ async def mail_operations_view(
     if folder not in ("inbox", "sent"):
         folder = "all"
 
+    # Review status scoping
+    valid_reviews = ("unmatched", "review", "approved", "rejected")
+    active_review_status = review.strip().lower() if review and review.strip().lower() in valid_reviews else None
+    if review not in valid_reviews:
+        review = "all"
+
     # Search query
     clean_q = q.strip() if q and q.strip() else None
 
@@ -9740,6 +9747,7 @@ async def mail_operations_view(
         account_ids=target_account_ids,
         folder_role=active_folder_role,
         search_query=clean_q,
+        review_status=active_review_status,
     )
 
     offset = (page - 1) * limit
@@ -9754,6 +9762,7 @@ async def mail_operations_view(
         account_ids=target_account_ids,
         folder_role=active_folder_role,
         search_query=clean_q,
+        review_status=active_review_status,
         limit=limit,
         offset=offset,
     )
@@ -9797,6 +9806,7 @@ async def mail_operations_view(
     thread_messages = []
     selected_account_email = ""
     selected_folder_name = ""
+    selected_audit_trail = []
 
     if message_id:
         msg_obj = repo.get_message(message_id)
@@ -9804,6 +9814,7 @@ async def mail_operations_view(
         if msg_obj and msg_obj.account_id in primary_account_ids:
             selected_message = msg_obj
             selected_crm_link = repo.get_crm_link_for_message(msg_obj.message_id)
+            selected_audit_trail = repo.get_reconciliation_audit_for_message(msg_obj.message_id)
             if msg_obj.has_html and msg_obj.body_html_sanitized:
                 selected_sanitized_html = sanitize_email_html(msg_obj.body_html_sanitized)
             elif msg_obj.has_html and not msg_obj.body_html_sanitized and msg_obj.body_plain_text:
@@ -9864,6 +9875,7 @@ async def mail_operations_view(
             "active_tab": "mail_ops",
             "account_filter": account,
             "folder_role": folder,
+            "review_filter": review,
             "search_query": clean_q or "",
             "messages": messages_with_links,
             "total_count": total_count,
@@ -9872,6 +9884,7 @@ async def mail_operations_view(
             "limit": limit,
             "selected_message": selected_message,
             "selected_crm_link": selected_crm_link,
+            "selected_audit_trail": selected_audit_trail,
             "selected_sanitized_html": selected_sanitized_html,
             "selected_account_email": selected_account_email,
             "selected_folder_name": selected_folder_name,
@@ -9885,3 +9898,239 @@ async def mail_operations_view(
             "scheduler_info": scheduler_info,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# 13B. MAILBOX RECONCILIATION & MANUAL SYNC NOW API (MAIL-OPS-01B)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/candidates/search", response_class=JSONResponse)
+async def api_candidates_search(
+    request: Request,
+    q: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Search candidate companies for operator mailbox reconciliation.
+    Matches candidate_id, company_name, or company_domain.
+    """
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    clean_q = (q or "").strip().lower()
+    results = []
+
+    with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+        conn.row_factory = sqlite3.Row
+        # Check if candidate_companies exists
+        has_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='candidate_companies' LIMIT 1"
+        ).fetchone()
+        if not has_table:
+            return JSONResponse({"candidates": []})
+
+        if clean_q:
+            q_like = f"%{clean_q}%"
+            rows = conn.execute(
+                """
+                SELECT candidate_id, company_name, company_domain, country, city
+                FROM candidate_companies
+                WHERE LOWER(candidate_id) LIKE ? OR LOWER(company_name) LIKE ? OR LOWER(company_domain) LIKE ?
+                ORDER BY company_name ASC
+                LIMIT ?;
+                """,
+                (q_like, q_like, q_like, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT candidate_id, company_name, company_domain, country, city
+                FROM candidate_companies
+                ORDER BY company_name ASC
+                LIMIT ?;
+                """,
+                (limit,),
+            ).fetchall()
+
+        for r in rows:
+            results.append({
+                "candidate_id": r["candidate_id"],
+                "company_name": r["company_name"] or r["candidate_id"],
+                "company_domain": r["company_domain"] or "",
+                "country": r["country"] or "",
+                "city": r["city"] or "",
+            })
+
+    return JSONResponse({"candidates": results})
+
+
+@router.get("/api/candidates/{candidate_id}/contacts", response_class=JSONResponse)
+async def api_candidate_contacts(
+    request: Request,
+    candidate_id: str,
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Retrieve registered contacts for a candidate company.
+    Enforces real CRM contacts to prevent cross-company contamination.
+    """
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    results = []
+
+    with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+        conn.row_factory = sqlite3.Row
+        has_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='candidate_contacts' LIMIT 1"
+        ).fetchone()
+        if not has_table:
+            return JSONResponse({"contacts": []})
+
+        rows = conn.execute(
+            """
+            SELECT contact_id, candidate_id, first_name, last_name, full_name, job_title, work_email
+            FROM candidate_contacts
+            WHERE candidate_id = ?
+            ORDER BY full_name ASC;
+            """,
+            (candidate_id,),
+        ).fetchall()
+
+        for r in rows:
+            results.append({
+                "contact_id": r["contact_id"],
+                "candidate_id": r["candidate_id"],
+                "full_name": r["full_name"] or f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
+                "job_title": r["job_title"] or "",
+                "work_email": r["work_email"] or "",
+            })
+
+    return JSONResponse({"contacts": results})
+
+
+@router.post("/mail-operations/reconcile", response_class=RedirectResponse)
+async def mail_operations_reconcile_action(
+    request: Request,
+    message_id: str = Form(...),
+    action: str = Form(...),
+    candidate_id: Optional[str] = Form(None),
+    contact_id: Optional[str] = Form(None),
+    reason: Optional[str] = Form(None),
+    account_filter: str = Form("all"),
+    folder_filter: str = Form("all"),
+    review_filter: str = Form("all"),
+    search_q: str = Form(""),
+    page: int = Form(1),
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Execute operator-controlled reconciliation action (approve, reject, reassign, associate_contact, clear).
+    Strictly verifies candidate and contact exist in CRM before linking.
+    Records immutable audit trail in mailbox_reconciliation_audit.
+    Zero mutations to core CRM tables.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    # 1. Verify message exists and belongs to primary sales mailboxes
+    msg = repo.get_message(message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail=f"Mailbox message {message_id} not found.")
+
+    primary_accounts = {"acc_info_com", "acc_info_it"}
+    if msg.account_id not in primary_accounts:
+        raise HTTPException(status_code=403, detail="Reconciliation is restricted strictly to primary sales mailboxes.")
+
+    clean_action = action.strip().lower()
+    valid_actions = {"approve", "reject", "reassign", "associate_contact", "clear"}
+    if clean_action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Invalid reconciliation action: {action}")
+
+    clean_cand_id = candidate_id.strip() if candidate_id and candidate_id.strip() else None
+    clean_cont_id = contact_id.strip() if contact_id and contact_id.strip() else None
+    clean_reason = reason.strip() if reason and reason.strip() else None
+
+    # 2. Validation for actions modifying candidate/contact
+    if clean_action in ("reassign", "associate_contact"):
+        if not clean_cand_id and clean_action == "reassign":
+            raise HTTPException(status_code=400, detail="Candidate company is required for reassignment.")
+
+        # If candidate specified, verify it exists in candidate_companies (if table exists)
+        if clean_cand_id:
+            with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+                has_cand_table = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='candidate_companies' LIMIT 1"
+                ).fetchone()
+                if has_cand_table:
+                    cand_exists = conn.execute(
+                        "SELECT 1 FROM candidate_companies WHERE candidate_id = ? LIMIT 1",
+                        (clean_cand_id,),
+                    ).fetchone()
+                    if not cand_exists:
+                        raise HTTPException(status_code=400, detail=f"Candidate company '{clean_cand_id}' does not exist in CRM.")
+
+                # If contact specified, verify it belongs to this candidate
+                if clean_cont_id:
+                    has_cont_table = conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='candidate_contacts' LIMIT 1"
+                    ).fetchone()
+                    if has_cont_table:
+                        cont_exists = conn.execute(
+                            "SELECT 1 FROM candidate_contacts WHERE contact_id = ? AND candidate_id = ? LIMIT 1",
+                            (clean_cont_id, clean_cand_id),
+                        ).fetchone()
+                        if not cont_exists:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Contact '{clean_cont_id}' does not exist for candidate '{clean_cand_id}'.",
+                            )
+
+    # 3. Execute atomic reconciliation and record audit entry
+    repo.record_reconciliation_action(
+        message_id=msg.message_id,
+        actor_username=user.username,
+        action_type=clean_action,
+        new_candidate_id=clean_cand_id,
+        new_contact_id=clean_cont_id,
+        reason=clean_reason,
+    )
+
+    # 4. Redirect preserving context filters
+    redirect_url = f"/sales/mail-operations?account={account_filter}&folder={folder_filter}&review={review_filter}&page={page}&message_id={message_id}"
+    if search_q:
+        redirect_url += f"&q={quote(search_q)}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/mail-operations/sync-now", response_class=JSONResponse)
+async def mail_operations_sync_now_action(
+    request: Request,
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Operator-triggered manual synchronization for primary sales mailboxes.
+    Uses concurrency lock and safe live connector.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+    from sales_engine.inbox.scheduled_sync import ScheduledSyncRunner
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+    runner = ScheduledSyncRunner(mailbox_repo=repo)
+
+    result = runner.execute_scheduled_sync(is_manual_sync_now=True)
+    return JSONResponse({
+        "success": result.get("status") in ("success", "no_new_messages"),
+        "status": result.get("status"),
+        "accounts_processed": result.get("accounts_processed", 0),
+        "folders_processed": result.get("folders_processed", 0),
+        "messages_ingested": result.get("messages_ingested", 0),
+        "messages_deferred": result.get("messages_deferred", 0),
+        "errors_count": len(result.get("errors", [])),
+        "errors": result.get("errors", []),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "actor": user.username,
+    })
+

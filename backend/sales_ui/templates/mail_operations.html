@@ -513,10 +513,13 @@
         📬 Mailbox Operations
       </h1>
       <p class="page-subtitle" style="color: var(--text-muted); font-size: 0.875rem; margin: 0.25rem 0 0;">
-        Authoritative read-only monitoring of Register.it primary sales mailboxes, IMAP sync status, and evidence-based CRM matching proposals.
+        Authoritative monitoring and operator-controlled CRM reconciliation of Register.it primary sales mailboxes.
       </p>
     </div>
-    <div>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+      <button id="btn-sync-now" class="btn btn-primary btn-sm" onclick="triggerManualSyncNow()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>🔄</span> <span id="sync-now-label">Sync Now</span>
+      </button>
       <button class="btn btn-secondary btn-sm" onclick="toggleSyncStatusModal()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
         <span>⚙️</span> Sync &amp; Checkpoints Status
       </button>
@@ -530,17 +533,17 @@
       <!-- Account Filter -->
       <div class="mail-filter-group">
         <span class="mail-filter-label">Account:</span>
-        <a href="/sales/mail-operations?account=all&folder={{ folder_role }}&q={{ search_query }}"
+        <a href="/sales/mail-operations?account=all&folder={{ folder_role }}&review={{ review_filter }}&q={{ search_query }}"
            class="mail-btn-pill {% if account_filter == 'all' %}active{% endif %}"
            title="All Primary Sales Mailboxes">
           All Primary <span style="opacity: 0.85; font-size: 0.75rem;">({{ stats.total_primary_messages }})</span>
         </a>
-        <a href="/sales/mail-operations?account=acc_info_com&folder={{ folder_role }}&q={{ search_query }}"
+        <a href="/sales/mail-operations?account=acc_info_com&folder={{ folder_role }}&review={{ review_filter }}&q={{ search_query }}"
            class="mail-btn-pill {% if account_filter == 'acc_info_com' %}active{% endif %}"
            title="info@pybim.com (COM)">
           info@pybim.com <span style="opacity: 0.85; font-size: 0.75rem;">({{ stats.info_com_messages }})</span>
         </a>
-        <a href="/sales/mail-operations?account=acc_info_it&folder={{ folder_role }}&q={{ search_query }}"
+        <a href="/sales/mail-operations?account=acc_info_it&folder={{ folder_role }}&review={{ review_filter }}&q={{ search_query }}"
            class="mail-btn-pill {% if account_filter == 'acc_info_it' %}active{% endif %}"
            title="info@pybim.it (IT)">
           info@pybim.it <span style="opacity: 0.85; font-size: 0.75rem;">({{ stats.info_it_messages }})</span>
@@ -550,17 +553,46 @@
       <!-- Folder Filter -->
       <div class="mail-filter-group">
         <span class="mail-filter-label">Folder:</span>
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder=all&q={{ search_query }}"
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder=all&review={{ review_filter }}&q={{ search_query }}"
            class="mail-btn-pill {% if folder_role == 'all' %}active{% endif %}">
           All Folders
         </a>
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder=inbox&q={{ search_query }}"
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder=inbox&review={{ review_filter }}&q={{ search_query }}"
            class="mail-btn-pill {% if folder_role == 'inbox' %}active{% endif %}">
           📥 Inbox
         </a>
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder=sent&q={{ search_query }}"
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder=sent&review={{ review_filter }}&q={{ search_query }}"
            class="mail-btn-pill {% if folder_role == 'sent' %}active{% endif %}">
           📤 Sent
+        </a>
+      </div>
+
+      <!-- Review Status Filter -->
+      <div class="mail-filter-group">
+        <span class="mail-filter-label">Review:</span>
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review=all&q={{ search_query }}"
+           class="mail-btn-pill {% if review_filter == 'all' or not review_filter %}active{% endif %}">
+          All
+        </a>
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review=unmatched&q={{ search_query }}"
+           class="mail-btn-pill {% if review_filter == 'unmatched' %}active{% endif %}"
+           title="Unmatched messages">
+          Unmatched
+        </a>
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review=review&q={{ search_query }}"
+           class="mail-btn-pill {% if review_filter == 'review' %}active{% endif %}"
+           title="Suggested pending review">
+          Needs Review
+        </a>
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review=approved&q={{ search_query }}"
+           class="mail-btn-pill {% if review_filter == 'approved' %}active{% endif %}"
+           title="Verified / Approved">
+          Approved
+        </a>
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review=rejected&q={{ search_query }}"
+           class="mail-btn-pill {% if review_filter == 'rejected' %}active{% endif %}"
+           title="Rejected">
+          Rejected
         </a>
       </div>
 
@@ -568,13 +600,14 @@
       <div class="mail-search-box">
         <input type="hidden" name="account" value="{{ account_filter }}">
         <input type="hidden" name="folder" value="{{ folder_role }}">
+        <input type="hidden" name="review" value="{{ review_filter }}">
         <input type="text" name="q" value="{{ search_query }}" placeholder="Search sender, recipient, subject, body..."
                class="mail-search-input">
         <button type="submit" class="btn btn-sm btn-secondary" style="font-weight: 600;">
           Search
         </button>
         {% if search_query %}
-        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}"
+        <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review={{ review_filter }}"
            class="btn btn-sm btn-secondary" style="padding: 0.35rem 0.55rem;" title="Clear search filter">
           ✕
         </a>
@@ -707,7 +740,7 @@
       <div style="padding: 0.75rem 1.25rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-secondary);">
         <div>
           {% if current_page > 1 %}
-          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page - 1 }}"
+          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review={{ review_filter }}&q={{ search_query }}&page={{ current_page - 1 }}"
              class="btn btn-sm btn-secondary" style="font-size: 0.8125rem;">
             ← Previous
           </a>
@@ -718,7 +751,7 @@
         </span>
         <div>
           {% if current_page < total_pages %}
-          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&q={{ search_query }}&page={{ current_page + 1 }}"
+          <a href="/sales/mail-operations?account={{ account_filter }}&folder={{ folder_role }}&review={{ review_filter }}&q={{ search_query }}&page={{ current_page + 1 }}"
              class="btn btn-sm btn-secondary" style="font-size: 0.8125rem;">
             Next →
           </a>
@@ -791,11 +824,11 @@
           </span>
         </div>
 
-        <!-- CRM Matching Proposal Card -->
+        <!-- CRM Matching Proposal & Operator Reconciliation Card (MAIL-OPS-01B) -->
         <div class="crm-proposal-card {% if selected_crm_link and selected_crm_link.link_status == 'verified' %}verified{% elif selected_crm_link and selected_crm_link.link_status == 'suggested_pending_review' %}review{% endif %}">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.8125rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;">
-              <span>🔗</span> CRM Match Proposal (Read-Only)
+              <span>🔗</span> CRM Match Proposal (Read-Only) &amp; Reconciliation
             </span>
             {% if selected_crm_link %}
               {% if selected_crm_link.link_status == 'verified' %}
@@ -806,19 +839,27 @@
               <span class="badge-crm-review">
                 REVIEW REQUIRED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
               </span>
+              {% elif selected_crm_link.link_status == 'rejected' %}
+              <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);">
+                REJECTED
+              </span>
+              {% elif selected_crm_link.link_status == 'unlinked' %}
+              <span class="badge" style="background: var(--bg-input); color: var(--text-muted);">
+                UNLINKED
+              </span>
               {% else %}
               <span class="badge" style="background: var(--bg-input); color: var(--text-secondary);">
                 {{ selected_crm_link.link_status|upper }}
               </span>
               {% endif %}
             {% else %}
-              <span class="badge" style="background: var(--bg-input); color: var(--text-muted);">UNPROPOSED</span>
+              <span class="badge" style="background: var(--bg-input); color: var(--text-muted);">UNLINKED</span>
             {% endif %}
           </div>
 
-          {% if selected_crm_link and selected_crm_link.candidate_id %}
+          {% if selected_crm_link and selected_crm_link.candidate_id and selected_crm_link.link_status != 'unlinked' %}
           <div style="font-size: 0.8125rem; color: var(--text-primary); margin-top: 0.25rem;">
-            <strong style="color: var(--text-secondary);">Proposed Company:</strong>
+            <strong style="color: var(--text-secondary);">Associated Company:</strong>
             <a href="/sales/candidates/{{ selected_crm_link.candidate_id }}" target="_blank"
                style="color: #38bdf8; text-decoration: underline; font-weight: 600; margin-left: 0.25rem;">
               {{ selected_crm_link.candidate_id }}
@@ -832,12 +873,104 @@
           </div>
           {% else %}
           <div style="font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
-            {{ selected_crm_link.evidence_summary if selected_crm_link else 'No matching company or contact proposed for this message.' }}
+            {{ selected_crm_link.evidence_summary if selected_crm_link else 'No company or contact currently linked with this message.' }}
+          </div>
+          {% endif %}
+
+          <!-- Operator Reconciliation Action Toolbar -->
+          <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; padding-top: 0.6rem; border-top: 1px solid var(--border-color); align-items: center;">
+            
+            {% if selected_crm_link and selected_crm_link.candidate_id and selected_crm_link.link_status == 'suggested_pending_review' %}
+            <form method="POST" action="/sales/mail-operations/reconcile" style="display: inline; margin: 0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="message_id" value="{{ selected_message.message_id }}">
+              <input type="hidden" name="action" value="approve">
+              <input type="hidden" name="account_filter" value="{{ account_filter }}">
+              <input type="hidden" name="folder_filter" value="{{ folder_role }}">
+              <input type="hidden" name="review_filter" value="{{ review_filter }}">
+              <input type="hidden" name="search_q" value="{{ search_query }}">
+              <input type="hidden" name="page" value="{{ current_page }}">
+              <button type="submit" class="btn btn-sm btn-success" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: #059669; color: #ffffff; border: 1px solid #10b981;">
+                ✓ Approve Match
+              </button>
+            </form>
+
+            <form method="POST" action="/sales/mail-operations/reconcile" style="display: inline; margin: 0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="message_id" value="{{ selected_message.message_id }}">
+              <input type="hidden" name="action" value="reject">
+              <input type="hidden" name="account_filter" value="{{ account_filter }}">
+              <input type="hidden" name="folder_filter" value="{{ folder_role }}">
+              <input type="hidden" name="review_filter" value="{{ review_filter }}">
+              <input type="hidden" name="search_q" value="{{ search_query }}">
+              <input type="hidden" name="page" value="{{ current_page }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; border: 1px solid #ef4444; color: #fca5a5; background: rgba(239, 68, 68, 0.1);">
+                ✕ Reject Match
+              </button>
+            </form>
+            {% endif %}
+
+            <button type="button" class="btn btn-sm btn-secondary" onclick="openReassignModal()" style="font-size: 0.75rem; padding: 0.25rem 0.65rem;">
+              🔄 Reassign Company...
+            </button>
+
+            {% if selected_crm_link and selected_crm_link.candidate_id and selected_crm_link.link_status != 'unlinked' %}
+            <form method="POST" action="/sales/mail-operations/reconcile" onsubmit="return confirm('Clear CRM association for this message?');" style="display: inline; margin: 0;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="message_id" value="{{ selected_message.message_id }}">
+              <input type="hidden" name="action" value="clear">
+              <input type="hidden" name="account_filter" value="{{ account_filter }}">
+              <input type="hidden" name="folder_filter" value="{{ folder_role }}">
+              <input type="hidden" name="review_filter" value="{{ review_filter }}">
+              <input type="hidden" name="search_q" value="{{ search_query }}">
+              <input type="hidden" name="page" value="{{ current_page }}">
+              <button type="submit" class="btn btn-sm btn-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; color: #cbd5e1;">
+                🗑️ Clear Association
+              </button>
+            </form>
+            {% endif %}
+
+          </div>
+
+          <!-- Audit Provenance Accordion / History -->
+          {% if selected_audit_trail %}
+          <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-size: 0.75rem;">
+            <details>
+              <summary style="cursor: pointer; color: #38bdf8; font-weight: 600;">
+                📜 View Reconciliation Audit History ({{ selected_audit_trail|length }})
+              </summary>
+              <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;">
+                {% for a in selected_audit_trail %}
+                <div style="background: var(--bg-card); padding: 0.4rem 0.6rem; border-radius: 4px; border: 1px solid var(--border-color);">
+                  <div style="display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 0.7rem;">
+                    <span><strong>{{ a.actor_username }}</strong> ({{ a.action_type|upper }})</span>
+                    <span style="font-family: monospace;">{{ a.created_at[:19].replace('T', ' ') }}</span>
+                  </div>
+                  <div style="color: var(--text-primary); margin-top: 0.2rem;">
+                    {% if a.new_candidate_id %}
+                      Company: <code>{{ a.new_candidate_id }}</code>
+                    {% endif %}
+                    {% if a.new_contact_id %}
+                      | Contact: <code>{{ a.new_contact_id }}</code>
+                    {% endif %}
+                    {% if a.new_status %}
+                      | Status: <strong>{{ a.new_status }}</strong>
+                    {% endif %}
+                  </div>
+                  {% if a.reason %}
+                  <div style="color: var(--text-muted); font-size: 0.7rem; margin-top: 0.15rem; font-style: italic;">
+                    Reason: {{ a.reason }}
+                  </div>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </details>
           </div>
           {% endif %}
 
           <div style="font-size: 0.7rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 0.35rem; margin-top: 0.25rem;">
-            * Read-Only Notice: This proposal does not mutate candidate ownership or CRM lead state. Match approval and reassignment actions belong to MAIL-OPS-01B.
+            🛡️ Staging Safety Guard: Reconciling links in Mailbox Operations updates staging links and audit logs only; it never mutates core CRM tables, lead status, or suppression lists.
           </div>
         </div>
 
@@ -995,12 +1128,79 @@
     </div>
 
     <div style="background: rgba(37, 99, 235, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); padding: 0.875rem; border-radius: var(--radius-md); font-size: 0.78rem; color: #bfdbfe; margin-bottom: 1.25rem; line-height: 1.45;">
-      🛡️ <strong>Sync Now Security Guard:</strong> Unattended synchronization is triggered exclusively by Windows Task Scheduler. User-facing manual Sync Now operations are disabled in this read-only phase until role-based authorization and session concurrency verification are completed in MAIL-OPS-01B.
+      🛡️ <strong>Sync Now Security Guard:</strong> Unattended synchronization is triggered by Windows Task Scheduler (12:15 &amp; 18:00 Europe/Rome). Manual "Sync Now" can be executed by authenticated operators using the primary toolbar button, which respects process file locks and strictly syncs primary sales accounts.
     </div>
 
     <div style="text-align: right;">
       <button class="btn btn-secondary btn-sm" onclick="toggleSyncStatusModal()">Close</button>
     </div>
+
+  </div>
+</div>
+
+<!-- Reassign Candidate Modal (MAIL-OPS-01B) -->
+<div id="reassign-modal" class="sync-modal-overlay">
+  <div class="sync-modal-content" style="max-width: 580px;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+      <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-primary);">
+        🔄 Reassign Message to CRM Company
+      </h3>
+      <button onclick="closeReassignModal()" style="border: none; background: none; font-size: 1.25rem; cursor: pointer; color: var(--text-muted);">✕</button>
+    </div>
+
+    <form method="POST" action="/sales/mail-operations/reconcile" id="reassign-form" onsubmit="return validateReassignForm()">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="message_id" value="{{ selected_message.message_id if selected_message else '' }}">
+      <input type="hidden" name="action" value="reassign">
+      <input type="hidden" name="account_filter" value="{{ account_filter }}">
+      <input type="hidden" name="folder_filter" value="{{ folder_role }}">
+      <input type="hidden" name="review_filter" value="{{ review_filter }}">
+      <input type="hidden" name="search_q" value="{{ search_query }}">
+      <input type="hidden" name="page" value="{{ current_page }}">
+
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">
+          Search Existing Company (Candidate ID / Name / Domain): *
+        </label>
+        <div style="display: flex; gap: 0.5rem;">
+          <input type="text" id="reassign-search-input" placeholder="e.g. Acme, acme.com..." 
+                 class="mail-search-input" style="flex: 1;" oninput="searchCandidatesDebounced(this.value)">
+        </div>
+        <div id="candidate-search-results" style="max-height: 150px; overflow-y: auto; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; margin-top: 0.35rem; display: none;"></div>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">
+          Selected Candidate ID: *
+        </label>
+        <input type="text" id="selected-candidate-id" name="candidate_id" readonly required
+               style="width: 100%; padding: 0.4rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: #38bdf8; font-family: monospace; font-size: 0.8125rem;">
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">
+          Select Contact (Optional):
+        </label>
+        <select id="selected-contact-id" name="contact_id" 
+                style="width: 100%; padding: 0.4rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 0.8125rem;">
+          <option value="">-- No Contact Associated --</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 1.25rem;">
+        <label style="display: block; font-size: 0.8125rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">
+          Reconciliation Reason / Note (Audited):
+        </label>
+        <input type="text" name="reason" placeholder="e.g. Verified by operator via matching project domain"
+               style="width: 100%; padding: 0.4rem 0.75rem; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 0.8125rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeReassignModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" style="font-weight: 600;">Confirm Reassignment</button>
+      </div>
+    </form>
 
   </div>
 </div>
@@ -1033,6 +1233,151 @@ function toggleSyncStatusModal() {
   } else {
     modal.style.display = 'none';
   }
+}
+
+function openReassignModal() {
+  var modal = document.getElementById('reassign-modal');
+  if (modal) modal.style.display = 'flex';
+  var searchInput = document.getElementById('reassign-search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.focus();
+  }
+}
+
+function closeReassignModal() {
+  var modal = document.getElementById('reassign-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+var searchDebounceTimer = null;
+function searchCandidatesDebounced(q) {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(function() {
+    fetchCandidates(q);
+  }, 250);
+}
+
+function fetchCandidates(q) {
+  var resultsDiv = document.getElementById('candidate-search-results');
+  if (!resultsDiv) return;
+  if (!q || q.trim().length === 0) {
+    resultsDiv.style.display = 'none';
+    resultsDiv.innerHTML = '';
+    return;
+  }
+
+  fetch('/sales/api/candidates/search?q=' + encodeURIComponent(q.trim()))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      resultsDiv.innerHTML = '';
+      if (!data.candidates || data.candidates.length === 0) {
+        resultsDiv.innerHTML = '<div style="padding: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">No matching CRM companies found</div>';
+        resultsDiv.style.display = 'block';
+        return;
+      }
+      data.candidates.forEach(function(c) {
+        var item = document.createElement('div');
+        item.style.padding = '0.4rem 0.6rem';
+        item.style.fontSize = '0.78rem';
+        item.style.cursor = 'pointer';
+        item.style.borderBottom = '1px solid var(--border-color)';
+        item.innerHTML = '<strong>' + escapeHtml(c.company_name) + '</strong> <span style="color: var(--text-muted); font-size: 0.7rem;">(' + escapeHtml(c.candidate_id) + ')</span>';
+        item.onmouseover = function() { item.style.backgroundColor = 'var(--bg-hover)'; };
+        item.onmouseout = function() { item.style.backgroundColor = ''; };
+        item.onclick = function() {
+          selectCandidate(c.candidate_id, c.company_name);
+        };
+        resultsDiv.appendChild(item);
+      });
+      resultsDiv.style.display = 'block';
+    })
+    .catch(function(err) {
+      console.error('Candidate search failed', err);
+    });
+}
+
+function selectCandidate(candidateId, companyName) {
+  var candInput = document.getElementById('selected-candidate-id');
+  var resultsDiv = document.getElementById('candidate-search-results');
+  var searchInput = document.getElementById('reassign-search-input');
+  if (candInput) candInput.value = candidateId;
+  if (searchInput) searchInput.value = companyName;
+  if (resultsDiv) resultsDiv.style.display = 'none';
+
+  // Fetch contacts for candidate
+  fetchContactsForCandidate(candidateId);
+}
+
+function fetchContactsForCandidate(candidateId) {
+  var contactSelect = document.getElementById('selected-contact-id');
+  if (!contactSelect) return;
+  contactSelect.innerHTML = '<option value="">-- No Contact Associated --</option>';
+
+  fetch('/sales/api/candidates/' + encodeURIComponent(candidateId) + '/contacts')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.contacts && data.contacts.length > 0) {
+        data.contacts.forEach(function(ct) {
+          var opt = document.createElement('option');
+          opt.value = ct.contact_id;
+          opt.textContent = ct.full_name + (ct.job_title ? ' (' + ct.job_title + ')' : '') + (ct.work_email ? ' <' + ct.work_email + '>' : '');
+          contactSelect.appendChild(opt);
+        });
+      }
+    })
+    .catch(function(err) {
+      console.error('Contacts fetch failed', err);
+    });
+}
+
+function validateReassignForm() {
+  var candInput = document.getElementById('selected-candidate-id');
+  if (!candInput || !candInput.value.trim()) {
+    alert('Please select an existing CRM company from the search results.');
+    return false;
+  }
+  return true;
+}
+
+function triggerManualSyncNow() {
+  var btn = document.getElementById('btn-sync-now');
+  var label = document.getElementById('sync-now-label');
+  if (btn) btn.disabled = true;
+  if (label) label.textContent = 'Syncing...';
+
+  // Retrieve CSRF token from form or cookie
+  var csrfToken = '{{ csrf_token }}';
+
+  fetch('/sales/mail-operations/sync-now', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRF-Token': csrfToken,
+    },
+    body: 'csrf_token=' + encodeURIComponent(csrfToken)
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = 'Sync Now';
+    if (data.success) {
+      alert('Sync Now completed: ' + data.status + ' (' + data.messages_ingested + ' new messages ingested across ' + data.accounts_processed + ' accounts).');
+      window.location.reload();
+    } else {
+      alert('Sync Now result: ' + data.status + (data.errors && data.errors.length > 0 ? '\n' + data.errors.join('\n') : ''));
+    }
+  })
+  .catch(function(err) {
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = 'Sync Now';
+    alert('Sync Now request failed: ' + err);
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 </script>
 {% endblock %}

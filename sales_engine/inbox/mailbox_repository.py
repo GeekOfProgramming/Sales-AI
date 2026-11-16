@@ -20,6 +20,7 @@ CRITICAL ARCHITECTURAL CONSTRAINTS:
 """
 
 import os
+import uuid
 import json
 import sqlite3
 import logging
@@ -34,6 +35,7 @@ from sales_engine.inbox.models import (
     MailboxFolderSyncStateRecord,
     MailboxMessageRecord,
     MessageCrmLinkRecord,
+    MailboxReconciliationAuditRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -241,6 +243,27 @@ class MailboxRepository:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mcl_cand ON message_crm_links(candidate_id);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mcl_status ON message_crm_links(link_status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mcl_msg ON message_crm_links(message_id);")
+
+            # 6. Additive Mailbox Reconciliation Audit Trail (MAIL-OPS-01B)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mailbox_reconciliation_audit (
+                    audit_id TEXT PRIMARY KEY,
+                    message_id TEXT NOT NULL,
+                    actor_username TEXT NOT NULL,
+                    action_type TEXT NOT NULL,
+                    previous_candidate_id TEXT,
+                    previous_contact_id TEXT,
+                    new_candidate_id TEXT,
+                    new_contact_id TEXT,
+                    previous_status TEXT,
+                    new_status TEXT,
+                    reason TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (message_id) REFERENCES mailbox_messages(message_id) ON DELETE CASCADE
+                );
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mra_msg ON mailbox_reconciliation_audit(message_id);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mra_created ON mailbox_reconciliation_audit(created_at DESC);")
 
             # Verify integrity
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
@@ -750,6 +773,7 @@ class MailboxRepository:
         direction: Optional[str] = None,
         since_date_utc: Optional[str] = None,
         search_query: Optional[str] = None,
+        review_status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[MailboxMessageRecord]:
@@ -759,35 +783,53 @@ class MailboxRepository:
             params: List[Any] = []
 
             if account_id:
-                clauses.append("account_id = ?")
+                clauses.append("m.account_id = ?")
                 params.append(account_id)
             elif account_ids:
                 placeholders = ",".join("?" for _ in account_ids)
-                clauses.append(f"account_id IN ({placeholders})")
+                clauses.append(f"m.account_id IN ({placeholders})")
                 params.extend(account_ids)
             if folder_id:
-                clauses.append("folder_id = ?")
+                clauses.append("m.folder_id = ?")
                 params.append(folder_id)
             if folder_role:
-                clauses.append("folder_role = ?")
+                clauses.append("m.folder_role = ?")
                 params.append(folder_role)
             if direction:
-                clauses.append("direction = ?")
+                clauses.append("m.direction = ?")
                 params.append(direction)
             if since_date_utc:
-                clauses.append("date_utc >= ?")
+                clauses.append("m.date_utc >= ?")
                 params.append(since_date_utc)
             if search_query:
                 q_like = f"%{search_query.strip()}%"
                 clauses.append(
-                    "(subject LIKE ? OR from_address LIKE ? OR to_addresses_json LIKE ? OR body_plain_text LIKE ?)"
+                    "(m.subject LIKE ? OR m.from_address LIKE ? OR m.to_addresses_json LIKE ? OR m.body_plain_text LIKE ?)"
                 )
                 params.extend([q_like, q_like, q_like, q_like])
 
-            query = "SELECT * FROM mailbox_messages"
+            # Review status filtering via message_crm_links
+            need_join = False
+            if review_status:
+                rev = review_status.strip().lower()
+                need_join = True
+                if rev == "unmatched":
+                    clauses.append("(c.link_status = 'unlinked' OR c.link_status IS NULL OR c.candidate_id IS NULL)")
+                elif rev == "review":
+                    clauses.append("c.link_status = 'suggested_pending_review'")
+                elif rev == "approved":
+                    clauses.append("c.link_status = 'verified'")
+                elif rev == "rejected":
+                    clauses.append("c.link_status = 'rejected'")
+
+            if need_join:
+                query = "SELECT m.* FROM mailbox_messages m LEFT JOIN message_crm_links c ON m.message_id = c.message_id"
+            else:
+                query = "SELECT m.* FROM mailbox_messages m"
+
             if clauses:
                 query += " WHERE " + " AND ".join(clauses)
-            query += " ORDER BY date_utc DESC LIMIT ? OFFSET ?;"
+            query += " ORDER BY m.date_utc DESC LIMIT ? OFFSET ?;"
             params.extend([limit, offset])
 
             rows = conn.execute(query, params).fetchall()
@@ -802,6 +844,7 @@ class MailboxRepository:
         direction: Optional[str] = None,
         since_date_utc: Optional[str] = None,
         search_query: Optional[str] = None,
+        review_status: Optional[str] = None,
     ) -> int:
         """Count staged mailbox messages matching filter criteria for pagination."""
         with self.get_connection() as conn:
@@ -809,32 +852,50 @@ class MailboxRepository:
             params: List[Any] = []
 
             if account_id:
-                clauses.append("account_id = ?")
+                clauses.append("m.account_id = ?")
                 params.append(account_id)
             elif account_ids:
                 placeholders = ",".join("?" for _ in account_ids)
-                clauses.append(f"account_id IN ({placeholders})")
+                clauses.append(f"m.account_id IN ({placeholders})")
                 params.extend(account_ids)
             if folder_id:
-                clauses.append("folder_id = ?")
+                clauses.append("m.folder_id = ?")
                 params.append(folder_id)
             if folder_role:
-                clauses.append("folder_role = ?")
+                clauses.append("m.folder_role = ?")
                 params.append(folder_role)
             if direction:
-                clauses.append("direction = ?")
+                clauses.append("m.direction = ?")
                 params.append(direction)
             if since_date_utc:
-                clauses.append("date_utc >= ?")
+                clauses.append("m.date_utc >= ?")
                 params.append(since_date_utc)
             if search_query:
                 q_like = f"%{search_query.strip()}%"
                 clauses.append(
-                    "(subject LIKE ? OR from_address LIKE ? OR to_addresses_json LIKE ? OR body_plain_text LIKE ?)"
+                    "(m.subject LIKE ? OR m.from_address LIKE ? OR m.to_addresses_json LIKE ? OR m.body_plain_text LIKE ?)"
                 )
                 params.extend([q_like, q_like, q_like, q_like])
 
-            query = "SELECT COUNT(*) FROM mailbox_messages"
+            # Review status filtering via message_crm_links
+            need_join = False
+            if review_status:
+                rev = review_status.strip().lower()
+                need_join = True
+                if rev == "unmatched":
+                    clauses.append("(c.link_status = 'unlinked' OR c.link_status IS NULL OR c.candidate_id IS NULL)")
+                elif rev == "review":
+                    clauses.append("c.link_status = 'suggested_pending_review'")
+                elif rev == "approved":
+                    clauses.append("c.link_status = 'verified'")
+                elif rev == "rejected":
+                    clauses.append("c.link_status = 'rejected'")
+
+            if need_join:
+                query = "SELECT COUNT(*) FROM mailbox_messages m LEFT JOIN message_crm_links c ON m.message_id = c.message_id"
+            else:
+                query = "SELECT COUNT(*) FROM mailbox_messages m"
+
             if clauses:
                 query += " WHERE " + " AND ".join(clauses)
 
@@ -1006,3 +1067,202 @@ class MailboxRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    # -----------------------------------------------------------------------
+    # Reconciliation Actions & Audit Trail (MAIL-OPS-01B)
+    # -----------------------------------------------------------------------
+
+    def record_reconciliation_action(
+        self,
+        message_id: str,
+        actor_username: str,
+        action_type: str,
+        new_candidate_id: Optional[str] = None,
+        new_contact_id: Optional[str] = None,
+        reason: Optional[str] = None,
+        new_status: Optional[str] = None,
+    ) -> Tuple[MessageCrmLinkRecord, MailboxReconciliationAuditRecord]:
+        """
+        Atomically executes an operator-controlled reconciliation action and records
+        an immutable audit log entry.
+        Never mutates candidate_companies, candidate_contacts, leads, or outreach history.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock, self.get_connection() as conn:
+            # 1. Fetch current link state
+            row = conn.execute(
+                "SELECT * FROM message_crm_links WHERE message_id = ? LIMIT 1;",
+                (message_id,),
+            ).fetchone()
+
+            prev_cand_id = row["candidate_id"] if row else None
+            prev_cont_id = row["contact_id"] if row else None
+            prev_status = row["link_status"] if row else "unlinked"
+            link_id = row["link_id"] if row else f"lnk_{uuid.uuid4().hex[:12]}"
+            orig_evidence = row["evidence_summary"] if row else None
+            created_at = row["created_at"] if row else now_iso
+
+            # Determine new state based on action_type
+            action = action_type.strip().lower()
+            if action == "approve":
+                target_status = "verified"
+                target_cand_id = prev_cand_id
+                target_cont_id = prev_cont_id
+                target_method = row["link_method"] if row else "manual_operator"
+                target_confidence = 1.0
+                target_evidence = f"Approved by operator {actor_username}. Original evidence: {orig_evidence or 'N/A'}"
+                verified_by = actor_username
+                verified_at = now_iso
+            elif action == "reject":
+                target_status = "rejected"
+                target_cand_id = prev_cand_id
+                target_cont_id = prev_cont_id
+                target_method = row["link_method"] if row else "manual_operator"
+                target_confidence = 0.0
+                target_evidence = f"Rejected by operator {actor_username}. Reason: {reason or 'Incorrect candidate proposal'}"
+                verified_by = actor_username
+                verified_at = now_iso
+            elif action == "reassign":
+                target_status = new_status or "verified"
+                target_cand_id = new_candidate_id
+                target_cont_id = new_contact_id
+                target_method = "manual_operator"
+                target_confidence = 1.0
+                target_evidence = f"Reassigned to {new_candidate_id} by operator {actor_username}. Reason: {reason or 'Operator reassociation'}"
+                verified_by = actor_username
+                verified_at = now_iso
+            elif action == "associate_contact":
+                target_status = new_status or (prev_status if prev_status in ("verified", "suggested_pending_review") else "verified")
+                target_cand_id = new_candidate_id or prev_cand_id
+                target_cont_id = new_contact_id
+                target_method = "manual_operator"
+                target_confidence = 1.0
+                target_evidence = f"Contact {new_contact_id} associated by operator {actor_username}. Reason: {reason or 'Operator contact selection'}"
+                verified_by = actor_username
+                verified_at = now_iso
+            elif action == "clear":
+                target_status = "unlinked"
+                target_cand_id = None
+                target_cont_id = None
+                target_method = "manual_operator"
+                target_confidence = 0.0
+                target_evidence = f"Association cleared by operator {actor_username}. Reason: {reason or 'Manual unlink'}"
+                verified_by = actor_username
+                verified_at = now_iso
+            else:
+                raise ValueError(f"Unsupported reconciliation action: {action_type}")
+
+            # 2. Update message_crm_links
+            # Delete any existing link for message_id to ensure clean atomic state
+            conn.execute("DELETE FROM message_crm_links WHERE message_id = ?;", (message_id,))
+            conn.execute(
+                """
+                INSERT INTO message_crm_links (
+                    link_id, message_id, candidate_id, contact_id, link_status,
+                    link_method, link_confidence, evidence_summary, verified_by,
+                    verified_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    link_id,
+                    message_id,
+                    target_cand_id,
+                    target_cont_id,
+                    target_status,
+                    target_method,
+                    target_confidence,
+                    target_evidence,
+                    verified_by,
+                    verified_at,
+                    created_at,
+                    now_iso,
+                ),
+            )
+
+            # 3. Insert immutable audit entry
+            audit_id = f"mra_{uuid.uuid4().hex[:12]}"
+            conn.execute(
+                """
+                INSERT INTO mailbox_reconciliation_audit (
+                    audit_id, message_id, actor_username, action_type,
+                    previous_candidate_id, previous_contact_id, new_candidate_id,
+                    new_contact_id, previous_status, new_status, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    audit_id,
+                    message_id,
+                    actor_username,
+                    action,
+                    prev_cand_id,
+                    prev_cont_id,
+                    target_cand_id,
+                    target_cont_id,
+                    prev_status,
+                    target_status,
+                    reason,
+                    now_iso,
+                ),
+            )
+
+            link_record = MessageCrmLinkRecord(
+                link_id=link_id,
+                message_id=message_id,
+                candidate_id=target_cand_id,
+                contact_id=target_cont_id,
+                link_status=target_status,
+                link_method=target_method,
+                link_confidence=target_confidence,
+                evidence_summary=target_evidence,
+                verified_by=verified_by,
+                verified_at=verified_at,
+                created_at=created_at,
+                updated_at=now_iso,
+            )
+
+            audit_record = MailboxReconciliationAuditRecord(
+                audit_id=audit_id,
+                message_id=message_id,
+                actor_username=actor_username,
+                action_type=action,
+                previous_candidate_id=prev_cand_id,
+                previous_contact_id=prev_cont_id,
+                new_candidate_id=target_cand_id,
+                new_contact_id=target_cont_id,
+                previous_status=prev_status,
+                new_status=target_status,
+                reason=reason,
+                created_at=now_iso,
+            )
+
+            return link_record, audit_record
+
+    def get_reconciliation_audit_for_message(self, message_id: str) -> List[MailboxReconciliationAuditRecord]:
+        """Fetch all immutable audit records for a message in chronological order."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM mailbox_reconciliation_audit
+                WHERE message_id = ?
+                ORDER BY created_at ASC;
+                """,
+                (message_id,),
+            ).fetchall()
+            return [
+                MailboxReconciliationAuditRecord(
+                    audit_id=r["audit_id"],
+                    message_id=r["message_id"],
+                    actor_username=r["actor_username"],
+                    action_type=r["action_type"],
+                    previous_candidate_id=r["previous_candidate_id"],
+                    previous_contact_id=r["previous_contact_id"],
+                    new_candidate_id=r["new_candidate_id"],
+                    new_contact_id=r["new_contact_id"],
+                    previous_status=r["previous_status"],
+                    new_status=r["new_status"],
+                    reason=r["reason"],
+                    created_at=r["created_at"],
+                )
+                for r in rows
+            ]
+
