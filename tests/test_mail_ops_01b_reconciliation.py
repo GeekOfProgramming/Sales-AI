@@ -576,3 +576,105 @@ def test_10_zero_crm_mutations_enforced(disposable_reconciliation_env):
 
         assert cands_count == 2
         assert conts_count == 2
+
+
+def test_11_machine_vs_human_approval_distinction(disposable_reconciliation_env):
+    """
+    Ensure:
+    1. Machine-verified records (verified_by IS NULL) are distinct from human-approved records.
+    2. The 'Approved' filter strictly requires verified_by IS NOT NULL.
+    3. Existing automated proposals with link_status='verified' remain intact without being reclassified as human-approved.
+    """
+    env = disposable_reconciliation_env
+    repo = env["repo"]
+
+    # Seed an automated machine-verified link (e.g. from domain matching) without human verification
+    msg_machine = MailboxMessageRecord(
+        message_id="msg_machine_04",
+        account_id="acc_info_com",
+        folder_id="fld_com_inbox",
+        folder_role="inbox",
+        direction="inbound",
+        imap_uid=104,
+        imap_uidvalidity=1791495722,
+        rfc_message_id="<msg-machine-04@acme.com>",
+        from_address="contact@acme.com",
+        to_addresses=["info@pybim.com"],
+        subject="Automated inquiry",
+        date_utc="2026-11-12T14:00:00+00:00",
+        body_plain_text="Inquiry body",
+    )
+    repo.save_message(msg_machine)
+
+    link_machine = MessageCrmLinkRecord(
+        link_id="lnk_machine_04",
+        message_id="msg_machine_04",
+        candidate_id="cand:domain:acme.com",
+        contact_id=None,
+        link_status="verified",
+        link_method="verified_domain",
+        link_confidence=0.95,
+        evidence_summary="Exact match on candidate canonical domain (acme.com)",
+        verified_by=None,
+        verified_at=None,
+    )
+    repo.save_crm_link(link_machine)
+
+    # 1. Query with review_status="approved" must NOT include the machine-verified record
+    approved_msgs = repo.list_messages(account_ids=["acc_info_com"], review_status="approved")
+    approved_ids = [m.message_id for m in approved_msgs]
+    assert "msg_machine_04" not in approved_ids
+
+    # 2. Count with review_status="approved" must also not count msg_machine_04
+    approved_count = repo.count_messages(account_ids=["acc_info_com"], review_status="approved")
+    assert approved_count == 0
+
+    # 3. But message exists in all messages and still has its link intact
+    stored_link = repo.get_crm_link_for_message("msg_machine_04")
+    assert stored_link is not None
+    assert stored_link.link_status == "verified"
+    assert stored_link.verified_by is None
+    assert stored_link.link_method == "verified_domain"
+
+    # 4. Now operator explicitly approves msg_machine_04
+    repo.record_reconciliation_action(
+        message_id="msg_machine_04",
+        actor_username="operator_hamid",
+        action_type="approve",
+        reason="Operator confirmed machine match",
+    )
+
+    # 5. Now it MUST appear in approved
+    approved_msgs_after = repo.list_messages(account_ids=["acc_info_com"], review_status="approved")
+    approved_ids_after = [m.message_id for m in approved_msgs_after]
+    assert "msg_machine_04" in approved_ids_after
+    assert repo.count_messages(account_ids=["acc_info_com"], review_status="approved") == 1
+
+
+def test_12_reconciliation_conflict_detection(disposable_reconciliation_env):
+    """
+    Test optimistic concurrency guard: expected_version mismatch raises conflict error.
+    """
+    repo = disposable_reconciliation_env["repo"]
+
+    link = repo.get_crm_link_for_message("msg_review_01")
+    assert link is not None
+    initial_version = link.updated_at
+
+    # Operator 1 approves with expected_version
+    repo.record_reconciliation_action(
+        message_id="msg_review_01",
+        actor_username="operator_alice",
+        action_type="approve",
+        expected_version=initial_version,
+    )
+
+    # Operator 2 tries to reject using stale expected_version
+    with pytest.raises(ValueError, match="Reconciliation conflict"):
+        repo.record_reconciliation_action(
+            message_id="msg_review_01",
+            actor_username="operator_bob",
+            action_type="reject",
+            expected_version=initial_version,  # Stale!
+        )
+

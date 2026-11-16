@@ -717,12 +717,22 @@
               <!-- CRM Match Proposal -->
               <td style="white-space: nowrap;">
                 {% if m.crm_link and m.crm_link.link_status == 'verified' %}
-                  <span class="badge-crm-verified" title="{{ m.crm_link.evidence_summary }}">
-                    ✓ {{ m.crm_link.candidate_id or 'Matched' }}
+                  {% if m.crm_link.verified_by %}
+                  <span class="badge-crm-verified" style="background: rgba(5, 150, 105, 0.25); border: 1px solid #10b981; color: #6ee7b7;" title="Operator Approved by {{ m.crm_link.verified_by }}: {{ m.crm_link.evidence_summary }}">
+                    ✓ Approved: {{ m.crm_link.candidate_id or 'Matched' }}
                   </span>
+                  {% else %}
+                  <span class="badge-crm-verified" title="Machine Verified: {{ m.crm_link.evidence_summary }}">
+                    ⚡ Verified: {{ m.crm_link.candidate_id or 'Matched' }}
+                  </span>
+                  {% endif %}
                 {% elif m.crm_link and m.crm_link.link_status == 'suggested_pending_review' %}
                   <span class="badge-crm-review" title="{{ m.crm_link.evidence_summary }}">
                     ⏳ Review: {{ m.crm_link.candidate_id }}
+                  </span>
+                {% elif m.crm_link and m.crm_link.link_status == 'rejected' %}
+                  <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 0.72rem;" title="{{ m.crm_link.evidence_summary }}">
+                    ✕ Rejected
                   </span>
                 {% else %}
                   <span style="color: var(--text-muted); font-size: 0.75rem;">—</span>
@@ -832,9 +842,15 @@
             </span>
             {% if selected_crm_link %}
               {% if selected_crm_link.link_status == 'verified' %}
-              <span class="badge-crm-verified">
-                VERIFIED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
-              </span>
+                {% if selected_crm_link.verified_by %}
+                <span class="badge-crm-verified" style="background: rgba(5, 150, 105, 0.25); border: 1px solid #10b981; color: #6ee7b7;">
+                  ✓ OPERATOR APPROVED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
+                </span>
+                {% else %}
+                <span class="badge-crm-verified">
+                  ⚡ MACHINE VERIFIED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
+                </span>
+                {% endif %}
               {% elif selected_crm_link.link_status == 'suggested_pending_review' %}
               <span class="badge-crm-review">
                 REVIEW REQUIRED ({{ (selected_crm_link.link_confidence * 100)|round(1) }}%)
@@ -880,7 +896,7 @@
           <!-- Operator Reconciliation Action Toolbar -->
           <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; padding-top: 0.6rem; border-top: 1px solid var(--border-color); align-items: center;">
             
-            {% if selected_crm_link and selected_crm_link.candidate_id and selected_crm_link.link_status == 'suggested_pending_review' %}
+            {% if selected_crm_link and selected_crm_link.candidate_id and (selected_crm_link.link_status == 'suggested_pending_review' or (selected_crm_link.link_status == 'verified' and not selected_crm_link.verified_by)) %}
             <form method="POST" action="/sales/mail-operations/reconcile" style="display: inline; margin: 0;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="message_id" value="{{ selected_message.message_id }}">

@@ -10087,14 +10087,17 @@ async def mail_operations_reconcile_action(
                             )
 
     # 3. Execute atomic reconciliation and record audit entry
-    repo.record_reconciliation_action(
-        message_id=msg.message_id,
-        actor_username=user.username,
-        action_type=clean_action,
-        new_candidate_id=clean_cand_id,
-        new_contact_id=clean_cont_id,
-        reason=clean_reason,
-    )
+    try:
+        repo.record_reconciliation_action(
+            message_id=msg.message_id,
+            actor_username=user.username,
+            action_type=clean_action,
+            new_candidate_id=clean_cand_id,
+            new_contact_id=clean_cont_id,
+            reason=clean_reason,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=409, detail=str(ve))
 
     # 4. Redirect preserving context filters
     redirect_url = f"/sales/mail-operations?account={account_filter}&folder={folder_filter}&review={review_filter}&page={page}&message_id={message_id}"

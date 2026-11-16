@@ -818,7 +818,7 @@ class MailboxRepository:
                 elif rev == "review":
                     clauses.append("c.link_status = 'suggested_pending_review'")
                 elif rev == "approved":
-                    clauses.append("c.link_status = 'verified'")
+                    clauses.append("(c.link_status = 'verified' AND c.verified_by IS NOT NULL)")
                 elif rev == "rejected":
                     clauses.append("c.link_status = 'rejected'")
 
@@ -887,7 +887,7 @@ class MailboxRepository:
                 elif rev == "review":
                     clauses.append("c.link_status = 'suggested_pending_review'")
                 elif rev == "approved":
-                    clauses.append("c.link_status = 'verified'")
+                    clauses.append("(c.link_status = 'verified' AND c.verified_by IS NOT NULL)")
                 elif rev == "rejected":
                     clauses.append("c.link_status = 'rejected'")
 
@@ -1081,11 +1081,14 @@ class MailboxRepository:
         new_contact_id: Optional[str] = None,
         reason: Optional[str] = None,
         new_status: Optional[str] = None,
+        expected_version: Optional[str] = None,
     ) -> Tuple[MessageCrmLinkRecord, MailboxReconciliationAuditRecord]:
         """
         Atomically executes an operator-controlled reconciliation action and records
         an immutable audit log entry.
         Never mutates candidate_companies, candidate_contacts, leads, or outreach history.
+        If expected_version (updated_at timestamp or token) is passed, verifies it matches
+        the existing record to prevent conflicting concurrent overwrites.
         """
         now_iso = datetime.now(timezone.utc).isoformat()
         with self._lock, self.get_connection() as conn:
@@ -1094,6 +1097,13 @@ class MailboxRepository:
                 "SELECT * FROM message_crm_links WHERE message_id = ? LIMIT 1;",
                 (message_id,),
             ).fetchone()
+
+            if expected_version and row:
+                current_version = row["updated_at"]
+                if current_version != expected_version:
+                    raise ValueError(
+                        f"Reconciliation conflict: record was modified at {current_version} by another operator (expected {expected_version})."
+                    )
 
             prev_cand_id = row["candidate_id"] if row else None
             prev_cont_id = row["contact_id"] if row else None
