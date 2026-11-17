@@ -10404,6 +10404,15 @@ async def compose_email_save_action(
     clean_draft_id = draft_id.strip() if draft_id and draft_id.strip() else f"drf_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    # Guard: If draft is currently 'scheduled', modifying body/subject requires cancelling schedule first
+    # to preserve snapshot immutability
+    existing_rec = repo.get_draft(clean_draft_id) if clean_draft_id else None
+    if existing_rec and existing_rec.draft_status == "scheduled":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Draft '{clean_draft_id}' is currently scheduled. You must cancel the schedule before editing draft contents to protect immutable delivery snapshots.",
+        )
+
     draft_record = MailboxDraftRecord(
         draft_id=clean_draft_id,
         account_id=account_id,
@@ -10638,6 +10647,7 @@ async def compose_email_schedule_action(
     send_time: str = Form(...),
     timezone_name: str = Form("Europe/Rome"),
     confirmation: Optional[str] = Form(None),
+    version: Optional[int] = Form(None),
     csrf: None = Depends(validate_csrf),
     user: OperatorUser = Depends(require_authenticated_operator),
 ):
@@ -10687,9 +10697,12 @@ async def compose_email_schedule_action(
             scheduled_local_time=send_time.strip(),
             scheduled_timezone=timezone_name.strip(),
             operator_username=user.username,
+            expected_version=version,
         )
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        err_msg = str(ve)
+        status_code = 409 if "Draft conflict" in err_msg else 400
+        raise HTTPException(status_code=status_code, detail=err_msg)
 
     # Support AJAX fetch requests
     accept_header = request.headers.get("accept", "")
@@ -10702,6 +10715,7 @@ async def compose_email_schedule_action(
             "scheduled_local_date": updated.scheduled_local_date,
             "scheduled_local_time": updated.scheduled_local_time,
             "scheduled_timezone": updated.scheduled_timezone,
+            "version": updated.version,
             "message": f"Draft successfully scheduled for {updated.scheduled_local_date} {updated.scheduled_local_time} ({updated.scheduled_timezone}).",
         })
 
@@ -10715,6 +10729,7 @@ async def compose_email_schedule_action(
 async def compose_email_cancel_schedule_action(
     request: Request,
     draft_id: str = Form(...),
+    version: Optional[int] = Form(None),
     csrf: None = Depends(validate_csrf),
     user: OperatorUser = Depends(require_authenticated_operator),
 ):
@@ -10729,9 +10744,11 @@ async def compose_email_cancel_schedule_action(
 
     clean_draft_id = draft_id.strip()
     try:
-        updated = repo.cancel_schedule(clean_draft_id, operator_username=user.username)
+        updated = repo.cancel_schedule(clean_draft_id, operator_username=user.username, expected_version=version)
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        err_msg = str(ve)
+        status_code = 409 if "Draft conflict" in err_msg else 400
+        raise HTTPException(status_code=status_code, detail=err_msg)
 
     accept_header = request.headers.get("accept", "")
     if "application/json" in accept_header:
@@ -10739,6 +10756,7 @@ async def compose_email_cancel_schedule_action(
             "success": True,
             "draft_id": updated.draft_id,
             "draft_status": updated.draft_status,
+            "version": updated.version,
             "message": "Schedule cancelled successfully. Draft reverted to Ready to Schedule.",
         })
 

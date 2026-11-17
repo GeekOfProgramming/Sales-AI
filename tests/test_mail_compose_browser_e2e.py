@@ -384,4 +384,43 @@ def test_composer_browser_interactions_and_regression(browser_server):
         assert canc_rec.draft_status == "ready_to_schedule"
         assert canc_rec.scheduled_for_utc is None
 
+        # 6. MAIL-COMPOSE-01B-SCHEDULE-RESPONSE-HOTFIX: Error Handling & Double-Click Prevention
+        # Open schedule dialog again
+        page.click("#btn-open-schedule-modal")
+        page.wait_for_timeout(300)
+        assert page.is_visible("#schedule-modal-overlay")
+
+        # Test past date validation feedback (Must display actual server error, NOT 'body stream already read' or generic connection error)
+        page.fill("#modal-send-date", "2020-01-01")
+        page.fill("#modal-send-time", "10:00")
+        page.check("#modal-confirm-checkbox")
+
+        page.click("#modal-btn-confirm-schedule")
+        page.wait_for_timeout(600)
+
+        assert page.is_visible("#modal-schedule-error")
+        err_msg = page.inner_text("#modal-schedule-error-detail")
+        assert "cannot be in the past" in err_msg.lower()
+        assert "stream already read" not in err_msg.lower()
+        assert "connection error" not in err_msg.lower()
+
+        # Input values are preserved after validation error
+        assert page.input_value("#modal-send-date") == "2020-01-01"
+        assert page.input_value("#modal-send-time") == "10:00"
+
+        # Verify button re-enabled after error
+        btn_el = page.locator("#modal-btn-confirm-schedule")
+        assert btn_el.is_enabled()
+
+        # Fix to valid future date/time
+        page.click("button:has-text('Tomorrow 10:00')")
+        assert page.input_value("#modal-send-time") == "10:00"
+
+        # Test duplicate click prevention (button disables on click)
+        page.click("#modal-btn-confirm-schedule")
+        # Ensure it transitions smoothly to scheduled without double-stream read error
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        page.wait_for_timeout(500)
+        assert "SCHEDULED" in page.inner_text("#composer-status-badge")
+
         browser.close()

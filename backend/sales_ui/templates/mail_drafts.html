@@ -418,6 +418,7 @@
                     <form method="POST" action="/sales/mail-operations/compose/cancel-schedule" style="display: inline; margin: 0;" onsubmit="return confirm('Cancel scheduled delivery for draft {{ d.draft_id }}?');">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                       <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
+                      <input type="hidden" name="version" value="{{ d.version }}">
                       <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #f59e0b;" title="Cancel Schedule">
                         ⏹️ Cancel
                       </button>

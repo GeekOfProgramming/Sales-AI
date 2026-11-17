@@ -261,6 +261,7 @@
       <form method="POST" action="/sales/mail-operations/compose/cancel-schedule" style="margin: 0; display: inline;" onsubmit="return confirm('Cancel scheduled delivery and revert to Ready to Schedule?');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="draft_id" value="{{ draft_id }}">
+        <input type="hidden" name="version" value="{{ version }}">
         <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; font-weight: 600; color: #f59e0b;" id="btn-cancel-schedule-banner">
           ⏹️ Cancel Schedule
         </button>
@@ -629,6 +630,7 @@
       <form id="modal-schedule-form" method="POST" action="/sales/mail-operations/compose/schedule" onsubmit="handleScheduleSubmit(event)">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="draft_id" id="modal-draft-id" value="{{ draft_id }}">
+        <input type="hidden" name="version" id="modal-draft-version" value="{{ version }}">
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
           <div>
@@ -1276,13 +1278,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
           let errMsg = `Request failed with HTTP ${resp.status}`;
           try {
-            const errData = await resp.json();
-            if (errData && errData.detail) {
-              errMsg = errData.detail;
+            const rawText = await resp.text();
+            if (rawText && rawText.trim()) {
+              try {
+                const errData = JSON.parse(rawText);
+                if (errData && errData.detail) errMsg = errData.detail;
+                else errMsg = rawText;
+              } catch (parseErr) {
+                errMsg = rawText;
+              }
             }
           } catch (e) {
-            const errText = await resp.text();
-            if (errText) errMsg = errText;
+            errMsg = `Request failed with HTTP ${resp.status}`;
           }
 
           // Display inline warning banner without losing entered data
@@ -1381,7 +1388,11 @@ async function handleScheduleSubmit(ev) {
   const errDetail = document.getElementById('modal-schedule-error-detail');
 
   if (errBox) errBox.style.display = 'none';
-  if (submitBtn) submitBtn.disabled = true;
+  if (submitBtn) {
+    if (submitBtn.disabled) return; // Prevent duplicate clicks
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Scheduling...';
+  }
 
   const formData = new FormData(form);
 
@@ -1399,21 +1410,40 @@ async function handleScheduleSubmit(ev) {
         window.location.href = resp.url;
         return;
       }
-      const data = await resp.json().catch(() => null);
+      let data = null;
+      try {
+        const rawText = await resp.text();
+        if (rawText && rawText.trim()) {
+          data = JSON.parse(rawText);
+        }
+      } catch (parseErr) {
+        data = null;
+      }
+
       if (data && data.draft_id) {
         window.location.href = `/sales/mail-operations/compose?draft_id=${data.draft_id}&scheduled=true`;
       } else {
         window.location.reload();
       }
     } else {
-      if (submitBtn) submitBtn.disabled = false;
-      let errMsg = `Scheduling failed (HTTP ${resp.status})`;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✓ Confirm & Schedule';
+      }
+      let errMsg = `Scheduling failed with status HTTP ${resp.status}`;
       try {
-        const errJson = await resp.json();
-        if (errJson && errJson.detail) errMsg = errJson.detail;
-      } catch (e) {
-        const text = await resp.text();
-        if (text) errMsg = text;
+        const rawText = await resp.text();
+        if (rawText && rawText.trim()) {
+          try {
+            const errJson = JSON.parse(rawText);
+            if (errJson && errJson.detail) errMsg = errJson.detail;
+            else errMsg = rawText;
+          } catch (jsonErr) {
+            errMsg = rawText;
+          }
+        }
+      } catch (readErr) {
+        errMsg = `Scheduling failed with status HTTP ${resp.status}`;
       }
 
       if (errBox && errDetail) {
@@ -1424,12 +1454,15 @@ async function handleScheduleSubmit(ev) {
       }
     }
   } catch (netErr) {
-    if (submitBtn) submitBtn.disabled = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '✓ Confirm & Schedule';
+    }
     if (errBox && errDetail) {
-      errDetail.textContent = 'Connection error: ' + netErr.message;
+      errDetail.textContent = 'Network error: ' + netErr.message;
       errBox.style.display = 'block';
     } else {
-      alert('Connection error: ' + netErr.message);
+      alert('Network error: ' + netErr.message);
     }
   }
 }

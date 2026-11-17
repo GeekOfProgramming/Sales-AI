@@ -1602,11 +1602,12 @@ class MailboxRepository:
         scheduled_local_time: str,
         scheduled_timezone: str,
         operator_username: str,
+        expected_version: Optional[int] = None,
     ) -> MailboxDraftRecord:
         """
         Transitions a draft with status 'ready_to_schedule' (or 'scheduled') to 'scheduled'.
         Captures immutable content snapshots of subject, recipients, and plain/html body.
-        Requires explicit operator approval.
+        Requires explicit operator approval and enforces optimistic concurrency.
         """
         now_iso = datetime.now(timezone.utc).isoformat()
         with self._lock, self.get_connection() as conn:
@@ -1616,6 +1617,11 @@ class MailboxRepository:
             ).fetchone()
             if not existing:
                 raise ValueError(f"Draft '{draft_id}' not found.")
+
+            if expected_version is not None and existing["version"] != expected_version:
+                raise ValueError(
+                    f"Draft conflict: draft '{draft_id}' was modified by another operator (current version: {existing['version']}, submitted: {expected_version})."
+                )
 
             current_status = existing["draft_status"]
             if current_status not in ("ready_to_schedule", "scheduled"):
@@ -1676,6 +1682,7 @@ class MailboxRepository:
         self,
         draft_id: str,
         operator_username: str,
+        expected_version: Optional[int] = None,
     ) -> MailboxDraftRecord:
         """
         Cancels a scheduled draft, reverting its status back to 'ready_to_schedule'
@@ -1689,6 +1696,11 @@ class MailboxRepository:
             ).fetchone()
             if not existing:
                 raise ValueError(f"Draft '{draft_id}' not found.")
+
+            if expected_version is not None and existing["version"] != expected_version:
+                raise ValueError(
+                    f"Draft conflict: draft '{draft_id}' was modified by another operator (current version: {existing['version']}, submitted: {expected_version})."
+                )
 
             if existing["draft_status"] != "scheduled":
                 raise ValueError(

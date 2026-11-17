@@ -260,6 +260,81 @@ def test_schedule_draft_workflow_and_snapshots(auth_client):
         assert cancelled_drf.snapshot_subject is None
 
 
+def test_concurrency_conflict_and_snapshot_protection(auth_client):
+    """Verify HTTP 409 on version conflict and protection against editing scheduled drafts."""
+    client, db_path = auth_client
+    repo = MailboxRepository(db_path=db_path)
+
+    drf = MailboxDraftRecord(
+        draft_id="drf_conflict_01",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        to_addresses=["client@test.com"],
+        subject="Subject Before Scheduling",
+        body_plain_text="Original body text",
+        body_html_sanitized="<p>Original body text</p>",
+        draft_status="ready_to_schedule",
+        created_by="op1",
+        updated_by="op1",
+        version=1,
+    )
+    repo.save_draft(drf)
+
+    with patch.dict(os.environ, {"SALES_OUTREACH_DB": db_path, "EMAIL_SEND_ENABLED": "false"}):
+        csrf_data = _get_csrf_tokens(client)
+        csrf_token = csrf_data["token"]
+
+        # Schedule successfully with version=1
+        res1 = client.post(
+            "/sales/mail-operations/compose/schedule",
+            data={
+                "draft_id": "drf_conflict_01",
+                "send_date": "2026-11-25",
+                "send_time": "09:00",
+                "timezone_name": "Europe/Rome",
+                "confirmation": "confirmed",
+                "version": 1,
+                "csrf_token": csrf_token,
+            },
+            headers={"Accept": "application/json"},
+        )
+        assert res1.status_code == 200
+
+        # Attempting to schedule again with stale version=1 -> HTTP 409
+        res_stale = client.post(
+            "/sales/mail-operations/compose/schedule",
+            data={
+                "draft_id": "drf_conflict_01",
+                "send_date": "2026-11-25",
+                "send_time": "09:30",
+                "timezone_name": "Europe/Rome",
+                "confirmation": "confirmed",
+                "version": 1,
+                "csrf_token": csrf_token,
+            },
+            headers={"Accept": "application/json"},
+        )
+        assert res_stale.status_code == 409
+        assert "Draft conflict" in res_stale.json()["detail"]
+
+        # Attempting to edit body while scheduled is blocked to protect immutable snapshot
+        res_edit_blocked = client.post(
+            "/sales/mail-operations/compose/save",
+            data={
+                "draft_id": "drf_conflict_01",
+                "account_id": "acc_info_com",
+                "to_addresses": "client@test.com",
+                "subject": "Tampered Subject",
+                "body_plain_text": "Tampered body",
+                "version": 2,
+                "csrf_token": csrf_token,
+            },
+            headers={"Accept": "application/json"},
+        )
+        assert res_edit_blocked.status_code == 400
+        assert "currently scheduled" in res_edit_blocked.json()["detail"].lower()
+
+
 def test_persistence_across_simulated_restart(test_db):
     """Verify that scheduled drafts, timing and immutable snapshots persist across repository instances."""
     repo1 = MailboxRepository(db_path=test_db)
