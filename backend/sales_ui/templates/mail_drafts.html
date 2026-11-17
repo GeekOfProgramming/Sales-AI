@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}Email Drafts | Mailbox Operations | Email Led{% endblock %}
+
+{% block content %}
+<style>
+  .drafts-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .drafts-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .drafts-filters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.875rem 1.25rem;
+    box-shadow: var(--shadow);
+  }
+
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.25rem;
+  }
+
+  .filter-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    transition: all 0.15s ease-in-out;
+  }
+
+  .filter-pill:hover {
+    color: var(--text-primary);
+    border-color: var(--border-focus);
+    background-color: var(--bg-hover);
+  }
+
+  .filter-pill.active {
+    background-color: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-hover);
+  }
+
+  .search-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .search-input {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.45rem 0.875rem;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    width: 260px;
+    transition: border-color 0.15s ease-in-out;
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: var(--border-focus);
+  }
+
+  .drafts-table-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .drafts-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    text-align: left;
+  }
+
+  .drafts-table th {
+    background-color: var(--bg-secondary);
+    color: #94a3b8;
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .drafts-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    vertical-align: middle;
+  }
+
+  .drafts-table tr:hover {
+    background-color: var(--bg-hover);
+  }
+
+  .badge-draft-status {
+    display: inline-block;
+    padding: 0.25rem 0.55rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .badge-status-draft {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+
+  .badge-status-ready {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .badge-status-scheduled {
+    background-color: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .badge-status-discarded {
+    background-color: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .badge-account {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.45rem;
+    border-radius: 4px;
+    font-family: monospace;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+  }
+
+  .pagination-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    background-color: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+</style>
+
+<div class="drafts-container">
+
+  <!-- Header -->
+  <div class="drafts-header">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <h1 class="page-title" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0;">
+          📂 Email Drafts &amp; Queue Management
+        </h1>
+        <span class="badge badge-info" style="font-size: 0.8rem;">Offline / Delivery Defanged</span>
+      </div>
+      <p class="page-subtitle" style="color: var(--text-muted); font-size: 0.875rem; margin: 0.25rem 0 0;">
+        Review, edit, duplicate, and stage persistent email drafts before scheduling. Zero automated SMTP transmission.
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+      <a href="/sales/mail-operations/compose" class="btn btn-primary btn-sm" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>✍️</span> Compose New Draft
+      </a>
+      <a href="/sales/mail-operations" class="btn btn-secondary btn-sm" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>📬</span> Back to Mail Operations
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters Toolbar -->
+  <div class="drafts-filters-bar">
+    <form method="GET" action="/sales/mail-operations/drafts" style="display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: center; width: 100%; margin: 0;">
+
+      <!-- Account Filter -->
+      <div class="filter-group">
+        <span class="filter-label">Sender Account:</span>
+        <a href="/sales/mail-operations/drafts?account=all&status={{ status_filter }}&q={{ search_query }}"
+           class="filter-pill {% if account_filter == 'all' %}active{% endif %}">
+          All Accounts
+        </a>
+        <a href="/sales/mail-operations/drafts?account=acc_info_com&status={{ status_filter }}&q={{ search_query }}"
+           class="filter-pill {% if account_filter == 'acc_info_com' %}active{% endif %}"
+           title="info@pybim.com (Global / COM)">
+          info@pybim.com
+        </a>
+        <a href="/sales/mail-operations/drafts?account=acc_info_it&status={{ status_filter }}&q={{ search_query }}"
+           class="filter-pill {% if account_filter == 'acc_info_it' %}active{% endif %}"
+           title="info@pybim.it (Italia / IT)">
+          info@pybim.it
+        </a>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="filter-group">
+        <span class="filter-label">Status:</span>
+        <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status=all&q={{ search_query }}"
+           class="filter-pill {% if status_filter == 'all' %}active{% endif %}">
+          All
+        </a>
+        <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status=draft&q={{ search_query }}"
+           class="filter-pill {% if status_filter == 'draft' %}active{% endif %}">
+          Draft
+        </a>
+        <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status=ready_to_schedule&q={{ search_query }}"
+           class="filter-pill {% if status_filter == 'ready_to_schedule' %}active{% endif %}">
+          Ready to Schedule
+        </a>
+        <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status=scheduled&q={{ search_query }}"
+           class="filter-pill {% if status_filter == 'scheduled' %}active{% endif %}">
+          Scheduled
+        </a>
+        <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status=discarded&q={{ search_query }}"
+           class="filter-pill {% if status_filter == 'discarded' %}active{% endif %}">
+          Discarded
+        </a>
+      </div>
+
+      <!-- Search Input -->
+      <div class="search-input-group" style="margin-left: auto;">
+        <input type="hidden" name="account" value="{{ account_filter }}">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input type="text"
+               name="q"
+               value="{{ search_query }}"
+               placeholder="Search subject, recipient, CRM..."
+               class="search-input">
+        <button type="submit" class="btn btn-secondary btn-sm" style="font-weight: 600;">
+          🔍 Filter
+        </button>
+        {% if search_query or account_filter != 'all' or status_filter != 'all' %}
+          <a href="/sales/mail-operations/drafts" class="btn btn-secondary btn-sm" title="Clear Filters" style="color: var(--text-muted);">
+            ✕ Clear
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Drafts Listing Table -->
+  <div class="drafts-table-card">
+    <div style="padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-card);">
+      <div style="font-weight: 600; font-size: 0.95rem; color: var(--text-primary);">
+        <span>Persistent Draft Records</span>
+        <span class="badge badge-secondary" style="margin-left: 0.5rem;">{{ total_count }} total</span>
+      </div>
+      <div style="font-size: 0.8rem; color: var(--text-muted);">
+        Page {{ current_page }} of {{ total_pages }}
+      </div>
+    </div>
+
+    {% if drafts %}
+    <div style="overflow-x: auto;">
+      <table class="drafts-table">
+        <thead>
+          <tr>
+            <th style="width: 140px;">Draft ID / Status</th>
+            <th style="width: 170px;">Sender</th>
+            <th style="width: 220px;">Recipients (To / CC)</th>
+            <th>Subject</th>
+            <th style="width: 140px;">CRM Company</th>
+            <th style="width: 140px;">Last Updated</th>
+            <th style="width: 160px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in drafts %}
+          <tr>
+            <td>
+              <div style="font-family: monospace; font-size: 0.8rem; font-weight: 700; color: var(--text-primary);">
+                {{ d.draft_id }}
+              </div>
+              <div style="margin-top: 0.25rem;">
+                {% if d.draft_status == 'draft' %}
+                  <span class="badge-draft-status badge-status-draft">Draft (v{{ d.version }})</span>
+                {% elif d.draft_status == 'ready_to_schedule' %}
+                  <span class="badge-draft-status badge-status-ready">Ready to Schedule</span>
+                {% elif d.draft_status == 'scheduled' %}
+                  <span class="badge-draft-status badge-status-scheduled">Scheduled</span>
+                {% elif d.draft_status == 'discarded' %}
+                  <span class="badge-draft-status badge-status-discarded">Discarded</span>
+                {% else %}
+                  <span class="badge-draft-status badge-status-draft">{{ d.draft_status }}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <span class="badge-account">{{ d.sender_email }}</span>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem;">
+                By: {{ d.updated_by }}
+              </div>
+            </td>
+            <td>
+              {% if d.to_addresses %}
+                <div style="font-weight: 600; font-size: 0.82rem; color: var(--text-primary); word-break: break-word;">
+                  {{ d.to_addresses|join(', ') }}
+                </div>
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">No recipients set</span>
+              {% endif %}
+              {% if d.cc_addresses %}
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem; word-break: break-word;">
+                  CC: {{ d.cc_addresses|join(', ') }}
+                </div>
+              {% endif %}
+            </td>
+            <td>
+              <div style="font-weight: 600; color: var(--text-primary);">
+                {% if d.subject %}
+                  <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}" style="color: inherit; text-decoration: none;">
+                    {{ d.subject }}
+                  </a>
+                {% else %}
+                  <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}" style="color: var(--text-muted); font-style: italic; text-decoration: none;">
+                    (No Subject)
+                  </a>
+                {% endif %}
+              </div>
+              <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem; max-width: 450px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                {{ d.body_plain_text[:120] if d.body_plain_text else '(Empty message body)' }}
+              </div>
+            </td>
+            <td>
+              {% if d.candidate_id %}
+                <a href="/sales/candidates/{{ d.candidate_id }}" target="_blank" rel="noopener" style="font-size: 0.82rem; font-weight: 600; color: #38bdf8; text-decoration: none;" title="Open Candidate Workspace">
+                  {{ d.candidate_id }} ↗
+                </a>
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.78rem;">Direct / Standalone</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="font-size: 0.8rem; color: var(--text-primary);">
+                {{ d.updated_at[:16].replace('T', ' ') if d.updated_at else '-' }}
+              </div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">
+                UTC
+              </div>
+            </td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 0.4rem; align-items: center;">
+                {% if d.draft_status != 'discarded' %}
+                  <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Edit Draft">
+                    ✏️ Edit
+                  </a>
+                  <form method="POST" action="/sales/mail-operations/compose/duplicate" style="display: inline; margin: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Duplicate Draft">
+                      📋 Copy
+                    </button>
+                  </form>
+                  <form method="POST" action="/sales/mail-operations/compose/discard" style="display: inline; margin: 0;" onsubmit="return confirm('Are you sure you want to discard draft {{ d.draft_id }}?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: #f87171;" title="Discard Draft">
+                      🗑️ Discard
+                    </button>
+                  </form>
+                {% else %}
+                  <form method="POST" action="/sales/mail-operations/compose/duplicate" style="display: inline; margin: 0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Restore as New Draft">
+                      📋 Recreate
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    {% if total_pages > 1 %}
+    <div class="pagination-bar">
+      <div>
+        Showing {{ ((current_page - 1) * limit) + 1 }} to {{ [current_page * limit, total_count]|min }} of {{ total_count }} drafts
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        {% if current_page > 1 %}
+          <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status={{ status_filter }}&q={{ search_query }}&page={{ current_page - 1 }}" class="btn btn-secondary btn-sm">
+            ← Previous
+          </a>
+        {% endif %}
+        <span>Page {{ current_page }} of {{ total_pages }}</span>
+        {% if current_page < total_pages %}
+          <a href="/sales/mail-operations/drafts?account={{ account_filter }}&status={{ status_filter }}&q={{ search_query }}&page={{ current_page + 1 }}" class="btn btn-secondary btn-sm">
+            Next →
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="padding: 3rem 1.5rem; text-align: center; color: var(--text-muted);">
+      <div style="font-size: 2rem; margin-bottom: 0.5rem;">📝</div>
+      <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.25rem;">No Drafts Found</div>
+      <p style="font-size: 0.875rem; max-width: 400px; margin: 0 auto 1.25rem;">
+        {% if search_query or account_filter != 'all' or status_filter != 'all' %}
+          No persistent email drafts match the current filter criteria.
+        {% else %}
+          You have not created any email drafts yet. Start composing to save draft messages.
+        {% endif %}
+      </p>
+      <a href="/sales/mail-operations/compose" class="btn btn-primary btn-sm">
+        ✍️ Compose First Draft
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

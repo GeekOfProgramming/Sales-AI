@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Email Composer | Email Led{% endblock %}
+
+{% block content %}
+<style>
+  .composer-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .composer-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-secondary);
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .composer-form {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .field-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .input-text, .select-input, .textarea-body {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: inherit;
+    transition: border-color 0.15s ease-in-out;
+  }
+
+  .input-text:focus, .select-input:focus, .textarea-body:focus {
+    outline: none;
+    border-color: var(--border-focus);
+  }
+
+  .textarea-body {
+    min-height: 240px;
+    line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  .extra-recipients {
+    display: none;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--border-color);
+  }
+
+  .composer-actions-bar {
+    padding: 1.25rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .scheduling-info-box {
+    background: rgba(37, 99, 235, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: var(--radius-md);
+    padding: 0.875rem 1.25rem;
+    font-size: 0.8125rem;
+    color: #93c5fd;
+    line-height: 1.45;
+  }
+</style>
+
+<div class="composer-container" style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
+
+  <!-- Header -->
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h1 class="page-title" style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); margin: 0;">
+        ✍️ Integrated Email Composer
+      </h1>
+      <p class="page-subtitle" style="color: var(--text-muted); font-size: 0.875rem; margin: 0.25rem 0 0;">
+        Compose and persist drafts using authorized pyBIM sender accounts without external sending.
+      </p>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <a href="/sales/mail-operations/drafts" class="btn btn-secondary btn-sm" style="font-weight: 600;">
+        📂 Saved Drafts
+      </a>
+      <a href="/sales/mail-operations" class="btn btn-secondary btn-sm">
+        ← Back to Mail Operations
+      </a>
+    </div>
+  </div>
+
+  {% if request.query_params.get('saved') %}
+  <div style="background: rgba(5, 150, 105, 0.15); border: 1px solid #059669; color: #a7f3d0; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-size: 0.875rem;">
+    ✓ Draft successfully saved and persisted to database.
+  </div>
+  {% elif request.query_params.get('duplicated') %}
+  <div style="background: rgba(37, 99, 235, 0.15); border: 1px solid #2563eb; color: #93c5fd; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-size: 0.875rem;">
+    ✓ Draft successfully duplicated as a new copy.
+  </div>
+  {% endif %}
+
+  <!-- Composer Card -->
+  <div class="composer-card">
+
+    <div class="composer-header">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary);">
+          {% if draft_id %}Editing Draft: <code>{{ draft_id }}</code> (v{{ version }}){% else %}New Email Draft{% endif %}
+        </span>
+        {% if draft_record %}
+        <span class="badge" style="background: rgba(37, 99, 235, 0.2); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.4);">
+          {{ draft_record.draft_status|upper }}
+        </span>
+        {% endif %}
+      </div>
+
+      {% if draft_id %}
+      <div style="display: flex; gap: 0.5rem;">
+        <form method="POST" action="/sales/mail-operations/compose/duplicate" style="margin: 0; display: inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="draft_id" value="{{ draft_id }}">
+          <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.78rem;">
+            📑 Duplicate
+          </button>
+        </form>
+
+        <form method="POST" action="/sales/mail-operations/compose/discard" onsubmit="return confirm('Discard this draft permanently?');" style="margin: 0; display: inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="draft_id" value="{{ draft_id }}">
+          <button type="submit" class="btn btn-sm" style="font-size: 0.78rem; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #fca5a5;">
+            🗑️ Discard Draft
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    <form method="POST" action="/sales/mail-operations/compose/save" id="composer-form" class="composer-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="draft_id" value="{{ draft_id }}">
+      <input type="hidden" name="version" value="{{ version }}">
+
+      <!-- From Account -->
+      <div class="field-row">
+        <label class="field-label" for="account_id">From (Authorized Sender Account): *</label>
+        <select id="account_id" name="account_id" class="select-input" required onchange="handleSenderChange(this.value)">
+          {% for s in authorized_senders %}
+          <option value="{{ s.account_id }}" {% if s.account_id == selected_account_id %}selected{% endif %}>
+            {{ s.label }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- CRM Company / Contact Context -->
+      {% if candidate_id %}
+      <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.875rem 1.25rem; font-size: 0.8125rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+          <span style="font-weight: 700; color: #38bdf8;">🔗 Linked CRM Company: {{ candidate_name or candidate_id }}</span>
+          <a href="/sales/candidates/{{ candidate_id }}" target="_blank" style="color: #93c5fd; text-decoration: underline; font-size: 0.75rem;">Open Workspace ↗</a>
+        </div>
+        <input type="hidden" name="candidate_id" value="{{ candidate_id }}">
+
+        {% if candidate_contacts %}
+        <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+          <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Prefill Recipient Contact:</label>
+          <select id="contact_id" name="contact_id" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem; max-width: 320px;" onchange="handleContactSelect(this)">
+            <option value="">-- Choose verified contact --</option>
+            {% for ct in candidate_contacts %}
+            <option value="{{ ct.contact_id }}" data-email="{{ ct.work_email }}" {% if ct.contact_id == contact_id %}selected{% endif %}>
+              {{ ct.full_name }}{% if ct.job_title %} ({{ ct.job_title }}){% endif %}{% if ct.work_email %} &lt;{{ ct.work_email }}&gt;{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- To Recipients -->
+      <div class="field-row">
+        <div class="field-label">
+          <span>To (Recipient Email Addresses): *</span>
+          <button type="button" onclick="toggleExtraRecipients()" style="background: none; border: none; color: #38bdf8; font-size: 0.75rem; cursor: pointer; text-decoration: underline;">
+            + Add CC / BCC
+          </button>
+        </div>
+        <input type="text" id="to_addresses" name="to_addresses" class="input-text" value="{{ to_field }}" placeholder="e.g. client@domain.com, partner@studio.it" required>
+      </div>
+
+      <!-- CC / BCC Section (Collapsible) -->
+      <div id="extra-recipients-box" class="extra-recipients" {% if cc_field or bcc_field %}style="display: flex;"{% endif %}>
+        <div class="field-row">
+          <label class="field-label" for="cc_addresses">CC:</label>
+          <input type="text" id="cc_addresses" name="cc_addresses" class="input-text" value="{{ cc_field }}" placeholder="cc@domain.com">
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="bcc_addresses">BCC:</label>
+          <input type="text" id="bcc_addresses" name="bcc_addresses" class="input-text" value="{{ bcc_field }}" placeholder="bcc@domain.com">
+        </div>
+      </div>
+
+      <!-- Subject -->
+      <div class="field-row">
+        <label class="field-label" for="subject">Subject: *</label>
+        <input type="text" id="subject" name="subject" class="input-text" value="{{ subject_field }}" placeholder="Email subject line..." required>
+      </div>
+
+      <!-- Plain-Text Body -->
+      <div class="field-row">
+        <div class="field-label">
+          <span>Plain Text Message Body: *</span>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Verified signatures auto-included</span>
+        </div>
+        <textarea id="body_plain_text" name="body_plain_text" class="textarea-body" placeholder="Write plain-text email content..." required>{{ body_plain_field }}</textarea>
+      </div>
+
+      <!-- Optional HTML Body -->
+      <div class="field-row">
+        <div class="field-label">
+          <span>HTML Message Body (Optional):</span>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Sanitized on save — no active scripts</span>
+        </div>
+        <textarea id="body_html" name="body_html" class="textarea-body" style="min-height: 120px;" placeholder="<p>Optional HTML version...</p>">{{ body_html_field }}</textarea>
+      </div>
+
+      <!-- Future Scheduling Safety Notice -->
+      <div class="scheduling-info-box">
+        🛡️ <strong>Safety Gate:</strong> Saving a draft stores it securely in SQLite without triggering any live SMTP connections or CRM lead status changes. Delivery and automated sending remain strictly disabled in this phase.
+      </div>
+
+      <!-- Footer Buttons -->
+      <div class="composer-actions-bar" style="margin: 0 -1.5rem -1.5rem; padding: 1.25rem 1.5rem;">
+        <div>
+          <a href="/sales/mail-operations/drafts" class="btn btn-secondary btn-sm">Cancel</a>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <button type="submit" name="action_type" value="save" class="btn btn-secondary btn-sm" style="font-weight: 600;">
+            💾 Save Draft
+          </button>
+          <button type="submit" name="action_type" value="ready_to_schedule" class="btn btn-primary btn-sm" style="font-weight: 600;">
+            📅 Mark Ready to Schedule
+          </button>
+        </div>
+      </div>
+
+    </form>
+
+  </div>
+
+</div>
+
+<script>
+function toggleExtraRecipients() {
+  var box = document.getElementById('extra-recipients-box');
+  if (!box) return;
+  if (box.style.display === 'none' || box.style.display === '') {
+    box.style.display = 'flex';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+function handleContactSelect(selectEl) {
+  var opt = selectEl.options[selectEl.selectedIndex];
+  if (!opt) return;
+  var email = opt.getAttribute('data-email');
+  if (email) {
+    var toInput = document.getElementById('to_addresses');
+    if (toInput) {
+      toInput.value = email;
+    }
+  }
+}
+
+function handleSenderChange(accountId) {
+  // Can dynamically update default signatures if user hasn't typed custom body
+  console.log('Sender account switched:', accountId);
+}
+</script>
+{% endblock %}

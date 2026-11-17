@@ -36,6 +36,7 @@ from sales_engine.inbox.models import (
     MailboxMessageRecord,
     MessageCrmLinkRecord,
     MailboxReconciliationAuditRecord,
+    MailboxDraftRecord,
 )
 
 logger = logging.getLogger(__name__)
@@ -264,6 +265,35 @@ class MailboxRepository:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mra_msg ON mailbox_reconciliation_audit(message_id);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mra_created ON mailbox_reconciliation_audit(created_at DESC);")
+
+            # 7. Additive Email Drafts & Scheduling Management (MAIL-COMPOSE-01A)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS mailbox_drafts (
+                    draft_id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL,
+                    sender_email TEXT NOT NULL,
+                    to_addresses_json TEXT NOT NULL DEFAULT '[]',
+                    cc_addresses_json TEXT NOT NULL DEFAULT '[]',
+                    bcc_addresses_json TEXT NOT NULL DEFAULT '[]',
+                    subject TEXT NOT NULL DEFAULT '',
+                    body_plain_text TEXT NOT NULL DEFAULT '',
+                    body_html_sanitized TEXT,
+                    candidate_id TEXT,
+                    contact_id TEXT,
+                    draft_status TEXT NOT NULL DEFAULT 'draft',
+                    scheduled_for_utc TEXT,
+                    created_by TEXT NOT NULL,
+                    updated_by TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (account_id) REFERENCES mailbox_accounts(account_id) ON DELETE CASCADE
+                );
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_acc ON mailbox_drafts(account_id);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_status ON mailbox_drafts(draft_status);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_cand ON mailbox_drafts(candidate_id);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_updated ON mailbox_drafts(updated_at DESC);")
 
             # Verify integrity
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
@@ -1275,4 +1305,284 @@ class MailboxRepository:
                 )
                 for r in rows
             ]
+
+    # -----------------------------------------------------------------------
+    # Email Draft Operations (MAIL-COMPOSE-01A)
+    # -----------------------------------------------------------------------
+
+    def save_draft(self, draft: MailboxDraftRecord) -> MailboxDraftRecord:
+        """
+        Create a new persistent email draft or update an existing draft.
+        Enforces optimistic concurrency checks if version is specified.
+        Truncates body to MAX_BODY_PLAIN_CHARS / MAX_BODY_HTML_CHARS to avoid unbounded growth.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        body_plain = (draft.body_plain_text or "")[:MAX_BODY_PLAIN_CHARS]
+        body_html = (draft.body_html_sanitized or "")[:MAX_BODY_HTML_CHARS] if draft.body_html_sanitized else None
+
+        with self._lock, self.get_connection() as conn:
+            existing = conn.execute(
+                "SELECT * FROM mailbox_drafts WHERE draft_id = ? LIMIT 1;",
+                (draft.draft_id,),
+            ).fetchone()
+
+            if existing:
+                # Check optimistic concurrency
+                if draft.version is not None and existing["version"] != draft.version:
+                    raise ValueError(
+                        f"Draft conflict: draft '{draft.draft_id}' was modified by another operator (current version: {existing['version']}, submitted: {draft.version})."
+                    )
+                new_version = existing["version"] + 1
+                conn.execute(
+                    """
+                    UPDATE mailbox_drafts SET
+                        account_id = ?,
+                        sender_email = ?,
+                        to_addresses_json = ?,
+                        cc_addresses_json = ?,
+                        bcc_addresses_json = ?,
+                        subject = ?,
+                        body_plain_text = ?,
+                        body_html_sanitized = ?,
+                        candidate_id = ?,
+                        contact_id = ?,
+                        draft_status = ?,
+                        scheduled_for_utc = ?,
+                        updated_by = ?,
+                        version = ?,
+                        updated_at = ?
+                    WHERE draft_id = ?;
+                    """,
+                    (
+                        draft.account_id,
+                        draft.sender_email,
+                        json.dumps(draft.to_addresses, ensure_ascii=False),
+                        json.dumps(draft.cc_addresses, ensure_ascii=False),
+                        json.dumps(draft.bcc_addresses, ensure_ascii=False),
+                        draft.subject,
+                        body_plain,
+                        body_html,
+                        draft.candidate_id,
+                        draft.contact_id,
+                        draft.draft_status,
+                        draft.scheduled_for_utc,
+                        draft.updated_by,
+                        new_version,
+                        now_iso,
+                        draft.draft_id,
+                    ),
+                )
+                draft.version = new_version
+                draft.updated_at = now_iso
+            else:
+                new_version = draft.version or 1
+                conn.execute(
+                    """
+                    INSERT INTO mailbox_drafts (
+                        draft_id, account_id, sender_email, to_addresses_json,
+                        cc_addresses_json, bcc_addresses_json, subject,
+                        body_plain_text, body_html_sanitized, candidate_id,
+                        contact_id, draft_status, scheduled_for_utc, created_by,
+                        updated_by, version, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        draft.draft_id,
+                        draft.account_id,
+                        draft.sender_email,
+                        json.dumps(draft.to_addresses, ensure_ascii=False),
+                        json.dumps(draft.cc_addresses, ensure_ascii=False),
+                        json.dumps(draft.bcc_addresses, ensure_ascii=False),
+                        draft.subject,
+                        body_plain,
+                        body_html,
+                        draft.candidate_id,
+                        draft.contact_id,
+                        draft.draft_status,
+                        draft.scheduled_for_utc,
+                        draft.created_by,
+                        draft.updated_by,
+                        new_version,
+                        draft.created_at or now_iso,
+                        now_iso,
+                    ),
+                )
+                draft.version = new_version
+                draft.updated_at = now_iso
+
+        return draft
+
+    def get_draft(self, draft_id: str) -> Optional[MailboxDraftRecord]:
+        """Fetch draft by draft_id."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM mailbox_drafts WHERE draft_id = ? LIMIT 1;",
+                (draft_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_draft(row)
+
+    def list_drafts(
+        self,
+        account_id: Optional[str] = None,
+        account_ids: Optional[List[str]] = None,
+        candidate_id: Optional[str] = None,
+        draft_status: Optional[str] = None,
+        search_query: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[MailboxDraftRecord]:
+        """List persistent drafts with optional filtering and pagination."""
+        with self.get_connection() as conn:
+            clauses = []
+            params: List[Any] = []
+
+            # Exclude discarded by default unless explicitly requested
+            if draft_status == "all":
+                pass
+            elif draft_status:
+                clauses.append("draft_status = ?")
+                params.append(draft_status)
+            else:
+                clauses.append("draft_status != 'discarded'")
+
+            if account_id:
+                clauses.append("account_id = ?")
+                params.append(account_id)
+            elif account_ids:
+                placeholders = ",".join("?" for _ in account_ids)
+                clauses.append(f"account_id IN ({placeholders})")
+                params.extend(account_ids)
+
+            if candidate_id:
+                clauses.append("candidate_id = ?")
+                params.append(candidate_id)
+
+            if search_query:
+                q_like = f"%{search_query.strip()}%"
+                clauses.append("(subject LIKE ? OR to_addresses_json LIKE ? OR body_plain_text LIKE ?)")
+                params.extend([q_like, q_like, q_like])
+
+            query = "SELECT * FROM mailbox_drafts"
+            if clauses:
+                query += " WHERE " + " AND ".join(clauses)
+            query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?;"
+            params.extend([limit, offset])
+
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_draft(r) for r in rows]
+
+    def count_drafts(
+        self,
+        account_id: Optional[str] = None,
+        account_ids: Optional[List[str]] = None,
+        candidate_id: Optional[str] = None,
+        draft_status: Optional[str] = None,
+        search_query: Optional[str] = None,
+    ) -> int:
+        """Count persistent drafts matching filters for pagination."""
+        with self.get_connection() as conn:
+            clauses = []
+            params: List[Any] = []
+
+            if draft_status == "all":
+                pass
+            elif draft_status:
+                clauses.append("draft_status = ?")
+                params.append(draft_status)
+            else:
+                clauses.append("draft_status != 'discarded'")
+
+            if account_id:
+                clauses.append("account_id = ?")
+                params.append(account_id)
+            elif account_ids:
+                placeholders = ",".join("?" for _ in account_ids)
+                clauses.append(f"account_id IN ({placeholders})")
+                params.extend(account_ids)
+
+            if candidate_id:
+                clauses.append("candidate_id = ?")
+                params.append(candidate_id)
+
+            if search_query:
+                q_like = f"%{search_query.strip()}%"
+                clauses.append("(subject LIKE ? OR to_addresses_json LIKE ? OR body_plain_text LIKE ?)")
+                params.extend([q_like, q_like, q_like])
+
+            query = "SELECT COUNT(*) FROM mailbox_drafts"
+            if clauses:
+                query += " WHERE " + " AND ".join(clauses)
+
+            row = conn.execute(query, params).fetchone()
+            return row[0] if row else 0
+
+    def discard_draft(self, draft_id: str, operator_username: str) -> bool:
+        """Mark a draft as discarded."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock, self.get_connection() as conn:
+            cur = conn.execute(
+                """
+                UPDATE mailbox_drafts SET
+                    draft_status = 'discarded',
+                    updated_by = ?,
+                    version = version + 1,
+                    updated_at = ?
+                WHERE draft_id = ? AND draft_status != 'discarded';
+                """,
+                (operator_username, now_iso, draft_id),
+            )
+            return cur.rowcount > 0
+
+    def duplicate_draft(self, source_draft_id: str, operator_username: str) -> Optional[MailboxDraftRecord]:
+        """Duplicate an existing draft into a new draft record."""
+        source = self.get_draft(source_draft_id)
+        if not source:
+            return None
+        now_iso = datetime.now(timezone.utc).isoformat()
+        new_draft = MailboxDraftRecord(
+            draft_id=f"drf_{uuid.uuid4().hex[:12]}",
+            account_id=source.account_id,
+            sender_email=source.sender_email,
+            to_addresses=list(source.to_addresses),
+            cc_addresses=list(source.cc_addresses),
+            bcc_addresses=list(source.bcc_addresses),
+            subject=f"Copy - {source.subject}" if source.subject else "Copy",
+            body_plain_text=source.body_plain_text,
+            body_html_sanitized=source.body_html_sanitized,
+            candidate_id=source.candidate_id,
+            contact_id=source.contact_id,
+            draft_status="draft",
+            scheduled_for_utc=None,
+            created_by=operator_username,
+            updated_by=operator_username,
+            version=1,
+            created_at=now_iso,
+            updated_at=now_iso,
+        )
+        return self.save_draft(new_draft)
+
+    def _row_to_draft(self, row: sqlite3.Row) -> MailboxDraftRecord:
+        return MailboxDraftRecord(
+            draft_id=row["draft_id"],
+            account_id=row["account_id"],
+            sender_email=row["sender_email"],
+            to_addresses=json.loads(row["to_addresses_json"] or "[]"),
+            cc_addresses=json.loads(row["cc_addresses_json"] or "[]"),
+            bcc_addresses=json.loads(row["bcc_addresses_json"] or "[]"),
+            subject=row["subject"],
+            body_plain_text=row["body_plain_text"],
+            body_html_sanitized=row["body_html_sanitized"],
+            candidate_id=row["candidate_id"],
+            contact_id=row["contact_id"],
+            draft_status=row["draft_status"],
+            scheduled_for_utc=row["scheduled_for_utc"],
+            created_by=row["created_by"],
+            updated_by=row["updated_by"],
+            version=row["version"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
 

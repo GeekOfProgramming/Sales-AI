@@ -516,8 +516,14 @@
         Authoritative monitoring and operator-controlled CRM reconciliation of Register.it primary sales mailboxes.
       </p>
     </div>
-    <div style="display: flex; gap: 0.75rem; align-items: center;">
-      <button id="btn-sync-now" class="btn btn-primary btn-sm" onclick="triggerManualSyncNow()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+      <a href="/sales/mail-operations/compose" class="btn btn-primary btn-sm" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>✉️</span> Compose Email
+      </a>
+      <a href="/sales/mail-operations/drafts" class="btn btn-secondary btn-sm" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>📂</span> Drafts
+      </a>
+      <button id="btn-sync-now" class="btn btn-secondary btn-sm" onclick="triggerManualSyncNow()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
         <span>🔄</span> <span id="sync-now-label">Sync Now</span>
       </button>
       <button class="btn btn-secondary btn-sm" onclick="toggleSyncStatusModal()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">

@@ -375,3 +375,45 @@ class MailboxReconciliationAuditRecord(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+# ============================================================================
+# MAIL-COMPOSE-01A: Draft Management & Scheduling Readiness Models
+# ============================================================================
+
+DraftStatus = Literal[
+    "draft",
+    "ready_to_schedule",
+    "scheduled",
+    "sending",
+    "sent",
+    "failed",
+    "cancelled",
+    "discarded",
+]
+
+
+class MailboxDraftRecord(BaseModel):
+    """
+    Persistent email draft record.
+    Decoupled from actual SMTP delivery and outreach state mutations.
+    """
+    draft_id: str = Field(default_factory=lambda: f"drf_{uuid.uuid4().hex[:12]}")
+    account_id: str  # acc_info_com or acc_info_it
+    sender_email: str  # info@pybim.com or info@pybim.it
+    to_addresses: List[str] = Field(default_factory=list)
+    cc_addresses: List[str] = Field(default_factory=list)
+    bcc_addresses: List[str] = Field(default_factory=list)
+    subject: str = ""
+    body_plain_text: str = ""
+    body_html_sanitized: Optional[str] = None
+    candidate_id: Optional[str] = None
+    contact_id: Optional[str] = None
+    draft_status: DraftStatus = "draft"
+    scheduled_for_utc: Optional[str] = None
+    created_by: str
+    updated_by: str
+    version: int = 1
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+

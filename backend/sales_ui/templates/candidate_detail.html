@@ -47,6 +47,7 @@
   </div>
   <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
     <a href="/sales/candidates?queue={{ return_params.queue if return_params else 'active' }}&q={{ return_params.q if return_params else '' }}&status={{ return_params.status if return_params else '' }}&tier={{ return_params.tier if return_params else '' }}&country={{ return_params.country if return_params else '' }}&city={{ return_params.city if return_params else '' }}&source={{ return_params.source if return_params else '' }}&outreach={{ return_params.outreach if return_params else '' }}&page={{ return_params.page if return_params else 1 }}" class="btn btn-secondary">← Back to Candidates</a>
+    <a href="/sales/mail-operations/compose?candidate_id={{ detail.candidate.candidate_id }}" class="btn btn-secondary" title="Compose persistent email draft for this candidate">✉️ Compose Email</a>
     <a href="/sales/candidates/{{ detail.candidate.candidate_id }}/research" class="btn btn-primary" title="Review researched 13-field proposals or run explicit crawler">🔬 Research Review</a>
     <form method="POST" action="/sales/candidates/{{ detail.candidate.candidate_id }}/research" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -997,19 +998,22 @@
               {% endif %}
             </td>
             <td>
-              {% if c.is_verified %}
-                {% if field_reviews and field_reviews.get('contact_email_addresses') and field_reviews.get('contact_email_addresses').evidence_url %}
-                  <a href="{{ field_reviews.get('contact_email_addresses').evidence_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size: 0.75rem;">
-                    🔗 View Source
+              <div style="display: inline-flex; gap: 0.35rem; align-items: center; flex-wrap: wrap;">
+                {% if c.is_verified %}
+                  <a href="/sales/mail-operations/compose?candidate_id={{ detail.candidate.candidate_id }}&contact_id={{ c.contact_id }}" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" title="Compose Email Draft for this contact">
+                    ✉️ Compose
                   </a>
+                  {% if field_reviews and field_reviews.get('contact_email_addresses') and field_reviews.get('contact_email_addresses').evidence_url %}
+                    <a href="{{ field_reviews.get('contact_email_addresses').evidence_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;">
+                      🔗 Source
+                    </a>
+                  {% endif %}
                 {% else %}
-                  <span class="text-subtle" style="font-size: 0.75rem;">Verified</span>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="populateVerifyModal('{{ c.contact_id }}', '{{ c.full_name }}', '{{ c.work_email }}')">
+                    🔍 Verify Evidence
+                  </button>
                 {% endif %}
-              {% else %}
-                <button type="button" class="btn btn-secondary btn-sm" onclick="populateVerifyModal('{{ c.contact_id }}', '{{ c.full_name }}', '{{ c.work_email }}')">
-                  🔍 Verify Evidence
-                </button>
-              {% endif %}
+              </div>
             </td>
           </tr>
           {% endfor %}

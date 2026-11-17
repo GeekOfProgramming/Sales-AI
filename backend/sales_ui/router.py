@@ -9708,6 +9708,7 @@ async def mail_operations_view(
     staged message headers, review status filtering, and evidence-based CRM matching proposals.
     """
     from sales_engine.inbox.mailbox_repository import MailboxRepository
+    from sales_engine.inbox.models import MailboxDraftRecord
     from sales_engine.inbox.html_sanitizer import sanitize_email_html
     from sales_engine.inbox.scheduled_sync import ScheduledSyncRunner
     import math
@@ -10136,4 +10137,405 @@ async def mail_operations_sync_now_action(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "actor": user.username,
     })
+
+
+# ---------------------------------------------------------------------------
+# 14. EMAIL COMPOSER & PERSISTENT DRAFTS (MAIL-COMPOSE-01A)
+# ---------------------------------------------------------------------------
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def parse_and_validate_email_list(raw_input: Optional[str]) -> List[str]:
+    """Parse comma, semicolon, or newline-separated email addresses and validate formats."""
+    if not raw_input:
+        return []
+    parts = re.split(r"[,;\n\r]+", raw_input)
+    cleaned = []
+    for p in parts:
+        addr = p.strip()
+        if not addr:
+            continue
+        # Check angle-bracket format: "Name <email@domain.com>"
+        bracket_match = re.search(r"<([^>]+)>", addr)
+        if bracket_match:
+            addr = bracket_match.group(1).strip()
+        if not EMAIL_REGEX.match(addr):
+            raise HTTPException(status_code=400, detail=f"Invalid email address format: '{addr}'")
+        cleaned.append(addr.lower())
+    return list(dict.fromkeys(cleaned))  # Deduplicate preserving order
+
+
+@router.get("/mail-operations/compose", response_class=HTMLResponse)
+async def compose_email_view(
+    request: Request,
+    draft_id: Optional[str] = Query(default=None),
+    candidate_id: Optional[str] = Query(default=None),
+    contact_id: Optional[str] = Query(default=None),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Renders the Integrated Email Composer UI (MAIL-COMPOSE-01A).
+    Supports new draft creation, editing existing drafts, and prefilling from validated CRM entities.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+    from sales_engine.inbox.signatures import get_default_signature
+    from sales_engine.inbox.html_sanitizer import sanitize_email_html
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    # Authorized sender accounts
+    authorized_senders = [
+        {"account_id": "acc_info_com", "email": "info@pybim.com", "label": "info@pybim.com (pyBIM Global / COM)"},
+        {"account_id": "acc_info_it", "email": "info@pybim.it", "label": "info@pybim.it (pyBIM Italia / IT)"},
+    ]
+
+    draft_record = None
+    selected_account_id = "acc_info_com"
+    selected_sender_email = "info@pybim.com"
+    to_field = ""
+    cc_field = ""
+    bcc_field = ""
+    subject_field = ""
+    body_plain_field = ""
+    body_html_field = ""
+    active_cand_id = candidate_id
+    active_cont_id = contact_id
+    version_field = 1
+
+    # 1. If editing an existing draft
+    if draft_id:
+        draft_record = repo.get_draft(draft_id)
+        if not draft_record or draft_record.draft_status == "discarded":
+            raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found.")
+        selected_account_id = draft_record.account_id
+        selected_sender_email = draft_record.sender_email
+        to_field = ", ".join(draft_record.to_addresses)
+        cc_field = ", ".join(draft_record.cc_addresses)
+        bcc_field = ", ".join(draft_record.bcc_addresses)
+        subject_field = draft_record.subject
+        body_plain_field = draft_record.body_plain_text
+        body_html_field = draft_record.body_html_sanitized or ""
+        active_cand_id = draft_record.candidate_id
+        active_cont_id = draft_record.contact_id
+        version_field = draft_record.version
+    else:
+        # 2. If new draft prefilling from CRM candidate/contact
+        if candidate_id:
+            with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+                conn.row_factory = sqlite3.Row
+                cand_row = conn.execute(
+                    "SELECT candidate_id, company_name, country FROM candidate_companies WHERE candidate_id = ? LIMIT 1;",
+                    (candidate_id,),
+                ).fetchone()
+                if cand_row:
+                    # Choose default sender based on country
+                    if (cand_row["country"] or "").strip().lower() == "italy":
+                        selected_account_id = "acc_info_it"
+                        selected_sender_email = "info@pybim.it"
+                    else:
+                        selected_account_id = "acc_info_com"
+                        selected_sender_email = "info@pybim.com"
+
+                # If contact specified, prefill validated recipient
+                if contact_id:
+                    cont_row = conn.execute(
+                        "SELECT contact_id, full_name, work_email FROM candidate_contacts WHERE contact_id = ? AND candidate_id = ? LIMIT 1;",
+                        (contact_id, candidate_id),
+                    ).fetchone()
+                    if cont_row and cont_row["work_email"]:
+                        to_field = cont_row["work_email"]
+
+        # Default signature prefill if plain body is empty
+        sig = get_default_signature(selected_sender_email)
+        if sig.get("plain"):
+            body_plain_field = "\n\n" + sig["plain"]
+            body_html_field = "<p><br></p>" + sig["html"]
+
+    # Retrieve candidate details for header display
+    candidate_name = None
+    if active_cand_id:
+        with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT company_name FROM candidate_companies WHERE candidate_id = ? LIMIT 1;",
+                (active_cand_id,),
+            ).fetchone()
+            if row:
+                candidate_name = row["company_name"]
+
+    # Retrieve candidate contacts for dropdown
+    candidate_contacts = []
+    if active_cand_id:
+        with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT contact_id, full_name, first_name, last_name, job_title, work_email FROM candidate_contacts WHERE candidate_id = ? ORDER BY full_name ASC;",
+                (active_cand_id,),
+            ).fetchall()
+            for r in rows:
+                candidate_contacts.append({
+                    "contact_id": r["contact_id"],
+                    "full_name": r["full_name"] or f"{r['first_name'] or ''} {r['last_name'] or ''}".strip(),
+                    "job_title": r["job_title"] or "",
+                    "work_email": r["work_email"] or "",
+                })
+
+    return render_console_template(
+        request=request,
+        name="mail_composer.html",
+        context={
+            "request": request,
+            "active_tab": "mail_ops",
+            "draft_id": draft_id or "",
+            "draft_record": draft_record,
+            "authorized_senders": authorized_senders,
+            "selected_account_id": selected_account_id,
+            "selected_sender_email": selected_sender_email,
+            "to_field": to_field,
+            "cc_field": cc_field,
+            "bcc_field": bcc_field,
+            "subject_field": subject_field,
+            "body_plain_field": body_plain_field,
+            "body_html_field": body_html_field,
+            "candidate_id": active_cand_id or "",
+            "candidate_name": candidate_name or "",
+            "contact_id": active_cont_id or "",
+            "candidate_contacts": candidate_contacts,
+            "version": version_field,
+        },
+    )
+
+
+@router.post("/mail-operations/compose/save", response_class=RedirectResponse)
+async def compose_email_save_action(
+    request: Request,
+    draft_id: Optional[str] = Form(None),
+    account_id: str = Form(...),
+    to_addresses: str = Form(""),
+    cc_addresses: Optional[str] = Form(""),
+    bcc_addresses: Optional[str] = Form(""),
+    subject: str = Form(""),
+    body_plain_text: str = Form(""),
+    body_html: Optional[str] = Form(""),
+    candidate_id: Optional[str] = Form(None),
+    contact_id: Optional[str] = Form(None),
+    version: int = Form(1),
+    action_type: str = Form("save"),  # save, ready_to_schedule
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Saves or updates a persistent email draft.
+    Enforces sender account restrictions, recipient email validation, and optimistic concurrency.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+    from sales_engine.inbox.models import MailboxDraftRecord
+    from sales_engine.inbox.html_sanitizer import sanitize_email_html
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    # 1. Validate authorized sender
+    account_mapping = {
+        "acc_info_com": "info@pybim.com",
+        "acc_info_it": "info@pybim.it",
+    }
+    if account_id not in account_mapping:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unauthorized sender account '{account_id}'. Sending identity is restricted strictly to info@pybim.com and info@pybim.it.",
+        )
+    sender_email = account_mapping[account_id]
+
+    # 2. Parse & validate recipients
+    to_list = parse_and_validate_email_list(to_addresses)
+    cc_list = parse_and_validate_email_list(cc_addresses)
+    bcc_list = parse_and_validate_email_list(bcc_addresses)
+
+    clean_subject = (subject or "").strip()
+    clean_plain = (body_plain_text or "").strip()
+    clean_html = sanitize_email_html(body_html) if body_html and body_html.strip() else None
+
+    clean_cand_id = candidate_id.strip() if candidate_id and candidate_id.strip() else None
+    clean_cont_id = contact_id.strip() if contact_id and contact_id.strip() else None
+
+    # 3. Validate CRM Candidate & Contact if specified
+    if clean_cand_id:
+        with sqlite3.connect(str(db_path), timeout=15.0) as conn:
+            cand_exists = conn.execute(
+                "SELECT 1 FROM candidate_companies WHERE candidate_id = ? LIMIT 1;",
+                (clean_cand_id,),
+            ).fetchone()
+            if not cand_exists:
+                raise HTTPException(status_code=400, detail=f"Candidate company '{clean_cand_id}' does not exist in CRM.")
+
+            if clean_cont_id:
+                cont_exists = conn.execute(
+                    "SELECT 1 FROM candidate_contacts WHERE contact_id = ? AND candidate_id = ? LIMIT 1;",
+                    (clean_cont_id, clean_cand_id),
+                ).fetchone()
+                if not cont_exists:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Contact '{clean_cont_id}' does not belong to candidate '{clean_cand_id}'.",
+                    )
+
+    target_status = "ready_to_schedule" if action_type == "ready_to_schedule" else "draft"
+
+    # 4. Construct or update draft record
+    clean_draft_id = draft_id.strip() if draft_id and draft_id.strip() else f"drf_{uuid.uuid4().hex[:12]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    draft_record = MailboxDraftRecord(
+        draft_id=clean_draft_id,
+        account_id=account_id,
+        sender_email=sender_email,
+        to_addresses=to_list,
+        cc_addresses=cc_list,
+        bcc_addresses=bcc_list,
+        subject=clean_subject,
+        body_plain_text=clean_plain,
+        body_html_sanitized=clean_html,
+        candidate_id=clean_cand_id,
+        contact_id=clean_cont_id,
+        draft_status=target_status,
+        created_by=user.username,
+        updated_by=user.username,
+        version=version,
+        updated_at=now_iso,
+    )
+
+    try:
+        saved = repo.save_draft(draft_record)
+    except ValueError as ve:
+        raise HTTPException(status_code=409, detail=str(ve))
+
+    return RedirectResponse(
+        url=f"/sales/mail-operations/compose?draft_id={saved.draft_id}&saved=true",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/mail-operations/compose/duplicate", response_class=RedirectResponse)
+async def compose_email_duplicate_action(
+    request: Request,
+    draft_id: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """Duplicates an existing draft."""
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    new_draft = repo.duplicate_draft(draft_id, operator_username=user.username)
+    if not new_draft:
+        raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found.")
+
+    return RedirectResponse(
+        url=f"/sales/mail-operations/compose?draft_id={new_draft.draft_id}&duplicated=true",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/mail-operations/compose/discard", response_class=RedirectResponse)
+async def compose_email_discard_action(
+    request: Request,
+    draft_id: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """Discards a draft with explicit confirmation."""
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    success = repo.discard_draft(draft_id, operator_username=user.username)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found or already discarded.")
+
+    return RedirectResponse(
+        url="/sales/mail-operations/drafts?discarded=true",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.get("/mail-operations/drafts", response_class=HTMLResponse)
+async def drafts_list_view(
+    request: Request,
+    account: str = Query(default="all"),
+    status: str = Query(default="all"),
+    q: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=30, ge=1, le=100),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Renders Drafts Management view with filtering by account, status, and search.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+    import math
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    primary_account_ids = ["acc_info_com", "acc_info_it"]
+    if account in primary_account_ids:
+        active_account_id = account
+        target_account_ids = None
+    else:
+        active_account_id = None
+        target_account_ids = primary_account_ids
+        account = "all"
+
+    valid_statuses = ("all", "draft", "ready_to_schedule", "scheduled", "discarded")
+    active_status = status.strip().lower() if status and status.strip().lower() in valid_statuses else "all"
+    if active_status not in valid_statuses:
+        active_status = "all"
+
+    clean_q = q.strip() if q and q.strip() else None
+
+    total_count = repo.count_drafts(
+        account_id=active_account_id,
+        account_ids=target_account_ids,
+        draft_status=active_status,
+        search_query=clean_q,
+    )
+
+    offset = (page - 1) * limit
+    total_pages = max(1, math.ceil(total_count / limit))
+    if page > total_pages:
+        page = total_pages
+        offset = (page - 1) * limit
+
+    raw_drafts = repo.list_drafts(
+        account_id=active_account_id,
+        account_ids=target_account_ids,
+        draft_status=active_status,
+        search_query=clean_q,
+        limit=limit,
+        offset=offset,
+    )
+
+    return render_console_template(
+        request=request,
+        name="mail_drafts.html",
+        context={
+            "request": request,
+            "active_tab": "mail_ops",
+            "account_filter": account,
+            "status_filter": status,
+            "search_query": clean_q or "",
+            "drafts": raw_drafts,
+            "total_count": total_count,
+            "current_page": page,
+            "total_pages": total_pages,
+            "limit": limit,
+        },
+    )
+
 
