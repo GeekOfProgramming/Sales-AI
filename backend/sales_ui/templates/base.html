@@ -26,78 +26,161 @@
       {% endif %}
     </div>
 
-    <!-- Operational Workflow Navigation: 5 Logical CRM Groups (UI-02) -->
+    <!-- Operational Workflow Navigation: 7 Logical CRM Groups (SALES-UI-NAV-01) -->
     <nav class="nav-bar-unified" aria-label="Main Navigation">
       <!-- 1. Overview -->
-      <div class="nav-group">
-        <span class="nav-group-label">Overview</span>
-        <a href="/sales/dashboard" class="nav-link {% if active_tab == 'dashboard' %}active{% endif %}">📊 Dashboard</a>
+      <div class="nav-item">
+        <a href="/sales/dashboard" class="nav-link {% if active_tab == 'dashboard' %}active{% endif %}" id="nav-dashboard">📊 Dashboard</a>
       </div>
 
       <span class="nav-divider"></span>
-      <!-- 2. Discovery & Companies -->
-      <div class="nav-group">
-        <span class="nav-group-label">Discovery &amp; Companies</span>
-        <a href="/sales/discovery" class="nav-link {% if active_tab in ('discoveries', 'discovery') %}active{% endif %}">Discovery</a>
-        <a href="/sales/sources" class="nav-link {% if active_tab == 'sources' %}active{% endif %}">Sources &amp; Imports</a>
-        <a href="/sales/candidates" class="nav-link {% if active_tab == 'candidates' %}active{% endif %}">
-          <span>Candidates</span>
-          {% if nav_badges and nav_badges.get('candidates', 0) > 0 %}
-          <span class="nav-badge" title="{{ nav_badges.candidates }} active candidates">{{ nav_badges.candidates }}</span>
+
+      <!-- 2. Discovery -->
+      <div class="nav-item nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle {% if active_tab in ('discoveries', 'discovery', 'sources') %}active{% endif %}" type="button" aria-haspopup="true" aria-expanded="false" id="nav-discovery-btn">
+          <span>Discovery</span>
+          <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" aria-labelledby="nav-discovery-btn">
+          <a href="/sales/discovery" class="nav-dropdown-item {% if active_tab in ('discoveries', 'discovery') %}active{% endif %}">
+            <span>Discovery Runs</span>
+          </a>
+          <a href="/sales/sources" class="nav-dropdown-item {% if active_tab == 'sources' %}active{% endif %}">
+            <span>Sources &amp; Imports</span>
+          </a>
+        </div>
+      </div>
+
+      <span class="nav-divider"></span>
+
+      <!-- 3. Companies & Research -->
+      <div class="nav-item nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle {% if active_tab in ('candidates', 'register', 'leads') %}active{% endif %}" type="button" aria-haspopup="true" aria-expanded="false" id="nav-companies-btn">
+          <span>Companies &amp; Research</span>
+          {% if nav_badges and (nav_badges.get('candidates', 0) > 0 or nav_badges.get('human_verification', 0) > 0) %}
+          <span class="nav-badge" title="Pending company actions">{{ nav_badges.get('candidates', 0) + nav_badges.get('human_verification', 0) }}</span>
           {% endif %}
-        </a>
-        <a href="/sales/candidates?queue=all" class="nav-link">All Companies</a>
+          <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" aria-labelledby="nav-companies-btn">
+          <a href="/sales/candidates" class="nav-dropdown-item {% if active_tab == 'candidates' and request.query_params.get('queue') not in ('all', 'needs_verification') %}active{% endif %}">
+            <span>Candidates Work Queue</span>
+            {% if nav_badges and nav_badges.get('candidates', 0) > 0 %}
+            <span class="nav-badge" title="{{ nav_badges.candidates }} active candidates">{{ nav_badges.candidates }}</span>
+            {% endif %}
+          </a>
+          <a href="/sales/candidates?queue=needs_verification" class="nav-dropdown-item {% if active_tab == 'candidates' and request.query_params.get('queue') == 'needs_verification' %}active{% endif %}">
+            <span>Human Verification Queue</span>
+            {% if nav_badges and nav_badges.get('human_verification', 0) > 0 %}
+            <span class="nav-badge nav-badge-warning" title="{{ nav_badges.human_verification }} records awaiting verification">{{ nav_badges.human_verification }}</span>
+            {% endif %}
+          </a>
+          <a href="/sales/candidates?queue=all" class="nav-dropdown-item {% if active_tab == 'candidates' and request.query_params.get('queue') == 'all' %}active{% endif %}">
+            <span>All Companies</span>
+          </a>
+          <div class="nav-dropdown-divider"></div>
+          <a href="/sales/register" class="nav-dropdown-item {% if active_tab == 'register' %}active{% endif %}">
+            <span>13-Field Register</span>
+          </a>
+          <a href="/sales/leads" class="nav-dropdown-item {% if active_tab == 'leads' %}active{% endif %}">
+            <span>Qualified Leads</span>
+          </a>
+        </div>
       </div>
 
       <span class="nav-divider"></span>
-      <!-- 3. Research & Qualification -->
-      <div class="nav-group">
-        <span class="nav-group-label">Research &amp; Qualification</span>
-        <a href="/sales/register" class="nav-link {% if active_tab == 'register' %}active{% endif %}">Research / 13-Field Register</a>
-        <a href="/sales/candidates?queue=needs_verification" class="nav-link">
-          <span>Human Verification</span>
-          {% if nav_badges and nav_badges.get('human_verification', 0) > 0 %}
-          <span class="nav-badge nav-badge-warning" title="{{ nav_badges.human_verification }} records awaiting verification">{{ nav_badges.human_verification }}</span>
-          {% endif %}
-        </a>
-        <a href="/sales/leads" class="nav-link {% if active_tab == 'leads' %}active{% endif %}">Qualified Leads</a>
-      </div>
 
-      <span class="nav-divider"></span>
       <!-- 4. Outreach -->
-      <div class="nav-group">
-        <span class="nav-group-label">Outreach</span>
-        <a href="/sales/drafts" class="nav-link {% if active_tab == 'drafts' %}active{% endif %}">
-          <span>Draft Review</span>
+      <div class="nav-item nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle {% if active_tab in ('drafts', 'approved', 'sent') %}active{% endif %}" type="button" aria-haspopup="true" aria-expanded="false" id="nav-outreach-btn">
+          <span>Outreach</span>
           {% if nav_badges and nav_badges.get('drafts', 0) > 0 %}
           <span class="nav-badge nav-badge-warning" title="{{ nav_badges.drafts }} drafts awaiting review">{{ nav_badges.drafts }}</span>
           {% endif %}
-        </a>
-        <a href="/sales/approved" class="nav-link {% if active_tab == 'approved' %}active{% endif %}">Approved</a>
-        <a href="/sales/sent" class="nav-link {% if active_tab == 'sent' %}active{% endif %}">Sent &amp; History</a>
-        <a href="/sales/mail-operations" class="nav-link {% if active_tab == 'mail_ops' %}active{% endif %}">
-          <span>Mailbox Operations</span>
-        </a>
-        <a href="/sales/replies" class="nav-link {% if active_tab == 'replies' %}active{% endif %}">
-          <span>Replies</span>
-          {% if nav_badges and nav_badges.get('replies', 0) > 0 %}
-          <span class="nav-badge nav-badge-info" title="{{ nav_badges.replies }} replies needing attention">{{ nav_badges.replies }}</span>
-          {% endif %}
-        </a>
+          <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" aria-labelledby="nav-outreach-btn">
+          <a href="/sales/drafts" class="nav-dropdown-item {% if active_tab == 'drafts' %}active{% endif %}">
+            <span>Draft Review Queue</span>
+            {% if nav_badges and nav_badges.get('drafts', 0) > 0 %}
+            <span class="nav-badge nav-badge-warning" title="{{ nav_badges.drafts }} drafts awaiting review">{{ nav_badges.drafts }}</span>
+            {% endif %}
+          </a>
+          <a href="/sales/approved" class="nav-dropdown-item {% if active_tab == 'approved' %}active{% endif %}">
+            <span>Approved Drafts</span>
+          </a>
+          <a href="/sales/sent" class="nav-dropdown-item {% if active_tab == 'sent' %}active{% endif %}">
+            <span>Historical Sent &amp; Log</span>
+          </a>
+        </div>
       </div>
 
       <span class="nav-divider"></span>
-      <!-- 5. Administration -->
-      <div class="nav-group">
-        <span class="nav-group-label">Administration</span>
-        <a href="/sales/excluded-companies" class="nav-link {% if active_tab == 'excluded' %}active{% endif %}">Excluded Companies</a>
-        <a href="/sales/do-not-contact" class="nav-link {% if active_tab == 'suppression' %}active{% endif %}">Do Not Contact</a>
-        <a href="/sales/watchlist" class="nav-link {% if active_tab == 'watchlist' %}active{% endif %}">Watchlist</a>
-        <a href="/sales/analytics" class="nav-link {% if active_tab == 'analytics' %}active{% endif %}">Analytics</a>
-        <a href="/sales/settings" class="nav-link {% if active_tab == 'settings' %}active{% endif %}">Settings</a>
-        {% if current_user and current_user.is_admin %}
-        <a href="/sales/users" class="nav-link {% if active_tab == 'users' %}active{% endif %}">Users</a>
-        {% endif %}
+
+      <!-- 5. Mail -->
+      <div class="nav-item nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle {% if active_tab in ('mail_ops', 'replies') %}active{% endif %}" type="button" aria-haspopup="true" aria-expanded="false" id="nav-mail-btn">
+          <span>Mail</span>
+          {% if nav_badges and nav_badges.get('replies', 0) > 0 %}
+          <span class="nav-badge nav-badge-info" title="{{ nav_badges.replies }} replies needing attention">{{ nav_badges.replies }}</span>
+          {% endif %}
+          <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" aria-labelledby="nav-mail-btn">
+          <a href="/sales/mail-operations" class="nav-dropdown-item {% if active_tab == 'mail_ops' and request.url.path == '/sales/mail-operations' %}active{% endif %}">
+            <span>Mailbox Operations</span>
+          </a>
+          <a href="/sales/mail-operations/compose" class="nav-dropdown-item {% if request.url.path == '/sales/mail-operations/compose' %}active{% endif %}">
+            <span>Compose Email</span>
+          </a>
+          <a href="/sales/mail-operations/drafts" class="nav-dropdown-item {% if request.url.path == '/sales/mail-operations/drafts' %}active{% endif %}">
+            <span>Drafts &amp; Outbox</span>
+          </a>
+          <div class="nav-dropdown-divider"></div>
+          <a href="/sales/replies" class="nav-dropdown-item {% if active_tab == 'replies' %}active{% endif %}">
+            <span>Replies Management (Legacy)</span>
+            {% if nav_badges and nav_badges.get('replies', 0) > 0 %}
+            <span class="nav-badge nav-badge-info" title="{{ nav_badges.replies }} replies needing attention">{{ nav_badges.replies }}</span>
+            {% endif %}
+          </a>
+        </div>
+      </div>
+
+      <span class="nav-divider"></span>
+
+      <!-- 6. Insights -->
+      <div class="nav-item">
+        <a href="/sales/analytics" class="nav-link {% if active_tab == 'analytics' %}active{% endif %}" id="nav-analytics">Insights</a>
+      </div>
+
+      <span class="nav-divider"></span>
+
+      <!-- 7. Administration -->
+      <div class="nav-item nav-dropdown">
+        <button class="nav-link nav-dropdown-toggle {% if active_tab in ('excluded', 'suppression', 'watchlist', 'settings', 'users') %}active{% endif %}" type="button" aria-haspopup="true" aria-expanded="false" id="nav-admin-btn">
+          <span>Administration</span>
+          <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="nav-dropdown-menu nav-dropdown-menu-right" aria-labelledby="nav-admin-btn">
+          <a href="/sales/excluded-companies" class="nav-dropdown-item {% if active_tab == 'excluded' %}active{% endif %}">
+            <span>Excluded Companies</span>
+          </a>
+          <a href="/sales/do-not-contact" class="nav-dropdown-item {% if active_tab == 'suppression' %}active{% endif %}">
+            <span>Do Not Contact</span>
+          </a>
+          <a href="/sales/watchlist" class="nav-dropdown-item {% if active_tab == 'watchlist' %}active{% endif %}">
+            <span>Watchlist</span>
+          </a>
+          <div class="nav-dropdown-divider"></div>
+          <a href="/sales/settings" class="nav-dropdown-item {% if active_tab == 'settings' %}active{% endif %}">
+            <span>Settings</span>
+          </a>
+          {% if current_user and current_user.is_admin %}
+          <a href="/sales/users" class="nav-dropdown-item {% if active_tab == 'users' %}active{% endif %}">
+            <span>Users</span>
+          </a>
+          {% endif %}
+        </div>
       </div>
     </nav>
   </header>
