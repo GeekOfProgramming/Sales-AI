@@ -10555,3 +10555,196 @@ async def drafts_list_view(
     )
 
 
+def validate_and_convert_schedule_time(
+    send_date: str,
+    send_time: str,
+    target_timezone: str = "Europe/Rome",
+    reference_now_utc: Optional[datetime] = None,
+) -> Tuple[datetime, datetime]:
+    """
+    Validates date/time string inputs against target timezone (default Europe/Rome).
+    Detects past dates, nonexistent times (DST spring forward gap), and ambiguous times (DST fall back).
+    Returns (aware_local_dt, utc_dt).
+    """
+    from dateutil import tz
+
+    clean_date = (send_date or "").strip()
+    clean_time = (send_time or "").strip()
+
+    if not clean_date or not clean_time:
+        raise HTTPException(
+            status_code=400,
+            detail="Send date and send time (HH:MM 24-hour format) are required.",
+        )
+
+    try:
+        combined_str = f"{clean_date} {clean_time}"
+        naive_dt = datetime.strptime(combined_str, "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid date or time format '{send_date} {send_time}'. Expected YYYY-MM-DD and HH:MM (24-hour).",
+        )
+
+    tz_obj = tz.gettz(target_timezone)
+    if not tz_obj:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported timezone '{target_timezone}'.",
+        )
+
+    # 1. Nonexistent local time check (DST spring forward transition gap)
+    if not tz.datetime_exists(naive_dt, tz=tz_obj):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Selected local time '{send_date} {send_time}' does not exist in {target_timezone} "
+                "due to Daylight Saving Time transition (clocks spring forward 1 hour). "
+                "Please choose a time after the transition gap."
+            ),
+        )
+
+    # 2. Ambiguous local time check (DST fall back repeated hour)
+    if tz.datetime_ambiguous(naive_dt, tz=tz_obj):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Selected local time '{send_date} {send_time}' is ambiguous in {target_timezone} "
+                "due to Daylight Saving Time transition (clocks turn back 1 hour). "
+                "Please choose an unambiguous time."
+            ),
+        )
+
+    # 3. Create aware local datetime & convert to UTC
+    aware_local = naive_dt.replace(tzinfo=tz_obj)
+    utc_dt = aware_local.astimezone(timezone.utc)
+
+    # 4. Validate not in the past
+    now_utc = reference_now_utc or datetime.now(timezone.utc)
+    if utc_dt <= now_utc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scheduled delivery time cannot be in the past ({send_date} {send_time} {target_timezone} is before current time).",
+        )
+
+    return aware_local, utc_dt
+
+
+@router.post("/mail-operations/compose/schedule", response_class=RedirectResponse)
+async def compose_email_schedule_action(
+    request: Request,
+    draft_id: str = Form(...),
+    send_date: str = Form(...),
+    send_time: str = Form(...),
+    timezone_name: str = Form("Europe/Rome"),
+    confirmation: Optional[str] = Form(None),
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Schedules an email draft for delivery.
+    Requires draft to be in 'ready_to_schedule' or 'scheduled' status.
+    Freezes immutable snapshot of draft subject, recipients, and message content.
+    Zero SMTP transmission occurs.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    clean_draft_id = draft_id.strip()
+    draft = repo.get_draft(clean_draft_id)
+    if not draft or draft.draft_status == "discarded":
+        raise HTTPException(status_code=404, detail=f"Draft '{clean_draft_id}' not found.")
+
+    if draft.draft_status not in ("ready_to_schedule", "scheduled"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Draft '{clean_draft_id}' has status '{draft.draft_status}'. You must mark it as 'Ready to Schedule' before scheduling send.",
+        )
+
+    # Explicit confirmation check
+    if not confirmation or confirmation.strip().lower() not in ("yes", "1", "true", "confirmed"):
+        raise HTTPException(
+            status_code=400,
+            detail="Explicit operator confirmation is required to schedule send.",
+        )
+
+    # Validate timing
+    aware_local, utc_dt = validate_and_convert_schedule_time(
+        send_date=send_date,
+        send_time=send_time,
+        target_timezone=timezone_name,
+    )
+
+    utc_iso = utc_dt.isoformat().replace("+00:00", "Z")
+
+    try:
+        updated = repo.schedule_draft(
+            draft_id=clean_draft_id,
+            scheduled_for_utc=utc_iso,
+            scheduled_local_date=send_date.strip(),
+            scheduled_local_time=send_time.strip(),
+            scheduled_timezone=timezone_name.strip(),
+            operator_username=user.username,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+    # Support AJAX fetch requests
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header:
+        return JSONResponse({
+            "success": True,
+            "draft_id": updated.draft_id,
+            "draft_status": updated.draft_status,
+            "scheduled_for_utc": updated.scheduled_for_utc,
+            "scheduled_local_date": updated.scheduled_local_date,
+            "scheduled_local_time": updated.scheduled_local_time,
+            "scheduled_timezone": updated.scheduled_timezone,
+            "message": f"Draft successfully scheduled for {updated.scheduled_local_date} {updated.scheduled_local_time} ({updated.scheduled_timezone}).",
+        })
+
+    return RedirectResponse(
+        url=f"/sales/mail-operations/compose?draft_id={updated.draft_id}&scheduled=true",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/mail-operations/compose/cancel-schedule", response_class=RedirectResponse)
+async def compose_email_cancel_schedule_action(
+    request: Request,
+    draft_id: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Cancels the schedule of a scheduled draft, reverting its status back to 'ready_to_schedule'.
+    Clears immutable content snapshot and scheduled timestamp.
+    """
+    from sales_engine.inbox.mailbox_repository import MailboxRepository
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    repo = MailboxRepository(db_path=db_path)
+
+    clean_draft_id = draft_id.strip()
+    try:
+        updated = repo.cancel_schedule(clean_draft_id, operator_username=user.username)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header:
+        return JSONResponse({
+            "success": True,
+            "draft_id": updated.draft_id,
+            "draft_status": updated.draft_status,
+            "message": "Schedule cancelled successfully. Draft reverted to Ready to Schedule.",
+        })
+
+    return RedirectResponse(
+        url=f"/sales/mail-operations/compose?draft_id={updated.draft_id}&schedule_cancelled=true",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+

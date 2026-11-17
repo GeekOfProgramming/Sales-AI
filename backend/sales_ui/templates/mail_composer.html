@@ -227,8 +227,46 @@
   <div class="alert-box alert-info" id="composer-flash-msg">
     ✓ Draft successfully duplicated as a new copy.
   </div>
+  {% elif request.query_params.get('scheduled') %}
+  <div class="alert-box alert-success" id="composer-flash-msg">
+    ✓ Draft successfully scheduled for automated delivery. Immutable snapshot created.
+  </div>
+  {% elif request.query_params.get('schedule_cancelled') %}
+  <div class="alert-box alert-info" id="composer-flash-msg">
+    ✓ Schedule cancelled. Draft reverted to Ready to Schedule.
+  </div>
   {% else %}
   <div class="alert-box alert-success" id="composer-flash-msg" style="display: none;"></div>
+  {% endif %}
+
+  {% if draft_record and draft_record.draft_status == 'scheduled' %}
+  <!-- Scheduled Status Details Banner -->
+  <div class="alert-box alert-info" style="background: rgba(14, 165, 233, 0.12); border: 1px solid #0284c7; color: #bae6fd; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+    <div>
+      <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; color: #38bdf8;">
+        <span>⏰</span> Draft Scheduled for Delivery
+      </div>
+      <div style="font-size: 0.85rem; margin-top: 0.25rem;">
+        Send Time: <strong>{{ draft_record.scheduled_local_date }} at {{ draft_record.scheduled_local_time }} ({{ draft_record.scheduled_timezone or 'Europe/Rome' }})</strong>
+        {% if draft_record.scheduled_for_utc %}<span style="color: #94a3b8; font-size: 0.75rem; margin-left: 0.5rem;">[{{ draft_record.scheduled_for_utc }} UTC]</span>{% endif %}
+      </div>
+      <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;">
+        Approved By: <strong>{{ draft_record.scheduled_approved_by or draft_record.updated_by }}</strong> • Delivery Worker: <em>Offline / Disabled (Safety Gate)</em>
+      </div>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="openScheduleModal()" style="font-size: 0.8rem; font-weight: 600; color: #38bdf8;">
+        🔄 Reschedule
+      </button>
+      <form method="POST" action="/sales/mail-operations/compose/cancel-schedule" style="margin: 0; display: inline;" onsubmit="return confirm('Cancel scheduled delivery and revert to Ready to Schedule?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="draft_id" value="{{ draft_id }}">
+        <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; font-weight: 600; color: #f59e0b;" id="btn-cancel-schedule-banner">
+          ⏹️ Cancel Schedule
+        </button>
+      </form>
+    </div>
+  </div>
   {% endif %}
 
   <!-- Inline Validation Error Banner -->
@@ -251,7 +289,7 @@
           {% if draft_id %}Editing Draft: <code>{{ draft_id }}</code> (v{{ version }}){% else %}New Email Draft{% endif %}
         </span>
         {% if draft_record %}
-        <span class="badge" style="background: rgba(37, 99, 235, 0.2); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.4);">
+        <span class="badge" id="composer-status-badge" style="background: rgba(37, 99, 235, 0.2); color: #93c5fd; border: 1px solid rgba(37, 99, 235, 0.4);">
           {{ draft_record.draft_status|upper }}
         </span>
         {% endif %}
@@ -525,9 +563,14 @@
           <button type="submit" name="action_type" value="save" class="btn btn-secondary btn-sm" style="font-weight: 600;">
             💾 Save Draft
           </button>
-          <button type="submit" name="action_type" value="ready_to_schedule" class="btn btn-primary btn-sm" style="font-weight: 600;" id="btn-ready-to-schedule">
-            📅 Mark Ready to Schedule
+          <button type="submit" name="action_type" value="ready_to_schedule" class="btn btn-secondary btn-sm" style="font-weight: 600;" id="btn-ready-to-schedule">
+            ✓ Mark Ready to Schedule
           </button>
+          {% if draft_record and draft_record.draft_status in ('ready_to_schedule', 'scheduled') %}
+          <button type="button" class="btn btn-primary btn-sm" style="font-weight: 600; background-color: #2563eb;" id="btn-open-schedule-modal" onclick="openScheduleModal()">
+            {% if draft_record.draft_status == 'scheduled' %}🔄 Reschedule Send{% else %}⏰ Schedule Send{% endif %}
+          </button>
+          {% endif %}
         </div>
       </div>
 
@@ -535,6 +578,106 @@
 
   </div>
 
+</div>
+
+<!-- SCHEDULE SEND MODAL -->
+<div id="schedule-modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(3px); z-index: 9999; justify-content: center; align-items: center; padding: 1rem;">
+  <div style="background: var(--bg-card, #111827); border: 1px solid var(--border-color, #1e293b); border-radius: 8px; width: 100%; max-width: 560px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); overflow: hidden; display: flex; flex-direction: column;">
+    <!-- Modal Header -->
+    <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color, #1e293b); display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.6);">
+      <div style="font-weight: 700; font-size: 1.1rem; color: var(--text-primary, #f8fafc); display: flex; align-items: center; gap: 0.5rem;">
+        <span>⏰</span>
+        <span id="modal-schedule-title">Schedule Email Delivery</span>
+      </div>
+      <button type="button" onclick="closeScheduleModal()" style="background: transparent; border: none; font-size: 1.25rem; color: var(--text-muted, #94a3b8); cursor: pointer; padding: 0.25rem;">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; max-height: calc(85vh - 120px); overflow-y: auto;">
+      <!-- Modal Error Alert -->
+      <div id="modal-schedule-error" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5; padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem;">
+        <strong>Validation Error:</strong> <span id="modal-schedule-error-detail"></span>
+      </div>
+
+      <!-- Immutable Summary Card -->
+      <div style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border-color, #1e293b); border-radius: 6px; padding: 0.875rem 1rem; font-size: 0.82rem; display: flex; flex-direction: column; gap: 0.35rem;">
+        <div style="color: var(--text-muted, #94a3b8); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Message Snapshot Summary</div>
+        <div><strong style="color: var(--text-muted, #94a3b8);">Sender:</strong> <span id="modal-summary-sender" style="color: var(--text-primary, #f8fafc);">{{ selected_sender_email }}</span></div>
+        <div><strong style="color: var(--text-muted, #94a3b8);">Recipient:</strong> <span id="modal-summary-recipient" style="color: var(--text-primary, #f8fafc);">-</span></div>
+        <div><strong style="color: var(--text-muted, #94a3b8);">Subject:</strong> <span id="modal-summary-subject" style="color: var(--text-primary, #f8fafc);">-</span></div>
+      </div>
+
+      <!-- Quick Presets -->
+      <div>
+        <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted, #94a3b8); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 0.5rem;">
+          ⚡ Quick Presets (Europe/Rome)
+        </label>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="applyPreset('tomorrow_0900')" style="font-size: 0.78rem;">
+            Tomorrow 09:00
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="applyPreset('tomorrow_0930')" style="font-size: 0.78rem;">
+            Tomorrow 09:30
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="applyPreset('tomorrow_1000')" style="font-size: 0.78rem;">
+            Tomorrow 10:00
+          </button>
+        </div>
+      </div>
+
+      <!-- Form Inputs -->
+      <form id="modal-schedule-form" method="POST" action="/sales/mail-operations/compose/schedule" onsubmit="handleScheduleSubmit(event)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="draft_id" id="modal-draft-id" value="{{ draft_id }}">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+          <div>
+            <label for="modal-send-date" style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-primary, #f8fafc); margin-bottom: 0.35rem;">
+              Send Date <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="date" id="modal-send-date" name="send_date" required class="input-text" style="width: 100%; font-size: 0.88rem; padding: 0.5rem 0.75rem;" value="{{ draft_record.scheduled_local_date if draft_record and draft_record.scheduled_local_date else '' }}">
+          </div>
+          <div>
+            <label for="modal-send-time" style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-primary, #f8fafc); margin-bottom: 0.35rem;">
+              Send Time (HH:MM, 24h) <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="text" id="modal-send-time" name="send_time" placeholder="09:00" pattern="^([01]?[0-9]|2[0-3]):[0-5][0-9]$" required class="input-text" style="width: 100%; font-size: 0.88rem; padding: 0.5rem 0.75rem;" value="{{ draft_record.scheduled_local_time if draft_record and draft_record.scheduled_local_time else '' }}">
+          </div>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label for="modal-timezone" style="display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-primary, #f8fafc); margin-bottom: 0.35rem;">
+            Timezone
+          </label>
+          <input type="text" id="modal-timezone" name="timezone_name" value="Europe/Rome" readonly class="input-text" style="width: 100%; font-size: 0.88rem; padding: 0.5rem 0.75rem; background: rgba(0, 0, 0, 0.2); color: var(--text-muted, #94a3b8); cursor: not-allowed;">
+          <span style="font-size: 0.72rem; color: var(--text-muted, #94a3b8); margin-top: 0.25rem; display: block;">
+            Delivery is scheduled in Europe/Rome and converted to UTC for persistent storage.
+          </span>
+        </div>
+
+        <!-- Explicit Confirmation Checkbox -->
+        <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.3); border-radius: 6px; padding: 0.875rem 1rem; margin-bottom: 1.25rem;">
+          <label style="display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; font-size: 0.82rem; color: var(--text-primary, #f8fafc); line-height: 1.4;">
+            <input type="checkbox" id="modal-confirm-checkbox" name="confirmation" value="confirmed" required style="margin-top: 0.15rem; cursor: pointer;">
+            <span>
+              <strong>I confirm and approve scheduling this email.</strong><br>
+              An immutable content snapshot will be created. The background sending worker remains offline until an authorized sending pilot.
+            </span>
+          </label>
+        </div>
+
+        <!-- Modal Actions -->
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; align-items: center;">
+          <button type="button" onclick="closeScheduleModal()" class="btn btn-secondary btn-sm">
+            Cancel
+          </button>
+          <button type="submit" id="modal-btn-confirm-schedule" class="btn btn-primary btn-sm" style="font-weight: 600; background-color: #2563eb;">
+            ✓ Confirm &amp; Schedule
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 <!-- EMBEDDED OFFICIAL ASSETS FOR CLIENT INTERACTIVITY -->
@@ -1162,6 +1305,133 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // Check URL param to open schedule modal automatically
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('open_schedule') === '1') {
+    openScheduleModal();
+  }
 });
+
+// Scheduling Dialog Functions
+function openScheduleModal() {
+  const overlay = document.getElementById('schedule-modal-overlay');
+  if (!overlay) return;
+
+  // Populate message snapshot summary from current form inputs
+  const toVal = document.getElementById('to_addresses').value || 'No recipient set';
+  const subjVal = document.getElementById('subject').value || '(No Subject)';
+  const senderEmail = document.getElementById('modal-summary-sender').textContent || 'info@pybim.com';
+
+  document.getElementById('modal-summary-recipient').textContent = toVal;
+  document.getElementById('modal-summary-subject').textContent = subjVal;
+
+  // Clear previous error
+  const errBox = document.getElementById('modal-schedule-error');
+  if (errBox) errBox.style.display = 'none';
+
+  // Default date to tomorrow if not set
+  const dateInput = document.getElementById('modal-send-date');
+  if (dateInput && !dateInput.value) {
+    const tom = new Date();
+    tom.setDate(tom.getDate() + 1);
+    const yyyy = tom.getFullYear();
+    const mm = String(tom.getMonth() + 1).padStart(2, '0');
+    const dd = String(tom.getDate()).padStart(2, '0');
+    dateInput.value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  const timeInput = document.getElementById('modal-send-time');
+  if (timeInput && !timeInput.value) {
+    timeInput.value = '09:00';
+  }
+
+  overlay.style.display = 'flex';
+}
+
+function closeScheduleModal() {
+  const overlay = document.getElementById('schedule-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+function applyPreset(preset) {
+  const dateInput = document.getElementById('modal-send-date');
+  const timeInput = document.getElementById('modal-send-time');
+  const tom = new Date();
+  tom.setDate(tom.getDate() + 1);
+  const yyyy = tom.getFullYear();
+  const mm = String(tom.getMonth() + 1).padStart(2, '0');
+  const dd = String(tom.getDate()).padStart(2, '0');
+  dateInput.value = `${yyyy}-${mm}-${dd}`;
+
+  if (preset === 'tomorrow_0900') {
+    timeInput.value = '09:00';
+  } else if (preset === 'tomorrow_0930') {
+    timeInput.value = '09:30';
+  } else if (preset === 'tomorrow_1000') {
+    timeInput.value = '10:00';
+  }
+}
+
+async function handleScheduleSubmit(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const submitBtn = document.getElementById('modal-btn-confirm-schedule');
+  const errBox = document.getElementById('modal-schedule-error');
+  const errDetail = document.getElementById('modal-schedule-error-detail');
+
+  if (errBox) errBox.style.display = 'none';
+  if (submitBtn) submitBtn.disabled = true;
+
+  const formData = new FormData(form);
+
+  try {
+    const resp = await fetch(form.action, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Accept': 'application/json, text/html, */*'
+      }
+    });
+
+    if (resp.ok) {
+      if (resp.redirected) {
+        window.location.href = resp.url;
+        return;
+      }
+      const data = await resp.json().catch(() => null);
+      if (data && data.draft_id) {
+        window.location.href = `/sales/mail-operations/compose?draft_id=${data.draft_id}&scheduled=true`;
+      } else {
+        window.location.reload();
+      }
+    } else {
+      if (submitBtn) submitBtn.disabled = false;
+      let errMsg = `Scheduling failed (HTTP ${resp.status})`;
+      try {
+        const errJson = await resp.json();
+        if (errJson && errJson.detail) errMsg = errJson.detail;
+      } catch (e) {
+        const text = await resp.text();
+        if (text) errMsg = text;
+      }
+
+      if (errBox && errDetail) {
+        errDetail.textContent = errMsg;
+        errBox.style.display = 'block';
+      } else {
+        alert(errMsg);
+      }
+    }
+  } catch (netErr) {
+    if (submitBtn) submitBtn.disabled = false;
+    if (errBox && errDetail) {
+      errDetail.textContent = 'Connection error: ' + netErr.message;
+      errBox.style.display = 'block';
+    } else {
+      alert('Connection error: ' + netErr.message);
+    }
+  }
+}
 </script>
 {% endblock %}

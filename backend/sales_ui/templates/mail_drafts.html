@@ -306,8 +306,9 @@
             <th style="width: 220px;">Recipients (To / CC)</th>
             <th>Subject</th>
             <th style="width: 140px;">CRM Company</th>
+            <th style="width: 170px;">Scheduled Delivery</th>
             <th style="width: 140px;">Last Updated</th>
-            <th style="width: 160px; text-align: right;">Actions</th>
+            <th style="width: 190px; text-align: right;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -323,7 +324,7 @@
                 {% elif d.draft_status == 'ready_to_schedule' %}
                   <span class="badge-draft-status badge-status-ready">Ready to Schedule</span>
                 {% elif d.draft_status == 'scheduled' %}
-                  <span class="badge-draft-status badge-status-scheduled">Scheduled</span>
+                  <span class="badge-draft-status badge-status-scheduled">⏰ Scheduled</span>
                 {% elif d.draft_status == 'discarded' %}
                   <span class="badge-draft-status badge-status-discarded">Discarded</span>
                 {% else %}
@@ -377,6 +378,25 @@
               {% endif %}
             </td>
             <td>
+              {% if d.draft_status == 'scheduled' and d.scheduled_local_date %}
+                <div style="font-size: 0.82rem; font-weight: 600; color: #38bdf8;">
+                  📅 {{ d.scheduled_local_date }} {{ d.scheduled_local_time }}
+                </div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem;">
+                  {{ d.scheduled_timezone or 'Europe/Rome' }}
+                  {% if d.scheduled_for_utc %}({{ d.scheduled_for_utc[:16].replace('T', ' ') }} UTC){% endif %}
+                </div>
+              {% elif d.draft_status == 'scheduled' and d.scheduled_for_utc %}
+                <div style="font-size: 0.82rem; font-weight: 600; color: #38bdf8;">
+                  ⏰ {{ d.scheduled_for_utc[:16].replace('T', ' ') }} UTC
+                </div>
+              {% elif d.draft_status == 'ready_to_schedule' %}
+                <span style="color: #34d399; font-size: 0.78rem; font-weight: 500;">Ready for schedule</span>
+              {% else %}
+                <span style="color: var(--text-muted); font-size: 0.75rem;">Not scheduled</span>
+              {% endif %}
+            </td>
+            <td>
               <div style="font-size: 0.8rem; color: var(--text-primary);">
                 {{ d.updated_at[:16].replace('T', ' ') if d.updated_at else '-' }}
               </div>
@@ -385,22 +405,38 @@
               </div>
             </td>
             <td style="text-align: right;">
-              <div style="display: inline-flex; gap: 0.4rem; align-items: center;">
+              <div style="display: inline-flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
                 {% if d.draft_status != 'discarded' %}
-                  <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Edit Draft">
+                  {% if d.draft_status == 'ready_to_schedule' %}
+                    <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}&open_schedule=1" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; background-color: #2563eb;" title="Schedule Delivery">
+                      ⏰ Schedule
+                    </a>
+                  {% elif d.draft_status == 'scheduled' %}
+                    <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}&open_schedule=1" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #38bdf8;" title="Reschedule Delivery">
+                      🔄 Reschedule
+                    </a>
+                    <form method="POST" action="/sales/mail-operations/compose/cancel-schedule" style="display: inline; margin: 0;" onsubmit="return confirm('Cancel scheduled delivery for draft {{ d.draft_id }}?');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
+                      <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #f59e0b;" title="Cancel Schedule">
+                        ⏹️ Cancel
+                      </button>
+                    </form>
+                  {% endif %}
+                  <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;" title="Edit Draft">
                     ✏️ Edit
                   </a>
                   <form method="POST" action="/sales/mail-operations/compose/duplicate" style="display: inline; margin: 0;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
-                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Duplicate Draft">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;" title="Duplicate Draft">
                       📋 Copy
                     </button>
                   </form>
                   <form method="POST" action="/sales/mail-operations/compose/discard" style="display: inline; margin: 0;" onsubmit="return confirm('Are you sure you want to discard draft {{ d.draft_id }}?');">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
-                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; color: #f87171;" title="Discard Draft">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #f87171;" title="Discard Draft">
                       🗑️ Discard
                     </button>
                   </form>
@@ -408,7 +444,7 @@
                   <form method="POST" action="/sales/mail-operations/compose/duplicate" style="display: inline; margin: 0;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="draft_id" value="{{ d.draft_id }}">
-                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" title="Restore as New Draft">
+                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem;" title="Restore as New Draft">
                       📋 Recreate
                     </button>
                   </form>

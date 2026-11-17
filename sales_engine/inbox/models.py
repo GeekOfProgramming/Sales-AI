@@ -409,6 +409,15 @@ class MailboxDraftRecord(BaseModel):
     contact_id: Optional[str] = None
     draft_status: DraftStatus = "draft"
     scheduled_for_utc: Optional[str] = None
+    scheduled_local_date: Optional[str] = None
+    scheduled_local_time: Optional[str] = None
+    scheduled_timezone: Optional[str] = None
+    scheduled_approved_by: Optional[str] = None
+    scheduled_at_utc: Optional[str] = None
+    snapshot_subject: Optional[str] = None
+    snapshot_plain_text: Optional[str] = None
+    snapshot_html_sanitized: Optional[str] = None
+    snapshot_to_addresses: Optional[List[str]] = None
     created_by: str
     updated_by: str
     version: int = 1

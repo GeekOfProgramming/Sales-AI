@@ -330,4 +330,58 @@ def test_composer_browser_interactions_and_regression(browser_server):
         # Ensure standard signature table does not appear inside meeting preview
         assert "Engineering &amp; Digital Automation" not in meeting_reloaded_preview
 
+        # 5. MAIL-COMPOSE-01B: Test Schedule Dialog, Reschedule, Cancellation, and Queue UI
+        # Open schedule modal on the ready draft
+        page.goto(f"{base_url}/sales/mail-operations/compose?draft_id={ready_draft_id}")
+        page.wait_for_timeout(500)
+
+        # "Schedule Send" button is visible for ready_to_schedule status
+        assert page.is_visible("#btn-open-schedule-modal")
+        page.click("#btn-open-schedule-modal")
+        page.wait_for_timeout(300)
+
+        assert page.is_visible("#schedule-modal-overlay")
+        assert page.inner_text("#modal-summary-sender") == "info@pybim.com"
+        assert "partner@bimstudio.it" in page.inner_text("#modal-summary-recipient")
+
+        # Quick preset Tomorrow 09:30
+        page.click("button:has-text('Tomorrow 09:30')")
+        assert page.input_value("#modal-send-time") == "09:30"
+
+        # Explicit confirmation
+        page.check("#modal-confirm-checkbox")
+
+        # Submit schedule
+        page.click("#modal-btn-confirm-schedule")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        page.wait_for_timeout(500)
+
+        # Verify status transitioned to SCHEDULED in UI and database
+        assert "SCHEDULED" in page.inner_text("#composer-status-badge")
+        assert page.is_visible("#btn-cancel-schedule-banner")
+        sched_rec = repo.get_draft(ready_draft_id)
+        assert sched_rec.draft_status == "scheduled"
+        assert sched_rec.scheduled_local_time == "09:30"
+        assert sched_rec.scheduled_timezone == "Europe/Rome"
+        assert sched_rec.snapshot_subject is not None
+
+        # Verify Drafts & Queue dashboard displays scheduled delivery and actions
+        page.goto(f"{base_url}/sales/mail-operations/drafts")
+        page.wait_for_timeout(500)
+        assert page.is_visible(".badge-status-scheduled")
+        assert "09:30" in page.content()
+        assert "Reschedule" in page.content()
+
+        # Cancel schedule from composer
+        page.goto(f"{base_url}/sales/mail-operations/compose?draft_id={ready_draft_id}")
+        page.wait_for_timeout(500)
+        page.click("#btn-cancel-schedule-banner")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        page.wait_for_timeout(500)
+
+        assert "READY_TO_SCHEDULE" in page.inner_text("#composer-status-badge")
+        canc_rec = repo.get_draft(ready_draft_id)
+        assert canc_rec.draft_status == "ready_to_schedule"
+        assert canc_rec.scheduled_for_utc is None
+
         browser.close()

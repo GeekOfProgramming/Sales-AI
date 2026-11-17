@@ -266,7 +266,7 @@ class MailboxRepository:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mra_msg ON mailbox_reconciliation_audit(message_id);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mra_created ON mailbox_reconciliation_audit(created_at DESC);")
 
-            # 7. Additive Email Drafts & Scheduling Management (MAIL-COMPOSE-01A)
+            # 7. Additive Email Drafts & Scheduling Management (MAIL-COMPOSE-01A & MAIL-COMPOSE-01B)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS mailbox_drafts (
                     draft_id TEXT PRIMARY KEY,
@@ -282,6 +282,15 @@ class MailboxRepository:
                     contact_id TEXT,
                     draft_status TEXT NOT NULL DEFAULT 'draft',
                     scheduled_for_utc TEXT,
+                    scheduled_local_date TEXT,
+                    scheduled_local_time TEXT,
+                    scheduled_timezone TEXT,
+                    scheduled_approved_by TEXT,
+                    scheduled_at_utc TEXT,
+                    snapshot_subject TEXT,
+                    snapshot_plain_text TEXT,
+                    snapshot_html_sanitized TEXT,
+                    snapshot_to_addresses_json TEXT,
                     created_by TEXT NOT NULL,
                     updated_by TEXT NOT NULL,
                     version INTEGER NOT NULL DEFAULT 1,
@@ -290,10 +299,29 @@ class MailboxRepository:
                     FOREIGN KEY (account_id) REFERENCES mailbox_accounts(account_id) ON DELETE CASCADE
                 );
             """)
+
+            # Additive column upgrades for existing mailbox_drafts table
+            existing_draft_cols = [c["name"] for c in conn.execute("PRAGMA table_info(mailbox_drafts);").fetchall()]
+            new_draft_cols = [
+                ("scheduled_local_date", "TEXT"),
+                ("scheduled_local_time", "TEXT"),
+                ("scheduled_timezone", "TEXT"),
+                ("scheduled_approved_by", "TEXT"),
+                ("scheduled_at_utc", "TEXT"),
+                ("snapshot_subject", "TEXT"),
+                ("snapshot_plain_text", "TEXT"),
+                ("snapshot_html_sanitized", "TEXT"),
+                ("snapshot_to_addresses_json", "TEXT"),
+            ]
+            for col_name, col_type in new_draft_cols:
+                if col_name not in existing_draft_cols:
+                    conn.execute(f"ALTER TABLE mailbox_drafts ADD COLUMN {col_name} {col_type};")
+
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_acc ON mailbox_drafts(account_id);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_status ON mailbox_drafts(draft_status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_cand ON mailbox_drafts(candidate_id);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_updated ON mailbox_drafts(updated_at DESC);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_mb_drafts_sched_utc ON mailbox_drafts(scheduled_for_utc);")
 
             # Verify integrity
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
@@ -1348,6 +1376,15 @@ class MailboxRepository:
                         contact_id = ?,
                         draft_status = ?,
                         scheduled_for_utc = ?,
+                        scheduled_local_date = ?,
+                        scheduled_local_time = ?,
+                        scheduled_timezone = ?,
+                        scheduled_approved_by = ?,
+                        scheduled_at_utc = ?,
+                        snapshot_subject = ?,
+                        snapshot_plain_text = ?,
+                        snapshot_html_sanitized = ?,
+                        snapshot_to_addresses_json = ?,
                         updated_by = ?,
                         version = ?,
                         updated_at = ?
@@ -1366,6 +1403,15 @@ class MailboxRepository:
                         draft.contact_id,
                         draft.draft_status,
                         draft.scheduled_for_utc,
+                        draft.scheduled_local_date,
+                        draft.scheduled_local_time,
+                        draft.scheduled_timezone,
+                        draft.scheduled_approved_by,
+                        draft.scheduled_at_utc,
+                        draft.snapshot_subject,
+                        draft.snapshot_plain_text,
+                        draft.snapshot_html_sanitized,
+                        json.dumps(draft.snapshot_to_addresses, ensure_ascii=False) if draft.snapshot_to_addresses is not None else None,
                         draft.updated_by,
                         new_version,
                         now_iso,
@@ -1382,9 +1428,13 @@ class MailboxRepository:
                         draft_id, account_id, sender_email, to_addresses_json,
                         cc_addresses_json, bcc_addresses_json, subject,
                         body_plain_text, body_html_sanitized, candidate_id,
-                        contact_id, draft_status, scheduled_for_utc, created_by,
-                        updated_by, version, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        contact_id, draft_status, scheduled_for_utc,
+                        scheduled_local_date, scheduled_local_time, scheduled_timezone,
+                        scheduled_approved_by, scheduled_at_utc,
+                        snapshot_subject, snapshot_plain_text, snapshot_html_sanitized,
+                        snapshot_to_addresses_json,
+                        created_by, updated_by, version, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     (
                         draft.draft_id,
@@ -1400,6 +1450,15 @@ class MailboxRepository:
                         draft.contact_id,
                         draft.draft_status,
                         draft.scheduled_for_utc,
+                        draft.scheduled_local_date,
+                        draft.scheduled_local_time,
+                        draft.scheduled_timezone,
+                        draft.scheduled_approved_by,
+                        draft.scheduled_at_utc,
+                        draft.snapshot_subject,
+                        draft.snapshot_plain_text,
+                        draft.snapshot_html_sanitized,
+                        json.dumps(draft.snapshot_to_addresses, ensure_ascii=False) if draft.snapshot_to_addresses is not None else None,
                         draft.created_by,
                         draft.updated_by,
                         new_version,
@@ -1535,6 +1594,140 @@ class MailboxRepository:
             )
             return cur.rowcount > 0
 
+    def schedule_draft(
+        self,
+        draft_id: str,
+        scheduled_for_utc: str,
+        scheduled_local_date: str,
+        scheduled_local_time: str,
+        scheduled_timezone: str,
+        operator_username: str,
+    ) -> MailboxDraftRecord:
+        """
+        Transitions a draft with status 'ready_to_schedule' (or 'scheduled') to 'scheduled'.
+        Captures immutable content snapshots of subject, recipients, and plain/html body.
+        Requires explicit operator approval.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock, self.get_connection() as conn:
+            existing = conn.execute(
+                "SELECT * FROM mailbox_drafts WHERE draft_id = ? LIMIT 1;",
+                (draft_id,),
+            ).fetchone()
+            if not existing:
+                raise ValueError(f"Draft '{draft_id}' not found.")
+
+            current_status = existing["draft_status"]
+            if current_status not in ("ready_to_schedule", "scheduled"):
+                raise ValueError(
+                    f"Cannot schedule draft '{draft_id}' with status '{current_status}'. Only 'ready_to_schedule' or 'scheduled' drafts can be scheduled."
+                )
+
+            # Build immutable snapshot from current draft content
+            snap_subj = existing["subject"]
+            snap_plain = existing["body_plain_text"]
+            snap_html = existing["body_html_sanitized"]
+            snap_to = existing["to_addresses_json"]
+
+            new_version = existing["version"] + 1
+            conn.execute(
+                """
+                UPDATE mailbox_drafts SET
+                    draft_status = 'scheduled',
+                    scheduled_for_utc = ?,
+                    scheduled_local_date = ?,
+                    scheduled_local_time = ?,
+                    scheduled_timezone = ?,
+                    scheduled_approved_by = ?,
+                    scheduled_at_utc = ?,
+                    snapshot_subject = ?,
+                    snapshot_plain_text = ?,
+                    snapshot_html_sanitized = ?,
+                    snapshot_to_addresses_json = ?,
+                    updated_by = ?,
+                    version = ?,
+                    updated_at = ?
+                WHERE draft_id = ?;
+                """,
+                (
+                    scheduled_for_utc,
+                    scheduled_local_date,
+                    scheduled_local_time,
+                    scheduled_timezone,
+                    operator_username,
+                    now_iso,
+                    snap_subj,
+                    snap_plain,
+                    snap_html,
+                    snap_to,
+                    operator_username,
+                    new_version,
+                    now_iso,
+                    draft_id,
+                ),
+            )
+
+        updated_draft = self.get_draft(draft_id)
+        if not updated_draft:
+            raise ValueError(f"Failed to reload draft '{draft_id}' after scheduling.")
+        return updated_draft
+
+    def cancel_schedule(
+        self,
+        draft_id: str,
+        operator_username: str,
+    ) -> MailboxDraftRecord:
+        """
+        Cancels a scheduled draft, reverting its status back to 'ready_to_schedule'
+        and clearing scheduled timing and snapshots before SMTP submission.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock, self.get_connection() as conn:
+            existing = conn.execute(
+                "SELECT * FROM mailbox_drafts WHERE draft_id = ? LIMIT 1;",
+                (draft_id,),
+            ).fetchone()
+            if not existing:
+                raise ValueError(f"Draft '{draft_id}' not found.")
+
+            if existing["draft_status"] != "scheduled":
+                raise ValueError(
+                    f"Cannot cancel schedule for draft '{draft_id}' with status '{existing['draft_status']}'. Only 'scheduled' drafts can be cancelled."
+                )
+
+            new_version = existing["version"] + 1
+            conn.execute(
+                """
+                UPDATE mailbox_drafts SET
+                    draft_status = 'ready_to_schedule',
+                    scheduled_for_utc = NULL,
+                    scheduled_local_date = NULL,
+                    scheduled_local_time = NULL,
+                    scheduled_timezone = NULL,
+                    scheduled_approved_by = NULL,
+                    scheduled_at_utc = NULL,
+                    snapshot_subject = NULL,
+                    snapshot_plain_text = NULL,
+                    snapshot_html_sanitized = NULL,
+                    snapshot_to_addresses_json = NULL,
+                    updated_by = ?,
+                    version = ?,
+                    updated_at = ?
+                WHERE draft_id = ?;
+                """,
+                (
+                    operator_username,
+                    new_version,
+                    now_iso,
+                    draft_id,
+                ),
+            )
+
+        updated = self.get_draft(draft_id)
+        if not updated:
+            raise ValueError(f"Failed to reload draft '{draft_id}' after schedule cancellation.")
+        return updated
+
     def duplicate_draft(self, source_draft_id: str, operator_username: str) -> Optional[MailboxDraftRecord]:
         """Duplicate an existing draft into a new draft record."""
         source = self.get_draft(source_draft_id)
@@ -1564,6 +1757,9 @@ class MailboxRepository:
         return self.save_draft(new_draft)
 
     def _row_to_draft(self, row: sqlite3.Row) -> MailboxDraftRecord:
+        keys = row.keys()
+        snap_to_json = row["snapshot_to_addresses_json"] if "snapshot_to_addresses_json" in keys else None
+        snap_to_list = json.loads(snap_to_json) if snap_to_json else None
         return MailboxDraftRecord(
             draft_id=row["draft_id"],
             account_id=row["account_id"],
@@ -1578,6 +1774,15 @@ class MailboxRepository:
             contact_id=row["contact_id"],
             draft_status=row["draft_status"],
             scheduled_for_utc=row["scheduled_for_utc"],
+            scheduled_local_date=row["scheduled_local_date"] if "scheduled_local_date" in keys else None,
+            scheduled_local_time=row["scheduled_local_time"] if "scheduled_local_time" in keys else None,
+            scheduled_timezone=row["scheduled_timezone"] if "scheduled_timezone" in keys else None,
+            scheduled_approved_by=row["scheduled_approved_by"] if "scheduled_approved_by" in keys else None,
+            scheduled_at_utc=row["scheduled_at_utc"] if "scheduled_at_utc" in keys else None,
+            snapshot_subject=row["snapshot_subject"] if "snapshot_subject" in keys else None,
+            snapshot_plain_text=row["snapshot_plain_text"] if "snapshot_plain_text" in keys else None,
+            snapshot_html_sanitized=row["snapshot_html_sanitized"] if "snapshot_html_sanitized" in keys else None,
+            snapshot_to_addresses=snap_to_list,
             created_by=row["created_by"],
             updated_by=row["updated_by"],
             version=row["version"],
