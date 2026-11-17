@@ -10247,11 +10247,10 @@ async def compose_email_view(
                     if cont_row and cont_row["work_email"]:
                         to_field = cont_row["work_email"]
 
-        # Default signature prefill if plain body is empty
-        sig = get_default_signature(selected_sender_email)
-        if sig.get("plain"):
-            body_plain_field = "\n\n" + sig["plain"]
-            body_html_field = "<p><br></p>" + sig["html"]
+        # For brand new drafts, do NOT prefill signatures directly into the editable body text.
+        # Signature is managed cleanly via the composer's official corporate signature selector and render pipeline.
+        body_plain_field = ""
+        body_html_field = ""
 
     # Retrieve candidate details for header display
     candidate_name = None
@@ -10282,6 +10281,10 @@ async def compose_email_view(
                     "work_email": r["work_email"] or "",
                 })
 
+    # Clean message body to strip any pre-existing appended signature for the editor
+    from sales_engine.inbox.signatures import strip_signature, strip_signature_html
+    user_body_content = strip_signature(body_plain_field) if body_plain_field else ""
+
     return render_console_template(
         request=request,
         name="mail_composer.html",
@@ -10299,6 +10302,7 @@ async def compose_email_view(
             "subject_field": subject_field,
             "body_plain_field": body_plain_field,
             "body_html_field": body_html_field,
+            "user_body_content": user_body_content,
             "candidate_id": active_cand_id or "",
             "candidate_name": candidate_name or "",
             "contact_id": active_cont_id or "",

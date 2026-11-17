@@ -341,8 +341,24 @@
             <input type="text" id="m_recipient" class="input-text" placeholder="e.g. Arch. Santoni" oninput="updateMeetingFromFields()">
           </div>
           <div class="field-row">
-            <label class="field-label" for="m_link">Meeting URL (Google Meet / Teams): *</label>
+            <label class="field-label" for="m_platform">Meeting Platform: *</label>
+            <select id="m_platform" class="select-input" onchange="handlePlatformChange(this.value)">
+              <option value="google_meet">Google Meet</option>
+              <option value="ms_teams">Microsoft Teams</option>
+              <option value="zoom">Zoom</option>
+              <option value="custom">Other / Custom</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-grid-2">
+          <div class="field-row">
+            <label class="field-label" for="m_link" id="m_link_label">Meeting URL (Google Meet): *</label>
             <input type="url" id="m_link" class="input-text" placeholder="https://meet.google.com/xxx-yyyy-zzz" oninput="updateMeetingFromFields()">
+          </div>
+          <div class="field-row" id="m_custom_platform_row" style="display: none;">
+            <label class="field-label" for="m_custom_platform_name">Custom Platform Name:</label>
+            <input type="text" id="m_custom_platform_name" class="input-text" placeholder="e.g. Webex / Jitsi" oninput="updateMeetingFromFields()">
           </div>
         </div>
 
@@ -586,6 +602,64 @@ const MEETING_META = {
   }
 };
 
+const PLATFORMS = {
+  "google_meet": {
+    "label": "Google Meet",
+    "placeholder": "https://meet.google.com/xxx-yyyy-zzz",
+    "domain": "meet.google.com",
+    "cta_en": "JOIN THE VIDEO CALL ↗",
+    "cta_it": "ACCEDI ALLA VIDEORIUNIONE ↗"
+  },
+  "ms_teams": {
+    "label": "Microsoft Teams",
+    "placeholder": "https://teams.microsoft.com/l/meetup-join/...",
+    "domain": "teams.microsoft.com",
+    "cta_en": "JOIN MICROSOFT TEAMS MEETING ↗",
+    "cta_it": "ACCEDI ALLA RIUNIONE TEAMS ↗"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "placeholder": "https://us02web.zoom.us/j/...",
+    "domain": "zoom.us",
+    "cta_en": "JOIN ZOOM MEETING ↗",
+    "cta_it": "ACCEDI ALLA RIUNIONE ZOOM ↗"
+  },
+  "custom": {
+    "label": "Other / Custom",
+    "placeholder": "https://...",
+    "domain": "",
+    "cta_en": "JOIN THE VIDEO CALL ↗",
+    "cta_it": "ACCEDI ALLA VIDEORIUNIONE ↗"
+  }
+};
+
+function handlePlatformChange(val) {
+  const p = PLATFORMS[val] || PLATFORMS["google_meet"];
+  const customRow = document.getElementById('m_custom_platform_row');
+  const linkLabel = document.getElementById('m_link_label');
+  const linkInput = document.getElementById('m_link');
+
+  if (val === 'custom') {
+    customRow.style.display = 'flex';
+    linkLabel.textContent = 'Meeting URL (Custom): *';
+  } else {
+    customRow.style.display = 'none';
+    linkLabel.textContent = `Meeting URL (${p.label}): *`;
+  }
+
+  if (!linkInput.value || linkInput.value.includes('meet.google.com') || linkInput.value.includes('teams.microsoft.com') || linkInput.value.includes('zoom.us')) {
+    linkInput.placeholder = p.placeholder;
+  }
+  updateMeetingFromFields();
+}
+    "date_default": "12 Novembre 2026",
+    "time_default": "15:00",
+    "agenda_defaults": ["Obiettivi e ambito del progetto", "Coordinamento tecnico e deliverable", "Prossime attività e responsabilità"],
+    "intro_invitation": "desideriamo invitarLa a una videoriunione per discutere <strong>[[TOPIC]]</strong>, esaminare i requisiti principali e concordare i prossimi passi.",
+    "intro_confirmation": "La ringraziamo per la conferma. Di seguito trova i dettagli della riunione dedicata a <strong>[[TOPIC]]</strong> e il collegamento per partecipare."
+  }
+};
+
 let currentTab = 'visual';
 
 function switchEditorTab(tabName) {
@@ -694,13 +768,29 @@ function updateMeetingFromFields() {
   const subjPrefix = (lang === 'it') ? (isConfirm ? 'Conferma riunione | pyBIM — ' : 'Invito alla riunione | pyBIM — ') : (isConfirm ? 'Meeting Confirmation | pyBIM — ' : 'Meeting Invitation | pyBIM — ');
   document.getElementById('subject').value = subjPrefix + (topic || meta.topic_default);
 
+  const platVal = document.getElementById('m_platform').value || 'google_meet';
+  const customPlatName = (document.getElementById('m_custom_platform_name').value || '').trim();
+  const platObj = PLATFORMS[platVal] || PLATFORMS['google_meet'];
+  let effPlatformLabel = platObj.label;
+  if (platVal === 'custom' && customPlatName) {
+    effPlatformLabel = customPlatName;
+  }
+  let ctaText = (lang === 'it') ? platObj.cta_it : platObj.cta_en;
+  if (platVal === 'custom' && customPlatName) {
+    ctaText = (lang === 'it') ? `ACCEDI ALLA RIUNIONE ${customPlatName.toUpperCase()} ↗` : `JOIN ${customPlatName.toUpperCase()} MEETING ↗`;
+  }
+
   // Validate fields for unresolved placeholders
   const errors = [];
   if (!topic || topic.startsWith('[')) errors.push('Topic required');
   if (!recipient || recipient.startsWith('[')) errors.push('Recipient required');
   if (!mDate || mDate.startsWith('[')) errors.push('Date required');
   if (!mTime || mTime.startsWith('[')) errors.push('Time required');
-  if (!link || !link.startsWith('http')) errors.push('Valid https:// link required');
+  if (!link || !link.startsWith('http')) {
+    errors.push('Valid https:// link required');
+  } else if (platObj.domain && !link.toLowerCase().includes(platObj.domain)) {
+    errors.push(`URL does not match ${effPlatformLabel} (${platObj.domain})`);
+  }
 
   const valMsg = document.getElementById('meeting-validation-msg');
   if (errors.length > 0) {
@@ -714,13 +804,13 @@ function updateMeetingFromFields() {
   let plain = (lang === 'it') ?
     `Gentile ${recipient || '[Nome destinatario]'},\n\n` +
     (isConfirm ? `La ringraziamo per la conferma. Di seguito trova i dettagli della riunione dedicata a ${topic} e il collegamento per partecipare.` : `desideriamo invitarLa a una videoriunione per discutere ${topic}, esaminare i requisiti principali e concordare i prossimi passi.`) +
-    `\n\nRIUNIONE: ${topic}\nDATA: ${mDate}\nORA: ${mTime} (${mZone})\nPIATTAFORMA: Google Meet\nCOLLEGAMENTO: ${link || '[Link della riunione]'}\n\n` +
+    `\n\nRIUNIONE: ${topic}\nDATA: ${mDate}\nORA: ${mTime} (${mZone})\nPIATTAFORMA: ${effPlatformLabel}\nCOLLEGAMENTO: ${link || '[Link della riunione]'}\n\n` +
     `PUNTI ALL'ORDINE DEL GIORNO:\n01. ${a1}\n02. ${a2}\n03. ${a3}\n\n` +
     `Cordiali saluti,\nIl team pyBIM\n\npyBIM / Tech-Enabled BIM Services\ninfo@pybim.it | https://www.pybim.it/it`
     :
     `Dear ${recipient || '[Recipient name]'},\n\n` +
     (isConfirm ? `Thank you for confirming the meeting. Below are the details for our discussion about ${topic} and the link to join.` : `We would like to invite you to a video meeting to discuss ${topic}, review the key requirements and agree on the next steps.`) +
-    `\n\nMEETING: ${topic}\nDATE: ${mDate}\nTIME: ${mTime} (${mZone})\nPLATFORM: Google Meet\nLINK: ${link || '[Meeting link]'}\n\n` +
+    `\n\nMEETING: ${topic}\nDATE: ${mDate}\nTIME: ${mTime} (${mZone})\nPLATFORM: ${effPlatformLabel}\nLINK: ${link || '[Meeting link]'}\n\n` +
     `DISCUSSION POINTS:\n01. ${a1}\n02. ${a2}\n03. ${a3}\n\n` +
     `Kind regards,\nThe pyBIM Team\n\npyBIM / Tech-Enabled BIM Services\ninfo@pybim.com | https://www.pybim.com/en`;
 
@@ -780,7 +870,7 @@ function updateMeetingFromFields() {
             </td>
             <td width="34%" style="padding: 12px;">
               <div style="font-size: 9px; font-weight: bold; color: #6F8EAD; letter-spacing: 1px;">${lang === 'it' ? 'PIATTAFORMA' : 'PLATFORM'}</div>
-              <div style="font-size: 13px; font-weight: bold; color: ${headingColor}; margin-top: 4px;">Google Meet</div>
+              <div style="font-size: 13px; font-weight: bold; color: ${headingColor}; margin-top: 4px;">${esc(effPlatformLabel)}</div>
             </td>
           </tr>
         </table>
@@ -805,8 +895,13 @@ function updateMeetingFromFields() {
     <tr>
       <td style="padding: 16px 24px;">
         <a href="${esc(link || '#')}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; padding: 12px 20px; font-weight: bold; text-decoration: none; border-radius: 4px; font-size: 13px;">
-          ${lang === 'it' ? 'ACCEDI ALLA VIDEORIUNIONE ↗' : 'JOIN THE VIDEO CALL ↗'}
+          ${ctaText}
         </a>
+        <div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">
+          ${esc(link || (lang === 'it' ? '[Inserire link riunione]' : '[Insert meeting link]'))}
+        </div>
+      </td>
+    </tr>
         <div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">
           ${esc(link || (lang === 'it' ? '[Inserire link riunione]' : '[Insert meeting link]'))}
         </div>
@@ -871,11 +966,23 @@ function toggleExtraRecipients() {
 
 // Initial initialization on DOM load
 document.addEventListener('DOMContentLoaded', function() {
-  // Check if existing body has content
+  // Check if existing body has content (using clean user_body_content passed by server if present)
+  const serverUserBody = `{{ user_body_content | default('') | e }}`;
   const existingPlain = document.getElementById('body_plain_text').value;
-  if (existingPlain && existingPlain.trim()) {
-    // If body already exists (e.g. editing draft), populate standard body
-    document.getElementById('standard_body_content').value = existingPlain;
+
+  if (serverUserBody && serverUserBody.trim()) {
+    document.getElementById('standard_body_content').value = serverUserBody;
+  } else if (existingPlain && existingPlain.trim()) {
+    // Fallback: strip any official signature client-side to prevent duplicate accumulation
+    let clean = existingPlain;
+    for (const k in OFFICIAL_SIGNATURES) {
+      const sigPlain = OFFICIAL_SIGNATURES[k].plain;
+      if (clean.includes(sigPlain)) {
+        clean = clean.split(sigPlain)[0];
+      }
+    }
+    clean = clean.replace(/--\s*$/, '').trimEnd();
+    document.getElementById('standard_body_content').value = clean;
   } else {
     document.getElementById('standard_body_content').value = 'Dear Architect,\n\nWe would like to introduce pyBIM.';
   }

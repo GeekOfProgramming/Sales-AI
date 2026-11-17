@@ -91,3 +91,70 @@ def get_signature_html_with_local_preview(html_content: str) -> str:
         "https://www.pybim.com/logo_white_transparent.png",
         "/static/brand/logo_white_transparent.png",
     )
+
+
+def strip_signature(plain_text: str) -> str:
+    """
+    Strips appended standard official pyBIM signature block from plain text email body.
+    Isolates pure user message content to prevent duplicate signature accumulation.
+    """
+    if not plain_text:
+        return ""
+
+    text = plain_text
+    # Known signatures to strip
+    signatures = [
+        _OFFICIAL_INFO_COM_PLAIN,
+        _OFFICIAL_INFO_IT_PLAIN,
+        # Also handle potential variations without exact line returns or spaces
+        "pyBIM\nEngineering & Digital Automation\nEmail: info@pybim.com",
+        "pyBIM\nIngegneria & Automazione Digitale\nEmail: info@pybim.it",
+    ]
+
+    for sig in signatures:
+        if sig in text:
+            # Split and keep the part before the signature
+            text = text.split(sig)[0]
+
+    # Clean standard '--' signature delimiter if it was left at the end
+    text = text.rstrip()
+    if text.endswith("--"):
+        text = text[:-2].rstrip()
+
+    return text
+
+
+def strip_signature_html(html_text: str) -> str:
+    """
+    Strips appended official pyBIM HTML signature block if present.
+    """
+    if not html_text:
+        return ""
+
+    text = html_text
+    # Check for table containing pyBIM logo or signature markers
+    # In compose view, signature is appended at bottom with table
+    sig_markers = [
+        '<table cellpadding="0" cellspacing="0" border="0" width="500"',
+        '<table cellpadding="0" cellspacing="0" border="0" width="500" style="width: 500px;',
+        'Engineering & Digital Automation',
+        'Ingegneria & Automazione Digitale',
+    ]
+
+    for marker in sig_markers:
+        idx = text.find(marker)
+        if idx != -1:
+            # Find beginning of <table before this marker or at this marker
+            table_start = text.rfind("<table", 0, idx + 1)
+            if table_start != -1:
+                text = text[:table_start]
+            else:
+                text = text[:idx]
+
+    # Clean trailing breaks / empty paragraphs
+    text = text.rstrip()
+    for empty_tag in ["<br>", "<br/>", "<br />", "<p><br></p>", "<p></p>"]:
+        while text.endswith(empty_tag):
+            text = text[:-len(empty_tag)].rstrip()
+
+    return text

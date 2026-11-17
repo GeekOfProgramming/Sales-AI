@@ -87,6 +87,64 @@ def _escape_html(s: Any) -> str:
     return html.escape(str(s) if s is not None else "", quote=True)
 
 
+# Platform Configuration
+PLATFORM_CONFIG = {
+    "google_meet": {
+        "id": "google_meet",
+        "label": "Google Meet",
+        "cta_en": "JOIN THE VIDEO CALL \u2197",
+        "cta_it": "ACCEDI ALLA VIDEORIUNIONE \u2197",
+        "placeholder": "https://meet.google.com/xxx-yyyy-zzz",
+        "domain": "meet.google.com",
+    },
+    "ms_teams": {
+        "id": "ms_teams",
+        "label": "Microsoft Teams",
+        "cta_en": "JOIN MICROSOFT TEAMS MEETING \u2197",
+        "cta_it": "ACCEDI ALLA RIUNIONE TEAMS \u2197",
+        "placeholder": "https://teams.microsoft.com/l/meetup-join/...",
+        "domain": "teams.microsoft.com",
+    },
+    "zoom": {
+        "id": "zoom",
+        "label": "Zoom",
+        "cta_en": "JOIN ZOOM MEETING \u2197",
+        "cta_it": "ACCEDI ALLA RIUNIONE ZOOM \u2197",
+        "placeholder": "https://us02web.zoom.us/j/...",
+        "domain": "zoom.us",
+    },
+    "custom": {
+        "id": "custom",
+        "label": "Other / Custom Platform",
+        "cta_en": "JOIN THE VIDEO CALL \u2197",
+        "cta_it": "ACCEDI ALLA VIDEORIUNIONE \u2197",
+        "placeholder": "https://...",
+        "domain": None,
+    },
+}
+
+def get_platform_info(platform_id: Optional[str], custom_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Returns resolved platform metadata (label, CTA text, placeholder).
+    """
+    clean_id = (platform_id or "").strip().lower()
+    # Support direct labels or IDs
+    if "teams" in clean_id:
+        p = dict(PLATFORM_CONFIG["ms_teams"])
+    elif "zoom" in clean_id:
+        p = dict(PLATFORM_CONFIG["zoom"])
+    elif "custom" in clean_id or "other" in clean_id:
+        p = dict(PLATFORM_CONFIG["custom"])
+        if custom_name and custom_name.strip():
+            c_name = custom_name.strip()
+            p["label"] = c_name
+            p["cta_en"] = f"JOIN {c_name.upper()} MEETING \u2197"
+            p["cta_it"] = f"ACCEDI ALLA RIUNIONE {c_name.upper()} \u2197"
+    else:
+        p = dict(PLATFORM_CONFIG["google_meet"])
+    return p
+
+
 def validate_meeting_parameters(params: Dict[str, Any]) -> List[str]:
     """
     Validates meeting parameters for completeness and readiness.
@@ -98,6 +156,7 @@ def validate_meeting_parameters(params: Dict[str, Any]) -> List[str]:
     date_val = (params.get("date") or "").strip()
     time_val = (params.get("time") or "").strip()
     link = (params.get("link") or "").strip()
+    platform_id = (params.get("platform_id") or params.get("platform") or "google_meet").strip()
 
     if not topic or topic.startswith("["):
         errors.append("Meeting topic is required and cannot be a placeholder.")
@@ -115,6 +174,13 @@ def validate_meeting_parameters(params: Dict[str, Any]) -> List[str]:
             errors.append("Meeting URL must start with https://.")
         elif link.startswith("["):
             errors.append("Meeting URL cannot be a placeholder.")
+        else:
+            # Platform-specific URL check
+            plat_info = get_platform_info(platform_id)
+            if plat_info.get("domain"):
+                dom = plat_info["domain"]
+                if dom not in link.lower():
+                    errors.append(f"Meeting URL does not match selected platform ({plat_info['label']}). Expected URL containing '{dom}'.")
 
     return errors
 
@@ -128,6 +194,8 @@ def build_meeting_email(
     meeting_time: Optional[str] = None,
     time_zone: str = "Europe/Rome",
     platform: str = "Google Meet",
+    platform_id: Optional[str] = None,
+    custom_platform_name: Optional[str] = None,
     meeting_url: Optional[str] = None,
     agenda_1: Optional[str] = None,
     agenda_2: Optional[str] = None,
@@ -147,13 +215,17 @@ def build_meeting_email(
 
     is_confirmation = (message_type or "").strip().lower() == "confirmation"
 
+    # Resolve platform information
+    plat_info = get_platform_info(platform_id or platform, custom_platform_name)
+    eff_platform = plat_info["label"]
+    cta_text = plat_info["cta_it"] if lang == "it" else plat_info["cta_en"]
+
     # Effective values with fallback to defaults/placeholders
     eff_topic = (meeting_topic or "").strip() or meta["topic_placeholder"]
     eff_recipient = (recipient_name or "").strip() or meta["recipient_placeholder"]
     eff_date = (meeting_date or "").strip() or meta["date_placeholder"]
     eff_time = (meeting_time or "").strip() or meta["time_placeholder"]
     eff_tz = (time_zone or "").strip() or "Europe/Rome"
-    eff_platform = (platform or "").strip() or meta["platform_default"]
     eff_link = (meeting_url or "").strip() or "#"
     eff_link_text = (meeting_url or "").strip() or (
         "[Meeting link]" if lang == "en" else "[Link della riunione]"
@@ -226,6 +298,14 @@ def build_meeting_email(
 
     for ph, val in placeholders_map.items():
         full_html = full_html.replace(ph, val)
+
+    # Replace CTA button text according to platform
+    if lang == "it":
+        full_html = full_html.replace("ACCEDI ALLA VIDEORIUNIONE &nbsp;&#8599;", f"{cta_text} &nbsp;&#8599;")
+        full_html = full_html.replace("ACCEDI ALLA VIDEORIUNIONE &nbsp;↗", f"{cta_text} &nbsp;↗")
+    else:
+        full_html = full_html.replace("JOIN THE VIDEO CALL &nbsp;&#8599;", f"{cta_text} &nbsp;&#8599;")
+        full_html = full_html.replace("JOIN THE VIDEO CALL &nbsp;↗", f"{cta_text} &nbsp;↗")
 
     # Local preview logo rewriting
     if for_local_preview:

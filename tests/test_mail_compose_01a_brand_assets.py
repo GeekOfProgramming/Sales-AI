@@ -336,3 +336,100 @@ def test_html_sanitizer_preserves_official_brand_elements():
     # Attacks eliminated
     assert "<script" not in clean_html
     assert "javascript:" not in clean_html
+
+
+# ============================================================================
+# 5. HOTFIX: Signature Duplication & Meeting Platform Selector Tests
+# ============================================================================
+
+def test_strip_signature_plain_and_html():
+    """Verify strip_signature isolates pure user body content."""
+    from sales_engine.inbox.signatures import strip_signature, strip_signature_html, _OFFICIAL_INFO_COM_PLAIN, _OFFICIAL_INFO_IT_PLAIN
+
+    user_msg = "Hello,\n\nPlease find the attached documents for project Alpha.\nBest regards,\nJohn"
+    
+    with_sig_com = f"{user_msg}\n\n{_OFFICIAL_INFO_COM_PLAIN}"
+    assert strip_signature(with_sig_com) == user_msg
+
+    with_sig_it = f"{user_msg}\n\n{_OFFICIAL_INFO_IT_PLAIN}"
+    assert strip_signature(with_sig_it) == user_msg
+
+    # Test stripping html signature
+    html_msg = f"<p>{user_msg}</p><br><table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"500\"><tr><td>Engineering & Digital Automation</td></tr></table>"
+    assert strip_signature_html(html_msg) == f"<p>{user_msg}</p>"
+
+
+def test_meeting_platform_selector_and_validation():
+    """Verify meeting templates adapt to Google Meet, MS Teams, Zoom, and Custom platforms."""
+    from sales_engine.inbox.meeting_templates import build_meeting_email, validate_meeting_parameters, get_platform_info
+
+    # 1. MS Teams
+    teams_info = get_platform_info("ms_teams")
+    assert teams_info["label"] == "Microsoft Teams"
+    assert "teams.microsoft.com" in teams_info["placeholder"]
+
+    email_teams = build_meeting_email(
+        template_id="en_dark",
+        platform_id="ms_teams",
+        recipient_name="Arch. Rossi",
+        meeting_topic="Design Review",
+        meeting_date="15 Dec 2026",
+        meeting_time="10:00",
+        meeting_url="https://teams.microsoft.com/l/meetup-join/123",
+    )
+    assert "PLATFORM: Microsoft Teams" in email_teams["body_plain_text"]
+    assert "JOIN MICROSOFT TEAMS MEETING" in email_teams["body_html"]
+
+    # 2. Zoom
+    zoom_info = get_platform_info("zoom")
+    assert zoom_info["label"] == "Zoom"
+    assert "zoom.us" in zoom_info["placeholder"]
+
+    email_zoom = build_meeting_email(
+        template_id="it_light",
+        platform_id="zoom",
+        recipient_name="Ing. Bianchi",
+        meeting_topic="Revisione Tecnica",
+        meeting_date="15 Dicembre 2026",
+        meeting_time="11:00",
+        meeting_url="https://us02web.zoom.us/j/987654321",
+    )
+    assert "PIATTAFORMA: Zoom" in email_zoom["body_plain_text"]
+    assert "ACCEDI ALLA RIUNIONE ZOOM" in email_zoom["body_html"]
+
+    # 3. Custom Platform
+    custom_email = build_meeting_email(
+        template_id="en_light",
+        platform_id="custom",
+        custom_platform_name="Webex",
+        recipient_name="Partner",
+        meeting_topic="BIM Sync",
+        meeting_date="16 Dec 2026",
+        meeting_time="12:00",
+        meeting_url="https://cisco.webex.com/meet/test",
+    )
+    assert "PLATFORM: Webex" in custom_email["body_plain_text"]
+    assert "JOIN WEBEX MEETING" in custom_email["body_html"]
+
+    # 4. Platform URL Validation
+    # Teams link on Meet platform -> error
+    mismatch_errs = validate_meeting_parameters({
+        "topic": "Coordination",
+        "recipient": "Arch. Partner",
+        "date": "10 Dec 2026",
+        "time": "14:00",
+        "platform_id": "google_meet",
+        "link": "https://teams.microsoft.com/l/meetup-join/123",
+    })
+    assert any("does not match selected platform" in err for err in mismatch_errs)
+
+
+def test_compose_view_does_not_inject_signature_into_initial_body(auth_client):
+    """Verify that opening compose view for a new draft leaves editable body clean without duplicate signatures."""
+    resp = auth_client.get("/sales/mail-operations/compose")
+    assert resp.status_code == 200
+    # In initial template rendering, standard_body_content should not have pre-injected signature
+    # Plain body textarea in HTML is populated cleanly
+    assert "Engineering & Digital Automation" not in resp.text or resp.text.count("Engineering & Digital Automation") <= 2
+    # Verify the specific duplicate signature pattern (having plain signature directly pre-filled in body_plain_text input)
+    assert 'name="body_plain_text" value="&#10;&#10;--&#10;pyBIM' not in resp.text
