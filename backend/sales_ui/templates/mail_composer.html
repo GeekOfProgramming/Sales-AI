@@ -652,13 +652,6 @@ function handlePlatformChange(val) {
   }
   updateMeetingFromFields();
 }
-    "date_default": "12 Novembre 2026",
-    "time_default": "15:00",
-    "agenda_defaults": ["Obiettivi e ambito del progetto", "Coordinamento tecnico e deliverable", "Prossime attività e responsabilità"],
-    "intro_invitation": "desideriamo invitarLa a una videoriunione per discutere <strong>[[TOPIC]]</strong>, esaminare i requisiti principali e concordare i prossimi passi.",
-    "intro_confirmation": "La ringraziamo per la conferma. Di seguito trova i dettagli della riunione dedicata a <strong>[[TOPIC]]</strong> e il collegamento per partecipare."
-  }
-};
 
 let currentTab = 'visual';
 
@@ -966,8 +959,8 @@ function toggleExtraRecipients() {
 
 // Initial initialization on DOM load
 document.addEventListener('DOMContentLoaded', function() {
-  // Check if existing body has content (using clean user_body_content passed by server if present)
-  const serverUserBody = `{{ user_body_content | default('') | e }}`;
+  // Check if existing body has content (using safe JSON serialization)
+  const serverUserBody = {{ user_body_content | default('') | tojson }};
   const existingPlain = document.getElementById('body_plain_text').value;
 
   if (serverUserBody && serverUserBody.trim()) {

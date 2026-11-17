@@ -97,31 +97,35 @@ def strip_signature(plain_text: str) -> str:
     """
     Strips appended standard official pyBIM signature block from plain text email body.
     Isolates pure user message content to prevent duplicate signature accumulation.
+    Handles both CRLF and LF line endings.
     """
     if not plain_text:
         return ""
 
-    text = plain_text
-    # Known signatures to strip
+    # Normalize CRLF to LF for reliable signature pattern matching
+    normalized = plain_text.replace("\r\n", "\n")
+
+    # Known signatures to strip (all LF-normalized)
     signatures = [
-        _OFFICIAL_INFO_COM_PLAIN,
-        _OFFICIAL_INFO_IT_PLAIN,
-        # Also handle potential variations without exact line returns or spaces
+        _OFFICIAL_INFO_COM_PLAIN.replace("\r\n", "\n"),
+        _OFFICIAL_INFO_IT_PLAIN.replace("\r\n", "\n"),
         "pyBIM\nEngineering & Digital Automation\nEmail: info@pybim.com",
         "pyBIM\nIngegneria & Automazione Digitale\nEmail: info@pybim.it",
     ]
 
     for sig in signatures:
-        if sig in text:
-            # Split and keep the part before the signature
-            text = text.split(sig)[0]
+        if sig in normalized:
+            normalized = normalized.split(sig)[0]
 
-    # Clean standard '--' signature delimiter if it was left at the end
-    text = text.rstrip()
-    if text.endswith("--"):
-        text = text[:-2].rstrip()
+    # Clean standard '--' signature delimiter if left at the end
+    normalized = normalized.rstrip()
+    if normalized.endswith("--"):
+        normalized = normalized[:-2].rstrip()
 
-    return text
+    # Restore original CRLF convention if input used CRLF
+    if "\r\n" in plain_text:
+        return normalized.replace("\n", "\r\n")
+    return normalized
 
 
 def strip_signature_html(html_text: str) -> str:
