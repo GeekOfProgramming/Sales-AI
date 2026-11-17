@@ -220,14 +220,27 @@
   </div>
 
   {% if request.query_params.get('saved') %}
-  <div class="alert-box alert-success">
+  <div class="alert-box alert-success" id="composer-flash-msg">
     ✓ Draft successfully saved and persisted to database.
   </div>
   {% elif request.query_params.get('duplicated') %}
-  <div class="alert-box alert-info">
+  <div class="alert-box alert-info" id="composer-flash-msg">
     ✓ Draft successfully duplicated as a new copy.
   </div>
+  {% else %}
+  <div class="alert-box alert-success" id="composer-flash-msg" style="display: none;"></div>
   {% endif %}
+
+  <!-- Inline Validation Error Banner -->
+  <div class="alert-box alert-warning" id="composer-inline-error" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #fca5a5;">
+    <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+      <span style="font-size: 1.1rem; line-height: 1;">⚠️</span>
+      <div>
+        <strong id="composer-error-title" style="display: block; margin-bottom: 0.25rem;">Cannot mark draft as ready to schedule:</strong>
+        <span id="composer-error-detail"></span>
+      </div>
+    </div>
+  </div>
 
   <!-- Composer Card -->
   <div class="composer-card">
@@ -957,29 +970,198 @@ function toggleExtraRecipients() {
   box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'flex' : 'none';
 }
 
+function parseMeetingDraftFromText(plainText, htmlText) {
+  if (!plainText || (!plainText.includes('RIUNIONE:') && !plainText.includes('MEETING:'))) {
+    return null;
+  }
+  const isIt = plainText.includes('RIUNIONE:') || plainText.includes('PIATTAFORMA:') || plainText.includes('COLLEGAMENTO:');
+  const lang = isIt ? 'it' : 'en';
+  const isLight = (htmlText || '').toLowerCase().includes('background-color: #ffffff') || (htmlText || '').toLowerCase().includes('background:#ffffff');
+  const theme = isLight ? 'light' : 'dark';
+  const templateId = `meeting_${lang}_${theme}`;
+
+  const isConfirm = plainText.toLowerCase().includes('thank you for confirming') || plainText.toLowerCase().includes('ringraziamo per la conferma');
+  const kind = isConfirm ? 'confirmation' : 'invitation';
+
+  const mTopic = plainText.match(/(?:MEETING|RIUNIONE):\s*(.*)/);
+  const mDate = plainText.match(/(?:DATE|DATA):\s*(.*)/);
+  const mTime = plainText.match(/(?:TIME|ORA):\s*([^\(\n\r]+)(?:\((.*)\))?/);
+  const mPlat = plainText.match(/(?:PLATFORM|PIATTAFORMA):\s*(.*)/);
+  const mLink = plainText.match(/(?:LINK|COLLEGAMENTO):\s*(.*)/);
+  const mRec = plainText.match(/^(?:Dear|Gentile)\s+([^,\n\r]+)/m);
+  const a1 = plainText.match(/01\.\s*(.*)/);
+  const a2 = plainText.match(/02\.\s*(.*)/);
+  const a3 = plainText.match(/03\.\s*(.*)/);
+
+  const platStr = (mPlat && mPlat[1]) ? mPlat[1].trim() : '';
+  let platId = 'google_meet';
+  let customName = '';
+  if (platStr.toLowerCase().includes('teams')) {
+    platId = 'ms_teams';
+  } else if (platStr.toLowerCase().includes('zoom')) {
+    platId = 'zoom';
+  } else if (platStr && !platStr.toLowerCase().includes('google meet')) {
+    platId = 'custom';
+    customName = platStr;
+  }
+
+  return {
+    template: templateId,
+    kind: kind,
+    topic: (mTopic && mTopic[1]) ? mTopic[1].trim() : '',
+    date: (mDate && mDate[1]) ? mDate[1].trim() : '',
+    time: (mTime && mTime[1]) ? mTime[1].trim() : '',
+    zone: (mTime && mTime[2]) ? mTime[2].trim() : 'Europe/Rome',
+    platform: platId,
+    custom_platform_name: customName,
+    link: (mLink && mLink[1]) ? mLink[1].trim() : '',
+    recipient: (mRec && mRec[1]) ? mRec[1].trim() : '',
+    a1: (a1 && a1[1]) ? a1[1].trim() : '',
+    a2: (a2 && a2[1]) ? a2[1].trim() : '',
+    a3: (a3 && a3[1]) ? a3[1].trim() : '',
+  };
+}
+
 // Initial initialization on DOM load
 document.addEventListener('DOMContentLoaded', function() {
-  // Check if existing body has content (using safe JSON serialization)
-  const serverUserBody = {{ user_body_content | default('') | tojson }};
   const existingPlain = document.getElementById('body_plain_text').value;
+  const existingHtml = document.getElementById('body_html').value;
 
-  if (serverUserBody && serverUserBody.trim()) {
-    document.getElementById('standard_body_content').value = serverUserBody;
-  } else if (existingPlain && existingPlain.trim()) {
-    // Fallback: strip any official signature client-side to prevent duplicate accumulation
-    let clean = existingPlain;
-    for (const k in OFFICIAL_SIGNATURES) {
-      const sigPlain = OFFICIAL_SIGNATURES[k].plain;
-      if (clean.includes(sigPlain)) {
-        clean = clean.split(sigPlain)[0];
-      }
+  // Check if draft is a Meeting email
+  const meetingInfo = parseMeetingDraftFromText(existingPlain, existingHtml);
+  if (meetingInfo) {
+    // Restore template selector and meeting fields
+    document.getElementById('template_select').value = meetingInfo.template;
+    handleTemplateChange(meetingInfo.template);
+
+    document.getElementById('m_kind').value = meetingInfo.kind;
+    if (meetingInfo.topic) document.getElementById('m_topic').value = meetingInfo.topic;
+    if (meetingInfo.recipient) document.getElementById('m_recipient').value = meetingInfo.recipient;
+    if (meetingInfo.date) document.getElementById('m_date').value = meetingInfo.date;
+    if (meetingInfo.time) document.getElementById('m_time').value = meetingInfo.time;
+    if (meetingInfo.zone) document.getElementById('m_zone').value = meetingInfo.zone;
+    if (meetingInfo.link) document.getElementById('m_link').value = meetingInfo.link;
+    if (meetingInfo.a1) document.getElementById('m_a1').value = meetingInfo.a1;
+    if (meetingInfo.a2) document.getElementById('m_a2').value = meetingInfo.a2;
+    if (meetingInfo.a3) document.getElementById('m_a3').value = meetingInfo.a3;
+
+    document.getElementById('m_platform').value = meetingInfo.platform;
+    if (meetingInfo.custom_platform_name) {
+      document.getElementById('m_custom_platform_name').value = meetingInfo.custom_platform_name;
     }
-    clean = clean.replace(/--\s*$/, '').trimEnd();
-    document.getElementById('standard_body_content').value = clean;
+    handlePlatformChange(meetingInfo.platform);
+    updateMeetingFromFields();
   } else {
-    document.getElementById('standard_body_content').value = 'Dear Architect,\n\nWe would like to introduce pyBIM.';
+    // Check if existing body has content (using safe JSON serialization)
+    const serverUserBody = {{ user_body_content | default('') | tojson }};
+    if (serverUserBody && serverUserBody.trim()) {
+      document.getElementById('standard_body_content').value = serverUserBody;
+    } else if (existingPlain && existingPlain.trim()) {
+      // Fallback: strip any official signature client-side to prevent duplicate accumulation
+      let clean = existingPlain;
+      for (const k in OFFICIAL_SIGNATURES) {
+        const sigPlain = OFFICIAL_SIGNATURES[k].plain;
+        if (clean.includes(sigPlain)) {
+          clean = clean.split(sigPlain)[0];
+        }
+      }
+      clean = clean.replace(/--\s*$/, '').trimEnd();
+      document.getElementById('standard_body_content').value = clean;
+    } else {
+      document.getElementById('standard_body_content').value = 'Dear Architect,\n\nWe would like to introduce pyBIM.';
+    }
+    refreshVisualPreview();
   }
-  refreshVisualPreview();
+
+  // Intercept Composer Form Submit via AJAX for graceful validation error handling
+  const formEl = document.getElementById('composer-form');
+  if (formEl) {
+    formEl.addEventListener('submit', async function(ev) {
+      ev.preventDefault();
+
+      // Clear previous error and flash banners
+      const errorBanner = document.getElementById('composer-inline-error');
+      const errorDetail = document.getElementById('composer-error-detail');
+      const flashBanner = document.getElementById('composer-flash-msg');
+      if (errorBanner) errorBanner.style.display = 'none';
+
+      // Ensure visual preview and hidden fields are up to date before submitting
+      const tmpl = document.getElementById('template_select').value;
+      if (tmpl.startsWith('meeting_')) {
+        updateMeetingFromFields();
+      } else {
+        updateStandardPreview();
+      }
+
+      // Determine action type from the clicked submit button
+      const submitBtn = ev.submitter;
+      const actionType = (submitBtn && submitBtn.value) ? submitBtn.value : 'save';
+
+      // Assemble FormData
+      const formData = new FormData(formEl);
+      formData.set('action_type', actionType);
+
+      // Disable buttons temporarily to prevent double submission
+      const allBtns = formEl.querySelectorAll('button[type="submit"]');
+      allBtns.forEach(b => b.disabled = true);
+
+      try {
+        const resp = await fetch(formEl.action, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json, text/html, */*'
+          }
+        });
+
+        if (resp.ok) {
+          // If redirected, navigate to returned location
+          if (resp.redirected) {
+            window.location.href = resp.url;
+            return;
+          }
+          const respUrl = resp.headers.get('Location');
+          if (respUrl) {
+            window.location.href = respUrl;
+            return;
+          }
+          // Fallback reload if saved successfully
+          window.location.reload();
+        } else {
+          // Re-enable submit buttons
+          allBtns.forEach(b => b.disabled = false);
+
+          let errMsg = `Request failed with HTTP ${resp.status}`;
+          try {
+            const errData = await resp.json();
+            if (errData && errData.detail) {
+              errMsg = errData.detail;
+            }
+          } catch (e) {
+            const errText = await resp.text();
+            if (errText) errMsg = errText;
+          }
+
+          // Display inline warning banner without losing entered data
+          if (errorBanner && errorDetail) {
+            errorDetail.textContent = errMsg;
+            errorBanner.style.display = 'block';
+            errorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } else {
+            alert(errMsg);
+          }
+        }
+      } catch (networkErr) {
+        allBtns.forEach(b => b.disabled = false);
+        if (errorBanner && errorDetail) {
+          errorDetail.textContent = 'Network or server connection error: ' + networkErr.message;
+          errorBanner.style.display = 'block';
+        } else {
+          alert('Network or server connection error: ' + networkErr.message);
+        }
+      }
+    });
+  }
 });
 </script>
 {% endblock %}

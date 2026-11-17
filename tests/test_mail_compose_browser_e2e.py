@@ -208,7 +208,7 @@ def test_composer_browser_interactions_and_regression(browser_server):
         page.wait_for_timeout(300)
 
         page.click("button[value='save']")
-        page.wait_for_load_state("networkidle")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
         assert "draft_id=" in page.url
         new_draft_id = page.url.split("draft_id=")[1].split("&")[0]
 
@@ -251,5 +251,83 @@ def test_composer_browser_interactions_and_regression(browser_server):
         page.click("a:has-text('Cancel')")
         page.wait_for_load_state("networkidle")
         assert "/sales/mail-operations/drafts" in page.url
+
+        # 3. MAIL-COMPOSE-01A-READY-UX-FIX: Test Inline Validation & Mark Ready UX
+        page.goto(f"{base_url}/sales/mail-operations/compose")
+        page.wait_for_timeout(500)
+
+        # Switch to meeting template
+        page.select_option("#template_select", "meeting_en_dark")
+        page.dispatch_event("#template_select", "change")
+        page.wait_for_timeout(300)
+
+        # Fill recipient and subject, but leave meeting URL empty/placeholder
+        page.fill("#to_addresses", "partner@bimstudio.it")
+        page.fill("#m_recipient", "Arch. Rossi")
+        page.fill("#m_topic", "BIM Technical Coordination")
+        page.fill("#m_date", "25 November 2026")
+        page.fill("#m_time", "15:00")
+        page.fill("#m_link", "")  # empty URL placeholder
+        page.dispatch_event("#m_link", "input")
+        page.wait_for_timeout(300)
+
+        # Click Mark Ready to Schedule -> MUST NOT navigate away to raw JSON 400
+        page.click("#btn-ready-to-schedule")
+        page.wait_for_timeout(800)
+
+        # User remains on compose page
+        assert "/sales/mail-operations/compose" in page.url
+        # Inline error banner is visible with specific placeholder error
+        assert page.is_visible("#composer-inline-error"), "Inline error banner should be visible on 400 validation error"
+        err_text = page.inner_text("#composer-error-detail")
+        assert "unresolved placeholder" in err_text.lower() or "meeting url" in err_text.lower()
+
+        # Input values are preserved
+        assert page.input_value("#to_addresses") == "partner@bimstudio.it"
+        assert page.input_value("#m_recipient") == "Arch. Rossi"
+
+        # Now complete the meeting URL with a valid link matching platform
+        page.fill("#m_link", "https://meet.google.com/abc-defg-hij")
+        page.dispatch_event("#m_link", "input")
+        page.wait_for_timeout(300)
+
+        # Mark Ready to Schedule -> Now succeeds and transitions status
+        page.click("#btn-ready-to-schedule")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        assert "draft_id=" in page.url
+        ready_draft_id = page.url.split("draft_id=")[1].split("&")[0]
+
+        ready_rec = repo.get_draft(ready_draft_id)
+        assert ready_rec is not None
+        assert ready_rec.draft_status == "ready_to_schedule"
+        assert "MEETING 01" in (ready_rec.body_html_sanitized or "")
+
+        # 4. Test Meeting Draft Duplication & Reopen Persistence
+        page.click("button:has-text('Duplicate')")
+        page.wait_for_load_state("networkidle")
+        assert "draft_id=" in page.url
+        dup_meeting_id = page.url.split("draft_id=")[1].split("&")[0]
+        assert dup_meeting_id != ready_draft_id
+
+        # Reload duplicated meeting draft in browser
+        page.goto(f"{base_url}/sales/mail-operations/compose?draft_id={dup_meeting_id}")
+        page.wait_for_timeout(800)
+
+        # Verify template selector automatically detected and restored meeting template
+        selected_tmpl = page.input_value("#template_select")
+        assert selected_tmpl.startswith("meeting_"), f"Expected meeting template, got: {selected_tmpl}"
+        assert page.is_visible("#meeting-studio-panel")
+        assert not page.is_visible("#signature-control-row")
+
+        # Verify meeting fields were parsed and restored
+        assert page.input_value("#m_topic") == "BIM Technical Coordination"
+        assert page.input_value("#m_recipient") == "Arch. Rossi"
+        assert page.input_value("#m_link") == "https://meet.google.com/abc-defg-hij"
+
+        # Verify preview renders meeting design without duplicated signature
+        meeting_reloaded_preview = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
+        assert "MEETING 01" in meeting_reloaded_preview
+        # Ensure standard signature table does not appear inside meeting preview
+        assert "Engineering &amp; Digital Automation" not in meeting_reloaded_preview
 
         browser.close()
