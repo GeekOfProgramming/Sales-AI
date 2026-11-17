@@ -1740,6 +1740,34 @@ class MailboxRepository:
             raise ValueError(f"Failed to reload draft '{draft_id}' after schedule cancellation.")
         return updated
 
+    def update_draft_status(
+        self,
+        draft_id: str,
+        new_status: str,
+        operator_username: str = "operator",
+    ) -> Optional[MailboxDraftRecord]:
+        """Update draft status (e.g. sent, failed) without clearing scheduled metadata."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock, self.get_connection() as conn:
+            existing = conn.execute(
+                "SELECT version FROM mailbox_drafts WHERE draft_id = ? LIMIT 1;",
+                (draft_id,),
+            ).fetchone()
+            if not existing:
+                return None
+            conn.execute(
+                """
+                UPDATE mailbox_drafts SET
+                    draft_status = ?,
+                    updated_by = ?,
+                    version = version + 1,
+                    updated_at = ?
+                WHERE draft_id = ?;
+                """,
+                (new_status, operator_username, now_iso, draft_id),
+            )
+        return self.get_draft(draft_id)
+
     def duplicate_draft(self, source_draft_id: str, operator_username: str) -> Optional[MailboxDraftRecord]:
         """Duplicate an existing draft into a new draft record."""
         source = self.get_draft(source_draft_id)

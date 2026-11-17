@@ -10546,6 +10546,15 @@ async def drafts_list_view(
         offset=offset,
     )
 
+    # Attach queued outbound job details if available
+    from sales_engine.sending.outbound_queue_store import OutboundQueueStore
+    queue_store = OutboundQueueStore(db_path=db_path)
+    job_map = {}
+    for d in raw_drafts:
+        j = queue_store.get_job_by_draft_id(d.draft_id)
+        if j:
+            job_map[d.draft_id] = j
+
     return render_console_template(
         request=request,
         name="mail_drafts.html",
@@ -10556,6 +10565,7 @@ async def drafts_list_view(
             "status_filter": status,
             "search_query": clean_q or "",
             "drafts": raw_drafts,
+            "job_map": job_map,
             "total_count": total_count,
             "current_page": page,
             "total_pages": total_pages,

@@ -331,6 +331,20 @@
                   <span class="badge-draft-status badge-status-draft">{{ d.draft_status }}</span>
                 {% endif %}
               </div>
+              {% if job_map and job_map.get(d.draft_id) %}
+                {% set j = job_map[d.draft_id] %}
+                <div style="margin-top: 0.35rem; font-size: 0.7rem; font-family: monospace;">
+                  <span title="Durable Outbound Queue Job ID: {{ j.job_id }}" style="padding: 2px 4px; border-radius: 3px; font-weight: 600;
+                    {% if j.status == 'smtp_accepted' %}background: rgba(16, 185, 129, 0.2); color: #34d399;
+                    {% elif j.status == 'failed' %}background: rgba(239, 68, 68, 0.2); color: #f87171;
+                    {% elif j.status == 'acceptance_unknown' %}background: rgba(245, 158, 11, 0.2); color: #fbbf24;
+                    {% elif j.status == 'requires_review' %}background: rgba(234, 179, 8, 0.2); color: #facc15;
+                    {% elif j.status == 'sending' %}background: rgba(59, 130, 246, 0.2); color: #60a5fa;
+                    {% else %}background: rgba(148, 163, 184, 0.2); color: #cbd5e1;{% endif %}">
+                    Queue: {{ j.status|upper }} (Att: {{ j.attempt_count }}/{{ j.max_attempts }})
+                  </span>
+                </div>
+              {% endif %}
             </td>
             <td>
               <span class="badge-account">{{ d.sender_email }}</span>
