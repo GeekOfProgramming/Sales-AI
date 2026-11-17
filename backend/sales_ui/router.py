@@ -10384,6 +10384,18 @@ async def compose_email_save_action(
 
     target_status = "ready_to_schedule" if action_type == "ready_to_schedule" else "draft"
 
+    # Validation: Prevent drafts with unresolved placeholders from becoming 'ready_to_schedule'
+    if target_status == "ready_to_schedule":
+        unresolved_markers = ["[Meeting topic]", "[Meeting date]", "[HH:MM]", "[Recipient name]", "[Meeting link]",
+                              "[Argomento della riunione]", "[Data della riunione]", "[Nome destinatario]", "[Inserire il link", "[Insert meeting link]"]
+        combined_text = f"{clean_subject} {clean_plain} {clean_html or ''}"
+        for marker in unresolved_markers:
+            if marker.lower() in combined_text.lower():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot mark draft as ready to schedule: unresolved placeholder '{marker}' detected. Please complete all meeting and message details.",
+                )
+
     # 4. Construct or update draft record
     clean_draft_id = draft_id.strip() if draft_id and draft_id.strip() else f"drf_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(timezone.utc).isoformat()

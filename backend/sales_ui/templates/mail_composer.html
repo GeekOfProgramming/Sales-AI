@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Email Composer | Email Led{% endblock %}
+{% block title %}Email Composer | Mailbox Operations | Email Led{% endblock %}
 
 {% block content %}
 <style>
@@ -38,6 +38,24 @@
     gap: 0.35rem;
   }
 
+  .field-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .field-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .field-grid-2, .field-grid-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .field-label {
     font-size: 0.8125rem;
     font-weight: 700;
@@ -46,6 +64,7 @@
     letter-spacing: 0.04em;
     display: flex;
     justify-content: space-between;
+    align-items: center;
   }
 
   .input-text, .select-input, .textarea-body {
@@ -66,7 +85,7 @@
   }
 
   .textarea-body {
-    min-height: 240px;
+    min-height: 200px;
     line-height: 1.5;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   }
@@ -91,6 +110,61 @@
     gap: 0.75rem;
   }
 
+  .meeting-params-panel {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid #263954;
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .preview-container {
+    background: #070d18;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+
+  .preview-toolbar {
+    background: var(--bg-secondary);
+    padding: 0.5rem 0.875rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .preview-frame {
+    padding: 1.25rem;
+    max-height: 620px;
+    overflow-y: auto;
+    background: #0a1120;
+    color: #e2e8f0;
+  }
+
+  .tab-pill {
+    padding: 0.35rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+
+  .tab-pill.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary-hover);
+  }
+
   .scheduling-info-box {
     background: rgba(37, 99, 235, 0.1);
     border: 1px solid rgba(56, 189, 248, 0.25);
@@ -100,9 +174,30 @@
     color: #93c5fd;
     line-height: 1.45;
   }
+
+  .alert-box {
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+  }
+  .alert-success {
+    background: rgba(5, 150, 105, 0.15);
+    border: 1px solid #059669;
+    color: #a7f3d0;
+  }
+  .alert-info {
+    background: rgba(37, 99, 235, 0.15);
+    border: 1px solid #2563eb;
+    color: #93c5fd;
+  }
+  .alert-warning {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid #f59e0b;
+    color: #fde68a;
+  }
 </style>
 
-<div class="composer-container" style="max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
+<div class="composer-container" style="max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem;">
 
   <!-- Header -->
   <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
@@ -111,7 +206,7 @@
         ✍️ Integrated Email Composer
       </h1>
       <p class="page-subtitle" style="color: var(--text-muted); font-size: 0.875rem; margin: 0.25rem 0 0;">
-        Compose and persist drafts using authorized pyBIM sender accounts without external sending.
+        Official pyBIM signatures and meeting email templates with live rendered preview and draft persistence.
       </p>
     </div>
     <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -125,11 +220,11 @@
   </div>
 
   {% if request.query_params.get('saved') %}
-  <div style="background: rgba(5, 150, 105, 0.15); border: 1px solid #059669; color: #a7f3d0; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-size: 0.875rem;">
+  <div class="alert-box alert-success">
     ✓ Draft successfully saved and persisted to database.
   </div>
   {% elif request.query_params.get('duplicated') %}
-  <div style="background: rgba(37, 99, 235, 0.15); border: 1px solid #2563eb; color: #93c5fd; padding: 0.75rem 1.25rem; border-radius: var(--radius-md); font-size: 0.875rem;">
+  <div class="alert-box alert-info">
     ✓ Draft successfully duplicated as a new copy.
   </div>
   {% endif %}
@@ -158,51 +253,150 @@
             📑 Duplicate
           </button>
         </form>
-
-        <form method="POST" action="/sales/mail-operations/compose/discard" onsubmit="return confirm('Discard this draft permanently?');" style="margin: 0; display: inline;">
+        <form method="POST" action="/sales/mail-operations/compose/discard" style="margin: 0; display: inline;" onsubmit="return confirm('Are you sure you want to discard this draft?');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="draft_id" value="{{ draft_id }}">
-          <button type="submit" class="btn btn-sm" style="font-size: 0.78rem; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #fca5a5;">
-            🗑️ Discard Draft
+          <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.78rem; color: #f87171;">
+            🗑️ Discard
           </button>
         </form>
       </div>
       {% endif %}
     </div>
 
-    <form method="POST" action="/sales/mail-operations/compose/save" id="composer-form" class="composer-form">
+    <form method="POST" action="/sales/mail-operations/compose/save" class="composer-form" id="composer-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="draft_id" value="{{ draft_id }}">
       <input type="hidden" name="version" value="{{ version }}">
 
-      <!-- From Account -->
-      <div class="field-row">
-        <label class="field-label" for="account_id">From (Authorized Sender Account): *</label>
-        <select id="account_id" name="account_id" class="select-input" required onchange="handleSenderChange(this.value)">
-          {% for s in authorized_senders %}
-          <option value="{{ s.account_id }}" {% if s.account_id == selected_account_id %}selected{% endif %}>
-            {{ s.label }}
-          </option>
-          {% endfor %}
+      <!-- Sender & Template Bar -->
+      <div class="field-grid-2">
+        <!-- Sender Account -->
+        <div class="field-row">
+          <label class="field-label" for="account_id">From (Sender Account): *</label>
+          <select id="account_id" name="account_id" class="select-input" required onchange="handleSenderAccountChange(this.value)">
+            {% for snd in authorized_senders %}
+            <option value="{{ snd.account_id }}" {% if snd.account_id == selected_account_id %}selected{% endif %}>
+              {{ snd.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Template Selector -->
+        <div class="field-row">
+          <label class="field-label" for="template_select">Template: *</label>
+          <select id="template_select" name="template_select" class="select-input" onchange="handleTemplateChange(this.value)">
+            <option value="standard" selected>Standard Email (No Layout Template)</option>
+            <option value="meeting_en_dark">Meeting — English / Dark Theme</option>
+            <option value="meeting_en_light">Meeting — English / Light Theme</option>
+            <option value="meeting_it_dark">Meeting — Italian / Dark Theme</option>
+            <option value="meeting_it_light">Meeting — Italian / Light Theme</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Signature Selection (Standard Email Mode) -->
+      <div id="signature-control-row" class="field-row">
+        <div class="field-label">
+          <span>Official Corporate Signature:</span>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Thunderbird / Webmail Verified</span>
+        </div>
+        <select id="signature_select" name="signature_select" class="select-input" style="max-width: 400px;" onchange="handleSignatureSelect(this.value)">
+          <option value="auto">Auto-select by Sender Account (Recommended)</option>
+          <option value="info-com">pyBIM Global (info@pybim.com - EN)</option>
+          <option value="info-it">pyBIM Italia (info@pybim.it - IT)</option>
+          <option value="none">No Signature (Omit)</option>
         </select>
       </div>
 
-      <!-- CRM Company / Contact Context -->
+      <!-- Meeting Parameters Studio Panel (Visible when Meeting template chosen) -->
+      <div id="meeting-studio-panel" class="meeting-params-panel" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #263954; padding-bottom: 0.5rem;">
+          <span style="font-weight: 700; font-size: 0.88rem; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.05em;">
+            📅 Meeting Template Parameters (pyBIM Studio)
+          </span>
+          <span style="font-size: 0.75rem; color: #94a3b8;">
+            Generates compliant HTML &amp; plain-text with integrated pyBIM footer
+          </span>
+        </div>
+
+        <div class="field-grid-2">
+          <div class="field-row">
+            <label class="field-label" for="m_kind">Message Type:</label>
+            <select id="m_kind" class="select-input" oninput="updateMeetingFromFields()">
+              <option value="invitation">Invitation (Invito alla riunione)</option>
+              <option value="confirmation">Confirmation (Conferma riunione)</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label" for="m_topic">Meeting Topic: *</label>
+            <input type="text" id="m_topic" class="input-text" placeholder="e.g. BIM Technical Coordination" oninput="updateMeetingFromFields()">
+          </div>
+        </div>
+
+        <div class="field-grid-2">
+          <div class="field-row">
+            <label class="field-label" for="m_recipient">Recipient Salutation / Name: *</label>
+            <input type="text" id="m_recipient" class="input-text" placeholder="e.g. Arch. Santoni" oninput="updateMeetingFromFields()">
+          </div>
+          <div class="field-row">
+            <label class="field-label" for="m_link">Meeting URL (Google Meet / Teams): *</label>
+            <input type="url" id="m_link" class="input-text" placeholder="https://meet.google.com/xxx-yyyy-zzz" oninput="updateMeetingFromFields()">
+          </div>
+        </div>
+
+        <div class="field-grid-3">
+          <div class="field-row">
+            <label class="field-label" for="m_date">Meeting Date: *</label>
+            <input type="text" id="m_date" class="input-text" placeholder="e.g. 12 November 2026" oninput="updateMeetingFromFields()">
+          </div>
+          <div class="field-row">
+            <label class="field-label" for="m_time">Meeting Time: *</label>
+            <input type="text" id="m_time" class="input-text" placeholder="e.g. 15:00" oninput="updateMeetingFromFields()">
+          </div>
+          <div class="field-row">
+            <label class="field-label" for="m_zone">Time Zone:</label>
+            <input type="text" id="m_zone" class="input-text" value="Europe/Rome" oninput="updateMeetingFromFields()">
+          </div>
+        </div>
+
+        <!-- Agenda Discussion Points -->
+        <div class="field-row">
+          <label class="field-label">Discussion Points (3 Agenda Items):</label>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
+            <input type="text" id="m_a1" class="input-text" placeholder="Agenda 01" oninput="updateMeetingFromFields()">
+            <input type="text" id="m_a2" class="input-text" placeholder="Agenda 02" oninput="updateMeetingFromFields()">
+            <input type="text" id="m_a3" class="input-text" placeholder="Agenda 03" oninput="updateMeetingFromFields()">
+          </div>
+        </div>
+
+        <div id="meeting-validation-msg" style="display: none; font-size: 0.78rem; color: #f87171; background: rgba(239, 68, 68, 0.1); padding: 0.5rem 0.75rem; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.25);"></div>
+      </div>
+
+      <!-- Linked Candidate Context (if linked) -->
       {% if candidate_id %}
-      <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.875rem 1.25rem; font-size: 0.8125rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-          <span style="font-weight: 700; color: #38bdf8;">🔗 Linked CRM Company: {{ candidate_name or candidate_id }}</span>
-          <a href="/sales/candidates/{{ candidate_id }}" target="_blank" style="color: #93c5fd; text-decoration: underline; font-size: 0.75rem;">Open Workspace ↗</a>
+      <div style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.875rem 1rem;">
+        <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.04em;">
+          CRM Target Linkage
+        </div>
+        <div style="margin-top: 0.25rem; font-size: 0.875rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+          <span>Candidate:</span>
+          <strong>{{ candidate_name or candidate_id }}</strong>
+          <code style="font-size: 0.78rem;">({{ candidate_id }})</code>
+          <a href="/sales/candidates/{{ candidate_id }}" target="_blank" rel="noopener" style="font-size: 0.75rem; color: #38bdf8; text-decoration: underline; margin-left: auto;">
+            Open Candidate Workspace ↗
+          </a>
         </div>
         <input type="hidden" name="candidate_id" value="{{ candidate_id }}">
 
         {% if candidate_contacts %}
         <div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
           <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Prefill Recipient Contact:</label>
-          <select id="contact_id" name="contact_id" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem; max-width: 320px;" onchange="handleContactSelect(this)">
+          <select id="contact_id" name="contact_id" class="select-input" style="font-size: 0.78rem; padding: 0.25rem 0.5rem; max-width: 360px;" onchange="handleContactSelect(this)">
             <option value="">-- Choose verified contact --</option>
             {% for ct in candidate_contacts %}
-            <option value="{{ ct.contact_id }}" data-email="{{ ct.work_email }}" {% if ct.contact_id == contact_id %}selected{% endif %}>
+            <option value="{{ ct.contact_id }}" data-email="{{ ct.work_email }}" data-name="{{ ct.full_name }}" {% if ct.contact_id == contact_id %}selected{% endif %}>
               {{ ct.full_name }}{% if ct.job_title %} ({{ ct.job_title }}){% endif %}{% if ct.work_email %} &lt;{{ ct.work_email }}&gt;{% endif %}
             </option>
             {% endfor %}
@@ -241,22 +435,51 @@
         <input type="text" id="subject" name="subject" class="input-text" value="{{ subject_field }}" placeholder="Email subject line..." required>
       </div>
 
-      <!-- Plain-Text Body -->
-      <div class="field-row">
+      <!-- View Modes / Editor Tabs -->
+      <div style="display: flex; gap: 0.5rem; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-top: 0.5rem;">
+        <span style="font-size: 0.8125rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">View Mode:</span>
+        <button type="button" class="tab-pill active" id="tab-btn-visual" onclick="switchEditorTab('visual')">👁️ Visual Rendered Preview</button>
+        <button type="button" class="tab-pill" id="tab-btn-plain" onclick="switchEditorTab('plain')">📝 Plain-Text Body</button>
+        <button type="button" class="tab-pill" id="tab-btn-html" onclick="switchEditorTab('html')">&lt;/&gt; Raw HTML Source</button>
+      </div>
+
+      <!-- VISUAL TAB: Rendered Preview & Standard Body Editor -->
+      <div id="tab-pane-visual">
+        <div id="standard-body-input-wrap" class="field-row" style="margin-bottom: 1rem;">
+          <div class="field-label">
+            <span>Message Content:</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Type your custom body here — signature is attached below</span>
+          </div>
+          <textarea id="standard_body_content" class="textarea-body" style="min-height: 140px;" placeholder="Write your message here..." oninput="updateStandardPreview()"></textarea>
+        </div>
+
+        <div class="preview-container">
+          <div class="preview-toolbar">
+            <span id="preview-status-label">Previewing: Standard Email with Official Signature</span>
+            <span id="preview-theme-indicator" style="font-family: monospace;">DESKTOP PREVIEW</span>
+          </div>
+          <div class="preview-frame" id="visual-preview-render">
+            <!-- Rendered visual preview injected here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- PLAIN-TEXT TAB -->
+      <div id="tab-pane-plain" style="display: none;" class="field-row">
         <div class="field-label">
           <span>Plain Text Message Body: *</span>
-          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Verified signatures auto-included</span>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Full plain-text fallback representation</span>
         </div>
         <textarea id="body_plain_text" name="body_plain_text" class="textarea-body" placeholder="Write plain-text email content..." required>{{ body_plain_field }}</textarea>
       </div>
 
-      <!-- Optional HTML Body -->
-      <div class="field-row">
+      <!-- RAW HTML TAB -->
+      <div id="tab-pane-html" style="display: none;" class="field-row">
         <div class="field-label">
-          <span>HTML Message Body (Optional):</span>
-          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Sanitized on save — no active scripts</span>
+          <span>HTML Message Body:</span>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Sanitized on save — tables &amp; brand styling preserved</span>
         </div>
-        <textarea id="body_html" name="body_html" class="textarea-body" style="min-height: 120px;" placeholder="<p>Optional HTML version...</p>">{{ body_html_field }}</textarea>
+        <textarea id="body_html" name="body_html" class="textarea-body" style="min-height: 240px;" placeholder="<p>Full HTML email body...</p>">{{ body_html_field }}</textarea>
       </div>
 
       <!-- Future Scheduling Safety Notice -->
@@ -273,7 +496,7 @@
           <button type="submit" name="action_type" value="save" class="btn btn-secondary btn-sm" style="font-weight: 600;">
             💾 Save Draft
           </button>
-          <button type="submit" name="action_type" value="ready_to_schedule" class="btn btn-primary btn-sm" style="font-weight: 600;">
+          <button type="submit" name="action_type" value="ready_to_schedule" class="btn btn-primary btn-sm" style="font-weight: 600;" id="btn-ready-to-schedule">
             📅 Mark Ready to Schedule
           </button>
         </div>
@@ -285,32 +508,378 @@
 
 </div>
 
+<!-- EMBEDDED OFFICIAL ASSETS FOR CLIENT INTERACTIVITY -->
 <script>
-function toggleExtraRecipients() {
-  var box = document.getElementById('extra-recipients-box');
-  if (!box) return;
-  if (box.style.display === 'none' || box.style.display === '') {
-    box.style.display = 'flex';
+// Official Signature fragments (Thunderbird / Webmail layout)
+const OFFICIAL_SIGNATURES = {
+  "info-com": {
+    "account": "info@pybim.com",
+    "plain": "--\npyBIM\nEngineering & Digital Automation\nEmail: info@pybim.com\nMobile: +39 352 288 7878\nWhatsApp: https://wa.me/393522887878\nWebsite: https://www.pybim.com\nCompany LinkedIn: https://www.linkedin.com/company/pybim",
+    "html": `<table cellpadding="0" cellspacing="0" border="0" width="500" style="width: 500px; max-width: 500px; min-width: 500px; border-collapse: collapse; background-color: #080C14; border: 1px solid #1E293B; border-radius: 4px; overflow: hidden; font-family: Arial, Helvetica, sans-serif; margin-top: 16px;">
+  <tr>
+    <td width="150" valign="middle" align="center" style="width: 150px; background-color: #080C14; padding: 18px 12px; text-align: center; vertical-align: middle; border-right: 1px solid #1E293B;">
+      <a href="https://www.pybim.com" target="_blank" rel="noopener noreferrer" style="display: block; text-decoration: none; border: 0; outline: none;">
+        <img src="/static/brand/logo_white_transparent.png" alt="pyBIM Logo" width="100" height="100" style="display: block; width: 100px; height: 100px; border: 0; outline: none; margin: 0 auto;" />
+      </a>
+    </td>
+    <td width="350" valign="top" style="width: 350px; background-color: #0F172A; padding: 16px 20px; vertical-align: top; text-align: left;">
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; border-collapse: collapse;">
+        <tr><td style="font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: bold; line-height: 20px; color: #F8FAFC;">pyBIM</td></tr>
+        <tr><td style="padding-top: 2px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 15px; color: #94A3B8; letter-spacing: 0.3px; text-transform: uppercase;">Engineering & Digital Automation</td></tr>
+        <tr><td style="padding: 8px 0 10px 0;"><table cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; border-collapse: collapse;"><tr><td height="1" style="height: 1px; background-color: #1E293B;"><table cellpadding="0" cellspacing="0" border="0" width="36" style="width: 36px; border-collapse: collapse;"><tr><td height="1" style="height: 1px; background-color: #3B82F6;"></td></tr></table></td></tr></table></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Email:</span><a href="mailto:info@pybim.com" style="color: #60A5FA; text-decoration: none; font-weight: 500;">info@pybim.com</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Mobile:</span><a href="tel:+393522887878" style="color: #60A5FA; text-decoration: none; font-weight: 500;">+39 352 288 7878</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">WhatsApp:</span><a href="https://wa.me/393522887878" target="_blank" rel="noopener noreferrer" style="color: #60A5FA; text-decoration: none; font-weight: 500;">Chat on WhatsApp</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Website:</span><a href="https://www.pybim.com" target="_blank" rel="noopener noreferrer" style="color: #60A5FA; text-decoration: none; font-weight: 500;">www.pybim.com</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Company LinkedIn:</span><a href="https://www.linkedin.com/company/pybim" target="_blank" rel="noopener noreferrer" style="color: #60A5FA; text-decoration: none; font-weight: 500;">Linkedin</a></td></tr>
+      </table>
+    </td>
+  </tr>
+</table>`
+  },
+  "info-it": {
+    "account": "info@pybim.it",
+    "plain": "--\npyBIM\nIngegneria & Automazione Digitale\nEmail: info@pybim.it\nCellulare: +39 352 288 7878\nWhatsApp: https://wa.me/393522887878\nSito web: https://www.pybim.it\nLinkedIn aziendale: https://www.linkedin.com/company/pybim",
+    "html": `<table cellpadding="0" cellspacing="0" border="0" width="500" style="width: 500px; max-width: 500px; min-width: 500px; border-collapse: collapse; background-color: #080C14; border: 1px solid #1E293B; border-radius: 4px; overflow: hidden; font-family: Arial, Helvetica, sans-serif; margin-top: 16px;">
+  <tr>
+    <td width="150" valign="middle" align="center" style="width: 150px; background-color: #080C14; padding: 18px 12px; text-align: center; vertical-align: middle; border-right: 1px solid #1E293B;">
+      <a href="https://www.pybim.it" target="_blank" rel="noopener noreferrer" style="display: block; text-decoration: none; border: 0; outline: none;">
+        <img src="/static/brand/logo_white_transparent.png" alt="pyBIM Logo" width="100" height="100" style="display: block; width: 100px; height: 100px; border: 0; outline: none; margin: 0 auto;" />
+      </a>
+    </td>
+    <td width="350" valign="top" style="width: 350px; background-color: #0F172A; padding: 16px 20px; vertical-align: top; text-align: left;">
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; border-collapse: collapse;">
+        <tr><td style="font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: bold; line-height: 20px; color: #F8FAFC;">pyBIM</td></tr>
+        <tr><td style="padding-top: 2px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 15px; color: #94A3B8; letter-spacing: 0.3px; text-transform: uppercase;">Ingegneria & Automazione Digitale</td></tr>
+        <tr><td style="padding: 8px 0 10px 0;"><table cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; border-collapse: collapse;"><tr><td height="1" style="height: 1px; background-color: #1E293B;"><table cellpadding="0" cellspacing="0" border="0" width="36" style="width: 36px; border-collapse: collapse;"><tr><td height="1" style="height: 1px; background-color: #3B82F6;"></td></tr></table></td></tr></table></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Email:</span><a href="mailto:info@pybim.it" style="color: #60A5FA; text-decoration: none; font-weight: 500;">info@pybim.it</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Cellulare:</span><a href="tel:+393522887878" style="color: #60A5FA; text-decoration: none; font-weight: 500;">+39 352 288 7878</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">WhatsApp:</span><a href="https://wa.me/393522887878" target="_blank" rel="noopener noreferrer" style="color: #60A5FA; text-decoration: none; font-weight: 500;">Chatta su WhatsApp</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">Sito web:</span><a href="https://www.pybim.it" target="_blank" rel="noopener noreferrer" style="color: #60A5FA; text-decoration: none; font-weight: 500;">www.pybim.it</a></td></tr>
+        <tr><td style="padding: 1px 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 16px; color: #94A3B8;"><span style="display: inline-block; width: 120px; color: #94A3B8;">LinkedIn aziendale:</span><a href="https://www.linkedin.com/company/pybim" target="_blank" rel="noopener noreferrer" style="color: #60A5FA; text-decoration: none; font-weight: 500;">Linkedin</a></td></tr>
+      </table>
+    </td>
+  </tr>
+</table>`
+  }
+};
+
+// Meeting Metadata
+const MEETING_META = {
+  "en": {
+    "topic_default": "Project Coordination",
+    "recipient_default": "Arch. Partner",
+    "date_default": "12 November 2026",
+    "time_default": "15:00",
+    "agenda_defaults": ["Project scope and objectives", "Technical coordination and deliverables", "Next steps and responsibilities"],
+    "intro_invitation": "We would like to invite you to a video meeting to discuss <strong>[[TOPIC]]</strong>, review the key requirements and agree on the next steps.",
+    "intro_confirmation": "Thank you for confirming the meeting. Below are the details for our discussion about <strong>[[TOPIC]]</strong> and the link to join."
+  },
+  "it": {
+    "topic_default": "Coordinamento di Progetto",
+    "recipient_default": "Gentile Architetto",
+    "date_default": "12 Novembre 2026",
+    "time_default": "15:00",
+    "agenda_defaults": ["Obiettivi e ambito del progetto", "Coordinamento tecnico e deliverable", "Prossime attività e responsabilità"],
+    "intro_invitation": "desideriamo invitarLa a una videoriunione per discutere <strong>[[TOPIC]]</strong>, esaminare i requisiti principali e concordare i prossimi passi.",
+    "intro_confirmation": "La ringraziamo per la conferma. Di seguito trova i dettagli della riunione dedicata a <strong>[[TOPIC]]</strong> e il collegamento per partecipare."
+  }
+};
+
+let currentTab = 'visual';
+
+function switchEditorTab(tabName) {
+  currentTab = tabName;
+  ['visual', 'plain', 'html'].forEach(t => {
+    const btn = document.getElementById('tab-btn-' + t);
+    const pane = document.getElementById('tab-pane-' + t);
+    if (btn) btn.classList.toggle('active', t === tabName);
+    if (pane) pane.style.display = (t === tabName) ? 'block' : 'none';
+  });
+
+  if (tabName === 'visual') {
+    refreshVisualPreview();
+  }
+}
+
+function getSelectedSenderKey() {
+  const acc = document.getElementById('account_id').value;
+  return (acc === 'acc_info_it') ? 'info-it' : 'info-com';
+}
+
+function getActiveSignature() {
+  const sigChoice = document.getElementById('signature_select').value;
+  if (sigChoice === 'none') return null;
+  if (sigChoice === 'auto') return OFFICIAL_SIGNATURES[getSelectedSenderKey()];
+  return OFFICIAL_SIGNATURES[sigChoice] || OFFICIAL_SIGNATURES['info-com'];
+}
+
+function handleSenderAccountChange(accId) {
+  const sigSelect = document.getElementById('signature_select');
+  if (sigSelect && sigSelect.value === 'auto') {
+    refreshVisualPreview();
+  }
+}
+
+function handleSignatureSelect(val) {
+  refreshVisualPreview();
+}
+
+function handleTemplateChange(templateId) {
+  const isMeeting = templateId.startsWith('meeting_');
+  document.getElementById('meeting-studio-panel').style.display = isMeeting ? 'flex' : 'none';
+  document.getElementById('signature-control-row').style.display = isMeeting ? 'none' : 'flex';
+  document.getElementById('standard-body-input-wrap').style.display = isMeeting ? 'none' : 'flex';
+
+  if (isMeeting) {
+    const lang = templateId.includes('_it_') ? 'it' : 'en';
+    const meta = MEETING_META[lang];
+    if (!document.getElementById('m_topic').value) document.getElementById('m_topic').value = meta.topic_default;
+    if (!document.getElementById('m_recipient').value) document.getElementById('m_recipient').value = meta.recipient_default;
+    if (!document.getElementById('m_date').value) document.getElementById('m_date').value = meta.date_default;
+    if (!document.getElementById('m_time').value) document.getElementById('m_time').value = meta.time_default;
+    if (!document.getElementById('m_a1').value) document.getElementById('m_a1').value = meta.agenda_defaults[0];
+    if (!document.getElementById('m_a2').value) document.getElementById('m_a2').value = meta.agenda_defaults[1];
+    if (!document.getElementById('m_a3').value) document.getElementById('m_a3').value = meta.agenda_defaults[2];
+    updateMeetingFromFields();
   } else {
-    box.style.display = 'none';
+    updateStandardPreview();
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function updateStandardPreview() {
+  const content = document.getElementById('standard_body_content').value;
+  const sig = getActiveSignature();
+
+  let htmlBody = '<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: #f8fafc; white-space: pre-wrap;">' + esc(content) + '</div>';
+  if (sig) {
+    htmlBody += '<br>' + sig.html;
+  }
+
+  let plainBody = content;
+  if (sig) {
+    plainBody += '\n\n' + sig.plain;
+  }
+
+  document.getElementById('visual-preview-render').innerHTML = htmlBody;
+  document.getElementById('body_html').value = htmlBody;
+  document.getElementById('body_plain_text').value = plainBody;
+  document.getElementById('preview-status-label').textContent = 'Previewing: Standard Email with ' + (sig ? sig.account + ' Signature' : 'No Signature');
+}
+
+function updateMeetingFromFields() {
+  const tmpl = document.getElementById('template_select').value;
+  if (!tmpl.startsWith('meeting_')) return;
+
+  const kind = document.getElementById('m_kind').value;
+  const topic = document.getElementById('m_topic').value.trim();
+  const recipient = document.getElementById('m_recipient').value.trim();
+  const link = document.getElementById('m_link').value.trim();
+  const mDate = document.getElementById('m_date').value.trim();
+  const mTime = document.getElementById('m_time').value.trim();
+  const mZone = document.getElementById('m_zone').value.trim() || 'Europe/Rome';
+  const a1 = document.getElementById('m_a1').value.trim();
+  const a2 = document.getElementById('m_a2').value.trim();
+  const a3 = document.getElementById('m_a3').value.trim();
+
+  const lang = tmpl.includes('_it_') ? 'it' : 'en';
+  const meta = MEETING_META[lang];
+  const isConfirm = (kind === 'confirmation');
+
+  // Update subject automatically
+  const subjPrefix = (lang === 'it') ? (isConfirm ? 'Conferma riunione | pyBIM — ' : 'Invito alla riunione | pyBIM — ') : (isConfirm ? 'Meeting Confirmation | pyBIM — ' : 'Meeting Invitation | pyBIM — ');
+  document.getElementById('subject').value = subjPrefix + (topic || meta.topic_default);
+
+  // Validate fields for unresolved placeholders
+  const errors = [];
+  if (!topic || topic.startsWith('[')) errors.push('Topic required');
+  if (!recipient || recipient.startsWith('[')) errors.push('Recipient required');
+  if (!mDate || mDate.startsWith('[')) errors.push('Date required');
+  if (!mTime || mTime.startsWith('[')) errors.push('Time required');
+  if (!link || !link.startsWith('http')) errors.push('Valid https:// link required');
+
+  const valMsg = document.getElementById('meeting-validation-msg');
+  if (errors.length > 0) {
+    valMsg.textContent = '⚠️ Incomplete fields before sending: ' + errors.join(', ');
+    valMsg.style.display = 'block';
+  } else {
+    valMsg.style.display = 'none';
+  }
+
+  // Construct plain-text fallback
+  let plain = (lang === 'it') ?
+    `Gentile ${recipient || '[Nome destinatario]'},\n\n` +
+    (isConfirm ? `La ringraziamo per la conferma. Di seguito trova i dettagli della riunione dedicata a ${topic} e il collegamento per partecipare.` : `desideriamo invitarLa a una videoriunione per discutere ${topic}, esaminare i requisiti principali e concordare i prossimi passi.`) +
+    `\n\nRIUNIONE: ${topic}\nDATA: ${mDate}\nORA: ${mTime} (${mZone})\nPIATTAFORMA: Google Meet\nCOLLEGAMENTO: ${link || '[Link della riunione]'}\n\n` +
+    `PUNTI ALL'ORDINE DEL GIORNO:\n01. ${a1}\n02. ${a2}\n03. ${a3}\n\n` +
+    `Cordiali saluti,\nIl team pyBIM\n\npyBIM / Tech-Enabled BIM Services\ninfo@pybim.it | https://www.pybim.it/it`
+    :
+    `Dear ${recipient || '[Recipient name]'},\n\n` +
+    (isConfirm ? `Thank you for confirming the meeting. Below are the details for our discussion about ${topic} and the link to join.` : `We would like to invite you to a video meeting to discuss ${topic}, review the key requirements and agree on the next steps.`) +
+    `\n\nMEETING: ${topic}\nDATE: ${mDate}\nTIME: ${mTime} (${mZone})\nPLATFORM: Google Meet\nLINK: ${link || '[Meeting link]'}\n\n` +
+    `DISCUSSION POINTS:\n01. ${a1}\n02. ${a2}\n03. ${a3}\n\n` +
+    `Kind regards,\nThe pyBIM Team\n\npyBIM / Tech-Enabled BIM Services\ninfo@pybim.com | https://www.pybim.com/en`;
+
+  document.getElementById('body_plain_text').value = plain;
+
+  // Construct visual preview
+  const isDark = tmpl.includes('_dark');
+  const bgColor = isDark ? '#101B2E' : '#FFFFFF';
+  const textColor = isDark ? '#DFE8F5' : '#263A53';
+  const boxBg = isDark ? '#13233C' : '#F1F6FD';
+  const borderColor = isDark ? '#263954' : '#DAE5F1';
+  const headingColor = isDark ? '#F8FBFF' : '#0B192D';
+  const accentColor = isDark ? '#60A5FA' : '#2563EB';
+
+  const introText = isConfirm ? meta.intro_confirmation.replace('[[TOPIC]]', esc(topic || meta.topic_default)) : meta.intro_invitation.replace('[[TOPIC]]', esc(topic || meta.topic_default));
+
+  const meetingHtml = `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width: 640px; margin: 0 auto; background-color: ${bgColor}; border: 1px solid ${borderColor}; font-family: Arial, sans-serif; color: ${textColor};">
+    <tr><td style="height: 5px; background: linear-gradient(90deg, #3B82F6 27%, #7DD3FC 45%, ${borderColor} 100%);"></td></tr>
+    <tr>
+      <td style="padding: 20px 24px; border-bottom: 1px solid ${borderColor};">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%">
+          <tr>
+            <td width="42" valign="middle">
+              <img src="/static/brand/logo_white_transparent.png" width="42" height="42" style="display:block; background:#08111F; padding:4px; border-radius:4px;">
+            </td>
+            <td style="padding-left: 12px;" valign="middle">
+              <div style="font-size: 20px; font-weight: 800; color: ${headingColor};">py<span style="color: ${accentColor};">BIM</span></div>
+              <div style="font-size: 11px; color: #94A3B8;">Tech-Enabled BIM Services</div>
+            </td>
+            <td align="right" valign="middle" style="font-size: 10px; font-weight: bold; color: #6F8EAD; letter-spacing: 1px;">
+              ${lang === 'it' ? 'COMUNICAZIONI DI PROGETTO' : 'PROJECT COMMUNICATION'}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 24px; background: ${boxBg};">
+        <div style="font-size: 10px; font-weight: bold; letter-spacing: 1.5px; color: ${accentColor}; margin-bottom: 6px;">pyBIM / ${lang === 'it' ? 'RIUNIONE 01' : 'MEETING 01'}</div>
+        <div style="font-size: 24px; font-weight: 700; color: ${headingColor}; margin-bottom: 6px;">${esc(topic || meta.topic_default)}</div>
+        <div style="font-size: 13px; color: #94A3B8;">${lang === 'it' ? 'Un confronto mirato per definire priorità tecniche e prossimi passi.' : 'A focused conversation to align technical priorities and next steps.'}</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 24px;">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border: 1px solid ${borderColor}; border-radius: 4px; background: ${isDark ? '#0F1A2C' : '#F8FAFC'};">
+          <tr>
+            <td width="33%" style="padding: 12px; border-right: 1px solid ${borderColor};">
+              <div style="font-size: 9px; font-weight: bold; color: #6F8EAD; letter-spacing: 1px;">${lang === 'it' ? 'DATA' : 'DATE'}</div>
+              <div style="font-size: 13px; font-weight: bold; color: ${headingColor}; margin-top: 4px;">${esc(mDate || meta.date_default)}</div>
+            </td>
+            <td width="33%" style="padding: 12px; border-right: 1px solid ${borderColor};">
+              <div style="font-size: 9px; font-weight: bold; color: #6F8EAD; letter-spacing: 1px;">${lang === 'it' ? 'ORA' : 'TIME'}</div>
+              <div style="font-size: 13px; font-weight: bold; color: ${headingColor}; margin-top: 4px;">${esc(mTime || meta.time_default)}</div>
+              <div style="font-size: 9px; color: #94A3B8;">${esc(mZone)}</div>
+            </td>
+            <td width="34%" style="padding: 12px;">
+              <div style="font-size: 9px; font-weight: bold; color: #6F8EAD; letter-spacing: 1px;">${lang === 'it' ? 'PIATTAFORMA' : 'PLATFORM'}</div>
+              <div style="font-size: 13px; font-weight: bold; color: ${headingColor}; margin-top: 4px;">Google Meet</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 24px 8px;">
+        <div style="font-size: 15px; margin-bottom: 8px;">${lang === 'it' ? 'Gentile' : 'Dear'} <strong>${esc(recipient || meta.recipient_default)}</strong>,</div>
+        <div style="font-size: 14px; line-height: 1.6;">${introText}</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 12px 24px;">
+        <div style="font-size: 10px; font-weight: bold; letter-spacing: 1px; color: ${accentColor}; margin-bottom: 8px;">${lang === 'it' ? 'PUNTI ALL’ORDINE DEL GIORNO' : 'DISCUSSION POINTS'}</div>
+        <div style="font-size: 13px; line-height: 1.8;">
+          <div><strong style="color: ${accentColor};">01.</strong> ${esc(a1 || meta.agenda_defaults[0])}</div>
+          <div><strong style="color: ${accentColor};">02.</strong> ${esc(a2 || meta.agenda_defaults[1])}</div>
+          <div><strong style="color: ${accentColor};">03.</strong> ${esc(a3 || meta.agenda_defaults[2])}</div>
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 24px;">
+        <a href="${esc(link || '#')}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; padding: 12px 20px; font-weight: bold; text-decoration: none; border-radius: 4px; font-size: 13px;">
+          ${lang === 'it' ? 'ACCEDI ALLA VIDEORIUNIONE ↗' : 'JOIN THE VIDEO CALL ↗'}
+        </a>
+        <div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">
+          ${esc(link || (lang === 'it' ? '[Inserire link riunione]' : '[Insert meeting link]'))}
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 20px 24px; border-top: 1px solid ${borderColor}; background: ${isDark ? '#0B1525' : '#EFF4FB'};">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%">
+          <tr>
+            <td valign="top" style="font-size: 12px; color: ${headingColor}; font-weight: bold;">
+              pyBIM / Tech-Enabled BIM Services
+              <div style="font-size: 11px; font-weight: normal; margin-top: 2px;">
+                <a href="mailto:${lang === 'it' ? 'info@pybim.it' : 'info@pybim.com'}" style="color: ${accentColor};">${lang === 'it' ? 'info@pybim.it' : 'info@pybim.com'}</a>
+              </div>
+            </td>
+            <td align="right" valign="top" style="font-size: 11px;">
+              <a href="https://www.pybim.com/${lang}" target="_blank" style="color: ${accentColor};">www.pybim.com/${lang}</a>
+              <div style="color: #94A3B8; margin-top: 2px;">LinkedIn / pyBIM</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`;
+
+  document.getElementById('visual-preview-render').innerHTML = meetingHtml;
+  document.getElementById('body_html').value = meetingHtml;
+  document.getElementById('preview-status-label').textContent = 'Previewing: ' + tmpl.toUpperCase().replace('_', ' / ');
+}
+
+function refreshVisualPreview() {
+  const tmpl = document.getElementById('template_select').value;
+  if (tmpl.startsWith('meeting_')) {
+    updateMeetingFromFields();
+  } else {
+    updateStandardPreview();
   }
 }
 
 function handleContactSelect(selectEl) {
-  var opt = selectEl.options[selectEl.selectedIndex];
+  const opt = selectEl.options[selectEl.selectedIndex];
   if (!opt) return;
-  var email = opt.getAttribute('data-email');
+  const email = opt.getAttribute('data-email');
+  const name = opt.getAttribute('data-name');
   if (email) {
-    var toInput = document.getElementById('to_addresses');
-    if (toInput) {
-      toInput.value = email;
+    document.getElementById('to_addresses').value = email;
+  }
+  if (name) {
+    const recInput = document.getElementById('m_recipient');
+    if (recInput) {
+      recInput.value = name;
+      updateMeetingFromFields();
     }
   }
 }
 
-function handleSenderChange(accountId) {
-  // Can dynamically update default signatures if user hasn't typed custom body
-  console.log('Sender account switched:', accountId);
+function toggleExtraRecipients() {
+  const box = document.getElementById('extra-recipients-box');
+  if (!box) return;
+  box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'flex' : 'none';
 }
+
+// Initial initialization on DOM load
+document.addEventListener('DOMContentLoaded', function() {
+  // Check if existing body has content
+  const existingPlain = document.getElementById('body_plain_text').value;
+  if (existingPlain && existingPlain.trim()) {
+    // If body already exists (e.g. editing draft), populate standard body
+    document.getElementById('standard_body_content').value = existingPlain;
+  } else {
+    document.getElementById('standard_body_content').value = 'Dear Architect,\n\nWe would like to introduce pyBIM.';
+  }
+  refreshVisualPreview();
+});
 </script>
 {% endblock %}

@@ -199,17 +199,25 @@ def test_parse_and_validate_email_list_invalid():
 # ============================================================================
 
 def test_signature_registry():
-    """Signatures for primary accounts exist and do not contain speculative marketing claims."""
+    """Official signatures for primary accounts exist and match official brand assets."""
     sig_com = get_default_signature("acc_info_com")
     sig_it = get_default_signature("acc_info_it")
 
-    assert "pyBIM Team" in sig_com["plain"]
+    # Official info@pybim.com checks
+    assert "Engineering & Digital Automation" in sig_com["plain"]
     assert "info@pybim.com" in sig_com["plain"]
-    assert "https://pybim.com" in sig_com["plain"]
+    assert "+39 352 288 7878" in sig_com["plain"]
+    assert "https://wa.me/393522887878" in sig_com["plain"]
+    assert "https://www.pybim.com" in sig_com["plain"]
+    assert "https://www.linkedin.com/company/pybim" in sig_com["plain"]
 
-    assert "Team pyBIM" in sig_it["plain"]
+    # Official info@pybim.it checks
+    assert "Ingegneria & Automazione Digitale" in sig_it["plain"]
     assert "info@pybim.it" in sig_it["plain"]
-    assert "https://pybim.it" in sig_it["plain"]
+    assert "+39 352 288 7878" in sig_it["plain"]
+    assert "https://wa.me/393522887878" in sig_it["plain"]
+    assert "https://www.pybim.it" in sig_it["plain"]
+    assert "https://www.linkedin.com/company/pybim" in sig_it["plain"]
 
     # Rejects invalid account
     invalid_sig = get_default_signature("acc_invalid")

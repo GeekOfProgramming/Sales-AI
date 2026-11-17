@@ -27,22 +27,29 @@ def sanitize_email_html(raw_html: Optional[str]) -> str:
             # Remove all JS event handlers (e.g. onclick, onmouseover)
             if attr.lower().startswith("on"):
                 del tag.attrs[attr]
-            # Defang javascript: links
+            # Defang javascript: links (do not delete href/src on safe urls here, tag.attrs is handled below)
             elif attr.lower() in ("href", "src") and isinstance(val, str):
                 cleaned_val = val.strip().lower()
                 if cleaned_val.startswith("javascript:") or cleaned_val.startswith("data:text/html"):
                     del tag.attrs[attr]
 
         # 3. Defang remote images to prevent email read receipts / tracking pixels
+        # Exception: Trust internal brand logo (/static/brand/...) and official pyBIM domain assets
         if tag.name == "img":
             if "src" in tag.attrs:
                 src_val = tag.attrs["src"]
-                # If remote http/https image, block automatic loading
-                if isinstance(src_val, str) and src_val.strip().lower().startswith(("http://", "https://", "//")):
+                # Allow safe local brand logo preview
+                if isinstance(src_val, str) and src_val.startswith("/static/brand/"):
+                    pass
+                # Allow official pyBIM domain logo
+                elif isinstance(src_val, str) and src_val.startswith(("https://www.pybim.com/", "https://pybim.com/")):
+                    pass
+                # Otherwise, if remote http/https image, block automatic loading
+                elif isinstance(src_val, str) and src_val.strip().lower().startswith(("http://", "https://", "//")):
                     tag.attrs["data-src"] = src_val
-                    del tag.attrs["src"]
                     tag.attrs["alt"] = "[Remote tracking image blocked]"
                     tag.attrs["class"] = (tag.attrs.get("class", []) or []) + ["blocked-remote-image"]
+                    del tag.attrs["src"]
 
         # 4. Safe link targeting
         if tag.name == "a":
