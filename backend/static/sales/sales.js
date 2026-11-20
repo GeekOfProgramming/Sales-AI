@@ -55,6 +55,54 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
+  // Setup Dropdown Navigation (SALES-UI-NAV-01B)
+  const dropdowns = document.querySelectorAll(".nav-dropdown");
+  dropdowns.forEach(function (dd) {
+    const toggle = dd.querySelector(".nav-dropdown-toggle");
+    const menu = dd.querySelector(".nav-dropdown-menu");
+    if (!toggle || !menu) return;
+
+    toggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const isOpen = dd.classList.contains("open");
+      // Close any other open dropdowns first
+      dropdowns.forEach(function (other) {
+        if (other !== dd) {
+          other.classList.remove("open");
+          const otherToggle = other.querySelector(".nav-dropdown-toggle");
+          if (otherToggle) otherToggle.setAttribute("aria-expanded", "false");
+        }
+      });
+      if (isOpen) {
+        dd.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      } else {
+        dd.classList.add("open");
+        toggle.setAttribute("aria-expanded", "true");
+      }
+    });
+
+    // Keyboard accessibility: Escape closes dropdown, Tab navigating away closes it
+    dd.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        dd.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.focus();
+      }
+    });
+  });
+
+  // Click outside closes all dropdowns
+  document.addEventListener("click", function (e) {
+    dropdowns.forEach(function (dd) {
+      if (!dd.contains(e.target)) {
+        dd.classList.remove("open");
+        const toggle = dd.querySelector(".nav-dropdown-toggle");
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+      }
+    });
+  });
+
   // Simple HTML Escaper
   function escapeHtml(text) {
     if (!text) return "";

@@ -13,17 +13,6 @@
       <a href="/sales" class="brand" title="Email Led — Sales Operator Console">
         <span class="brand-name">Email Led</span>
       </a>
-      {% if current_user %}
-      <div class="header-user-badge" style="margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: 0.8125rem;">
-        <span class="badge {% if current_user.is_admin %}badge-primary{% else %}badge-info{% endif %}" title="Logged in as {{ current_user.username }}">
-          👤 {{ current_user.username }} ({{ current_user.role | upper }})
-        </span>
-        <form method="POST" action="/sales/logout" style="margin: 0; display: inline;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-sm btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">Sign Out</button>
-        </form>
-      </div>
-      {% endif %}
     </div>
 
     <!-- Operational Workflow Navigation: 7 Logical CRM Groups (SALES-UI-NAV-01) -->
@@ -57,9 +46,6 @@
       <div class="nav-item nav-dropdown">
         <button class="nav-link nav-dropdown-toggle {% if active_tab in ('candidates', 'register', 'leads') %}active{% endif %}" type="button" aria-haspopup="true" aria-expanded="false" id="nav-companies-btn">
           <span>Companies &amp; Research</span>
-          {% if nav_badges and (nav_badges.get('candidates', 0) > 0 or nav_badges.get('human_verification', 0) > 0) %}
-          <span class="nav-badge" title="Pending company actions">{{ nav_badges.get('candidates', 0) + nav_badges.get('human_verification', 0) }}</span>
-          {% endif %}
           <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
         </button>
         <div class="nav-dropdown-menu" aria-labelledby="nav-companies-btn">
@@ -183,6 +169,18 @@
         </div>
       </div>
     </nav>
+
+    {% if current_user %}
+    <div class="header-user-badge">
+      <span class="badge {% if current_user.is_admin %}badge-primary{% else %}badge-info{% endif %}" title="Logged in as {{ current_user.username }}">
+        👤 {{ current_user.username }} ({{ current_user.role | upper }})
+      </span>
+      <form method="POST" action="/sales/logout" style="margin: 0; display: inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-sm btn-secondary sign-out-btn">Sign Out</button>
+      </form>
+    </div>
+    {% endif %}
   </header>
 
   <!-- Alerts & Banners -->
