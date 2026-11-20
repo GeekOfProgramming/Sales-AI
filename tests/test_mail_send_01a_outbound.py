@@ -149,7 +149,7 @@ def test_mime_generation_headers_and_bcc_privacy():
     )
 
     # Verify visible headers
-    assert msg["From"] == "info@pybim.com"
+    assert msg["From"] == "pyBIM <info@pybim.com>"
     assert msg["To"] == "client@example.com"
     assert msg["Cc"] == "colleague@pybim.com"
     assert msg["Subject"] == "Proposta Collaborazione BIM · pyBIM"
@@ -624,3 +624,50 @@ def test_worker_end_to_end_mock_delivery_and_crm_immutability(isolated_db):
         if has_hist:
             count = conn.execute("SELECT COUNT(*) FROM historical_sent_emails WHERE matched_candidate_id = 'cand:comp:studio'").fetchone()[0]
             assert count == 0
+
+
+def test_sender_display_name_and_second_account_readiness():
+    """
+    MAIL-SEND-01F: Verify From headers, sender display names, and envelope consistency
+    for both authorized accounts: info@pybim.com and info@pybim.it.
+    """
+    from sales_engine.sending.mime_builder import SENDER_DISPLAY_NAMES, format_sender_address
+
+    # 1. Authoritative mapping verification
+    assert SENDER_DISPLAY_NAMES["info@pybim.com"] == "pyBIM"
+    assert SENDER_DISPLAY_NAMES["info@pybim.it"] == "pyBIM"
+
+    # 2. format_sender_address formatting
+    assert format_sender_address("info@pybim.com") == "pyBIM <info@pybim.com>"
+    assert format_sender_address("info@pybim.it") == "pyBIM <info@pybim.it>"
+    assert format_sender_address("info@pybim.com", "Custom Display") == "Custom Display <info@pybim.com>"
+
+    # 3. Message generation for info@pybim.com
+    msg_com, env_com = build_mime_message(
+        sender_email="info@pybim.com",
+        to_addresses=["client@studiobim.com"],
+        subject="pyBIM Automation — Global",
+        body_plain_text="Hello, we are pyBIM.",
+        account_id="acc_info_com",
+    )
+    assert msg_com["From"] == "pyBIM <info@pybim.com>"
+    assert msg_com["Reply-To"] == "info@pybim.com"
+    assert env_com == ["client@studiobim.com"]
+
+    # 4. Message generation for info@pybim.it
+    msg_it, env_it = build_mime_message(
+        sender_email="info@pybim.it",
+        to_addresses=["studio@bim.it"],
+        subject="pyBIM Automazione — Italia",
+        body_plain_text="Buongiorno, siamo pyBIM.",
+        body_html_sanitized="<p>Buongiorno, siamo pyBIM.</p>",
+        account_id="acc_info_it",
+    )
+    assert msg_it["From"] == "pyBIM <info@pybim.it>"
+    assert msg_it["Reply-To"] == "info@pybim.it"
+    assert env_it == ["studio@bim.it"]
+
+    # 5. Verify official signature preservation without duplication
+    full_serialized = msg_it.as_string()
+    assert "Ingegneria &amp; Automazione Digitale" in full_serialized or "Ingegneria & Automazione Digitale" in full_serialized
+    assert "From: pyBIM <info@pybim.it>" in full_serialized

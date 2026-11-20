@@ -34,6 +34,25 @@ from sales_engine.inbox.signatures import (
 PYBIM_LOGO_CID = "pybim-logo@pybim.com"
 _LOGO_FILE_PATH = _BRAND_ASSETS_DIR / "signatures" / "assets" / "logo_white_transparent.png"
 
+# Centralized authoritative sender-identity mapping: mailbox -> display name
+SENDER_DISPLAY_NAMES: Dict[str, str] = {
+    "info@pybim.com": "pyBIM",
+    "info@pybim.it": "pyBIM",
+}
+
+DEFAULT_SENDER_DISPLAY_NAME = "pyBIM"
+
+
+def format_sender_address(sender_email: str, display_name: Optional[str] = None) -> str:
+    """
+    Formats a standards-compliant RFC 5322 From header with display name.
+    e.g., 'pyBIM <info@pybim.com>'
+    """
+    clean_email = (sender_email or "").strip().lower()
+    name = display_name or SENDER_DISPLAY_NAMES.get(clean_email, DEFAULT_SENDER_DISPLAY_NAME)
+    return email.utils.formataddr((name, clean_email))
+
+
 UNRESOLVED_PLACEHOLDER_REGEX = re.compile(
     r"\[(Meeting topic|Meeting date|HH:MM|Recipient name|Meeting link|Argomento della riunione|Data della riunione|Nome destinatario|Inserire il link|Insert meeting link)\]",
     re.IGNORECASE,
@@ -165,7 +184,7 @@ def build_mime_message(
     # Construct EmailMessage
     msg = EmailMessage()
     msg["Subject"] = subject or "(No Subject)"
-    msg["From"] = sender_email
+    msg["From"] = format_sender_address(sender_email)
     msg["To"] = ", ".join(to_clean)
     if cc_clean:
         msg["Cc"] = ", ".join(cc_clean)
