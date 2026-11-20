@@ -131,32 +131,54 @@ def strip_signature(plain_text: str) -> str:
 def strip_signature_html(html_text: str) -> str:
     """
     Strips appended official pyBIM HTML signature block if present.
+    Also strips wrapping presentation container if user content was wrapped in one.
     """
     if not html_text:
         return ""
 
     text = html_text
-    # Check for table containing pyBIM logo or signature markers
-    # In compose view, signature is appended at bottom with table
+
+    # Strip signature comment or signature block markers
     sig_markers = [
+        "<!-- pyBIM Branded Email Signature",
         '<table cellpadding="0" cellspacing="0" border="0" width="500"',
         '<table cellpadding="0" cellspacing="0" border="0" width="500" style="width: 500px;',
-        'Engineering & Digital Automation',
-        'Ingegneria & Automazione Digitale',
+        "Engineering & Digital Automation",
+        "Engineering &amp; Digital Automation",
+        "Ingegneria & Automazione Digitale",
+        "Ingegneria &amp; Automazione Digitale",
+        "logo_white_transparent.png",
     ]
 
     for marker in sig_markers:
         idx = text.find(marker)
         if idx != -1:
-            # Find beginning of <table before this marker or at this marker
+            # If marker is after a table start, strip from <table
             table_start = text.rfind("<table", 0, idx + 1)
-            if table_start != -1:
-                text = text[:table_start]
-            else:
-                text = text[:idx]
+            comment_start = text.rfind("<!-- pyBIM Branded Email Signature", 0, idx + 1)
+            
+            strip_pos = idx
+            if comment_start != -1:
+                strip_pos = comment_start
+            elif table_start != -1:
+                strip_pos = table_start
+                
+            text = text[:strip_pos]
 
-    # Clean trailing breaks / empty paragraphs
+    # Clean trailing breaks / empty paragraphs / trailing comment leftovers
     text = text.rstrip()
+    for empty_tag in ["<br>", "<br/>", "<br />", "<p><br></p>", "<p></p>", "<div><br></div>", "<div></div>"]:
+        while text.endswith(empty_tag):
+            text = text[:-len(empty_tag)].rstrip()
+
+    # If the user content was wrapped in the visual preview container:
+    # <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: #f8fafc;">...</div>
+    # unwrap it cleanly so the editor doesn't accumulate nested divs.
+    wrapper_prefix = '<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: #f8fafc;">'
+    if text.startswith(wrapper_prefix) and text.endswith("</div>"):
+        text = text[len(wrapper_prefix):-6].strip()
+
+    # Again clean any leading/trailing breaks
     for empty_tag in ["<br>", "<br/>", "<br />", "<p><br></p>", "<p></p>"]:
         while text.endswith(empty_tag):
             text = text[:-len(empty_tag)].rstrip()

@@ -10402,6 +10402,14 @@ async def compose_email_save_action(
                     detail=f"Cannot mark draft as ready to schedule: unresolved placeholder '{marker}' detected. Please complete all meeting and message details.",
                 )
 
+        # If this is a branded meeting template, enforce valid HTTPS meeting URL
+        if "role=\"presentation\"" in (clean_html or "") or "MEETING:" in clean_plain or "RIUNIONE:" in clean_plain:
+            if not ("https://" in clean_plain or (clean_html and "https://" in clean_html)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot mark draft as ready to schedule: a valid HTTPS meeting link (https://...) is required for meeting templates.",
+                )
+
     # 4. Construct or update draft record
     clean_draft_id = draft_id.strip() if draft_id and draft_id.strip() else f"drf_{uuid.uuid4().hex[:12]}"
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -10700,6 +10708,16 @@ async def compose_email_schedule_action(
     )
 
     utc_iso = utc_dt.isoformat().replace("+00:00", "Z")
+
+    # Validate meeting template requirements
+    snapshot_plain = draft.snapshot_plain_text or draft.body_plain_text or ""
+    snapshot_html = draft.snapshot_html_sanitized or draft.body_html_sanitized or ""
+    if "role=\"presentation\"" in snapshot_html or "MEETING:" in snapshot_plain or "RIUNIONE:" in snapshot_plain:
+        if not ("https://" in snapshot_plain or "https://" in snapshot_html):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot schedule meeting email: draft does not contain a valid HTTPS meeting link.",
+            )
 
     try:
         updated = repo.schedule_draft(

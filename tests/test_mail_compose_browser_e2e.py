@@ -467,4 +467,125 @@ def test_composer_browser_interactions_and_regression(browser_server):
         page.wait_for_timeout(500)
         assert "SCHEDULED" in page.inner_text("#composer-status-badge")
 
+        # -------------------------------------------------------------
+        # 7. MAIL-COMPOSE-01D: Dedicated Regression Tests
+        # Task A & B: Rich Text Signature Isolation & Formatting Round-Trip
+        # Task C: Meeting Placeholder Leakage & Valid Link Gate
+        # -------------------------------------------------------------
+        # 7.1 Rich text formatting round-trip test (bold, italic, list, link)
+        page.goto(f"{base_url}/sales/mail-operations/compose")
+        page.wait_for_timeout(500)
+        page.fill("#to_addresses", "architect@designstudio.it")
+        page.fill("#subject", "B2B Automation Partnership Proposal")
+
+        # Insert rich text with formatting in #rich_body_editor
+        rich_test_html = (
+            "<p>Dear Partner,</p>"
+            "<p>We specialize in <b>BIM Automation</b> and <i>Computational Design</i>.</p>"
+            "<ul><li>Clash Resolution</li><li>Quantity Takeoff</li></ul>"
+            "<p>Review our work at <a href=\"https://www.pybim.com\">pybim.com</a>.</p>"
+        )
+        page.eval_on_selector("#rich_body_editor", f"(el) => {{ el.innerHTML = `{rich_test_html}`; }}")
+        page.dispatch_event("#rich_body_editor", "input")
+        page.wait_for_timeout(300)
+
+        # Save draft
+        page.click("button[value='save']")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        rich_draft_id = page.url.split("draft_id=")[1].split("&")[0]
+
+        # Reopen saved draft
+        page.goto(f"{base_url}/sales/mail-operations/compose?draft_id={rich_draft_id}")
+        page.wait_for_timeout(600)
+
+        # Verify #rich_body_editor contains ONLY user content, NO pyBIM signature table or comment
+        editor_html = page.eval_on_selector("#rich_body_editor", "el => el.innerHTML")
+        assert "BIM Automation" in editor_html
+        assert "Computational Design" in editor_html
+        assert "Clash Resolution" in editor_html
+        assert "pybim.com" in editor_html
+        assert "Engineering &amp; Digital Automation" not in editor_html
+        assert "Ingegneria &amp; Automazione Digitale" not in editor_html
+        assert "<!-- pyBIM Branded Email Signature" not in editor_html
+
+        # Verify #visual-preview-render contains the user content + exactly ONE signature block
+        preview_html = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
+        assert "BIM Automation" in preview_html
+        sig_matches = preview_html.count("Engineering &amp; Digital Automation") + preview_html.count("Engineering & Digital Automation")
+        assert sig_matches == 1, f"Expected exactly 1 signature in preview, found {sig_matches}"
+
+        # Save again and re-open to verify no signature accumulation or growth
+        page.click("button[value='save']")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        page.wait_for_timeout(500)
+        editor_html_2 = page.eval_on_selector("#rich_body_editor", "el => el.innerHTML")
+        assert "Engineering &amp; Digital Automation" not in editor_html_2
+        preview_html_2 = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
+        sig_matches_2 = preview_html_2.count("Engineering &amp; Digital Automation") + preview_html_2.count("Engineering & Digital Automation")
+        assert sig_matches_2 == 1, f"Expected exactly 1 signature after re-save, found {sig_matches_2}"
+
+        # Capture evidence screenshot for rich text reload
+        os.makedirs("tests/reports", exist_ok=True)
+        page.screenshot(path="tests/reports/composer_rich_text_reload_single_sig.png", full_page=True)
+
+        # 7.2 Meeting Template Placeholder Leakage & Valid Link Gate (Task C)
+        page.goto(f"{base_url}/sales/mail-operations/compose")
+        page.wait_for_timeout(500)
+        page.select_option("#template_select", "meeting_en_dark")
+        page.dispatch_event("#template_select", "change")
+        page.wait_for_timeout(400)
+
+        page.fill("#to_addresses", "director@bimstudio.com")
+        page.fill("#m_recipient", "Dr. Miller")
+        page.fill("#m_topic", "Enterprise BIM Integration")
+        page.fill("#m_date", "30 November 2026")
+        page.fill("#m_time", "11:00")
+        page.fill("#m_link", "")  # Empty link initially
+        page.dispatch_event("#m_link", "input")
+        page.wait_for_timeout(300)
+
+        # Verify preview does NOT contain orphan [Insert meeting link] or duplicate tags
+        meeting_raw_preview = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
+        assert "[Insert meeting link]" not in meeting_raw_preview
+        assert "[Inserire link riunione]" not in meeting_raw_preview
+        # CTA button should be visually disabled / unclickable
+        assert 'pointer-events: none' in meeting_raw_preview or 'opacity: 0.6' in meeting_raw_preview
+
+        # Verify inline validation message is visible
+        assert page.is_visible("#meeting-validation-msg")
+        assert "Valid https:// link required" in page.inner_text("#meeting-validation-msg")
+
+        # Attempt to mark ready to schedule without link -> blocked
+        page.click("#btn-ready-to-schedule")
+        page.wait_for_timeout(500)
+        assert page.is_visible("#composer-inline-error")
+        err_msg_ready = page.inner_text("#composer-error-detail")
+        assert "unresolved placeholder" in err_msg_ready.lower() or "meeting link" in err_msg_ready.lower()
+
+        # Capture screenshot for missing link validation
+        page.screenshot(path="tests/reports/composer_meeting_missing_link_validation.png", full_page=True)
+
+        # Now fill a valid Google Meet link matching platform
+        page.fill("#m_link", "https://meet.google.com/xyz-uvwx-rst")
+        page.dispatch_event("#m_link", "input")
+        page.wait_for_timeout(300)
+
+        # Verify preview now has active button and cleanly displays link without duplicate/orphan text
+        meeting_valid_preview = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
+        assert "https://meet.google.com/xyz-uvwx-rst" in meeting_valid_preview
+        assert "[Insert meeting link]" not in meeting_valid_preview
+        assert "[Inserire link riunione]" not in meeting_valid_preview
+        # Single integrated footer containing pyBIM link
+        assert "www.pybim.com/en" in meeting_valid_preview
+        assert meeting_valid_preview.count("LinkedIn / pyBIM") == 1
+
+        # Mark ready to schedule -> succeeds
+        page.click("#btn-ready-to-schedule")
+        page.wait_for_url("**/sales/mail-operations/compose?draft_id=*", timeout=8000)
+        page.wait_for_timeout(500)
+        assert "READY_TO_SCHEDULE" in page.inner_text("#composer-status-badge")
+
+        # Capture screenshot for valid meeting template
+        page.screenshot(path="tests/reports/composer_meeting_valid_link.png", full_page=True)
+
         browser.close()

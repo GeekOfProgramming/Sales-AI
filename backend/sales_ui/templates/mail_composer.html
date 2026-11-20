@@ -1034,8 +1034,30 @@ function switchEditorTab(tabName) {
     if (pane) pane.style.display = (t === tabName) ? 'block' : 'none';
   });
 
-  if (tabName === 'visual') {
-    refreshVisualPreview();
+  const tmpl = document.getElementById('template_select').value;
+  if (!tmpl.startsWith('meeting_')) {
+    if (tabName === 'visual') {
+      const richEditor = document.getElementById('rich_body_editor');
+      const plainInput = document.getElementById('body_plain_text');
+      const htmlInput = document.getElementById('body_html');
+      // If user edited HTML tab or Plain tab, reflect in rich editor
+      if (htmlInput && htmlInput.value) {
+        richEditor.innerHTML = htmlInput.value;
+      } else if (plainInput && plainInput.value) {
+        syncTextToRichEditor(plainInput.value, '');
+      }
+      refreshVisualPreview();
+    } else if (tabName === 'plain') {
+      syncEditorToHidden();
+      document.getElementById('body_plain_text').value = document.getElementById('standard_body_content').value;
+    } else if (tabName === 'html') {
+      const richEditor = document.getElementById('rich_body_editor');
+      document.getElementById('body_html').value = (richEditor && richEditor.innerHTML.trim() !== '<br>') ? richEditor.innerHTML : '';
+    }
+  } else {
+    if (tabName === 'visual') {
+      refreshVisualPreview();
+    }
   }
 }
 
@@ -1127,14 +1149,15 @@ function updateStandardPreview() {
     htmlBody += '<br>' + sig.html;
   }
 
-  let plainBody = content;
-  if (sig) {
-    plainBody = plainBody ? (plainBody + '\n\n' + sig.plain) : sig.plain;
-  }
-
+  // Update visual preview presentation frame ONLY
   document.getElementById('visual-preview-render').innerHTML = htmlBody;
-  document.getElementById('body_html').value = htmlBody;
-  document.getElementById('body_plain_text').value = plainBody;
+
+  // The hidden form inputs for standard emails hold user-authored content ONLY:
+  // body_html holds the clean rich HTML (from rich editor or escaped paragraphs)
+  // body_plain_text holds the plain text content
+  // Signatures are attached cleanly at outbound transmission and in the visual preview frame.
+  document.getElementById('body_html').value = innerHtmlContent || '';
+  document.getElementById('body_plain_text').value = content || '';
   document.getElementById('preview-status-label').textContent = 'Previewing: Standard Email with ' + (sig ? sig.account + ' Signature' : 'No Signature');
 }
 
@@ -1287,17 +1310,10 @@ function updateMeetingFromFields() {
     </tr>
     <tr>
       <td style="padding: 16px 24px;">
-        <a href="${esc(link || '#')}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; padding: 12px 20px; font-weight: bold; text-decoration: none; border-radius: 4px; font-size: 13px;">
+        <a href="${esc((link && link.startsWith('http')) ? link : '#')}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${accentColor}; color: #ffffff; padding: 12px 20px; font-weight: bold; text-decoration: none; border-radius: 4px; font-size: 13px; ${(!link || !link.startsWith('http')) ? 'opacity: 0.6; pointer-events: none;' : ''}">
           ${ctaText}
         </a>
-        <div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">
-          ${esc(link || (lang === 'it' ? '[Inserire link riunione]' : '[Insert meeting link]'))}
-        </div>
-      </td>
-    </tr>
-        <div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">
-          ${esc(link || (lang === 'it' ? '[Inserire link riunione]' : '[Insert meeting link]'))}
-        </div>
+        ${(link && link.startsWith('http')) ? `<div style="font-size: 11px; color: #94A3B8; margin-top: 8px;">${esc(link)}</div>` : ''}
       </td>
     </tr>
     <tr>
@@ -1445,6 +1461,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (serverUserBody && serverUserBody.trim()) {
       syncTextToRichEditor(serverUserBody, serverUserHtml);
+    } else if (existingHtml && existingHtml.trim()) {
+      syncTextToRichEditor(existingPlain || '', existingHtml);
     } else if (existingPlain && existingPlain.trim()) {
       // Fallback: strip any official signature client-side to prevent duplicate accumulation
       let clean = existingPlain;
@@ -1570,6 +1588,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Scheduling Dialog Functions
 function openScheduleModal() {
+  const tmpl = document.getElementById('template_select').value;
+  if (tmpl && tmpl.startsWith('meeting_')) {
+    const linkVal = (document.getElementById('m_link').value || '').trim();
+    if (!linkVal || !linkVal.startsWith('https://')) {
+      const errorBanner = document.getElementById('composer-inline-error');
+      const errorDetail = document.getElementById('composer-error-detail');
+      if (errorBanner && errorDetail) {
+        errorDetail.textContent = 'A valid HTTPS meeting URL is required before scheduling a branded meeting email.';
+        errorBanner.style.display = 'block';
+        errorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        alert('A valid HTTPS meeting URL is required before scheduling a branded meeting email.');
+      }
+      return;
+    }
+  }
+
   const overlay = document.getElementById('schedule-modal-overlay');
   if (!overlay) return;
 
