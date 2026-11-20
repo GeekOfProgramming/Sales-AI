@@ -165,6 +165,85 @@
     border-color: var(--primary-hover);
   }
 
+  .editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    border-top-left-radius: var(--radius-md);
+    border-top-right-radius: var(--radius-md);
+    padding: 0.4rem 0.6rem;
+  }
+
+  .editor-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 0.25rem 0.55rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    transition: background 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+
+  .editor-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-focus);
+    color: #38bdf8;
+  }
+
+  .rich-editor-surface {
+    min-height: 160px;
+    padding: 0.75rem;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-bottom-left-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    outline: none;
+    overflow-y: auto;
+    font-family: inherit;
+  }
+
+  .rich-editor-surface:focus {
+    border-color: var(--border-focus);
+  }
+
+  .rich-editor-surface:empty:before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    cursor: text;
+  }
+
+  .rich-editor-surface p {
+    margin: 0 0 0.75rem 0;
+  }
+
+  .rich-editor-surface p:last-child {
+    margin-bottom: 0;
+  }
+
+  .rich-editor-surface ul, .rich-editor-surface ol {
+    margin: 0 0 0.75rem 1.25rem;
+    padding: 0;
+  }
+
+  .rich-editor-surface a {
+    color: #38bdf8;
+    text-decoration: underline;
+  }
+
   .scheduling-info-box {
     background: rgba(37, 99, 235, 0.1);
     border: 1px solid rgba(56, 189, 248, 0.25);
@@ -337,13 +416,27 @@
 
         <!-- Template Selector -->
         <div class="field-row">
-          <label class="field-label" for="template_select">Template: *</label>
+          <label class="field-label" for="template_select">Email Template: *</label>
           <select id="template_select" name="template_select" class="select-input" onchange="handleTemplateChange(this.value)">
-            <option value="standard" selected>Standard Email (No Layout Template)</option>
-            <option value="meeting_en_dark">Meeting — English / Dark Theme</option>
-            <option value="meeting_en_light">Meeting — English / Light Theme</option>
-            <option value="meeting_it_dark">Meeting — Italian / Dark Theme</option>
-            <option value="meeting_it_light">Meeting — Italian / Light Theme</option>
+            <optgroup label="Standard B2B Templates (Editable)">
+              <option value="standard" selected>Blank Email (Clean Slate)</option>
+              <option value="b2b_intro_en">Initial B2B Introduction (English)</option>
+              <option value="b2b_intro_it">Introduzione B2B Iniziale (Italiano)</option>
+              <option value="collab_proposal_en">Collaboration Proposal (English)</option>
+              <option value="collab_proposal_it">Proposta di Collaborazione (Italiano)</option>
+              <option value="followup_en">Follow-up Email (English)</option>
+              <option value="followup_it">Email di Follow-up (Italiano)</option>
+              <option value="client_reply_en">Reply to Client (English)</option>
+              <option value="client_reply_it">Riscontro al Cliente (Italiano)</option>
+            </optgroup>
+            <optgroup label="Official Meeting Templates (Branded Studio Layout)">
+              <option value="meeting_en_dark">Meeting Invitation / Confirmation — EN (Dark Theme)</option>
+              <option value="meeting_en_light">Meeting Invitation / Confirmation — EN (Light Theme)</option>
+              <option value="meeting_it_dark">Meeting Invito / Conferma — IT (Dark Theme)</option>
+              <option value="meeting_it_light">Meeting Invito / Conferma — IT (Light Theme)</option>
+              <option value="meeting_followup_en">Meeting Follow-up &amp; Summary (English)</option>
+              <option value="meeting_followup_it">Follow-up &amp; Sintesi Riunione (Italiano)</option>
+            </optgroup>
           </select>
         </div>
       </div>
@@ -516,15 +609,31 @@
         <div id="standard-body-input-wrap" class="field-row" style="margin-bottom: 1rem;">
           <div class="field-label">
             <span>Message Content:</span>
-            <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Type your custom body here — signature is attached below</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: normal;">Type your custom message — official signature is attached below in final preview</span>
           </div>
-          <textarea id="standard_body_content" class="textarea-body" style="min-height: 140px;" placeholder="Write your message here..." oninput="updateStandardPreview()"></textarea>
+          
+          <!-- Rich Text Formatting Toolbar -->
+          <div class="editor-toolbar" id="rich-editor-toolbar" role="toolbar" aria-label="Text Formatting">
+            <button type="button" class="editor-btn" onclick="formatDoc('bold')" title="Bold (Ctrl+B)" aria-label="Bold"><strong>B</strong></button>
+            <button type="button" class="editor-btn" onclick="formatDoc('italic')" title="Italic (Ctrl+I)" aria-label="Italic"><em>I</em></button>
+            <button type="button" class="editor-btn" onclick="formatDoc('insertUnorderedList')" title="Bullet List" aria-label="Bullet List">• List</button>
+            <button type="button" class="editor-btn" onclick="formatDoc('insertOrderedList')" title="Numbered List" aria-label="Numbered List">1. List</button>
+            <button type="button" class="editor-btn" onclick="insertHyperlink()" title="Insert Link" aria-label="Insert Link">🔗 Link</button>
+            <button type="button" class="editor-btn" onclick="formatDoc('removeFormat')" title="Clear Formatting" aria-label="Clear Formatting">✕ Clear</button>
+            <span style="font-size: 0.72rem; color: var(--text-muted); margin-left: auto;">Rich-Text Mode</span>
+          </div>
+
+          <!-- Rich-Text Surface -->
+          <div id="rich_body_editor" class="rich-editor-surface" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your email message here..." oninput="syncEditorToHidden(); updateStandardPreview();"></div>
+
+          <!-- Synchronized Raw Content Inputs -->
+          <textarea id="standard_body_content" class="textarea-body" style="display: none; min-height: 140px;" placeholder="Write your message here..." oninput="updateStandardPreview()"></textarea>
         </div>
 
         <div class="preview-container">
           <div class="preview-toolbar">
             <span id="preview-status-label">Previewing: Standard Email with Official Signature</span>
-            <span id="preview-theme-indicator" style="font-family: monospace;">DESKTOP PREVIEW</span>
+            <span id="preview-theme-indicator" style="font-family: monospace;">FINAL PREVIEW</span>
           </div>
           <div class="preview-frame" id="visual-preview-render">
             <!-- Rendered visual preview injected here -->
@@ -738,6 +847,109 @@ const OFFICIAL_SIGNATURES = {
   }
 };
 
+const B2B_TEMPLATES = {
+  "standard": {
+    "subject": "",
+    "body_text": "",
+    "body_html": ""
+  },
+  "b2b_intro_en": {
+    "subject": "Introduction | pyBIM — BIM & Digital Automation",
+    "body_text": "Hello,\n\nI am contacting you from pyBIM regarding engineering and digital BIM automation services.\n\nWe support architecture and engineering practices in streamlining modeling workflows, clash detection, and digital project delivery.\n\nCould we arrange a brief introductory call next week to explore potential synergies?",
+    "body_html": "<p>Hello,</p><p>I am contacting you from pyBIM regarding engineering and digital BIM automation services.</p><p>We support architecture and engineering practices in streamlining modeling workflows, clash detection, and digital project delivery.</p><p>Could we arrange a brief introductory call next week to explore potential synergies?</p>"
+  },
+  "b2b_intro_it": {
+    "subject": "Presentazione | pyBIM — Ingegneria e Automazione BIM",
+    "body_text": "Gentile Studio,\n\nVi contatto a nome di pyBIM in merito ai nostri servizi di ingegneria e automazione digitale BIM.\n\nSupportiamo studi di architettura e società di ingegneria nell'ottimizzazione dei flussi di modellazione, coordinamento e gestione delle commesse digitali.\n\nSarebbe possibile organizzare un breve confronto conoscitivo nei prossimi giorni?",
+    "body_html": "<p>Gentile Studio,</p><p>Vi contatto a nome di pyBIM in merito ai nostri servizi di ingegneria e automazione digitale BIM.</p><p>Supportiamo studi di architettura e società di ingegneria nell'ottimizzazione dei flussi di modellazione, coordinamento e gestione delle commesse digitali.</p><p>Sarebbe possibile organizzare un breve confronto conoscitivo nei prossimi giorni?</p>"
+  },
+  "collab_proposal_en": {
+    "subject": "Collaboration Proposal | pyBIM Technical Support",
+    "body_text": "Hello,\n\nFollowing our review of your ongoing projects, we would like to propose a technical collaboration for specialized BIM management and automation services.\n\nOur team can assist with:\n• Advanced BIM modeling and parameter standardization\n• Automated clash detection and model coordination\n• Custom computational workflows\n\nPlease let us know if you would like to discuss this opportunity in detail.",
+    "body_html": "<p>Hello,</p><p>Following our review of your ongoing projects, we would like to propose a technical collaboration for specialized BIM management and automation services.</p><p>Our team can assist with:</p><ul><li>Advanced BIM modeling and parameter standardization</li><li>Automated clash detection and model coordination</li><li>Custom computational workflows</li></ul><p>Please let us know if you would like to discuss this opportunity in detail.</p>"
+  },
+  "collab_proposal_it": {
+    "subject": "Proposta di Collaborazione Tecnica | pyBIM",
+    "body_text": "Gentile Studio,\n\nIn riferimento ai vostri progetti in corso, desideriamo proporvi una collaborazione tecnica per il supporto specialistico BIM e automazione dei flussi informativi.\n\nIl nostro team può affiancarvi nelle seguenti aree:\n• Modellazione avanzata e standardizzazione parametri\n• Clash detection e coordinamento multidisciplinare\n• Sviluppo di automazioni computazionali su misura\n\nRestiamo a disposizione per approfondire i dettagli operativi.",
+    "body_html": "<p>Gentile Studio,</p><p>In riferimento ai vostri progetti in corso, desideriamo proporvi una collaborazione tecnica per il supporto specialistico BIM e automazione dei flussi informativi.</p><p>Il nostro team può affiancarvi nelle seguenti aree:</p><ul><li>Modellazione avanzata e standardizzazione parametri</li><li>Clash detection e coordinamento multidisciplinare</li><li>Sviluppo di automazioni computazionali su misura</li></ul><p>Restiamo a disposizione per approfondire i dettagli operativi.</p>"
+  },
+  "followup_en": {
+    "subject": "Follow-up | pyBIM Coordination",
+    "body_text": "Hello,\n\nI am following up on our previous correspondence regarding pyBIM engineering and BIM coordination services.\n\nPlease let me know if you had an opportunity to review the materials or if you need any additional technical information.\n\nWe remain at your disposal.",
+    "body_html": "<p>Hello,</p><p>I am following up on our previous correspondence regarding pyBIM engineering and BIM coordination services.</p><p>Please let me know if you had an opportunity to review the materials or if you need any additional technical information.</p><p>We remain at your disposal.</p>"
+  },
+  "followup_it": {
+    "subject": "Follow-up | pyBIM Coordinamento",
+    "body_text": "Gentile Studio,\n\nDesidero fare seguito alla nostra precedente comunicazione in merito ai servizi di ingegneria e coordinamento BIM di pyBIM.\n\nResto a disposizione qualora abbiate avuto modo di valutare la proposta o desideriate ulteriori chiarimenti tecnici.",
+    "body_html": "<p>Gentile Studio,</p><p>Desidero fare seguito alla nostra precedente comunicazione in merito ai servizi di ingegneria e coordinamento BIM di pyBIM.</p><p>Resto a disposizione qualora abbiate avuto modo di valutare la proposta o desideriate ulteriori chiarimenti tecnici.</p>"
+  },
+  "client_reply_en": {
+    "subject": "Re: Project Coordination | pyBIM",
+    "body_text": "Hello,\n\nThank you for reaching out.\n\nWe have reviewed your request and confirmed our team's availability to assist. Attached below are the relevant details for your consideration.\n\nPlease let us know how you would like to proceed.",
+    "body_html": "<p>Hello,</p><p>Thank you for reaching out.</p><p>We have reviewed your request and confirmed our team's availability to assist. Attached below are the relevant details for your consideration.</p><p>Please let us know how you would like to proceed.</p>"
+  },
+  "client_reply_it": {
+    "subject": "Riscontro | pyBIM — Coordinamento Progetto",
+    "body_text": "Gentile Cliente,\n\nLa ringraziamo per il messaggio.\n\nAbbiamo esaminato la vostra richiesta e vi confermiamo la nostra piena disponibilità a supportare le attività di progetto. Restiamo a disposizione per concordare i prossimi passaggi operativi.",
+    "body_html": "<p>Gentile Cliente,</p><p>La ringraziamo per il messaggio.</p><p>Abbiamo esaminato la vostra richiesta e vi confermiamo la nostra piena disponibilità a supportare le attività di progetto. Restiamo a disposizione per concordare i prossimi passaggi operativi.</p>"
+  },
+  "meeting_followup_en": {
+    "subject": "Meeting Follow-up & Next Steps | pyBIM",
+    "body_text": "Hello,\n\nThank you for taking the time to meet with us today. It was a pleasure discussing the project requirements.\n\nKey discussion summary and next steps:\n• Technical scope alignment\n• Deliverables timeline confirmation\n• Action items distribution\n\nPlease let us know if anything should be amended.",
+    "body_html": "<p>Hello,</p><p>Thank you for taking the time to meet with us today. It was a pleasure discussing the project requirements.</p><p>Key discussion summary and next steps:</p><ul><li>Technical scope alignment</li><li>Deliverables timeline confirmation</li><li>Action items distribution</li></ul><p>Please let us know if anything should be amended.</p>"
+  },
+  "meeting_followup_it": {
+    "subject": "Sintesi Riunione e Prossimi Passi | pyBIM",
+    "body_text": "Gentile Studio,\n\nVi ringraziamo per il tempo dedicato durante la riunione di oggi.\n\nRiepilogo dei punti principali concordati:\n• Allineamento sui requisiti tecnici di commessa\n• Tempistiche di consegna e deliverable\n• Ripartizione delle prossime attività operative\n\nRestiamo a disposizione per qualsiasi integrazione.",
+    "body_html": "<p>Gentile Studio,</p><p>Vi ringraziamo per il tempo dedicato durante la riunione di oggi.</p><p>Riepilogo dei punti principali concordati:</p><ul><li>Allineamento sui requisiti tecnici di commessa</li><li>Tempistiche di consegna e deliverable</li><li>Ripartizione delle prossime attività operative</li></ul><p>Restiamo a disposizione per qualsiasi integrazione.</p>"
+  }
+};
+
+// Rich-Text Editor Helper Functions
+function formatDoc(cmd, val = null) {
+  const editor = document.getElementById('rich_body_editor');
+  if (editor) editor.focus();
+  document.execCommand(cmd, false, val);
+  syncEditorToHidden();
+  updateStandardPreview();
+}
+
+function insertHyperlink() {
+  const url = prompt('Enter link URL (https://...):', 'https://');
+  if (url && url.trim() && url !== 'https://') {
+    formatDoc('createLink', url.trim());
+  }
+}
+
+function syncEditorToHidden() {
+  const editor = document.getElementById('rich_body_editor');
+  const hiddenContent = document.getElementById('standard_body_content');
+  if (!editor || !hiddenContent) return;
+  hiddenContent.value = editor.innerText || '';
+}
+
+function syncTextToRichEditor(plainText, htmlText = '') {
+  const editor = document.getElementById('rich_body_editor');
+  const hiddenContent = document.getElementById('standard_body_content');
+  if (!editor || !hiddenContent) return;
+
+  hiddenContent.value = plainText || '';
+
+  if (htmlText && htmlText.trim()) {
+    editor.innerHTML = htmlText;
+  } else if (plainText && plainText.trim()) {
+    // Format plain text into clean paragraphs
+    const paragraphs = plainText.split(/\n\s*\n/);
+    editor.innerHTML = paragraphs.map(p => {
+      const trimmed = p.trim();
+      if (!trimmed) return '';
+      return '<p>' + esc(trimmed).replace(/\n/g, '<br>') + '</p>';
+    }).join('');
+  } else {
+    editor.innerHTML = '';
+  }
+}
+
 // Meeting Metadata
 const MEETING_META = {
   "en": {
@@ -851,12 +1063,12 @@ function handleSignatureSelect(val) {
 }
 
 function handleTemplateChange(templateId) {
-  const isMeeting = templateId.startsWith('meeting_');
-  document.getElementById('meeting-studio-panel').style.display = isMeeting ? 'flex' : 'none';
-  document.getElementById('signature-control-row').style.display = isMeeting ? 'none' : 'flex';
-  document.getElementById('standard-body-input-wrap').style.display = isMeeting ? 'none' : 'flex';
+  const isMeetingBranded = ['meeting_en_dark', 'meeting_en_light', 'meeting_it_dark', 'meeting_it_light'].includes(templateId);
+  document.getElementById('meeting-studio-panel').style.display = isMeetingBranded ? 'flex' : 'none';
+  document.getElementById('signature-control-row').style.display = isMeetingBranded ? 'none' : 'flex';
+  document.getElementById('standard-body-input-wrap').style.display = isMeetingBranded ? 'none' : 'flex';
 
-  if (isMeeting) {
+  if (isMeetingBranded) {
     const lang = templateId.includes('_it_') ? 'it' : 'en';
     const meta = MEETING_META[lang];
     if (!document.getElementById('m_topic').value) document.getElementById('m_topic').value = meta.topic_default;
@@ -868,6 +1080,23 @@ function handleTemplateChange(templateId) {
     if (!document.getElementById('m_a3').value) document.getElementById('m_a3').value = meta.agenda_defaults[2];
     updateMeetingFromFields();
   } else {
+    // Check if selecting a standard B2B template
+    const tmplObj = B2B_TEMPLATES[templateId];
+    if (tmplObj) {
+      const currentContent = document.getElementById('standard_body_content').value.trim();
+      // If user has authored non-empty content, ask for confirmation before overwriting
+      if (currentContent && tmplObj.body_text && currentContent !== tmplObj.body_text.trim()) {
+        const confirmed = confirm('Apply this template? Your current message content will be replaced.');
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      if (tmplObj.subject && !document.getElementById('subject').value.trim()) {
+        document.getElementById('subject').value = tmplObj.subject;
+      }
+      syncTextToRichEditor(tmplObj.body_text, tmplObj.body_html);
+    }
     updateStandardPreview();
   }
 }
@@ -878,16 +1107,29 @@ function esc(s) {
 
 function updateStandardPreview() {
   const content = document.getElementById('standard_body_content').value;
+  const richEditor = document.getElementById('rich_body_editor');
   const sig = getActiveSignature();
 
-  let htmlBody = '<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: #f8fafc; white-space: pre-wrap;">' + esc(content) + '</div>';
+  // If rich-text editor has HTML content, use its innerHTML; otherwise escape plain text
+  let innerHtmlContent = '';
+  if (richEditor && richEditor.innerHTML.trim() && richEditor.innerHTML !== '<br>') {
+    innerHtmlContent = richEditor.innerHTML;
+  } else if (content) {
+    const paragraphs = content.split(/\n\s*\n/);
+    innerHtmlContent = paragraphs.map(p => {
+      const trimmed = p.trim();
+      return trimmed ? '<p>' + esc(trimmed).replace(/\n/g, '<br>') + '</p>' : '';
+    }).join('');
+  }
+
+  let htmlBody = '<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: #f8fafc;">' + (innerHtmlContent || '<p style="color: #64748b; font-style: italic;">(Empty message body)</p>') + '</div>';
   if (sig) {
     htmlBody += '<br>' + sig.html;
   }
 
   let plainBody = content;
   if (sig) {
-    plainBody += '\n\n' + sig.plain;
+    plainBody = plainBody ? (plainBody + '\n\n' + sig.plain) : sig.plain;
   }
 
   document.getElementById('visual-preview-render').innerHTML = htmlBody;
@@ -1199,8 +1441,10 @@ document.addEventListener('DOMContentLoaded', function() {
   } else {
     // Check if existing body has content (using safe JSON serialization)
     const serverUserBody = {{ user_body_content | default('') | tojson }};
+    const serverUserHtml = {{ user_html_content | default('') | tojson }};
+
     if (serverUserBody && serverUserBody.trim()) {
-      document.getElementById('standard_body_content').value = serverUserBody;
+      syncTextToRichEditor(serverUserBody, serverUserHtml);
     } else if (existingPlain && existingPlain.trim()) {
       // Fallback: strip any official signature client-side to prevent duplicate accumulation
       let clean = existingPlain;
@@ -1211,9 +1455,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
       clean = clean.replace(/--\s*$/, '').trimEnd();
-      document.getElementById('standard_body_content').value = clean;
+      syncTextToRichEditor(clean, existingHtml);
     } else {
-      document.getElementById('standard_body_content').value = 'Dear Architect,\n\nWe would like to introduce pyBIM.';
+      // Professional blank new draft by default: clean slate
+      syncTextToRichEditor('', '');
     }
     refreshVisualPreview();
   }
@@ -1229,6 +1474,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const errorDetail = document.getElementById('composer-error-detail');
       const flashBanner = document.getElementById('composer-flash-msg');
       if (errorBanner) errorBanner.style.display = 'none';
+
+      // Ensure rich editor text is synced to hidden plain text textarea
+      syncEditorToHidden();
 
       // Ensure visual preview and hidden fields are up to date before submitting
       const tmpl = document.getElementById('template_select').value;

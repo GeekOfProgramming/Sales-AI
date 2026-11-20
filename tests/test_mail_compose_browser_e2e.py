@@ -123,7 +123,7 @@ def test_composer_browser_interactions_and_regression(browser_server):
         page.on("console", lambda msg: console_msgs.append(f"{msg.type}: {msg.text}"))
         page.on("pageerror", lambda err: errors.append(str(err)))
 
-        # 1. Test New Draft Composer
+        # 1. Test New Draft Composer — Blank slate defaults (MAIL-COMPOSE-01C)
         resp = page.goto(f"{base_url}/sales/mail-operations/compose")
         page.wait_for_timeout(1000)
         print("\nPAGE LOADED URL:", page.url, "HTTP STATUS:", resp.status if resp else "no resp")
@@ -131,16 +131,59 @@ def test_composer_browser_interactions_and_regression(browser_server):
             print("PAGE CONTENT PREVIEW:\n", page.content()[:1000])
         assert len(errors) == 0, f"Unexpected page errors: {errors}"
 
-        # Visual preview should be populated
+        # Blank default assertions: to, subject, editable body should all be empty
+        assert page.input_value("#to_addresses") == "", "New draft should have empty recipient"
+        assert page.input_value("#subject") == "", "New draft should have empty subject"
+        assert page.input_value("#standard_body_content") == "", "New draft body textarea should be blank (no 'Dear Architect')"
+        rich_initial_text = page.eval_on_selector("#rich_body_editor", "el => el.innerText.trim()")
+        assert rich_initial_text == "", "Rich text surface should be blank initially"
+
+        # Sender should default to authorized primary account and signature should be in visual preview
+        assert page.input_value("#account_id") == "acc_info_com"
         prev_html = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
         assert len(prev_html) > 500, "Visual preview was blank"
         assert "info@pybim.com" in prev_html
+        assert "Empty message body" in prev_html
 
-        # Typing in message content updates visual preview in real time
-        page.fill("#standard_body_content", "Real-time browser typed content")
+        # Typing in rich text editor updates hidden textarea and preview in real time
+        page.fill("#rich_body_editor", "Real-time browser typed content")
+        page.dispatch_event("#rich_body_editor", "input")
         page.wait_for_timeout(300)
+        assert page.input_value("#standard_body_content") == "Real-time browser typed content"
         updated_prev = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
         assert "Real-time browser typed content" in updated_prev
+
+        # Rich text toolbar buttons test: bold, italic, list
+        page.click("button[title='Bold (Ctrl+B)']")
+        page.click("button[title='Italic (Ctrl+I)']")
+        page.wait_for_timeout(100)
+
+        # Test B2B Template Switching (MAIL-COMPOSE-01C Section B)
+        # Select Initial B2B Introduction (English)
+        # User already typed text, so changing template triggers confirm prompt
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.select_option("#template_select", "b2b_intro_en")
+        page.dispatch_event("#template_select", "change")
+        page.wait_for_timeout(400)
+
+        # Subject and body populated with clean B2B template
+        intro_subject = page.input_value("#subject")
+        intro_body = page.input_value("#standard_body_content")
+        assert "Introduction | pyBIM" in intro_subject
+        assert "streamlining modeling workflows" in intro_body
+        assert "Dear Architect" not in intro_body
+        intro_prev = page.eval_on_selector("#visual-preview-render", "el => el.innerHTML")
+        assert "streamlining modeling workflows" in intro_prev
+        assert "info@pybim.com" in intro_prev
+
+        # Select Italian B2B Introduction
+        page.once("dialog", lambda dialog: dialog.accept())
+        page.select_option("#template_select", "b2b_intro_it")
+        page.dispatch_event("#template_select", "change")
+        page.wait_for_timeout(400)
+        intro_it_body = page.input_value("#standard_body_content")
+        assert "Gentile Studio" in intro_it_body
+        assert "commesse digitali" in intro_it_body
 
         # Tab switching
         page.click("#tab-btn-plain")
@@ -199,12 +242,13 @@ def test_composer_browser_interactions_and_regression(browser_server):
         page.dispatch_event("#template_select", "change")
         page.wait_for_timeout(300)
         assert not page.is_visible("#meeting-studio-panel")
-        assert page.is_visible("#standard_body_content")
+        assert page.is_visible("#rich_body_editor")
 
         # Form submission: Save Draft
         page.fill("#to_addresses", "lead@company.com")
         page.fill("#subject", "E2E Verified Proposal")
-        page.fill("#standard_body_content", "Draft content verified with Playwright.")
+        page.fill("#rich_body_editor", "Draft content verified with Playwright.")
+        page.dispatch_event("#rich_body_editor", "input")
         page.wait_for_timeout(300)
 
         page.click("button[value='save']")

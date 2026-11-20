@@ -10284,6 +10284,7 @@ async def compose_email_view(
     # Clean message body to strip any pre-existing appended signature for the editor
     from sales_engine.inbox.signatures import strip_signature, strip_signature_html
     user_body_content = strip_signature(body_plain_field) if body_plain_field else ""
+    user_html_content = strip_signature_html(body_html_field) if body_html_field else ""
 
     return render_console_template(
         request=request,
@@ -10303,6 +10304,7 @@ async def compose_email_view(
             "body_plain_field": body_plain_field,
             "body_html_field": body_html_field,
             "user_body_content": user_body_content,
+            "user_html_content": user_html_content,
             "candidate_id": active_cand_id or "",
             "candidate_name": candidate_name or "",
             "contact_id": active_cont_id or "",
