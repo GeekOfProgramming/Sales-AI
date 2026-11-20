@@ -67,6 +67,183 @@ DEFAULT_DB_PATH = os.getenv("SALES_OUTREACH_DB", "data/sales_outreach.db")
 AUTHORIZED_PILOT_SENDERS = {"info@pybim.com", "info@pybim.it"}
 
 
+def check_draft_eligibility(
+    db_path: str,
+    draft_id: str,
+    allowed_recipient: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Safely inspects a scheduled draft for outbound queue admission eligibility without mutations.
+    """
+    abs_db = os.path.abspath(db_path)
+    repo = MailboxRepository(db_path=abs_db, auto_migrate=False)
+    safeguards = OutboundSafeguardService(db_path=abs_db)
+    queue_store = OutboundQueueStore(db_path=abs_db, auto_apply_schema=False)
+
+    clean_draft_id = draft_id.strip()
+    draft = repo.get_draft(clean_draft_id)
+    if not draft:
+        return {
+            "eligible": False,
+            "draft_id": clean_draft_id,
+            "reasons": [f"Draft '{clean_draft_id}' not found in mailbox_drafts."],
+        }
+
+    reasons: List[str] = []
+    warnings: List[str] = []
+
+    # 1. Draft status check
+    if draft.draft_status != "scheduled":
+        reasons.append(
+            f"Draft status is '{draft.draft_status}'. Only 'scheduled' drafts can be admitted to the outbound queue."
+        )
+
+    # 2. Sender check
+    if draft.sender_email not in AUTHORIZED_PILOT_SENDERS:
+        reasons.append(
+            f"Sender '{draft.sender_email}' is not in authorized pilot senders ({', '.join(sorted(AUTHORIZED_PILOT_SENDERS))})."
+        )
+
+    # 3. Snapshot verification
+    frozen_subject = draft.snapshot_subject or draft.subject
+    frozen_plain = draft.snapshot_plain_text or draft.body_plain_text
+    frozen_html = draft.snapshot_html_sanitized or draft.body_html_sanitized
+    frozen_to = draft.snapshot_to_addresses or draft.to_addresses
+    frozen_cc = draft.cc_addresses or []
+    frozen_bcc = draft.bcc_addresses or []
+
+    if not draft.snapshot_subject and not draft.snapshot_plain_text:
+        warnings.append("Draft has no immutable snapshot fields stored; will fallback to live draft content.")
+
+    # 4. Recipient checking
+    if not frozen_to:
+        reasons.append("Draft has no recipient (To) addresses.")
+    else:
+        try:
+            clean_to = safeguards.validate_recipients(frozen_to)
+            safeguards.check_suppression(clean_to)
+        except Exception as e:
+            reasons.append(f"Recipient validation/suppression error: {e}")
+
+        if allowed_recipient:
+            clean_rcpt = allowed_recipient.strip().lower()
+            if len(frozen_to) != 1 or frozen_to[0].strip().lower() != clean_rcpt:
+                reasons.append(
+                    f"Recipient mismatch: draft contains {frozen_to}, but required allowed recipient is '{clean_rcpt}'."
+                )
+
+    # 5. Placeholder checking
+    try:
+        content_errs = validate_message_payload(
+            subject=frozen_subject,
+            plain_text=frozen_plain,
+            html_text=frozen_html,
+        )
+        if content_errs:
+            reasons.extend(content_errs)
+    except Exception as e:
+        reasons.append(f"Payload validation error: {e}")
+
+    # 6. Scheduled time check & expiration
+    now_utc = datetime.now(timezone.utc)
+    is_expired = False
+    if not draft.scheduled_for_utc:
+        reasons.append("Draft is missing scheduled_for_utc timestamp.")
+    else:
+        try:
+            sched_dt = datetime.fromisoformat(draft.scheduled_for_utc.replace("Z", "+00:00"))
+            if sched_dt < now_utc:
+                is_expired = True
+                reasons.append(
+                    f"Scheduled send time ({draft.scheduled_for_utc}) has already passed (expired). Current UTC is {now_utc.isoformat()}."
+                )
+        except Exception as e:
+            reasons.append(f"Invalid scheduled_for_utc format: {e}")
+
+    # 7. Check existing queue job (Idempotency)
+    existing_job = queue_store.get_job_by_draft_id(clean_draft_id)
+    if existing_job:
+        if existing_job.status in ("scheduled", "sending", "smtp_accepted"):
+            reasons.append(
+                f"Draft already admitted to queue: Job ID '{existing_job.job_id}' (status: '{existing_job.status}'). Duplicate admission blocked."
+            )
+        else:
+            warnings.append(
+                f"Draft has a previous inactive queue job '{existing_job.job_id}' with status '{existing_job.status}'."
+            )
+
+    is_eligible = len(reasons) == 0
+
+    return {
+        "eligible": is_eligible,
+        "draft_id": clean_draft_id,
+        "draft_status": draft.draft_status,
+        "sender_email": draft.sender_email,
+        "recipients": frozen_to,
+        "subject": frozen_subject,
+        "scheduled_for_utc": draft.scheduled_for_utc,
+        "is_expired": is_expired,
+        "existing_job_id": existing_job.job_id if existing_job else None,
+        "reasons": reasons,
+        "warnings": warnings,
+    }
+
+
+def admit_draft_to_queue(
+    db_path: str,
+    draft_id: str,
+    allowed_recipient: str,
+    operator_username: str = "pilot_operator",
+    allow_expired: bool = False,
+) -> Dict[str, Any]:
+    """
+    Admits exactly one approved scheduled draft into the outbound queue with strict gating.
+    Does NOT transmit or send any message.
+    """
+    abs_db = os.path.abspath(db_path)
+    clean_draft_id = draft_id.strip()
+    clean_allowed_rcpt = allowed_recipient.strip().lower()
+
+    # 1. Eligibility preflight
+    eligibility = check_draft_eligibility(
+        db_path=abs_db,
+        draft_id=clean_draft_id,
+        allowed_recipient=clean_allowed_rcpt,
+    )
+
+    if not eligibility["eligible"]:
+        # If the only reason was expiration and operator explicitly allowed it, we can proceed
+        if allow_expired and eligibility.get("is_expired") and len(eligibility["reasons"]) == 1:
+            logger.info("Admitting expired draft per operator override (--allow-expired).")
+        else:
+            raise ValueError(
+                f"Draft '{clean_draft_id}' is not eligible for queue admission: {'; '.join(eligibility['reasons'])}"
+            )
+
+    # 2. Execute queueing via OutboundDispatchService
+    from sales_engine.sending.outbound_service import OutboundDispatchService
+    dispatch_svc = OutboundDispatchService(db_path=abs_db)
+    job = dispatch_svc.queue_approved_draft(
+        draft_id=clean_draft_id,
+        operator_username=operator_username,
+        is_legacy_revalidated=True,
+    )
+
+    return {
+        "success": True,
+        "action": "QUEUE_ADMISSION",
+        "job_id": job.job_id,
+        "draft_id": job.source_draft_id,
+        "status": job.status,
+        "sender_email": job.sender_email,
+        "recipient": clean_allowed_rcpt,
+        "subject": job.subject,
+        "scheduled_for_utc": job.scheduled_for_utc,
+        "approved_by": job.approved_by,
+        "approved_at_utc": job.approved_at_utc,
+    }
+
+
 def get_diagnostics(db_path: str) -> Dict[str, Any]:
     """Generates read-only operational diagnostics without creating schema or mutating data."""
     abs_db = os.path.abspath(db_path)
@@ -142,6 +319,7 @@ def execute_single_message_pilot(
     dry_run: bool = True,
     operator_username: str = "pilot_operator",
     custom_smtp_server: Optional[Any] = None,
+    credential_store: Optional[MailboxCredentialStore] = None,
 ) -> Dict[str, Any]:
     """
     Executes a single-message pilot transmission under strict containment rules.
@@ -149,7 +327,7 @@ def execute_single_message_pilot(
     abs_db = os.path.abspath(db_path)
     queue_store = OutboundQueueStore(db_path=abs_db, auto_apply_schema=False)
     safeguards = OutboundSafeguardService(db_path=abs_db)
-    cred_store = MailboxCredentialStore()
+    cred_store = credential_store or MailboxCredentialStore()
     repo = MailboxRepository(db_path=abs_db, auto_migrate=False)
 
     clean_allowed_rcpt = allowed_recipient.strip().lower()
@@ -380,7 +558,19 @@ def main():
     insp_parser = subparsers.add_parser("inspect-job", help="Inspect a specific queued job and preview its frozen payload")
     insp_parser.add_argument("--job-id", required=True, help="Job ID to inspect")
 
-    # Command 3: pilot-send
+    # Command 3: check-draft (inspect eligibility without mutating)
+    check_parser = subparsers.add_parser("check-draft", help="Inspect a scheduled draft for outbound queue eligibility")
+    check_parser.add_argument("--draft-id", required=True, help="Draft ID to check")
+    check_parser.add_argument("--allowed-recipient", default=None, help="Optional recipient email to verify against draft destination")
+
+    # Command 4: admit-draft (explicit queue admission)
+    admit_parser = subparsers.add_parser("admit-draft", help="Explicitly admit an eligible scheduled draft into outbound_jobs")
+    admit_parser.add_argument("--draft-id", required=True, help="Draft ID to admit to queue")
+    admit_parser.add_argument("--allowed-recipient", required=True, help="Exact recipient address allowlist for verification")
+    admit_parser.add_argument("--operator", default="operator_pilot", help="Operator username authorizing queue admission")
+    admit_parser.add_argument("--allow-expired", action="store_true", default=False, help="Allow admitting draft whose scheduled time has passed (quarantined test drafts)")
+
+    # Command 5: pilot-send
     pilot_parser = subparsers.add_parser("pilot-send", help="Execute single-message pilot transmission")
     pilot_parser.add_argument("--job-id", required=True, help="Exact Job ID to pilot")
     pilot_parser.add_argument("--allowed-recipient", required=True, help="Exact recipient address allowlist for the pilot")
@@ -444,6 +634,61 @@ def main():
         print("\n--- Frozen Body Preview ---")
         print(job.body_plain_text[:500] + ("..." if len(job.body_plain_text) > 500 else ""))
         print("======================================================================\n")
+
+    elif args.command == "check-draft":
+        elig = check_draft_eligibility(
+            db_path=args.db_path,
+            draft_id=args.draft_id,
+            allowed_recipient=args.allowed_recipient,
+        )
+        print("\n======================================================================")
+        print(f"Draft Queue Eligibility Inspection: {args.draft_id}")
+        print("======================================================================")
+        print(f"Eligible for Queue: {elig['eligible']}")
+        print(f"Draft Status:       {elig.get('draft_status')}")
+        print(f"Sender Email:       {elig.get('sender_email')}")
+        print(f"Recipients:         {elig.get('recipients')}")
+        print(f"Subject:            {elig.get('subject')}")
+        print(f"Scheduled For UTC:  {elig.get('scheduled_for_utc')}")
+        print(f"Schedule Expired:   {elig.get('is_expired')}")
+        print(f"Existing Job ID:    {elig.get('existing_job_id') or 'None'}")
+        if elig.get("reasons"):
+            print("\nBlocking Reasons:")
+            for r in elig["reasons"]:
+                print(f"  [X] {r}")
+        if elig.get("warnings"):
+            print("\nWarnings:")
+            for w in elig["warnings"]:
+                print(f"  [!] {w}")
+        print("======================================================================\n")
+
+    elif args.command == "admit-draft":
+        try:
+            res = admit_draft_to_queue(
+                db_path=args.db_path,
+                draft_id=args.draft_id,
+                allowed_recipient=args.allowed_recipient,
+                operator_username=args.operator,
+                allow_expired=args.allow_expired,
+            )
+            print("\n======================================================================")
+            print("SUCCESS: Draft Admitted to Outbound Queue")
+            print("======================================================================")
+            print(f"Resulting Job ID:   {res['job_id']}")
+            print(f"Source Draft ID:    {res['draft_id']}")
+            print(f"Queue Status:       {res['status']}")
+            print(f"Sender Email:       {res['sender_email']}")
+            print(f"Recipient:          {res['recipient']}")
+            print(f"Subject:            {res['subject']}")
+            print(f"Scheduled For UTC:  {res['scheduled_for_utc']}")
+            print(f"Approved By:        {res['approved_by']} at {res['approved_at_utc']}")
+            print("======================================================================\n")
+            print(f"Next step: Inspect or dry-run using:")
+            print(f"  python scripts/run_outbound_pilot.py inspect-job --job-id {res['job_id']}")
+            print(f"  python scripts/run_outbound_pilot.py pilot-send --job-id {res['job_id']} --allowed-recipient {res['recipient']} --dry-run\n")
+        except Exception as e:
+            print(f"\n[ERROR] Queue admission rejected: {e}\n")
+            sys.exit(1)
 
     elif args.command == "pilot-send":
         # Check explicit dry-run vs live-send flags

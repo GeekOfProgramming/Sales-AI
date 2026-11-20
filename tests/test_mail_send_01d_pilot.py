@@ -46,7 +46,12 @@ from sales_engine.sending.mime_builder import build_mime_message, validate_messa
 from sales_engine.sending.smtp_adapter import RegisterItSMTPAdapter
 from backend.operator_auth import get_auth_service, init_auth_schema, OperatorUser, OperatorAuthService
 import backend.operator_auth as operator_auth_mod
-from scripts.run_outbound_pilot import get_diagnostics, execute_single_message_pilot
+from scripts.run_outbound_pilot import (
+    get_diagnostics,
+    execute_single_message_pilot,
+    check_draft_eligibility,
+    admit_draft_to_queue,
+)
 
 
 @pytest.fixture(scope="function")
@@ -190,6 +195,7 @@ def test_pilot_single_message_dry_run_simulation(pilot_test_env):
         job_id="job_pilot_001",
         allowed_recipient="test.recipient@partner.com",
         dry_run=True,
+        credential_store=pilot_test_env["cred_store"],
     )
 
     assert res["success"] is True
@@ -335,6 +341,7 @@ def test_pilot_live_send_with_mock_smtp_server(pilot_test_env, monkeypatch):
         allowed_recipient="partner.verified@company.com",
         dry_run=False,
         custom_smtp_server=mock_server,
+        credential_store=pilot_test_env["cred_store"],
     )
 
     assert res["success"] is True
@@ -388,6 +395,7 @@ def test_pilot_unknown_acceptance_on_timeout(pilot_test_env, monkeypatch):
         allowed_recipient="timeout.partner@company.com",
         dry_run=False,
         custom_smtp_server=mock_server,
+        credential_store=pilot_test_env["cred_store"],
     )
 
     assert res["success"] is False
@@ -428,3 +436,218 @@ def test_reversible_account_deactivation_and_session_revocation(pilot_test_env):
     restored_u = auth.authenticate_user("test_operator_1", "OperatorPass123!")
     assert restored_u is not None
     assert restored_u.is_active is True
+
+
+# ==============================================================================
+# MAIL-SEND-01D-QUEUE-BRIDGE Tests
+# ==============================================================================
+
+def test_check_draft_eligibility_scheduled_vs_unscheduled(pilot_test_env):
+    """Verify eligibility inspector correctly distinguishes unscheduled from scheduled drafts."""
+    db_path = pilot_test_env["db_path"]
+    repo: MailboxRepository = pilot_test_env["repo"]
+
+    # 1. Unscheduled draft ('ready_to_schedule')
+    draft_unsched = MailboxDraftRecord(
+        draft_id="drf_elig_unsched",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        to_addresses=["h.lotfalian98@gmail.com"],
+        subject="pyBIM SMTP Pilot — Test 01",
+        body_plain_text="Content",
+        draft_status="ready_to_schedule",
+        created_by="pilot_admin",
+        updated_by="pilot_admin",
+    )
+    repo.save_draft(draft_unsched)
+
+    res_unsched = check_draft_eligibility(db_path, "drf_elig_unsched", "h.lotfalian98@gmail.com")
+    assert res_unsched["eligible"] is False
+    assert any("Only 'scheduled' drafts" in r for r in res_unsched["reasons"])
+    assert any("missing scheduled_for_utc" in r for r in res_unsched["reasons"])
+
+    # 2. Valid scheduled draft in the future
+    future_time = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    draft_sched = MailboxDraftRecord(
+        draft_id="drf_elig_sched",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        to_addresses=["h.lotfalian98@gmail.com"],
+        subject="pyBIM SMTP Pilot — Test 01",
+        body_plain_text="Content",
+        draft_status="scheduled",
+        scheduled_for_utc=future_time,
+        scheduled_local_date="2026-11-20",
+        scheduled_local_time="17:00",
+        scheduled_timezone="Europe/Rome",
+        snapshot_subject="pyBIM SMTP Pilot — Test 01",
+        snapshot_plain_text="Content",
+        snapshot_to_addresses=["h.lotfalian98@gmail.com"],
+        created_by="pilot_admin",
+        updated_by="pilot_admin",
+    )
+    repo.save_draft(draft_sched)
+
+    res_sched = check_draft_eligibility(db_path, "drf_elig_sched", "h.lotfalian98@gmail.com")
+    assert res_sched["eligible"] is True
+    assert res_sched["reasons"] == []
+    assert res_sched["is_expired"] is False
+
+
+def test_admit_draft_to_queue_success_and_idempotency(pilot_test_env):
+    """Verify explicit admission creates one queued outbound job and prevents duplicate admission."""
+    db_path = pilot_test_env["db_path"]
+    repo: MailboxRepository = pilot_test_env["repo"]
+
+    future_time = (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat()
+    draft = MailboxDraftRecord(
+        draft_id="drf_admit_001",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        to_addresses=["partner@example.com"],
+        subject="Meeting Confirmation",
+        body_plain_text="Confirmed agenda.",
+        draft_status="scheduled",
+        scheduled_for_utc=future_time,
+        scheduled_local_date="2026-11-20",
+        scheduled_local_time="18:00",
+        scheduled_timezone="Europe/Rome",
+        snapshot_subject="Meeting Confirmation",
+        snapshot_plain_text="Confirmed agenda.",
+        snapshot_to_addresses=["partner@example.com"],
+        created_by="pilot_admin",
+        updated_by="pilot_admin",
+    )
+    repo.save_draft(draft)
+
+    # First admission: should succeed and create a Job ID
+    adm_res = admit_draft_to_queue(
+        db_path=db_path,
+        draft_id="drf_admit_001",
+        allowed_recipient="partner@example.com",
+        operator_username="pilot_admin",
+    )
+    assert adm_res["success"] is True
+    job_id = adm_res["job_id"]
+    assert job_id.startswith("job_")
+    assert adm_res["status"] == "scheduled"
+
+    # Verify queue record exists
+    queue_store = OutboundQueueStore(db_path=db_path)
+    job = queue_store.get_job(job_id)
+    assert job is not None
+    assert job.source_draft_id == "drf_admit_001"
+    assert job.status == "scheduled"
+
+    # Second admission: duplicate admission must be rejected by idempotency check
+    with pytest.raises(ValueError, match="Draft already admitted to queue"):
+        admit_draft_to_queue(
+            db_path=db_path,
+            draft_id="drf_admit_001",
+            allowed_recipient="partner@example.com",
+            operator_username="pilot_admin",
+        )
+
+
+def test_admit_draft_expired_schedule_rejection_and_override(pilot_test_env):
+    """Verify expired scheduled times cannot silently become active without explicit override."""
+    db_path = pilot_test_env["db_path"]
+    repo: MailboxRepository = pilot_test_env["repo"]
+
+    past_time = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    draft = MailboxDraftRecord(
+        draft_id="drf_expired_001",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        to_addresses=["partner.expired@example.com"],
+        subject="Past Meeting",
+        body_plain_text="Past content.",
+        draft_status="scheduled",
+        scheduled_for_utc=past_time,
+        scheduled_local_date="2026-11-20",
+        scheduled_local_time="10:00",
+        scheduled_timezone="Europe/Rome",
+        snapshot_subject="Past Meeting",
+        snapshot_plain_text="Past content.",
+        snapshot_to_addresses=["partner.expired@example.com"],
+        created_by="pilot_admin",
+        updated_by="pilot_admin",
+    )
+    repo.save_draft(draft)
+
+    # 1. Check eligibility reports expired
+    elig = check_draft_eligibility(db_path, "drf_expired_001", "partner.expired@example.com")
+    assert elig["eligible"] is False
+    assert elig["is_expired"] is True
+    assert any("has already passed (expired)" in r for r in elig["reasons"])
+
+    # 2. Admission rejected by default
+    with pytest.raises(ValueError, match="has already passed"):
+        admit_draft_to_queue(
+            db_path=db_path,
+            draft_id="drf_expired_001",
+            allowed_recipient="partner.expired@example.com",
+            operator_username="pilot_admin",
+            allow_expired=False,
+        )
+
+    # 3. Explicit operator override admits quarantined/expired test job
+    adm_res = admit_draft_to_queue(
+        db_path=db_path,
+        draft_id="drf_expired_001",
+        allowed_recipient="partner.expired@example.com",
+        operator_username="pilot_admin",
+        allow_expired=True,
+    )
+    assert adm_res["success"] is True
+    assert adm_res["job_id"].startswith("job_")
+
+
+def test_admit_draft_suppression_and_recipient_mismatch(pilot_test_env):
+    """Verify DNC suppression and recipient mismatch prevent queue admission."""
+    db_path = pilot_test_env["db_path"]
+    repo: MailboxRepository = pilot_test_env["repo"]
+
+    # Insert suppressed address
+    with repo.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO suppression_list (suppression_id, email, reason) VALUES ('s_dnc', 'dnc.admit@example.com', 'Opt-out');"
+        )
+        conn.commit()
+
+    future_time = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    draft = MailboxDraftRecord(
+        draft_id="drf_suppressed_admit",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        to_addresses=["dnc.admit@example.com"],
+        subject="Meeting",
+        body_plain_text="Body",
+        draft_status="scheduled",
+        scheduled_for_utc=future_time,
+        created_by="pilot_admin",
+        updated_by="pilot_admin",
+    )
+    repo.save_draft(draft)
+
+    # Check eligibility fails
+    elig = check_draft_eligibility(db_path, "drf_suppressed_admit", "dnc.admit@example.com")
+    assert elig["eligible"] is False
+    assert any("suppressed on the Do Not Contact list" in r for r in elig["reasons"])
+
+    # Admission fails
+    with pytest.raises(ValueError, match="Do Not Contact"):
+        admit_draft_to_queue(
+            db_path=db_path,
+            draft_id="drf_suppressed_admit",
+            allowed_recipient="dnc.admit@example.com",
+        )
+
+    # Recipient mismatch fails
+    with pytest.raises(ValueError, match="Recipient mismatch"):
+        admit_draft_to_queue(
+            db_path=db_path,
+            draft_id="drf_suppressed_admit",
+            allowed_recipient="different@example.com",
+        )
+

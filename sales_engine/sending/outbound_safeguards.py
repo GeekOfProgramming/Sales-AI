@@ -85,6 +85,11 @@ class OutboundSafeguardService:
             if not has_supp:
                 return
 
+            # Check table columns dynamically to support both production schema and test variations
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(suppression_list)").fetchall()}
+            has_scope = "scope" in cols and "value" in cols
+            has_domain = "company_domain" in cols
+
             for email_addr in recipients:
                 # 1. Exact email match
                 row_email = conn.execute(
@@ -98,14 +103,24 @@ class OutboundSafeguardService:
 
                 # 2. Domain-level suppression
                 domain = email_addr.split("@")[-1]
-                row_dom = conn.execute(
-                    "SELECT suppression_id, reason FROM suppression_list WHERE LOWER(company_domain) = ? OR (scope = 'domain' AND LOWER(value) = ?) LIMIT 1",
-                    (domain, domain),
-                ).fetchone()
-                if row_dom:
-                    raise SafeguardViolationError(
-                        f"Recipient domain '{domain}' for '{email_addr}' is suppressed on the Do Not Contact list (Reason: {row_dom['reason']})."
-                    )
+                if has_domain and has_scope:
+                    query = "SELECT suppression_id, reason FROM suppression_list WHERE LOWER(company_domain) = ? OR (scope = 'domain' AND LOWER(value) = ?) LIMIT 1"
+                    params = (domain, domain)
+                elif has_domain:
+                    query = "SELECT suppression_id, reason FROM suppression_list WHERE LOWER(company_domain) = ? LIMIT 1"
+                    params = (domain,)
+                elif has_scope:
+                    query = "SELECT suppression_id, reason FROM suppression_list WHERE scope = 'domain' AND LOWER(value) = ? LIMIT 1"
+                    params = (domain,)
+                else:
+                    query = None
+
+                if query:
+                    row_dom = conn.execute(query, params).fetchone()
+                    if row_dom:
+                        raise SafeguardViolationError(
+                            f"Recipient domain '{domain}' for '{email_addr}' is suppressed on the Do Not Contact list (Reason: {row_dom['reason']})."
+                        )
 
     def check_crm_exclusion(self, candidate_id: Optional[str], recipients: List[str]) -> Optional[Dict[str, Any]]:
         """
