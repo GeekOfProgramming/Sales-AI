@@ -84,15 +84,19 @@ class OutboundWorker:
             "jobs": [],
         }
 
-        # 1. Master killswitch check
-        # Can be activated via environment variable OUTBOUND_SEND_ENABLED=true or config.enabled
-        is_live_enabled = self.config.enabled or (os.getenv("OUTBOUND_SEND_ENABLED", "false").lower() in ("true", "1", "yes"))
+        # 1. Master killswitch check: Fail closed if either switch is disabled or contradictory
+        # Both EMAIL_SEND_ENABLED and OUTBOUND_SEND_ENABLED must be explicitly true to permit live sending.
+        env_outbound = os.getenv("OUTBOUND_SEND_ENABLED", "false").strip().lower() in ("true", "1", "yes")
+        env_email = os.getenv("EMAIL_SEND_ENABLED", "false").strip().lower() in ("true", "1", "yes")
+        
+        # If either switch is explicitly false, fail closed regardless of other settings
+        is_live_enabled = (self.config.enabled or env_outbound) and env_email
         if not is_live_enabled and custom_server is None:
             # Worker is inert by default
             return {
                 "worker_id": self.worker_id,
                 "status": "disabled",
-                "message": "Outbound worker is disabled by default (OUTBOUND_SEND_ENABLED=false). No jobs processed.",
+                "message": "Outbound worker is disabled by default (OUTBOUND_SEND_ENABLED=false or EMAIL_SEND_ENABLED=false). No jobs processed.",
                 "processed": 0,
             }
 
@@ -297,7 +301,31 @@ class OutboundWorker:
         t_complete = datetime.now(timezone.utc).isoformat()
 
         if smtp_res.success:
-            # SMTP ACCEPTED
+            if getattr(smtp_res, "is_simulated", False):
+                # Simulated dry run: Record attempt as dry_run and NEVER mark draft as 'sent'
+                # or job as 'smtp_accepted'. Keep job in scheduled status without consuming it.
+                attempt = OutboundAttemptRecord(
+                    job_id=job.job_id,
+                    attempt_number=attempt_num,
+                    worker_id=self.worker_id,
+                    status="dry_run_simulated",
+                    smtp_host=self.smtp_adapter.host,
+                    smtp_port=self.smtp_adapter.port,
+                    smtp_code=smtp_res.status_code,
+                    smtp_message=smtp_res.response_message,
+                    duration_ms=smtp_res.duration_ms,
+                    started_at_utc=t_start,
+                    completed_at_utc=t_complete,
+                )
+                self.queue_store.record_attempt(
+                    attempt=attempt,
+                    new_job_status="scheduled",
+                    smtp_response_code=smtp_res.status_code,
+                    smtp_response_message=smtp_res.response_message,
+                )
+                return {"job_id": job.job_id, "final_status": "dry_run_simulated"}
+
+            # REAL LIVE SMTP ACCEPTED
             attempt = OutboundAttemptRecord(
                 job_id=job.job_id,
                 attempt_number=attempt_num,

@@ -10546,9 +10546,9 @@ async def drafts_list_view(
         offset=offset,
     )
 
-    # Attach queued outbound job details if available
+    # Attach queued outbound job details if available (read-only; does not mutate schema)
     from sales_engine.sending.outbound_queue_store import OutboundQueueStore
-    queue_store = OutboundQueueStore(db_path=db_path)
+    queue_store = OutboundQueueStore(db_path=db_path, auto_apply_schema=False)
     job_map = {}
     for d in raw_drafts:
         j = queue_store.get_job_by_draft_id(d.draft_id)
@@ -10713,6 +10713,9 @@ async def compose_email_schedule_action(
         err_msg = str(ve)
         status_code = 409 if "Draft conflict" in err_msg else 400
         raise HTTPException(status_code=status_code, detail=err_msg)
+    except RuntimeError as re:
+        logger.error(f"Scheduling schema error: {re}")
+        raise HTTPException(status_code=503, detail=str(re))
 
     # Support AJAX fetch requests
     accept_header = request.headers.get("accept", "")
@@ -10759,6 +10762,9 @@ async def compose_email_cancel_schedule_action(
         err_msg = str(ve)
         status_code = 409 if "Draft conflict" in err_msg else 400
         raise HTTPException(status_code=status_code, detail=err_msg)
+    except RuntimeError as re:
+        logger.error(f"Schedule cancellation schema error: {re}")
+        raise HTTPException(status_code=503, detail=str(re))
 
     accept_header = request.headers.get("accept", "")
     if "application/json" in accept_header:

@@ -30,6 +30,7 @@ AttemptStatus = Literal[
     "failed_retryable",
     "failed_permanent",
     "unknown",
+    "dry_run_simulated",
 ]
 
 

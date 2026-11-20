@@ -1636,42 +1636,50 @@ class MailboxRepository:
             snap_to = existing["to_addresses_json"]
 
             new_version = existing["version"] + 1
-            conn.execute(
-                """
-                UPDATE mailbox_drafts SET
-                    draft_status = 'scheduled',
-                    scheduled_for_utc = ?,
-                    scheduled_local_date = ?,
-                    scheduled_local_time = ?,
-                    scheduled_timezone = ?,
-                    scheduled_approved_by = ?,
-                    scheduled_at_utc = ?,
-                    snapshot_subject = ?,
-                    snapshot_plain_text = ?,
-                    snapshot_html_sanitized = ?,
-                    snapshot_to_addresses_json = ?,
-                    updated_by = ?,
-                    version = ?,
-                    updated_at = ?
-                WHERE draft_id = ?;
-                """,
-                (
-                    scheduled_for_utc,
-                    scheduled_local_date,
-                    scheduled_local_time,
-                    scheduled_timezone,
-                    operator_username,
-                    now_iso,
-                    snap_subj,
-                    snap_plain,
-                    snap_html,
-                    snap_to,
-                    operator_username,
-                    new_version,
-                    now_iso,
-                    draft_id,
-                ),
-            )
+            try:
+                conn.execute(
+                    """
+                    UPDATE mailbox_drafts SET
+                        draft_status = 'scheduled',
+                        scheduled_for_utc = ?,
+                        scheduled_local_date = ?,
+                        scheduled_local_time = ?,
+                        scheduled_timezone = ?,
+                        scheduled_approved_by = ?,
+                        scheduled_at_utc = ?,
+                        snapshot_subject = ?,
+                        snapshot_plain_text = ?,
+                        snapshot_html_sanitized = ?,
+                        snapshot_to_addresses_json = ?,
+                        updated_by = ?,
+                        version = ?,
+                        updated_at = ?
+                    WHERE draft_id = ?;
+                    """,
+                    (
+                        scheduled_for_utc,
+                        scheduled_local_date,
+                        scheduled_local_time,
+                        scheduled_timezone,
+                        operator_username,
+                        now_iso,
+                        snap_subj,
+                        snap_plain,
+                        snap_html,
+                        snap_to,
+                        operator_username,
+                        new_version,
+                        now_iso,
+                        draft_id,
+                    ),
+                )
+            except sqlite3.OperationalError as oe:
+                if "no such column" in str(oe):
+                    raise RuntimeError(
+                        f"Database schema is missing required scheduling columns ({oe}). "
+                        "Please run 'python scripts/migrate_outbound_queue.py' to update schema."
+                    ) from oe
+                raise
 
         updated_draft = self.get_draft(draft_id)
         if not updated_draft:
@@ -1708,32 +1716,40 @@ class MailboxRepository:
                 )
 
             new_version = existing["version"] + 1
-            conn.execute(
-                """
-                UPDATE mailbox_drafts SET
-                    draft_status = 'ready_to_schedule',
-                    scheduled_for_utc = NULL,
-                    scheduled_local_date = NULL,
-                    scheduled_local_time = NULL,
-                    scheduled_timezone = NULL,
-                    scheduled_approved_by = NULL,
-                    scheduled_at_utc = NULL,
-                    snapshot_subject = NULL,
-                    snapshot_plain_text = NULL,
-                    snapshot_html_sanitized = NULL,
-                    snapshot_to_addresses_json = NULL,
-                    updated_by = ?,
-                    version = ?,
-                    updated_at = ?
-                WHERE draft_id = ?;
-                """,
-                (
-                    operator_username,
-                    new_version,
-                    now_iso,
-                    draft_id,
-                ),
-            )
+            try:
+                conn.execute(
+                    """
+                    UPDATE mailbox_drafts SET
+                        draft_status = 'ready_to_schedule',
+                        scheduled_for_utc = NULL,
+                        scheduled_local_date = NULL,
+                        scheduled_local_time = NULL,
+                        scheduled_timezone = NULL,
+                        scheduled_approved_by = NULL,
+                        scheduled_at_utc = NULL,
+                        snapshot_subject = NULL,
+                        snapshot_plain_text = NULL,
+                        snapshot_html_sanitized = NULL,
+                        snapshot_to_addresses_json = NULL,
+                        updated_by = ?,
+                        version = ?,
+                        updated_at = ?
+                    WHERE draft_id = ?;
+                    """,
+                    (
+                        operator_username,
+                        new_version,
+                        now_iso,
+                        draft_id,
+                    ),
+                )
+            except sqlite3.OperationalError as oe:
+                if "no such column" in str(oe):
+                    raise RuntimeError(
+                        f"Database schema is missing required scheduling columns ({oe}). "
+                        "Please run 'python scripts/migrate_outbound_queue.py' to update schema."
+                    ) from oe
+                raise
 
         updated = self.get_draft(draft_id)
         if not updated:

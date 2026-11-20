@@ -65,14 +65,24 @@ class OutboundDispatchService:
         frozen_plain = draft.snapshot_plain_text or draft.body_plain_text
         frozen_html = draft.snapshot_html_sanitized or draft.body_html_sanitized
         frozen_to = draft.snapshot_to_addresses or draft.to_addresses
+        frozen_cc = draft.cc_addresses or []
+        frozen_bcc = draft.bcc_addresses or []
 
-        # 1. Safeguards check
+        # 1. Safeguards check across all envelope destinations (To, CC, BCC)
+        all_recipients = frozen_to + frozen_cc + frozen_bcc
         clean_to = self.safeguards.validate_pre_queue(
             account_id=draft.account_id,
             sender_email=draft.sender_email,
             recipients=frozen_to,
             candidate_id=draft.candidate_id,
         )
+        # Verify CC and BCC recipients are valid syntax and not suppressed
+        if frozen_cc:
+            clean_cc = self.safeguards.validate_recipients(frozen_cc)
+            self.safeguards.check_suppression(clean_cc)
+        if frozen_bcc:
+            clean_bcc = self.safeguards.validate_recipients(frozen_bcc)
+            self.safeguards.check_suppression(clean_bcc)
 
         # 2. Content placeholder check
         content_errors = validate_message_payload(

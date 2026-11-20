@@ -47,6 +47,7 @@ class SMTPSubmissionResult:
         duration_ms: Optional[int] = None,
         is_retryable: bool = False,
         is_unknown_acceptance: bool = False,
+        is_simulated: bool = False,
     ):
         self.success = success
         self.status_code = status_code
@@ -56,6 +57,7 @@ class SMTPSubmissionResult:
         self.duration_ms = duration_ms
         self.is_retryable = is_retryable
         self.is_unknown_acceptance = is_unknown_acceptance
+        self.is_simulated = is_simulated
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -67,6 +69,7 @@ class SMTPSubmissionResult:
             "duration_ms": self.duration_ms,
             "is_retryable": self.is_retryable,
             "is_unknown_acceptance": self.is_unknown_acceptance,
+            "is_simulated": self.is_simulated,
         }
 
 
@@ -142,6 +145,7 @@ class RegisterItSMTPAdapter:
                 status_code=250,
                 response_message="DRY RUN: Message validated successfully (live send disabled).",
                 duration_ms=duration_ms,
+                is_simulated=True,
             )
 
         # Network transmission (Mock or Real)

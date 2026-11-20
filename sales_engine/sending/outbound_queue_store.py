@@ -34,10 +34,11 @@ class OutboundQueueStore:
     Dedicated SQLite store for outbound jobs and attempt history.
     """
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, auto_apply_schema: bool = True):
         self.db_path = str(db_path)
         self._lock = threading.Lock()
-        self.apply_schema()
+        if auto_apply_schema:
+            self.apply_schema()
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
@@ -123,6 +124,11 @@ class OutboundQueueStore:
         Raises ValueError if idempotency_key already exists.
         """
         with self._lock, self._get_connection() as conn:
+            # Ensure schema exists before write operation
+            has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='outbound_jobs'").fetchone()
+            if not has_table:
+                self.apply_schema()
+
             # Check duplicate idempotency
             existing = conn.execute(
                 "SELECT job_id FROM outbound_jobs WHERE idempotency_key = ? LIMIT 1",
@@ -160,6 +166,9 @@ class OutboundQueueStore:
     def get_job(self, job_id: str) -> Optional[OutboundQueueJob]:
         """Retrieves an outbound job by ID."""
         with self._get_connection() as conn:
+            has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='outbound_jobs'").fetchone()
+            if not has_table:
+                return None
             row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ? LIMIT 1;", (job_id,)).fetchone()
             if not row:
                 return None
@@ -168,6 +177,9 @@ class OutboundQueueStore:
     def get_job_by_draft_id(self, source_draft_id: str) -> Optional[OutboundQueueJob]:
         """Retrieves active or latest outbound job for a given source draft."""
         with self._get_connection() as conn:
+            has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='outbound_jobs'").fetchone()
+            if not has_table:
+                return None
             row = conn.execute(
                 "SELECT * FROM outbound_jobs WHERE source_draft_id = ? ORDER BY created_at DESC LIMIT 1;",
                 (source_draft_id,),
@@ -185,6 +197,9 @@ class OutboundQueueStore:
     ) -> List[OutboundQueueJob]:
         """Lists queue jobs with optional filtering."""
         with self._get_connection() as conn:
+            has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='outbound_jobs'").fetchone()
+            if not has_table:
+                return []
             clauses = ["1=1"]
             params: List[Any] = []
             if status and status != "all":
@@ -204,6 +219,9 @@ class OutboundQueueStore:
     def count_jobs(self, status: Optional[str] = None, account_id: Optional[str] = None) -> int:
         """Counts jobs matching criteria."""
         with self._get_connection() as conn:
+            has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='outbound_jobs'").fetchone()
+            if not has_table:
+                return 0
             clauses = ["1=1"]
             params: List[Any] = []
             if status and status != "all":
