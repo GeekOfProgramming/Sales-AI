@@ -142,35 +142,88 @@ def cmd_list_users():
     return 0
 
 
+def cmd_deactivate_user(username: Optional[str] = None):
+    """Deactivates a user account and revokes all active sessions."""
+    if not username:
+        username = input("Username to deactivate: ").strip()
+    if not username:
+        print("[ERROR] Username required.")
+        return 1
+    svc = get_auth_service()
+    try:
+        ok = svc.set_user_active(username, is_active=False)
+        if ok:
+            print(f"[SUCCESS] User '{username}' deactivated and all active sessions revoked.")
+            return 0
+        else:
+            print(f"[ERROR] User '{username}' not found.")
+            return 1
+    except ValueError as e:
+        print(f"[ERROR] {e}")
+        return 1
+
+
+def cmd_activate_user(username: Optional[str] = None):
+    """Activates a user account."""
+    if not username:
+        username = input("Username to activate: ").strip()
+    if not username:
+        print("[ERROR] Username required.")
+        return 1
+    svc = get_auth_service()
+    try:
+        ok = svc.set_user_active(username, is_active=True)
+        if ok:
+            print(f"[SUCCESS] User '{username}' activated.")
+            return 0
+        else:
+            print(f"[ERROR] User '{username}' not found.")
+            return 1
+    except ValueError as e:
+        print(f"[ERROR] {e}")
+        return 1
+
+
 def main():
     if len(sys.argv) < 2:
         # Default interactive choice
         print("Sales-AI User Management CLI (SEC-01)")
         print("Commands:")
-        print("  1. init-admin    - Create initial primary administrator account")
-        print("  2. create-user   - Create second operator or administrator account")
-        print("  3. list-users    - Display registered operator accounts")
-        choice = input("\nEnter choice (1/2/3) or command: ").strip()
+        print("  1. init-admin      - Create initial primary administrator account")
+        print("  2. create-user     - Create second operator or administrator account")
+        print("  3. list-users      - Display registered operator accounts")
+        print("  4. deactivate-user - Deactivate an operator account and revoke sessions")
+        print("  5. activate-user   - Activate an operator account")
+        choice = input("\nEnter choice (1/2/3/4/5) or command: ").strip()
         if choice in ("1", "init-admin"):
             sys.exit(cmd_init_admin())
         elif choice in ("2", "create-user"):
             sys.exit(cmd_create_user())
         elif choice in ("3", "list-users"):
             sys.exit(cmd_list_users())
+        elif choice in ("4", "deactivate-user"):
+            sys.exit(cmd_deactivate_user())
+        elif choice in ("5", "activate-user"):
+            sys.exit(cmd_activate_user())
         else:
             print("Invalid choice.")
             sys.exit(1)
 
     cmd = sys.argv[1].lower()
+    arg_val = sys.argv[2] if len(sys.argv) > 2 else None
     if cmd in ("init-admin", "init"):
         sys.exit(cmd_init_admin())
     elif cmd in ("create-user", "add-user"):
         sys.exit(cmd_create_user())
     elif cmd in ("list-users", "list"):
         sys.exit(cmd_list_users())
+    elif cmd in ("deactivate-user", "deactivate"):
+        sys.exit(cmd_deactivate_user(arg_val))
+    elif cmd in ("activate-user", "activate"):
+        sys.exit(cmd_activate_user(arg_val))
     else:
         print(f"Unknown command: {cmd}")
-        print("Usage: python scripts/setup_operators.py [init-admin | create-user | list-users]")
+        print("Usage: python scripts/setup_operators.py [init-admin | create-user | list-users | deactivate-user | activate-user]")
         sys.exit(1)
 
 

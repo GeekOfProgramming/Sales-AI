@@ -285,6 +285,35 @@ class OperatorAuthService:
             created_at=now_iso,
         )
 
+    def set_user_active(self, username: str, is_active: bool) -> bool:
+        """Activates or deactivates a user. Revokes all active sessions immediately on deactivation."""
+        clean_user = username.strip().lower()
+        with self._get_conn() as conn:
+            user = self.get_user_by_username(clean_user)
+            if not user:
+                return False
+
+            # Prevent deactivating the last active administrator
+            if not is_active and user.is_admin:
+                active_admins = conn.execute(
+                    "SELECT COUNT(*) FROM operator_users WHERE role = 'admin' AND is_active = 1;"
+                ).fetchone()[0]
+                if active_admins <= 1:
+                    raise ValueError("Cannot deactivate the sole active administrator account.")
+
+            conn.execute(
+                "UPDATE operator_users SET is_active = ? WHERE user_id = ?;",
+                (1 if is_active else 0, user.user_id),
+            )
+            # If deactivating, immediately revoke all active sessions
+            if not is_active:
+                conn.execute(
+                    "DELETE FROM operator_sessions WHERE user_id = ?;",
+                    (user.user_id,),
+                )
+            conn.commit()
+            return True
+
     def authenticate_user(
         self,
         username: str,
