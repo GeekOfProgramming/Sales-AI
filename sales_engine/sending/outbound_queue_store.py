@@ -87,17 +87,38 @@ class OutboundQueueStore:
                     review_reason TEXT,
                     submitted_mime_bytes BLOB,
                     submitted_mime_sha256 TEXT,
+                    reconciliation_status TEXT NOT NULL DEFAULT 'not_applicable',
+                    reconciled_at_utc TEXT,
+                    imap_uid TEXT,
+                    imap_uidvalidity INTEGER,
+                    reconciliation_provenance TEXT,
+                    reconciliation_attempts INTEGER NOT NULL DEFAULT 0,
+                    reconciliation_last_error TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
             """)
 
-            # Additive migration for submitted_mime_bytes and submitted_mime_sha256
+            # Additive migration for submitted_mime_bytes, submitted_mime_sha256, and reconciliation tracking
             existing_cols = [r["name"] for r in conn.execute("PRAGMA table_info(outbound_jobs);").fetchall()]
             if "submitted_mime_bytes" not in existing_cols:
                 conn.execute("ALTER TABLE outbound_jobs ADD COLUMN submitted_mime_bytes BLOB;")
             if "submitted_mime_sha256" not in existing_cols:
                 conn.execute("ALTER TABLE outbound_jobs ADD COLUMN submitted_mime_sha256 TEXT;")
+            if "reconciliation_status" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN reconciliation_status TEXT NOT NULL DEFAULT 'not_applicable';")
+            if "reconciled_at_utc" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN reconciled_at_utc TEXT;")
+            if "imap_uid" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN imap_uid TEXT;")
+            if "imap_uidvalidity" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN imap_uidvalidity INTEGER;")
+            if "reconciliation_provenance" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN reconciliation_provenance TEXT;")
+            if "reconciliation_attempts" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN reconciliation_attempts INTEGER NOT NULL DEFAULT 0;")
+            if "reconciliation_last_error" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN reconciliation_last_error TEXT;")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_outbound_status ON outbound_jobs(status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_outbound_sched_utc ON outbound_jobs(scheduled_for_utc);")
@@ -157,10 +178,13 @@ class OutboundQueueStore:
                     lease_expires_at_utc, attempt_count, max_attempts, last_attempt_at_utc,
                     smtp_response_code, smtp_response_message, review_reason,
                     submitted_mime_bytes, submitted_mime_sha256,
+                    reconciliation_status, reconciled_at_utc, imap_uid, imap_uidvalidity,
+                    reconciliation_provenance, reconciliation_attempts, reconciliation_last_error,
                     created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?
                 );
             """, (
                 job.job_id, job.source_draft_id, job.account_id, job.sender_email, job.envelope_from,
@@ -172,6 +196,8 @@ class OutboundQueueStore:
                 job.lease_expires_at_utc, job.attempt_count, job.max_attempts, job.last_attempt_at_utc,
                 job.smtp_response_code, job.smtp_response_message, job.review_reason,
                 job.submitted_mime_bytes, job.submitted_mime_sha256,
+                job.reconciliation_status, job.reconciled_at_utc, job.imap_uid, job.imap_uidvalidity,
+                job.reconciliation_provenance, job.reconciliation_attempts, job.reconciliation_last_error,
                 job.created_at, job.updated_at,
             ))
             return job
@@ -336,8 +362,9 @@ class OutboundQueueStore:
             ))
 
             # 2. Update parent job (persisting exact submitted MIME bytes if provided)
+            reconcile_status_update = ", reconciliation_status = 'sent_pending'" if new_job_status == "smtp_accepted" else ""
             if submitted_mime_bytes is not None:
-                conn.execute("""
+                conn.execute(f"""
                     UPDATE outbound_jobs
                     SET status = ?,
                         attempt_count = attempt_count + 1,
@@ -351,13 +378,14 @@ class OutboundQueueStore:
                         lease_expires_at_utc = NULL,
                         version = version + 1,
                         updated_at = ?
+                        {reconcile_status_update}
                     WHERE job_id = ?;
                 """, (
                     new_job_status, now_utc, smtp_response_code, smtp_response_message,
                     review_reason, submitted_mime_bytes, submitted_mime_sha256, now_utc, attempt.job_id,
                 ))
             else:
-                conn.execute("""
+                conn.execute(f"""
                     UPDATE outbound_jobs
                     SET status = ?,
                         attempt_count = attempt_count + 1,
@@ -369,6 +397,7 @@ class OutboundQueueStore:
                         lease_expires_at_utc = NULL,
                         version = version + 1,
                         updated_at = ?
+                        {reconcile_status_update}
                     WHERE job_id = ?;
                 """, (
                     new_job_status, now_utc, smtp_response_code, smtp_response_message,
@@ -376,6 +405,48 @@ class OutboundQueueStore:
                 ))
 
             row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (attempt.job_id,)).fetchone()
+            return self._row_to_job(row)
+
+    def update_reconciliation_status(
+        self,
+        job_id: str,
+        reconciliation_status: str,
+        reconciled_at_utc: Optional[str] = None,
+        imap_uid: Optional[str] = None,
+        imap_uidvalidity: Optional[int] = None,
+        provenance: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> OutboundQueueJob:
+        """
+        Updates Sent-folder reconciliation tracking state independently of SMTP state.
+        Guarantees that reconciliation outcomes never modify SMTP delivery status or retry count.
+        """
+        now_utc = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._get_connection() as conn:
+            conn.execute("""
+                UPDATE outbound_jobs
+                SET reconciliation_status = ?,
+                    reconciled_at_utc = COALESCE(?, reconciled_at_utc),
+                    imap_uid = COALESCE(?, imap_uid),
+                    imap_uidvalidity = COALESCE(?, imap_uidvalidity),
+                    reconciliation_provenance = COALESCE(?, reconciliation_provenance),
+                    reconciliation_attempts = reconciliation_attempts + 1,
+                    reconciliation_last_error = ?,
+                    updated_at = ?
+                WHERE job_id = ?;
+            """, (
+                reconciliation_status,
+                reconciled_at_utc,
+                imap_uid,
+                imap_uidvalidity,
+                provenance,
+                error_message,
+                now_utc,
+                job_id,
+            ))
+            row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Job '{job_id}' not found.")
             return self._row_to_job(row)
 
     def cancel_job(self, job_id: str, operator_username: str, reason: Optional[str] = None) -> OutboundQueueJob:
@@ -466,6 +537,13 @@ class OutboundQueueStore:
             review_reason=row["review_reason"],
             submitted_mime_bytes=row["submitted_mime_bytes"] if "submitted_mime_bytes" in row.keys() else None,
             submitted_mime_sha256=row["submitted_mime_sha256"] if "submitted_mime_sha256" in row.keys() else None,
+            reconciliation_status=row["reconciliation_status"] if "reconciliation_status" in row.keys() and row["reconciliation_status"] else "not_applicable",
+            reconciled_at_utc=row["reconciled_at_utc"] if "reconciled_at_utc" in row.keys() else None,
+            imap_uid=row["imap_uid"] if "imap_uid" in row.keys() else None,
+            imap_uidvalidity=row["imap_uidvalidity"] if "imap_uidvalidity" in row.keys() else None,
+            reconciliation_provenance=row["reconciliation_provenance"] if "reconciliation_provenance" in row.keys() else None,
+            reconciliation_attempts=row["reconciliation_attempts"] if "reconciliation_attempts" in row.keys() and row["reconciliation_attempts"] is not None else 0,
+            reconciliation_last_error=row["reconciliation_last_error"] if "reconciliation_last_error" in row.keys() else None,
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

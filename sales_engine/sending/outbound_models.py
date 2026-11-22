@@ -25,6 +25,15 @@ OutboundJobStatus = Literal[
     "requires_review",      # Flagged by safety guards (e.g., overdue dormancy, ambiguous state)
 ]
 
+# Sent Folder Reconciliation Status Lifecycle
+SentReconciliationStatus = Literal[
+    "not_applicable",       # Job not yet smtp_accepted or cancelled
+    "sent_pending",         # SMTP accepted, awaiting sent-folder reconciliation
+    "sent_reconciled",      # Successfully verified/appended in IMAP Sent folder
+    "sent_requires_review", # Encountered ambiguity (e.g. multiple duplicates or remote check failure)
+    "sent_failed",          # Reconcile attempt failed with error
+]
+
 AttemptStatus = Literal[
     "success",
     "failed_retryable",
@@ -74,6 +83,13 @@ class OutboundQueueJob(BaseModel):
     review_reason: Optional[str] = None
     submitted_mime_bytes: Optional[bytes] = None      # Durable pre-submission exact raw MIME bytes
     submitted_mime_sha256: Optional[str] = None       # SHA-256 hash of exact pre-submission MIME bytes
+    reconciliation_status: SentReconciliationStatus = "not_applicable"
+    reconciled_at_utc: Optional[str] = None
+    imap_uid: Optional[str] = None
+    imap_uidvalidity: Optional[int] = None
+    reconciliation_provenance: Optional[str] = None   # e.g. DURABLE_EXACT, IMPORTED_RECEIVED_EML, RECONSTRUCTED_SEMANTIC
+    reconciliation_attempts: int = 0
+    reconciliation_last_error: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

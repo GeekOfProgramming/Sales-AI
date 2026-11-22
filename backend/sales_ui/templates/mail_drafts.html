@@ -341,9 +341,25 @@
                     {% elif j.status == 'requires_review' %}background: rgba(234, 179, 8, 0.2); color: #facc15;
                     {% elif j.status == 'sending' %}background: rgba(59, 130, 246, 0.2); color: #60a5fa;
                     {% else %}background: rgba(148, 163, 184, 0.2); color: #cbd5e1;{% endif %}">
-                    Queue: {{ j.status|upper }} (Att: {{ j.attempt_count }}/{{ j.max_attempts }})
+                    SMTP: {{ j.status|upper }} (Att: {{ j.attempt_count }}/{{ j.max_attempts }})
                   </span>
                 </div>
+                {% if j.status == 'smtp_accepted' or j.reconciliation_status != 'not_applicable' %}
+                <div style="margin-top: 0.25rem; font-size: 0.68rem; font-family: monospace;">
+                  <span title="Sent Folder Reconciliation Status" style="padding: 1px 4px; border-radius: 3px; font-weight: 600;
+                    {% if j.reconciliation_status == 'sent_reconciled' %}background: rgba(16, 185, 129, 0.2); color: #34d399;
+                    {% elif j.reconciliation_status == 'sent_requires_review' %}background: rgba(234, 179, 8, 0.2); color: #facc15;
+                    {% elif j.reconciliation_status == 'sent_failed' %}background: rgba(239, 68, 68, 0.2); color: #f87171;
+                    {% else %}background: rgba(59, 130, 246, 0.2); color: #60a5fa;{% endif %}">
+                    SENT: {{ j.reconciliation_status|upper }}{% if j.imap_uid %} (UID: {{ j.imap_uid }}){% endif %}
+                  </span>
+                  {% if j.reconciled_at_utc %}
+                  <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.15rem;">
+                    Reconciled: {{ j.reconciled_at_utc[:16].replace('T', ' ') }} UTC
+                  </div>
+                  {% endif %}
+                </div>
+                {% endif %}
               {% endif %}
             </td>
             <td>
@@ -420,6 +436,14 @@
             </td>
             <td style="text-align: right;">
               <div style="display: inline-flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+                {% if job_map and job_map.get(d.draft_id) %}
+                  {% set j = job_map[d.draft_id] %}
+                  {% if j.status == 'smtp_accepted' and j.reconciliation_status != 'sent_reconciled' %}
+                    <a href="/sales/mail-operations/reconcile-sent?job_id={{ j.job_id }}" class="btn btn-secondary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; color: #38bdf8; font-weight: 600;" title="Reconcile message to IMAP Sent folder">
+                      📥 Reconcile Sent
+                    </a>
+                  {% endif %}
+                {% endif %}
                 {% if d.draft_status != 'discarded' %}
                   {% if d.draft_status == 'ready_to_schedule' %}
                     <a href="/sales/mail-operations/compose?draft_id={{ d.draft_id }}&open_schedule=1" class="btn btn-primary btn-sm" style="font-size: 0.72rem; padding: 0.2rem 0.45rem; background-color: #2563eb;" title="Schedule Delivery">

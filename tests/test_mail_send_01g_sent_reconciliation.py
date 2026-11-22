@@ -299,7 +299,7 @@ def test_duplicate_prevention_skips_append(temp_db, mock_cred_store, sample_acce
     )
 
     assert res["success"] is True
-    assert res["status"] == "already_reconciled"
+    assert res["status"] == "sent_reconciled"
     assert res["action"] == "SKIPPED_ALREADY_EXISTS"
     mock_client.append.assert_not_called()
 
@@ -323,7 +323,8 @@ def test_timeout_recovery_and_unverified(temp_db, mock_cred_store, sample_accept
         allow_reconstruction=True,
         client=mock_client,
     )
-    assert res["status"] == "reconciled_after_timeout"
+    assert res["status"] == "sent_reconciled"
+    assert res["action"] == "APPENDED_WITH_RECOVERY"
 
     # 2. Unverified case
     mock_client.uid.side_effect = [("OK", [b""]), ("OK", [b""])]
@@ -336,4 +337,4 @@ def test_timeout_recovery_and_unverified(temp_db, mock_cred_store, sample_accept
         allow_reconstruction=True,
         client=mock_client,
     )
-    assert res2["status"] == "reconciliation_unknown"
+    assert res2["status"] == "sent_requires_review"

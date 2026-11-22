@@ -644,6 +644,12 @@ def main():
         help="Explicitly authorize semantic reconstruction when exact pre-submission MIME bytes are not available",
     )
     reconcile_parser.add_argument(
+        "--retry-pending",
+        action="store_true",
+        default=False,
+        help="Retry sent-folder reconciliation for a job in sent_pending or sent_requires_review state without retransmitting over SMTP",
+    )
+    reconcile_parser.add_argument(
         "--operator",
         default="operator_pilot",
         help="Operator username authorizing sent reconciliation",
@@ -844,6 +850,9 @@ def main():
                 print(f"Target Sent Folder: {res['sent_folder']}")
                 print(f"Exists in Sent:     {res['exists_in_sent']}")
                 print(f"Matched UIDs:       {res['matched_uids']}")
+                print(f"Reconcile Status:   {res.get('reconciliation_status')}")
+                print(f"Reconciled At UTC:  {res.get('reconciled_at_utc')}")
+                print(f"Recorded IMAP UID:  {res.get('imap_uid')}")
                 print("======================================================================\n")
             except Exception as e:
                 print(f"\n[ERROR] Sent folder inspection failed: {e}\n")

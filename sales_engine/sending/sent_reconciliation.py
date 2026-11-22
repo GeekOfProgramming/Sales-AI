@@ -1,8 +1,8 @@
-"""
+r"""
 sales_engine/sending/sent_reconciliation.py
-MAIL-SEND-01G & MAIL-SEND-01G-HOTFIX: Safe, Audited IMAP Sent-Folder Reconciliation Service.
+MAIL-SEND-01G & MAIL-SEND-01H: Safe, Audited IMAP Sent-Folder Reconciliation Service.
 
-Provides:
+Key Invariants:
 1. Exact Message-ID remote search in Register.it INBOX.Sent (read-only diagnostic).
 2. Provenance-aware MIME resolution:
    - DURABLE_EXACT: Pre-submission byte-exact MIME stored in outbound_jobs (SHA-256 verified).
@@ -13,9 +13,19 @@ Provides:
      CID logo references, and attachments.
    - Audits and reports transport-added headers (DKIM, Received, ARC, SPF, Authentication-Results, etc.)
      vs pre-submission headers (From display name, Date, boundaries).
-4. Idempotent IMAP APPEND for successfully submitted outbound jobs (smtp_accepted).
-5. Ambiguous timeout handling with post-failure remote verification.
-6. Strict account binding (original authorized sender only).
+4. Idempotent IMAP APPEND for successfully submitted outbound jobs (smtp_accepted):
+   - Pre-check search by RFC Message-ID.
+   - If exactly one exists: marks sent_reconciled immediately without writing to IMAP.
+   - If multiple exist: transitions reconciliation_status to 'sent_requires_review'.
+   - If zero exist: executes IMAP APPEND with exact stored MIME and \Seen flag.
+   - Post-append verification checks Message-ID and captures UID / UIDVALIDITY.
+5. Ambiguous timeout handling:
+   - If IMAP APPEND raises a timeout or disconnect, re-searches remote Sent folder.
+   - If verified on server: marks sent_reconciled.
+   - If unverified: transitions to 'sent_requires_review' without resubmitting or creating duplicate.
+6. Separation of Delivery and Reconciliation states:
+   - Reconcile outcomes NEVER touch SMTP status (stays 'smtp_accepted') and never trigger re-send.
+7. Strict account isolation: info@pybim.com vs info@pybim.it.
 """
 
 import ssl
@@ -24,6 +34,7 @@ import email
 import hashlib
 import imaplib
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Tuple
 from email.utils import formatdate, parseaddr
 from email.policy import default as default_policy
@@ -174,8 +185,6 @@ def compare_eml_against_job(job: OutboundQueueJob, eml_bytes: bytes) -> Dict[str
     if not plain_match:
         discrepancies.append("Plain text body content does not match job text snapshot")
 
-    # HTML signature count check
-    sig_count_eml = eml_html.count("pybim-logo") + eml_html.count("Ing. H. Lotfalian") + eml_html.count("info@pybim.com")
     has_cid_logo = (len(cid_logos_found) > 0 or PYBIM_LOGO_CID in eml_html or "cid:pybim-logo" in eml_html)
 
     return {
@@ -207,7 +216,6 @@ def clean_received_eml_for_sent_folder(eml_bytes: bytes) -> bytes:
     """
     parsed_msg = email.message_from_bytes(eml_bytes, policy=default_policy)
     
-    # Remove transport headers added after departure from MSA
     headers_to_remove = [k for k in parsed_msg.keys() if k.lower() in TRANSPORT_ADDED_HEADERS]
     for h in headers_to_remove:
         try:
@@ -335,6 +343,9 @@ class SentReconciliationService:
                 "exists_in_sent": len(matched_uids) > 0,
                 "match_count": len(matched_uids),
                 "matched_uids": matched_uids,
+                "reconciliation_status": job.reconciliation_status,
+                "reconciled_at_utc": job.reconciled_at_utc,
+                "imap_uid": job.imap_uid,
             }
         finally:
             if managed_client and client:
@@ -474,6 +485,16 @@ class SentReconciliationService:
     ) -> Dict[str, Any]:
         """
         Safely reconciles an accepted outbound job into the IMAP Sent folder.
+
+        Guarantees:
+        - Job status must be 'smtp_accepted'.
+        - Checks for existing message by rfc_message_id before any append (idempotent).
+        - If exactly 1 message already exists: marks reconciliation complete without writing to IMAP.
+        - If >1 messages exist: marks 'sent_requires_review' without writing to IMAP.
+        - If dry_run=True, verifies credentials, folder selection, and MIME resolution without calling APPEND.
+        - If live_append=True (and dry_run=False), performs IMAP APPEND with \\Seen flag.
+        - If an ambiguous network timeout occurs during APPEND, immediately verifies if message landed remotely.
+        - Updates job reconciliation state independently of SMTP state.
         """
         job = self.queue_store.get_job(job_id)
         if not job:
@@ -506,11 +527,46 @@ class SentReconciliationService:
         try:
             # 2. Check remote sent folder (duplicate prevention)
             existing_uids = self.find_remote_sent_message(client, job.rfc_message_id, sent_folder=sent_folder)
-            if existing_uids:
+            
+            # Case 2A: Multiple duplicate messages detected remotely
+            if len(existing_uids) > 1:
+                err_msg = f"Ambiguity: Multiple remote messages ({len(existing_uids)}) found for Message-ID {job.rfc_message_id} (UIDs: {existing_uids})."
+                logger.warning(err_msg)
+                if not dry_run and live_append:
+                    self.queue_store.update_reconciliation_status(
+                        job_id=job.job_id,
+                        reconciliation_status="sent_requires_review",
+                        error_message=err_msg,
+                    )
+                return {
+                    "success": False,
+                    "action": "HALTED_MULTIPLE_MATCHES",
+                    "status": "sent_requires_review",
+                    "job_id": job.job_id,
+                    "rfc_message_id": job.rfc_message_id,
+                    "sent_folder": sent_folder,
+                    "account_id": account.account_id,
+                    "sender_email": job.sender_email,
+                    "matched_uids": existing_uids,
+                    "error": err_msg,
+                }
+
+            # Case 2B: Exactly one matching message already present
+            if len(existing_uids) == 1:
+                uid_str = existing_uids[0]
+                now_utc = datetime.now(timezone.utc).isoformat()
+                if not dry_run and live_append:
+                    self.queue_store.update_reconciliation_status(
+                        job_id=job.job_id,
+                        reconciliation_status="sent_reconciled",
+                        reconciled_at_utc=now_utc,
+                        imap_uid=uid_str,
+                        provenance=provenance,
+                    )
                 return {
                     "success": True,
                     "action": "SKIPPED_ALREADY_EXISTS",
-                    "status": "already_reconciled",
+                    "status": "sent_reconciled",
                     "job_id": job.job_id,
                     "rfc_message_id": job.rfc_message_id,
                     "sent_folder": sent_folder,
@@ -519,7 +575,8 @@ class SentReconciliationService:
                     "provenance": provenance,
                     "is_byte_identical": audit_info["is_byte_identical"],
                     "matched_uids": existing_uids,
-                    "message": f"Message with Message-ID {job.rfc_message_id} already exists in {sent_folder} (UIDs: {existing_uids}).",
+                    "imap_uid": uid_str,
+                    "message": f"Message with Message-ID {job.rfc_message_id} already exists in {sent_folder} (UID: {uid_str}). Reconciled without writing.",
                 }
 
             # 3. Dry-Run Handling
@@ -555,12 +612,21 @@ class SentReconciliationService:
                 logger.warning(f"Ambiguous APPEND failure for job {job_id}: {append_exc}. Verifying remote state...")
                 try:
                     verify_uids = self.find_remote_sent_message(client, job.rfc_message_id, sent_folder=sent_folder)
-                    if verify_uids:
-                        logger.info(f"Verified remote message arrived despite exception (UIDs: {verify_uids}).")
+                    if len(verify_uids) == 1:
+                        uid_str = verify_uids[0]
+                        now_utc = datetime.now(timezone.utc).isoformat()
+                        logger.info(f"Verified remote message arrived despite exception (UID: {uid_str}).")
+                        self.queue_store.update_reconciliation_status(
+                            job_id=job.job_id,
+                            reconciliation_status="sent_reconciled",
+                            reconciled_at_utc=now_utc,
+                            imap_uid=uid_str,
+                            provenance=provenance,
+                        )
                         return {
                             "success": True,
                             "action": "APPENDED_WITH_RECOVERY",
-                            "status": "reconciled_after_timeout",
+                            "status": "sent_reconciled",
                             "job_id": job.job_id,
                             "rfc_message_id": job.rfc_message_id,
                             "sent_folder": sent_folder,
@@ -569,17 +635,40 @@ class SentReconciliationService:
                             "provenance": provenance,
                             "is_byte_identical": audit_info["is_byte_identical"],
                             "matched_uids": verify_uids,
+                            "imap_uid": uid_str,
                             "operator": operator_username,
                             "audit_info": audit_info,
                             "message": f"Message verified in {sent_folder} after network timeout recovery.",
                         }
+                    elif len(verify_uids) > 1:
+                        err_msg = f"Multiple matches ({len(verify_uids)}) found after ambiguous append exception."
+                        self.queue_store.update_reconciliation_status(
+                            job_id=job.job_id,
+                            reconciliation_status="sent_requires_review",
+                            error_message=err_msg,
+                        )
+                        return {
+                            "success": False,
+                            "action": "HALTED_MULTIPLE_MATCHES",
+                            "status": "sent_requires_review",
+                            "job_id": job.job_id,
+                            "rfc_message_id": job.rfc_message_id,
+                            "sent_folder": sent_folder,
+                            "error": err_msg,
+                        }
                 except Exception as verify_exc:
                     logger.error(f"Post-append verification failed: {verify_exc}")
 
+                err_details = f"Append network/server error: {append_exc}"
+                self.queue_store.update_reconciliation_status(
+                    job_id=job.job_id,
+                    reconciliation_status="sent_requires_review",
+                    error_message=err_details,
+                )
                 return {
                     "success": False,
                     "action": "FAILED_AMBIGUOUS_TIMEOUT",
-                    "status": "reconciliation_unknown",
+                    "status": "sent_requires_review",
                     "job_id": job.job_id,
                     "rfc_message_id": job.rfc_message_id,
                     "sent_folder": sent_folder,
@@ -589,23 +678,40 @@ class SentReconciliationService:
                 }
 
             if append_status != "OK":
+                err_details = f"IMAP server rejected APPEND: {append_resp}"
+                self.queue_store.update_reconciliation_status(
+                    job_id=job.job_id,
+                    reconciliation_status="sent_failed",
+                    error_message=err_details,
+                )
                 return {
                     "success": False,
                     "action": "FAILED_SERVER_REJECTION",
-                    "status": "reconciliation_rejected",
+                    "status": "sent_failed",
                     "job_id": job.job_id,
                     "rfc_message_id": job.rfc_message_id,
                     "sent_folder": sent_folder,
                     "response": str(append_resp),
-                    "message": f"IMAP server rejected APPEND: {append_resp}",
+                    "message": err_details,
                 }
 
             # 5. Confirm message appears in remote Sent folder
             confirm_uids = self.find_remote_sent_message(client, job.rfc_message_id, sent_folder=sent_folder)
+            now_utc = datetime.now(timezone.utc).isoformat()
+            uid_str = confirm_uids[0] if confirm_uids else None
+
+            self.queue_store.update_reconciliation_status(
+                job_id=job.job_id,
+                reconciliation_status="sent_reconciled",
+                reconciled_at_utc=now_utc,
+                imap_uid=uid_str,
+                provenance=provenance,
+            )
+
             return {
                 "success": True,
                 "action": "APPENDED_CONFIRMED",
-                "status": "reconciled",
+                "status": "sent_reconciled",
                 "job_id": job.job_id,
                 "rfc_message_id": job.rfc_message_id,
                 "sent_folder": sent_folder,
@@ -614,6 +720,7 @@ class SentReconciliationService:
                 "provenance": provenance,
                 "is_byte_identical": audit_info["is_byte_identical"],
                 "matched_uids": confirm_uids,
+                "imap_uid": uid_str,
                 "raw_mime_bytes_len": len(raw_mime_bytes),
                 "operator": operator_username,
                 "audit_info": audit_info,
