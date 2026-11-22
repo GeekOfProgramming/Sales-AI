@@ -56,6 +56,11 @@ from sales_engine.sending.outbound_queue_store import OutboundQueueStore
 from sales_engine.sending.outbound_safeguards import OutboundSafeguardService, SafeguardViolationError
 from sales_engine.sending.mime_builder import build_mime_message, validate_message_payload
 from sales_engine.sending.smtp_adapter import RegisterItSMTPAdapter, SMTPSubmissionResult
+from sales_engine.sending.sent_reconciliation import (
+    SentReconciliationService,
+    SentReconciliationError,
+    DEFAULT_SENT_FOLDER,
+)
 from sales_engine.inbox.mailbox_repository import MailboxRepository
 from sales_engine.inbox.credential_store import MailboxCredentialStore, WindowsDPAPI
 from backend.operator_auth import get_auth_service
@@ -579,6 +584,46 @@ def main():
     pilot_parser.add_argument("--confirm-pilot", default="", help="Safety confirmation string: must be CONFIRM-PILOT-SEND")
     pilot_parser.add_argument("--operator", default="operator_pilot", help="Operator username authorizing pilot")
 
+    # Command 6: reconcile-sent
+    reconcile_parser = subparsers.add_parser(
+        "reconcile-sent",
+        help="Reconcile successfully accepted outbound email into Register.it IMAP Sent folder",
+    )
+    reconcile_parser.add_argument("--job-id", required=True, help="Job ID of the accepted outbound email to reconcile")
+    reconcile_parser.add_argument(
+        "--inspect",
+        action="store_true",
+        default=False,
+        help="Read-only diagnostic: search Sent folder by Message-ID without modifying anything",
+    )
+    reconcile_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Preflight dry run: test credentials, folder access, and MIME reconstruction without APPEND",
+    )
+    reconcile_parser.add_argument(
+        "--live-append",
+        action="store_true",
+        default=False,
+        help="Perform authorized live IMAP APPEND into the Sent folder",
+    )
+    reconcile_parser.add_argument(
+        "--confirm-append",
+        default="",
+        help="Safety confirmation string required for live append: must be CONFIRM-SENT-APPEND",
+    )
+    reconcile_parser.add_argument(
+        "--sent-folder",
+        default=DEFAULT_SENT_FOLDER,
+        help=f"Target IMAP sent folder (default: {DEFAULT_SENT_FOLDER})",
+    )
+    reconcile_parser.add_argument(
+        "--operator",
+        default="operator_pilot",
+        help="Operator username authorizing sent reconciliation",
+    )
+
     args = parser.parse_args()
 
     if args.command == "status":
@@ -716,6 +761,57 @@ def main():
         except Exception as e:
             print(f"\n[ERROR] Pilot execution halted: {e}")
             sys.exit(1)
+
+    elif args.command == "reconcile-sent":
+        svc = SentReconciliationService(db_path=args.db_path)
+
+        if args.inspect:
+            try:
+                res = svc.inspect_remote_sent_status(
+                    job_id=args.job_id,
+                    sent_folder=args.sent_folder,
+                )
+                print("\n======================================================================")
+                print("IMAP Sent-Folder Read-Only Diagnostic")
+                print("======================================================================")
+                print(f"Job ID:             {res['job_id']}")
+                print(f"Account ID:         {res['account_id']}")
+                print(f"Sender Email:       {res['sender_email']}")
+                print(f"RFC Message-ID:     {res['rfc_message_id']}")
+                print(f"Target Sent Folder: {res['sent_folder']}")
+                print(f"Exists in Sent:     {res['exists_in_sent']}")
+                print(f"Matched UIDs:       {res['matched_uids']}")
+                print("======================================================================\n")
+            except Exception as e:
+                print(f"\n[ERROR] Sent folder inspection failed: {e}\n")
+                sys.exit(1)
+
+        else:
+            # Reconcile operation
+            if not args.dry_run:
+                if not args.live_append:
+                    print("[ERROR] Live append requires '--live-append' (or use '--dry-run' / '--inspect').")
+                    sys.exit(1)
+                if args.confirm_append != "CONFIRM-SENT-APPEND":
+                    print("[ERROR] Live append requires '--confirm-append CONFIRM-SENT-APPEND'.")
+                    sys.exit(1)
+
+            try:
+                res = svc.reconcile_job_sent_copy(
+                    job_id=args.job_id,
+                    dry_run=args.dry_run,
+                    live_append=args.live_append,
+                    sent_folder=args.sent_folder,
+                    operator_username=args.operator,
+                )
+                print("\n======================================================================")
+                print(f"Sent Reconciliation Result: {res.get('action')}")
+                print("======================================================================")
+                print(json.dumps(res, indent=2))
+                print("======================================================================\n")
+            except Exception as e:
+                print(f"\n[ERROR] Sent reconciliation failed: {e}\n")
+                sys.exit(1)
 
     else:
         parser.print_help()
