@@ -289,6 +289,10 @@ class OutboundWorker:
             return {"job_id": job.job_id, "final_status": "requires_review", "error": reason}
 
         # Execute SMTP submission
+        raw_submitted_bytes = email_msg.as_bytes()
+        import hashlib
+        submitted_sha256 = hashlib.sha256(raw_submitted_bytes).hexdigest()
+
         smtp_res: SMTPSubmissionResult = self.smtp_adapter.send_message(
             sender_email=job.sender_email,
             credential_ref=acc_rec.credential_ref,
@@ -344,6 +348,8 @@ class OutboundWorker:
                 new_job_status="smtp_accepted",
                 smtp_response_code=smtp_res.status_code,
                 smtp_response_message=smtp_res.response_message,
+                submitted_mime_bytes=raw_submitted_bytes,
+                submitted_mime_sha256=submitted_sha256,
             )
             # Update source draft status to 'sent' without mutating CRM leads
             try:

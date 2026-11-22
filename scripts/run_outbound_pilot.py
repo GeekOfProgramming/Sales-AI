@@ -60,6 +60,7 @@ from sales_engine.sending.sent_reconciliation import (
     SentReconciliationService,
     SentReconciliationError,
     DEFAULT_SENT_FOLDER,
+    compare_eml_against_job,
 )
 from sales_engine.inbox.mailbox_repository import MailboxRepository
 from sales_engine.inbox.credential_store import MailboxCredentialStore, WindowsDPAPI
@@ -411,6 +412,11 @@ def execute_single_message_pilot(
     attempt_num = job.attempt_count + 1
 
     # 10. Execute transmission (dry run or single live send)
+    # Serialize exact pre-submission MIME bytes and calculate SHA-256 integrity hash
+    raw_submitted_bytes = mime_msg.as_bytes()
+    import hashlib
+    submitted_sha256 = hashlib.sha256(raw_submitted_bytes).hexdigest()
+
     smtp_res: SMTPSubmissionResult = adapter.send_message(
         sender_email=job.sender_email,
         credential_ref=acc_ref,
@@ -472,6 +478,8 @@ def execute_single_message_pilot(
             new_job_status="smtp_accepted",
             smtp_response_code=smtp_res.status_code,
             smtp_response_message=smtp_res.response_message,
+            submitted_mime_bytes=raw_submitted_bytes,
+            submitted_mime_sha256=submitted_sha256,
         )
         try:
             repo.update_draft_status(job.source_draft_id, "sent", operator_username=operator_username)
@@ -617,6 +625,23 @@ def main():
         "--sent-folder",
         default=DEFAULT_SENT_FOLDER,
         help=f"Target IMAP sent folder (default: {DEFAULT_SENT_FOLDER})",
+    )
+    reconcile_parser.add_argument(
+        "--eml-file",
+        default=None,
+        help="Path to operator-supplied received .eml file (e.g. exported from Gmail) to verify and import",
+    )
+    reconcile_parser.add_argument(
+        "--compare-eml",
+        action="store_true",
+        default=False,
+        help="Audit and compare the supplied .eml file against the job's immutable database snapshot without appending",
+    )
+    reconcile_parser.add_argument(
+        "--allow-reconstruction",
+        action="store_true",
+        default=False,
+        help="Explicitly authorize semantic reconstruction when exact pre-submission MIME bytes are not available",
     )
     reconcile_parser.add_argument(
         "--operator",
@@ -765,7 +790,45 @@ def main():
     elif args.command == "reconcile-sent":
         svc = SentReconciliationService(db_path=args.db_path)
 
-        if args.inspect:
+        if args.compare_eml:
+            if not args.eml_file:
+                print("[ERROR] '--compare-eml' requires '--eml-file <path_to_file.eml>'.")
+                sys.exit(1)
+            try:
+                job = svc.queue_store.get_job(args.job_id)
+                if not job:
+                    print(f"[ERROR] Job '{args.job_id}' not found.")
+                    sys.exit(1)
+                with open(args.eml_file, "rb") as f:
+                    eml_raw = f.read()
+                comp = compare_eml_against_job(job, eml_raw)
+                print("\n======================================================================")
+                print("EML vs Job Snapshot Audit Report")
+                print("======================================================================")
+                print(f"Job ID:                    {job.job_id}")
+                print(f"EML Path:                  {args.eml_file}")
+                print(f"Compatible for Import:     {comp['is_compatible']}")
+                print(f"Message-ID Match:          {comp['message_id_match']}")
+                print(f"Sender Email Match:        {comp['sender_match']}")
+                print(f"Recipients Match:          {comp['to_match']}")
+                print(f"Subject Match:             {comp['subject_match']}")
+                print(f"Plain Body Match:          {comp['plain_body_match']}")
+                print(f"CID Logo References:       {comp['has_cid_logo']} ({comp['cid_logos_found']})")
+                print(f"Attachments Detected:      {comp['attachments_count']}")
+                print(f"EML From Display Name:     '{comp['eml_from_name']}'")
+                print(f"EML Sender Address:        '{comp['eml_from_addr']}'")
+                print(f"EML Date Header:           {comp['eml_date']}")
+                print(f"Transport Headers Removed: {comp['transport_headers_count']} ({', '.join(comp['transport_headers_detected'][:5])}...)")
+                if comp['discrepancies']:
+                    print("\nDiscrepancies:")
+                    for d in comp['discrepancies']:
+                        print(f"  [X] {d}")
+                print("======================================================================\n")
+            except Exception as e:
+                print(f"\n[ERROR] EML comparison failed: {e}\n")
+                sys.exit(1)
+
+        elif args.inspect:
             try:
                 res = svc.inspect_remote_sent_status(
                     job_id=args.job_id,
@@ -803,9 +866,13 @@ def main():
                     live_append=args.live_append,
                     sent_folder=args.sent_folder,
                     operator_username=args.operator,
+                    eml_path=args.eml_file,
+                    allow_reconstruction=args.allow_reconstruction,
                 )
                 print("\n======================================================================")
                 print(f"Sent Reconciliation Result: {res.get('action')}")
+                print(f"Provenance Mode:            {res.get('provenance')}")
+                print(f"Byte-Identical Original:    {res.get('is_byte_identical')}")
                 print("======================================================================")
                 print(json.dumps(res, indent=2))
                 print("======================================================================\n")

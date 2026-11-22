@@ -72,6 +72,8 @@ class OutboundQueueJob(BaseModel):
     smtp_response_code: Optional[int] = None
     smtp_response_message: Optional[str] = None
     review_reason: Optional[str] = None
+    submitted_mime_bytes: Optional[bytes] = None      # Durable pre-submission exact raw MIME bytes
+    submitted_mime_sha256: Optional[str] = None       # SHA-256 hash of exact pre-submission MIME bytes
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

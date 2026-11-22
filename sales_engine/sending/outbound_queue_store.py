@@ -85,10 +85,19 @@ class OutboundQueueStore:
                     smtp_response_code INTEGER,
                     smtp_response_message TEXT,
                     review_reason TEXT,
+                    submitted_mime_bytes BLOB,
+                    submitted_mime_sha256 TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
             """)
+
+            # Additive migration for submitted_mime_bytes and submitted_mime_sha256
+            existing_cols = [r["name"] for r in conn.execute("PRAGMA table_info(outbound_jobs);").fetchall()]
+            if "submitted_mime_bytes" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN submitted_mime_bytes BLOB;")
+            if "submitted_mime_sha256" not in existing_cols:
+                conn.execute("ALTER TABLE outbound_jobs ADD COLUMN submitted_mime_sha256 TEXT;")
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_outbound_status ON outbound_jobs(status);")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_outbound_sched_utc ON outbound_jobs(scheduled_for_utc);")
@@ -146,10 +155,12 @@ class OutboundQueueStore:
                     scheduled_local_time, scheduled_timezone, approved_by, approved_at_utc,
                     status, version, idempotency_key, worker_lease_id, worker_leased_at_utc,
                     lease_expires_at_utc, attempt_count, max_attempts, last_attempt_at_utc,
-                    smtp_response_code, smtp_response_message, review_reason, created_at, updated_at
+                    smtp_response_code, smtp_response_message, review_reason,
+                    submitted_mime_bytes, submitted_mime_sha256,
+                    created_at, updated_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 );
             """, (
                 job.job_id, job.source_draft_id, job.account_id, job.sender_email, job.envelope_from,
@@ -159,7 +170,9 @@ class OutboundQueueStore:
                 job.scheduled_local_time, job.scheduled_timezone, job.approved_by, job.approved_at_utc,
                 job.status, job.version, job.idempotency_key, job.worker_lease_id, job.worker_leased_at_utc,
                 job.lease_expires_at_utc, job.attempt_count, job.max_attempts, job.last_attempt_at_utc,
-                job.smtp_response_code, job.smtp_response_message, job.review_reason, job.created_at, job.updated_at,
+                job.smtp_response_code, job.smtp_response_message, job.review_reason,
+                job.submitted_mime_bytes, job.submitted_mime_sha256,
+                job.created_at, job.updated_at,
             ))
             return job
 
@@ -298,9 +311,12 @@ class OutboundQueueStore:
         smtp_response_code: Optional[int] = None,
         smtp_response_message: Optional[str] = None,
         review_reason: Optional[str] = None,
+        submitted_mime_bytes: Optional[bytes] = None,
+        submitted_mime_sha256: Optional[str] = None,
     ) -> OutboundQueueJob:
         """
         Atomically records an attempt log and updates job status and attempt count.
+        Optionally persists exact pre-submission raw MIME bytes and SHA-256 integrity hash.
         Releases worker lease.
         """
         now_utc = datetime.now(timezone.utc).isoformat()
@@ -319,24 +335,45 @@ class OutboundQueueStore:
                 attempt.duration_ms, attempt.started_at_utc, attempt.completed_at_utc,
             ))
 
-            # 2. Update parent job
-            conn.execute("""
-                UPDATE outbound_jobs
-                SET status = ?,
-                    attempt_count = attempt_count + 1,
-                    last_attempt_at_utc = ?,
-                    smtp_response_code = ?,
-                    smtp_response_message = ?,
-                    review_reason = ?,
-                    worker_lease_id = NULL,
-                    lease_expires_at_utc = NULL,
-                    version = version + 1,
-                    updated_at = ?
-                WHERE job_id = ?;
-            """, (
-                new_job_status, now_utc, smtp_response_code, smtp_response_message,
-                review_reason, now_utc, attempt.job_id,
-            ))
+            # 2. Update parent job (persisting exact submitted MIME bytes if provided)
+            if submitted_mime_bytes is not None:
+                conn.execute("""
+                    UPDATE outbound_jobs
+                    SET status = ?,
+                        attempt_count = attempt_count + 1,
+                        last_attempt_at_utc = ?,
+                        smtp_response_code = ?,
+                        smtp_response_message = ?,
+                        review_reason = ?,
+                        submitted_mime_bytes = ?,
+                        submitted_mime_sha256 = ?,
+                        worker_lease_id = NULL,
+                        lease_expires_at_utc = NULL,
+                        version = version + 1,
+                        updated_at = ?
+                    WHERE job_id = ?;
+                """, (
+                    new_job_status, now_utc, smtp_response_code, smtp_response_message,
+                    review_reason, submitted_mime_bytes, submitted_mime_sha256, now_utc, attempt.job_id,
+                ))
+            else:
+                conn.execute("""
+                    UPDATE outbound_jobs
+                    SET status = ?,
+                        attempt_count = attempt_count + 1,
+                        last_attempt_at_utc = ?,
+                        smtp_response_code = ?,
+                        smtp_response_message = ?,
+                        review_reason = ?,
+                        worker_lease_id = NULL,
+                        lease_expires_at_utc = NULL,
+                        version = version + 1,
+                        updated_at = ?
+                    WHERE job_id = ?;
+                """, (
+                    new_job_status, now_utc, smtp_response_code, smtp_response_message,
+                    review_reason, now_utc, attempt.job_id,
+                ))
 
             row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (attempt.job_id,)).fetchone()
             return self._row_to_job(row)
@@ -427,6 +464,8 @@ class OutboundQueueStore:
             smtp_response_code=row["smtp_response_code"],
             smtp_response_message=row["smtp_response_message"],
             review_reason=row["review_reason"],
+            submitted_mime_bytes=row["submitted_mime_bytes"] if "submitted_mime_bytes" in row.keys() else None,
+            submitted_mime_sha256=row["submitted_mime_sha256"] if "submitted_mime_sha256" in row.keys() else None,
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
