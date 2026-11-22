@@ -282,8 +282,15 @@ class OutboundQueueStore:
         now_utc: Optional[str] = None,
     ) -> List[OutboundQueueJob]:
         """
-        Atomically leases eligible 'scheduled' jobs whose scheduled_for_utc <= now_utc,
-        or reclaims stale 'sending' jobs whose lease_expires_at_utc < now_utc.
+        Atomically leases eligible 'scheduled' jobs whose scheduled_for_utc <= now_utc.
+
+        CRITICAL SAFETY RULE (MAIL-SEND-01I-FINAL-SAFETY):
+        An expired lease on a 'sending' job must NEVER automatically make a possibly
+        transmitted message eligible for another SMTP send. If a worker crashed during
+        transmission or if a lease expires while in 'sending' state, the job may have
+        already been transmitted to the remote server.
+        Therefore, any expired 'sending' jobs are quarantined into 'acceptance_unknown' /
+        'requires_review' for operator verification, and are NEVER claimed for re-sending.
         Uses optimistic version increments to avoid multi-worker race conditions.
         """
         current_time = now_utc or datetime.now(timezone.utc).isoformat()
@@ -295,17 +302,35 @@ class OutboundQueueStore:
         claimed_jobs: List[OutboundQueueJob] = []
 
         with self._lock, self._get_connection() as conn:
-            # 1. Candidate query: eligible scheduled jobs or expired leases
+            # 1. Quarantine expired 'sending' leases to prevent automatic duplicate transmission
+            expired_sending = conn.execute("""
+                SELECT job_id, version FROM outbound_jobs
+                WHERE status = 'sending' AND lease_expires_at_utc < ?;
+            """, (current_time,)).fetchall()
+
+            for exp in expired_sending:
+                q_reason = (
+                    f"Worker lease expired while in 'sending' state at {current_time}. "
+                    "Quarantined to prevent duplicate transmission. Explicit operator verification required."
+                )
+                conn.execute("""
+                    UPDATE outbound_jobs
+                    SET status = 'acceptance_unknown',
+                        review_reason = ?,
+                        worker_lease_id = NULL,
+                        lease_expires_at_utc = NULL,
+                        version = version + 1,
+                        updated_at = ?
+                    WHERE job_id = ? AND version = ?;
+                """, (q_reason, current_time, exp["job_id"], exp["version"]))
+
+            # 2. Candidate query: only eligible 'scheduled' jobs
             candidates = conn.execute("""
                 SELECT * FROM outbound_jobs
-                WHERE (
-                    status = 'scheduled' AND scheduled_for_utc <= ?
-                ) OR (
-                    status = 'sending' AND lease_expires_at_utc < ?
-                )
+                WHERE status = 'scheduled' AND scheduled_for_utc <= ?
                 ORDER BY scheduled_for_utc ASC
                 LIMIT ?;
-            """, (current_time, current_time, batch_size)).fetchall()
+            """, (current_time, batch_size)).fetchall()
 
             for cand in candidates:
                 job_id = cand["job_id"]

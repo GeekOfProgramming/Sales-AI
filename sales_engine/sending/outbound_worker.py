@@ -335,7 +335,7 @@ class OutboundWorker:
         smtp_res: SMTPSubmissionResult = self.smtp_adapter.send_message(
             sender_email=job.sender_email,
             credential_ref=acc_rec.credential_ref,
-            envelope_recipients=verified_envelope,
+            envelope_recipients=envelope_recipients,
             message=email_msg,
             live_send_enabled=is_live_enabled,
             custom_server=custom_server,

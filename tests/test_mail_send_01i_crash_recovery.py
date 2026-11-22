@@ -360,6 +360,21 @@ def test_concurrency_protection_blocks_double_execution(temp_db):
     )
     assert len(claimed_2) == 0
 
+    # CRITICAL SAFETY TEST:
+    # If the lease on a 'sending' job expires, it must NOT automatically be re-claimed
+    # for sending (which could duplicate a message already sent over the wire).
+    # Instead, claim_next_jobs must quarantine it into 'acceptance_unknown' and return 0 claimed jobs.
+    claimed_expired = temp_db["queue"].claim_next_jobs(
+        worker_id="worker_gamma",
+        lease_id="lease_gamma",
+        now_utc="2026-11-20T14:15:00Z",  # 10 minutes later (lease duration is 5 min)
+    )
+    assert len(claimed_expired) == 0
+
+    reloaded_job = temp_db["queue"].get_job("job_race_01")
+    assert reloaded_job.status == "acceptance_unknown"
+    assert "Worker lease expired while in 'sending' state" in reloaded_job.review_reason
+
 
 # ==============================================================================
 # Test 5: Schema Migration Runner (Idempotency, Integrity & Dry-Run)
