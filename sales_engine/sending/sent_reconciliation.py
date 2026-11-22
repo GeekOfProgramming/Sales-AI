@@ -354,6 +354,184 @@ class SentReconciliationService:
                 except Exception:
                     pass
 
+    def get_folder_uidvalidity(
+        self,
+        client: imaplib.IMAP4_SSL,
+        folder_name: str = DEFAULT_SENT_FOLDER,
+    ) -> int:
+        """
+        Retrieves the authoritative UIDVALIDITY for a given mailbox folder via STATUS command.
+        """
+        import re
+        status, data = client.status(folder_name, "(UIDVALIDITY)")
+        if status != "OK" or not data:
+            raise SentReconciliationError(f"Failed to get STATUS for folder '{folder_name}': {data}")
+
+        raw_resp = data[0].decode("ascii", errors="ignore")
+        match = re.search(r"UIDVALIDITY\s+(\d+)", raw_resp, re.IGNORECASE)
+        if not match:
+            raise SentReconciliationError(f"Could not parse UIDVALIDITY from response: {raw_resp}")
+
+        return int(match.group(1))
+
+    def reconcile_historical_job_sent_metadata(
+        self,
+        job_id: str,
+        dry_run: bool = True,
+        sent_folder: str = DEFAULT_SENT_FOLDER,
+        expected_uid: Optional[str] = None,
+        expected_uidvalidity: Optional[int] = None,
+        provenance: str = "IMPORTED_RECEIVED_EML",
+        operator_username: str = "operator_historical",
+        client: Optional[imaplib.IMAP4_SSL] = None,
+    ) -> Dict[str, Any]:
+        """
+        Safely reconciles the historical outbound job's SQLite tracking metadata with an existing, verified IMAP Sent message.
+        Guarantees:
+        - Read-only IMAP lookup: NEVER invokes SMTP, IMAP APPEND, or modifies existing remote emails.
+        - Exact Message-ID search in target account's Sent folder.
+        - Requires exactly 1 matching remote message.
+        - Verifies current remote UIDVALIDITY and remote UID.
+        - Idempotent: previously reconciled matching record returns ALREADY_RECONCILED without modification.
+        - Strict guarded UPDATE with rollback on mismatch.
+        - Default mode is dry_run=True (read-only preflight).
+        """
+        job = self.queue_store.get_job(job_id)
+        if not job:
+            raise SentReconciliationError(f"Job '{job_id}' not found in outbound queue.")
+
+        if job.status != "smtp_accepted":
+            raise SentReconciliationError(
+                f"Job '{job_id}' status is '{job.status}'. Historical reconciliation only permitted for 'smtp_accepted' jobs."
+            )
+
+        if not job.rfc_message_id:
+            raise SentReconciliationError(f"Job '{job_id}' does not have an RFC Message-ID recorded.")
+
+        account = self.mailbox_repo.get_account_by_email(job.sender_email)
+        if not account:
+            raise SentReconciliationError(f"Authorized mailbox account not found for sender '{job.sender_email}'.")
+
+        managed_client = False
+        if client is None:
+            client = self.connect_imap(account)
+            managed_client = True
+
+        try:
+            # 1. Fetch current UIDVALIDITY from remote IMAP server
+            current_uidvalidity = self.get_folder_uidvalidity(client, folder_name=sent_folder)
+
+            # 2. Search for exact RFC Message-ID in remote Sent folder
+            matched_uids = self.find_remote_sent_message(client, job.rfc_message_id, sent_folder=sent_folder)
+
+            if len(matched_uids) == 0:
+                raise SentReconciliationError(
+                    f"Message-ID '{job.rfc_message_id}' not found in remote '{sent_folder}' on account '{account.account_id}'."
+                )
+            if len(matched_uids) > 1:
+                raise SentReconciliationError(
+                    f"Ambiguity: Multiple remote messages ({len(matched_uids)}) found for Message-ID '{job.rfc_message_id}' (UIDs: {matched_uids})."
+                )
+
+            remote_uid = matched_uids[0]
+
+            # 3. Verify against expected UID / UIDVALIDITY if supplied
+            if expected_uid is not None and str(remote_uid) != str(expected_uid):
+                raise SentReconciliationError(
+                    f"Stale or mismatched UID: expected '{expected_uid}', but server returned '{remote_uid}'."
+                )
+            if expected_uidvalidity is not None and int(current_uidvalidity) != int(expected_uidvalidity):
+                raise SentReconciliationError(
+                    f"UIDVALIDITY mismatch: expected {expected_uidvalidity}, but server reported {current_uidvalidity}."
+                )
+
+            # 4. Check if already reconciled
+            if (
+                job.reconciliation_status == "sent_reconciled"
+                and str(job.imap_uid) == str(remote_uid)
+                and job.imap_uidvalidity == current_uidvalidity
+            ):
+                return {
+                    "success": True,
+                    "action": "ALREADY_RECONCILED",
+                    "status": "sent_reconciled",
+                    "job_id": job.job_id,
+                    "account_id": account.account_id,
+                    "sender_email": job.sender_email,
+                    "rfc_message_id": job.rfc_message_id,
+                    "sent_folder": sent_folder,
+                    "imap_uid": str(job.imap_uid),
+                    "imap_uidvalidity": job.imap_uidvalidity,
+                    "reconciliation_provenance": job.reconciliation_provenance,
+                    "reconciled_at_utc": job.reconciled_at_utc,
+                    "message": f"Job '{job_id}' is already reconciled with matching UID {remote_uid} (UIDVALIDITY: {current_uidvalidity}).",
+                }
+
+            # 5. Handle Dry Run vs Apply
+            verification_time_utc = datetime.now(timezone.utc).isoformat()
+            preflight_summary = {
+                "job_id": job.job_id,
+                "account_id": account.account_id,
+                "sender_email": job.sender_email,
+                "rfc_message_id": job.rfc_message_id,
+                "sent_folder": sent_folder,
+                "matched_remote_uids": matched_uids,
+                "verified_imap_uid": remote_uid,
+                "verified_uidvalidity": current_uidvalidity,
+                "provenance": provenance,
+                "reconciliation_confirmation_time_utc": verification_time_utc,
+                "current_reconciliation_status": job.reconciliation_status,
+                "target_reconciliation_status": "sent_reconciled",
+            }
+
+            if dry_run:
+                return {
+                    "success": True,
+                    "action": "DRY_RUN_VALIDATED",
+                    "status": "dry_run_ready",
+                    "preflight": preflight_summary,
+                    "message": (
+                        f"Preflight validation passed: exactly 1 matching message found in {sent_folder} "
+                        f"(UID: {remote_uid}, UIDVALIDITY: {current_uidvalidity}). Ready to apply metadata update."
+                    ),
+                }
+
+            # 6. Apply metadata update
+            update_res = self.queue_store.reconcile_historical_metadata(
+                job_id=job.job_id,
+                expected_account_id=account.account_id,
+                expected_rfc_message_id=job.rfc_message_id,
+                verified_imap_uid=remote_uid,
+                verified_uidvalidity=current_uidvalidity,
+                provenance=provenance,
+                verification_time_utc=verification_time_utc,
+                operator_username=operator_username,
+            )
+
+            return {
+                "success": True,
+                "action": update_res.get("action", "RECONCILED"),
+                "status": "sent_reconciled",
+                "job_id": job.job_id,
+                "account_id": account.account_id,
+                "sender_email": job.sender_email,
+                "rfc_message_id": job.rfc_message_id,
+                "sent_folder": sent_folder,
+                "imap_uid": str(remote_uid),
+                "imap_uidvalidity": current_uidvalidity,
+                "reconciliation_provenance": provenance,
+                "reconciled_at_utc": verification_time_utc,
+                "operator": operator_username,
+                "message": update_res.get("message"),
+            }
+
+        finally:
+            if managed_client and client:
+                try:
+                    client.logout()
+                except Exception:
+                    pass
+
     def reconstruct_job_mime(self, job: OutboundQueueJob) -> bytes:
         """
         Reconstructs RFC 5322 MIME message bytes from immutable OutboundQueueJob fields.

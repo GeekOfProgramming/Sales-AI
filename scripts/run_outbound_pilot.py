@@ -741,6 +741,51 @@ def main():
         help="Perform dry-run inspection of missing columns/tables without applying changes",
     )
 
+    # Command 8: reconcile-historical
+    hist_parser = subparsers.add_parser(
+        "reconcile-historical",
+        help="Safely reconcile historical outbound job SQLite tracking metadata with an existing verified IMAP Sent message",
+    )
+    hist_parser.add_argument("--job-id", required=True, help="Job ID of the historical outbound email to reconcile")
+    hist_parser.add_argument(
+        "--sent-folder",
+        default=DEFAULT_SENT_FOLDER,
+        help=f"Target IMAP sent folder (default: {DEFAULT_SENT_FOLDER})",
+    )
+    hist_parser.add_argument(
+        "--expected-uid",
+        default="357",
+        help="Expected IMAP UID on remote server (default: 357)",
+    )
+    hist_parser.add_argument(
+        "--expected-uidvalidity",
+        type=int,
+        default=1791495724,
+        help="Expected UIDVALIDITY of sent folder (default: 1791495724)",
+    )
+    hist_parser.add_argument(
+        "--provenance",
+        default="IMPORTED_RECEIVED_EML",
+        help="Provenance classification (default: IMPORTED_RECEIVED_EML)",
+    )
+    hist_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+        help="Preflight read-only inspection (default: True)",
+    )
+    hist_parser.add_argument(
+        "--apply",
+        action="store_true",
+        default=False,
+        help="Explicitly apply the metadata update to SQLite after read-only IMAP validation",
+    )
+    hist_parser.add_argument(
+        "--operator",
+        default="operator_historical",
+        help="Operator username authorizing the historical metadata reconciliation",
+    )
+
     args = parser.parse_args()
 
     if args.command == "status":
@@ -988,6 +1033,42 @@ def main():
         for c in res.get("changes_applied", []):
             print(f"  + {c}")
         print("======================================================================\n")
+
+    elif args.command == "reconcile-historical":
+        svc = SentReconciliationService(db_path=args.db_path)
+        is_dry_run = not args.apply
+
+        try:
+            res = svc.reconcile_historical_job_sent_metadata(
+                job_id=args.job_id,
+                dry_run=is_dry_run,
+                sent_folder=args.sent_folder,
+                expected_uid=args.expected_uid,
+                expected_uidvalidity=args.expected_uidvalidity,
+                provenance=args.provenance,
+                operator_username=args.operator,
+            )
+            details = res.get("preflight", res)
+            print("\n======================================================================")
+            print("pyBIM Sales-AI: Historical Sent Reconciliation")
+            print("======================================================================")
+            print(f"Action:                 {res.get('action')}")
+            print(f"Status:                 {res.get('status')}")
+            print(f"Job ID:                 {details.get('job_id')}")
+            print(f"RFC Message-ID:         {details.get('rfc_message_id')}")
+            print(f"Target Sent Folder:     {details.get('sent_folder')}")
+            print(f"Verified IMAP UID:      {details.get('verified_imap_uid') or details.get('imap_uid')}")
+            print(f"Verified UIDVALIDITY:   {details.get('verified_uidvalidity') or details.get('imap_uidvalidity')}")
+            print(f"Provenance Mode:        {details.get('provenance') or details.get('reconciliation_provenance')}")
+            print(f"Confirmation Time UTC:  {details.get('reconciliation_confirmation_time_utc') or details.get('reconciled_at_utc')}")
+            print(f"Message:                {res.get('message')}")
+            if "preflight" in res:
+                print("\nPreflight Details:")
+                print(json.dumps(res["preflight"], indent=2))
+            print("======================================================================\n")
+        except Exception as e:
+            print(f"\n[ERROR] Historical sent reconciliation failed: {e}\n")
+            sys.exit(1)
 
     else:
         parser.print_help()

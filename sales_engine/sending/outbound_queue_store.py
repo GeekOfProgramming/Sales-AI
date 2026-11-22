@@ -458,6 +458,114 @@ class OutboundQueueStore:
                 raise ValueError(f"Job '{job_id}' not found.")
             return self._row_to_job(row)
 
+    def reconcile_historical_metadata(
+        self,
+        job_id: str,
+        expected_account_id: str,
+        expected_rfc_message_id: str,
+        verified_imap_uid: str,
+        verified_uidvalidity: int,
+        provenance: str = "IMPORTED_RECEIVED_EML",
+        verification_time_utc: Optional[str] = None,
+        operator_username: str = "operator",
+    ) -> Dict[str, Any]:
+        """
+        Safely reconciles historical outbound job tracking metadata with an existing, verified IMAP Sent message.
+        Guarantees:
+        - Strict guarded UPDATE with predicates checking job_id, account_id, rfc_message_id, and status='smtp_accepted'.
+        - Idempotent: If already reconciled with matching UID, returns ALREADY_RECONCILED without modifying updated_at or rows.
+        - Does NOT increment reconciliation_attempts (metadata backfill, not an execution attempt).
+        - Exactly one row modified; rolls back on mismatch.
+        """
+        now_utc = verification_time_utc or datetime.now(timezone.utc).isoformat()
+        with self._lock, self._get_connection() as conn:
+            # 1. Fetch current job state with strict checks
+            row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Job '{job_id}' not found in outbound_jobs.")
+
+            current_job = self._row_to_job(row)
+            if current_job.account_id != expected_account_id:
+                raise ValueError(
+                    f"Account mismatch for job '{job_id}': expected '{expected_account_id}', found '{current_job.account_id}'."
+                )
+            if current_job.sender_email != expected_account_id and current_job.account_id != expected_account_id:
+                raise ValueError(f"Sender account mismatch for job '{job_id}'.")
+            if current_job.status != "smtp_accepted":
+                raise ValueError(
+                    f"Job '{job_id}' status is '{current_job.status}'. Historical reconciliation only allowed for 'smtp_accepted' jobs."
+                )
+            if current_job.rfc_message_id != expected_rfc_message_id:
+                raise ValueError(
+                    f"RFC Message-ID mismatch for job '{job_id}': expected '{expected_rfc_message_id}', found '{current_job.rfc_message_id}'."
+                )
+
+            # 2. Check if already reconciled
+            if (
+                current_job.reconciliation_status == "sent_reconciled"
+                and str(current_job.imap_uid) == str(verified_imap_uid)
+                and current_job.imap_uidvalidity == verified_uidvalidity
+            ):
+                return {
+                    "action": "ALREADY_RECONCILED",
+                    "status": "sent_reconciled",
+                    "job_id": job_id,
+                    "imap_uid": str(current_job.imap_uid),
+                    "imap_uidvalidity": current_job.imap_uidvalidity,
+                    "reconciliation_provenance": current_job.reconciliation_provenance,
+                    "reconciled_at_utc": current_job.reconciled_at_utc,
+                    "message": f"Job '{job_id}' is already reconciled with matching UID {verified_imap_uid}.",
+                }
+
+            # 3. Guarded UPDATE
+            cursor = conn.execute("""
+                UPDATE outbound_jobs
+                SET reconciliation_status = 'sent_reconciled',
+                    reconciled_at_utc = ?,
+                    imap_uid = ?,
+                    imap_uidvalidity = ?,
+                    reconciliation_provenance = ?,
+                    reconciliation_last_error = NULL,
+                    version = version + 1,
+                    updated_at = ?
+                WHERE job_id = ?
+                  AND account_id = ?
+                  AND rfc_message_id = ?
+                  AND status = 'smtp_accepted';
+            """, (
+                now_utc,
+                str(verified_imap_uid),
+                int(verified_uidvalidity),
+                provenance,
+                now_utc,
+                job_id,
+                expected_account_id,
+                expected_rfc_message_id,
+            ))
+
+            if cursor.rowcount != 1:
+                conn.rollback()
+                raise ValueError(
+                    f"Guarded UPDATE failed: Expected to modify exactly 1 row for job '{job_id}', but modified {cursor.rowcount}. Transaction rolled back."
+                )
+
+            conn.commit()
+
+            updated_row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            updated_job = self._row_to_job(updated_row)
+
+            return {
+                "action": "RECONCILED",
+                "status": "sent_reconciled",
+                "job_id": job_id,
+                "imap_uid": updated_job.imap_uid,
+                "imap_uidvalidity": updated_job.imap_uidvalidity,
+                "reconciliation_provenance": updated_job.reconciliation_provenance,
+                "reconciled_at_utc": updated_job.reconciled_at_utc,
+                "operator": operator_username,
+                "message": f"Historical metadata successfully reconciled for job '{job_id}' (UID {verified_imap_uid}).",
+            }
+
     def update_reconciliation_status(
         self,
         job_id: str,
