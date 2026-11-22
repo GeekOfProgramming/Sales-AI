@@ -239,35 +239,78 @@ class OutboundWorker:
             self.queue_store.record_attempt(attempt, "requires_review", review_reason=reason)
             return {"job_id": job.job_id, "final_status": "requires_review", "error": reason}
 
-        # Build MIME message from frozen queue job
-        try:
-            email_msg, verified_envelope = build_mime_message(
-                sender_email=job.sender_email,
-                to_addresses=header_to,
-                subject=job.subject,
-                body_plain_text=job.body_plain_text,
-                body_html_sanitized=job.body_html_sanitized,
-                cc_addresses=header_cc,
-                bcc_addresses=header_bcc,
-                rfc_message_id=job.rfc_message_id,
-                account_id=job.account_id,
-            )
-        except Exception as e:
-            reason = f"MIME generator error: {e}"
-            attempt = OutboundAttemptRecord(
+        # Resolve or Build MIME message (Reuse durable pre-submission MIME if available)
+        import hashlib
+        email_msg = None
+        raw_submitted_bytes = None
+        submitted_sha256 = None
+
+        if job.submitted_mime_bytes:
+            # Verify existing durable bytes against stored checksum
+            calc_sha256 = hashlib.sha256(job.submitted_mime_bytes).hexdigest()
+            if job.submitted_mime_sha256 and calc_sha256 != job.submitted_mime_sha256:
+                reason = f"Integrity error: Stored pre-submission MIME SHA-256 mismatch for job '{job.job_id}' ({calc_sha256} != {job.submitted_mime_sha256})."
+                attempt = OutboundAttemptRecord(
+                    job_id=job.job_id,
+                    attempt_number=attempt_num,
+                    worker_id=self.worker_id,
+                    status="failed_permanent",
+                    smtp_host=self.smtp_adapter.host,
+                    smtp_port=self.smtp_adapter.port,
+                    error_type="mime_integrity_mismatch",
+                    error_details=reason,
+                    started_at_utc=t_start,
+                    completed_at_utc=datetime.now(timezone.utc).isoformat(),
+                )
+                self.queue_store.record_attempt(attempt, "requires_review", review_reason=reason)
+                return {"job_id": job.job_id, "final_status": "requires_review", "error": reason}
+
+            import email
+            from email.policy import default as default_policy
+            email_msg = email.message_from_bytes(job.submitted_mime_bytes, policy=default_policy)
+            raw_submitted_bytes = job.submitted_mime_bytes
+            submitted_sha256 = calc_sha256
+        else:
+            # Build MIME message from frozen queue job exactly once
+            try:
+                email_msg, _ = build_mime_message(
+                    sender_email=job.sender_email,
+                    to_addresses=header_to,
+                    subject=job.subject,
+                    body_plain_text=job.body_plain_text,
+                    body_html_sanitized=job.body_html_sanitized,
+                    cc_addresses=header_cc,
+                    bcc_addresses=header_bcc,
+                    rfc_message_id=job.rfc_message_id,
+                    account_id=job.account_id,
+                )
+            except Exception as e:
+                reason = f"MIME generator error: {e}"
+                attempt = OutboundAttemptRecord(
+                    job_id=job.job_id,
+                    attempt_number=attempt_num,
+                    worker_id=self.worker_id,
+                    status="failed_permanent",
+                    smtp_host=self.smtp_adapter.host,
+                    smtp_port=self.smtp_adapter.port,
+                    error_type="mime_build_error",
+                    error_details=reason,
+                    started_at_utc=t_start,
+                    completed_at_utc=datetime.now(timezone.utc).isoformat(),
+                )
+                self.queue_store.record_attempt(attempt, "failed", review_reason=reason)
+                return {"job_id": job.job_id, "final_status": "failed", "error": reason}
+
+            raw_submitted_bytes = email_msg.as_bytes()
+            submitted_sha256 = hashlib.sha256(raw_submitted_bytes).hexdigest()
+
+            # Pre-submission durability: Commit raw bytes to SQLite before network connection
+            self.queue_store.persist_pre_submission_mime(
                 job_id=job.job_id,
-                attempt_number=attempt_num,
-                worker_id=self.worker_id,
-                status="failed_permanent",
-                smtp_host=self.smtp_adapter.host,
-                smtp_port=self.smtp_adapter.port,
-                error_type="mime_build_error",
-                error_details=reason,
-                started_at_utc=t_start,
-                completed_at_utc=datetime.now(timezone.utc).isoformat(),
+                submitted_mime_bytes=raw_submitted_bytes,
+                submitted_mime_sha256=submitted_sha256,
+                submission_intent="smtp_delivery",
             )
-            self.queue_store.record_attempt(attempt, "failed", review_reason=reason)
-            return {"job_id": job.job_id, "final_status": "failed", "error": reason}
 
         # Lookup account credential reference
         acc_rec = self.repo.get_account(job.account_id)
@@ -289,10 +332,6 @@ class OutboundWorker:
             return {"job_id": job.job_id, "final_status": "requires_review", "error": reason}
 
         # Execute SMTP submission
-        raw_submitted_bytes = email_msg.as_bytes()
-        import hashlib
-        submitted_sha256 = hashlib.sha256(raw_submitted_bytes).hexdigest()
-
         smtp_res: SMTPSubmissionResult = self.smtp_adapter.send_message(
             sender_email=job.sender_email,
             credential_ref=acc_rec.credential_ref,

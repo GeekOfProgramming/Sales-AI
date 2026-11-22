@@ -407,6 +407,32 @@ class OutboundQueueStore:
             row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (attempt.job_id,)).fetchone()
             return self._row_to_job(row)
 
+    def persist_pre_submission_mime(
+        self,
+        job_id: str,
+        submitted_mime_bytes: bytes,
+        submitted_mime_sha256: str,
+        submission_intent: Optional[str] = None,
+    ) -> OutboundQueueJob:
+        """
+        Durably commits exact assembled RFC 5322 MIME bytes and SHA-256 integrity hash
+        into outbound_jobs BEFORE opening any outbound SMTP socket.
+        Guarantees that on retry or crash recovery, identical wire bytes are preserved.
+        """
+        now_utc = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._get_connection() as conn:
+            conn.execute("""
+                UPDATE outbound_jobs
+                SET submitted_mime_bytes = ?,
+                    submitted_mime_sha256 = ?,
+                    updated_at = ?
+                WHERE job_id = ?;
+            """, (submitted_mime_bytes, submitted_mime_sha256, now_utc, job_id))
+            row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Job '{job_id}' not found.")
+            return self._row_to_job(row)
+
     def update_reconciliation_status(
         self,
         job_id: str,

@@ -48,6 +48,18 @@ REQUIRED_DRAFT_COLUMNS = [
     ("snapshot_to_addresses_json", "TEXT"),
 ]
 
+REQUIRED_OUTBOUND_JOB_COLUMNS = [
+    ("submitted_mime_bytes", "BLOB"),
+    ("submitted_mime_sha256", "TEXT"),
+    ("reconciliation_status", "TEXT NOT NULL DEFAULT 'not_applicable'"),
+    ("reconciled_at_utc", "TEXT"),
+    ("imap_uid", "TEXT"),
+    ("imap_uidvalidity", "INTEGER"),
+    ("reconciliation_provenance", "TEXT"),
+    ("reconciliation_attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("reconciliation_last_error", "TEXT"),
+]
+
 
 def run_migration(db_path: str, dry_run: bool = False) -> Dict[str, Any]:
     abs_path = os.path.abspath(db_path)
@@ -161,6 +173,21 @@ def run_migration(db_path: str, dry_run: bool = False) -> Dict[str, Any]:
                 changes_applied.append("Created table outbound_jobs")
         else:
             skipped_existing.append("Table outbound_jobs already present")
+
+        # Ensure all required columns exist in outbound_jobs (additive migration)
+        if "outbound_jobs" in tables or "Created table outbound_jobs" in changes_applied:
+            cursor.execute("PRAGMA table_info(outbound_jobs);")
+            existing_job_cols = {r["name"] for r in cursor.fetchall()}
+            for col_name, col_def in REQUIRED_OUTBOUND_JOB_COLUMNS:
+                if col_name not in existing_job_cols:
+                    sql = f"ALTER TABLE outbound_jobs ADD COLUMN {col_name} {col_def};"
+                    if dry_run:
+                        changes_applied.append(f"[DRY RUN] Would execute: {sql}")
+                    else:
+                        cursor.execute(sql)
+                        changes_applied.append(f"Added column outbound_jobs.{col_name}")
+                else:
+                    skipped_existing.append(f"Column outbound_jobs.{col_name} already present")
 
         # Indexes for outbound_jobs
         outbound_jobs_indexes = [

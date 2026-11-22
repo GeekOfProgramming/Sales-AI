@@ -380,22 +380,51 @@ def execute_single_message_pilot(
     if not password:
         raise ValueError(f"Missing credential for reference '{acc_ref}' in credential store.")
 
-    # 8. Assemble RFC 5322 MIME message
-    to_list = json.loads(job.header_to_json)
-    cc_list = json.loads(job.header_cc_json or "[]")
-    bcc_list = json.loads(job.header_bcc_json or "[]")
+    # 8. Assemble or Reuse RFC 5322 MIME message
+    import hashlib
+    raw_submitted_bytes = None
+    submitted_sha256 = None
+    mime_msg = None
 
-    mime_msg, env_recipients = build_mime_message(
-        sender_email=job.sender_email,
-        to_addresses=to_list,
-        subject=job.subject,
-        body_plain_text=job.body_plain_text,
-        body_html_sanitized=job.body_html_sanitized,
-        cc_addresses=cc_list,
-        bcc_addresses=bcc_list,
-        rfc_message_id=job.rfc_message_id,
-        account_id=job.account_id,
-    )
+    if job.submitted_mime_bytes:
+        # Verify existing durable bytes against stored checksum
+        calc_sha256 = hashlib.sha256(job.submitted_mime_bytes).hexdigest()
+        if job.submitted_mime_sha256 and calc_sha256 != job.submitted_mime_sha256:
+            raise ValueError(
+                f"Integrity error: Stored pre-submission MIME SHA-256 mismatch for job '{job.job_id}' "
+                f"({calc_sha256} != {job.submitted_mime_sha256})."
+            )
+        import email
+        from email.policy import default as default_policy
+        mime_msg = email.message_from_bytes(job.submitted_mime_bytes, policy=default_policy)
+        raw_submitted_bytes = job.submitted_mime_bytes
+        submitted_sha256 = calc_sha256
+    else:
+        to_list = json.loads(job.header_to_json)
+        cc_list = json.loads(job.header_cc_json or "[]")
+        bcc_list = json.loads(job.header_bcc_json or "[]")
+
+        mime_msg, _ = build_mime_message(
+            sender_email=job.sender_email,
+            to_addresses=to_list,
+            subject=job.subject,
+            body_plain_text=job.body_plain_text,
+            body_html_sanitized=job.body_html_sanitized,
+            cc_addresses=cc_list,
+            bcc_addresses=bcc_list,
+            rfc_message_id=job.rfc_message_id,
+            account_id=job.account_id,
+        )
+        raw_submitted_bytes = mime_msg.as_bytes()
+        submitted_sha256 = hashlib.sha256(raw_submitted_bytes).hexdigest()
+
+        # Pre-submission durability: Commit raw bytes to SQLite BEFORE opening network connection
+        queue_store.persist_pre_submission_mime(
+            job_id=job.job_id,
+            submitted_mime_bytes=raw_submitted_bytes,
+            submitted_mime_sha256=submitted_sha256,
+            submission_intent="pilot_transmission",
+        )
 
     # 9. Gate check for live transmission
     env_outbound = os.getenv("OUTBOUND_SEND_ENABLED", "false").strip().lower() in ("true", "1", "yes")
@@ -412,15 +441,10 @@ def execute_single_message_pilot(
     attempt_num = job.attempt_count + 1
 
     # 10. Execute transmission (dry run or single live send)
-    # Serialize exact pre-submission MIME bytes and calculate SHA-256 integrity hash
-    raw_submitted_bytes = mime_msg.as_bytes()
-    import hashlib
-    submitted_sha256 = hashlib.sha256(raw_submitted_bytes).hexdigest()
-
     smtp_res: SMTPSubmissionResult = adapter.send_message(
         sender_email=job.sender_email,
         credential_ref=acc_ref,
-        envelope_recipients=env_recipients,
+        envelope_recipients=envelope_recipients,
         message=mime_msg,
         live_send_enabled=is_live,
         custom_server=custom_smtp_server,
@@ -540,6 +564,38 @@ def execute_single_message_pilot(
             "job_id": job.job_id,
             "recipient": clean_allowed_rcpt,
             "status": "acceptance_unknown",
+            "error": smtp_res.error_details,
+        }
+
+    elif smtp_res.is_retryable and attempt_num < job.max_attempts:
+        # Retryable temporary failure (e.g. 451, greylisting, temp disconnect)
+        attempt = OutboundAttemptRecord(
+            job_id=job.job_id,
+            attempt_number=attempt_num,
+            worker_id="single_message_pilot_harness",
+            status="failed_retryable",
+            smtp_host=adapter.host,
+            smtp_port=adapter.port,
+            smtp_code=smtp_res.status_code,
+            smtp_message=smtp_res.response_message,
+            error_type=smtp_res.error_type,
+            error_details=smtp_res.error_details,
+            duration_ms=smtp_res.duration_ms,
+            started_at_utc=t_start,
+            completed_at_utc=t_complete,
+        )
+        queue_store.record_attempt(
+            attempt=attempt,
+            new_job_status="scheduled",  # Return to scheduled status for retry
+            smtp_response_code=smtp_res.status_code,
+            smtp_response_message=smtp_res.error_details,
+        )
+        return {
+            "success": False,
+            "mode": "LIVE_SEND",
+            "job_id": job.job_id,
+            "recipient": clean_allowed_rcpt,
+            "status": "scheduled_retry",
             "error": smtp_res.error_details,
         }
 
@@ -671,6 +727,18 @@ def main():
         "--operator",
         default="operator_pilot",
         help="Operator username authorizing sent reconciliation",
+    )
+
+    # Command 7: migrate-schema
+    migrate_parser = subparsers.add_parser(
+        "migrate-schema",
+        help="Run explicit, idempotent schema preflight and migration for outbound queue & Sent reconciliation",
+    )
+    migrate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Perform dry-run inspection of missing columns/tables without applying changes",
     )
 
     args = parser.parse_args()
@@ -906,6 +974,20 @@ def main():
             except Exception as e:
                 print(f"\n[ERROR] Sent reconciliation failed: {e}\n")
                 sys.exit(1)
+
+    elif args.command == "migrate-schema":
+        from scripts.migrate_outbound_queue import run_migration
+        res = run_migration(db_path=args.db_path, dry_run=args.dry_run)
+        print("\n======================================================================")
+        print(f"Migration Status:       {res.get('status')}")
+        print(f"Dry Run Mode:           {res.get('dry_run')}")
+        print(f"Target Database:        {res.get('db_path')}")
+        print(f"Integrity Check:        {res.get('integrity')}")
+        print(f"Foreign Key Violations: {res.get('foreign_key_violations')}")
+        print(f"Changes Applied:        {len(res.get('changes_applied', []))}")
+        for c in res.get("changes_applied", []):
+            print(f"  + {c}")
+        print("======================================================================\n")
 
     else:
         parser.print_help()

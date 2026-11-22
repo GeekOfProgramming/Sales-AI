@@ -334,7 +334,7 @@
               {% if job_map and job_map.get(d.draft_id) %}
                 {% set j = job_map[d.draft_id] %}
                 <div style="margin-top: 0.35rem; font-size: 0.7rem; font-family: monospace;">
-                  <span title="Durable Outbound Queue Job ID: {{ j.job_id }}" style="padding: 2px 4px; border-radius: 3px; font-weight: 600;
+                  <span title="Durable Outbound Queue Job ID: {{ j.job_id }}&#10;Message-ID: {{ j.rfc_message_id }}" style="padding: 2px 4px; border-radius: 3px; font-weight: 600;
                     {% if j.status == 'smtp_accepted' %}background: rgba(16, 185, 129, 0.2); color: #34d399;
                     {% elif j.status == 'failed' %}background: rgba(239, 68, 68, 0.2); color: #f87171;
                     {% elif j.status == 'acceptance_unknown' %}background: rgba(245, 158, 11, 0.2); color: #fbbf24;
@@ -343,6 +343,11 @@
                     {% else %}background: rgba(148, 163, 184, 0.2); color: #cbd5e1;{% endif %}">
                     SMTP: {{ j.status|upper }} (Att: {{ j.attempt_count }}/{{ j.max_attempts }})
                   </span>
+                  {% if j.status == 'smtp_accepted' %}
+                  <div style="font-size: 0.62rem; color: #94a3b8; margin-top: 0.15rem;" title="Accepted by sending server (delivery receipt not implied)">
+                    (Accepted by Mail Server)
+                  </div>
+                  {% endif %}
                 </div>
                 {% if j.status == 'smtp_accepted' or j.reconciliation_status != 'not_applicable' %}
                 <div style="margin-top: 0.25rem; font-size: 0.68rem; font-family: monospace;">
@@ -353,6 +358,11 @@
                     {% else %}background: rgba(59, 130, 246, 0.2); color: #60a5fa;{% endif %}">
                     SENT: {{ j.reconciliation_status|upper }}{% if j.imap_uid %} (UID: {{ j.imap_uid }}){% endif %}
                   </span>
+                  {% if j.reconciliation_provenance %}
+                  <div style="font-size: 0.62rem; color: var(--text-muted); margin-top: 0.1rem;" title="Provenance mode">
+                    Src: {{ j.reconciliation_provenance }}
+                  </div>
+                  {% endif %}
                   {% if j.reconciled_at_utc %}
                   <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.15rem;">
                     Reconciled: {{ j.reconciled_at_utc[:16].replace('T', ' ') }} UTC
@@ -394,6 +404,11 @@
                   </a>
                 {% endif %}
               </div>
+              {% if job_map and job_map.get(d.draft_id) and job_map[d.draft_id].rfc_message_id %}
+              <div style="font-family: monospace; font-size: 0.68rem; color: #64748b; margin-top: 0.15rem;" title="Stable RFC 5322 Message-ID">
+                ID: {{ job_map[d.draft_id].rfc_message_id }}
+              </div>
+              {% endif %}
               <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem; max-width: 450px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                 {{ d.body_plain_text[:120] if d.body_plain_text else '(Empty message body)' }}
               </div>
