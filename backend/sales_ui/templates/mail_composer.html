@@ -1074,6 +1074,11 @@ function getActiveSignature() {
 }
 
 function handleSenderAccountChange(accId) {
+  // Sync schedule modal summary sender display
+  const modalSender = document.getElementById('modal-summary-sender');
+  if (modalSender) {
+    modalSender.textContent = (accId === 'acc_info_it') ? 'info@pybim.it' : 'info@pybim.com';
+  }
   const sigSelect = document.getElementById('signature_select');
   if (sigSelect && sigSelect.value === 'auto') {
     refreshVisualPreview();
@@ -1512,6 +1517,12 @@ document.addEventListener('DOMContentLoaded', function() {
       const formData = new FormData(formEl);
       formData.set('action_type', actionType);
 
+      // Explicitly guarantee selected sender account is captured in FormData
+      const accountSelect = document.getElementById('account_id');
+      if (accountSelect && accountSelect.value) {
+        formData.set('account_id', accountSelect.value);
+      }
+
       // Disable buttons temporarily to prevent double submission
       const allBtns = formEl.querySelectorAll('button[type="submit"]');
       allBtns.forEach(b => b.disabled = true);
@@ -1611,7 +1622,11 @@ function openScheduleModal() {
   // Populate message snapshot summary from current form inputs
   const toVal = document.getElementById('to_addresses').value || 'No recipient set';
   const subjVal = document.getElementById('subject').value || '(No Subject)';
-  const senderEmail = document.getElementById('modal-summary-sender').textContent || 'info@pybim.com';
+  const currentAcc = document.getElementById('account_id') ? document.getElementById('account_id').value : '';
+  const currentSender = (currentAcc === 'acc_info_it') ? 'info@pybim.it' : 'info@pybim.com';
+  const senderEmailEl = document.getElementById('modal-summary-sender');
+  if (senderEmailEl) senderEmailEl.textContent = currentSender;
+  const senderEmail = currentSender;
 
   document.getElementById('modal-summary-recipient').textContent = toVal;
   document.getElementById('modal-summary-subject').textContent = subjVal;

@@ -140,14 +140,23 @@ def disposable_compose_env(tmp_path, monkeypatch):
     )
     cand_store.save_candidate(cand2)
 
-    return {
+    import backend.operator_auth
+    from backend.operator_auth import OperatorAuthService
+    orig_auth = backend.operator_auth._auth_service
+    test_auth = OperatorAuthService(db_path=test_db)
+    backend.operator_auth._auth_service = test_auth
+
+    yield {
         "db_path": test_db,
         "repo": repo,
         "cand_store": cand_store,
         "cand1": cand1,
         "cont1": cont1,
         "cand2": cand2,
+        "auth": test_auth,
     }
+
+    backend.operator_auth._auth_service = orig_auth
 
 
 @pytest.fixture
