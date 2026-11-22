@@ -486,6 +486,23 @@ def execute_single_message_pilot(
         except Exception as e:
             logger.warning(f"Could not update source draft status: {e}")
 
+        # Controlled Sent Reconciliation Handoff:
+        # Executes IMAP Sent reconciliation only if explicitly authorized via env flag or parameter
+        reconciliation_res = None
+        auto_reconcile_enabled = os.getenv("OUTBOUND_AUTO_SENT_RECONCILE", "false").strip().lower() in ("true", "1", "yes")
+        if auto_reconcile_enabled:
+            try:
+                rec_svc = SentReconciliationService(db_path=db_path, credential_store=cred_store)
+                reconciliation_res = rec_svc.reconcile_job_sent_copy(
+                    job_id=job.job_id,
+                    dry_run=False,
+                    live_append=True,
+                    operator_username=operator_username,
+                )
+                logger.info(f"Automatic Sent reconciliation completed for {job.job_id}: {reconciliation_res.get('status')}")
+            except Exception as rec_err:
+                logger.error(f"Automatic Sent reconciliation failed for {job.job_id} (SMTP send untouched): {rec_err}")
+
         return {
             "success": True,
             "mode": "LIVE_SEND",
@@ -495,6 +512,7 @@ def execute_single_message_pilot(
             "smtp_code": smtp_res.status_code,
             "smtp_message": smtp_res.response_message,
             "duration_ms": smtp_res.duration_ms,
+            "reconciliation": reconciliation_res,
         }
 
     elif smtp_res.is_unknown_acceptance:

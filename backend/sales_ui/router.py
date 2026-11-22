@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Set
 from datetime import datetime, timezone
-from urllib.parse import urlparse, urlencode, quote
+from urllib.parse import urlparse, urlencode, quote, quote_plus
 
 try:
     import openpyxl
@@ -10798,6 +10798,69 @@ async def compose_email_cancel_schedule_action(
 
     return RedirectResponse(
         url=f"/sales/mail-operations/compose?draft_id={updated.draft_id}&schedule_cancelled=true",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/mail-operations/reconcile-sent")
+async def mail_operations_reconcile_sent_endpoint(
+    request: Request,
+    job_id: str = Form(...),
+    csrf: None = Depends(validate_csrf),
+    user: OperatorUser = Depends(require_authenticated_operator),
+):
+    """
+    Dedicated endpoint for operator-authorized IMAP Sent-folder reconciliation.
+    Guarantees:
+    - Operator must be authenticated with valid CSRF token.
+    - Resolves job from OutboundQueueStore and verifies status == 'smtp_accepted'.
+    - Never triggers an SMTP transmission.
+    - Idempotently reconciles into Register.it INBOX.Sent folder.
+    - Updates reconciliation status and displays structured outcome.
+    """
+    from sales_engine.sending.sent_reconciliation import SentReconciliationService, SentReconciliationError
+
+    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    clean_job_id = (job_id or "").strip()
+    if not clean_job_id:
+        raise HTTPException(status_code=400, detail="Missing required job_id.")
+
+    svc = SentReconciliationService(db_path=db_path)
+    job = svc.queue_store.get_job(clean_job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Outbound job '{clean_job_id}' not found.")
+
+    if job.status != "smtp_accepted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job '{clean_job_id}' status is '{job.status}'. Only 'smtp_accepted' jobs can be reconciled into Sent folder.",
+        )
+
+    try:
+        # Operator explicitly submitted form with confirmation
+        res = svc.reconcile_job_sent_copy(
+            job_id=clean_job_id,
+            dry_run=False,
+            live_append=True,
+            operator_username=user.username,
+        )
+    except SentReconciliationError as sre:
+        logger.error(f"Reconciliation error for job {clean_job_id}: {sre}")
+        accept_header = request.headers.get("accept", "")
+        if "application/json" in accept_header:
+            return JSONResponse(status_code=400, content={"success": False, "error": str(sre)})
+        return RedirectResponse(
+            url=f"/sales/mail-operations/drafts?reconcile_error={quote_plus(str(sre))}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header:
+        return JSONResponse(res)
+
+    status_msg = f"Reconciliation {res.get('status', 'complete')}: UID {res.get('imap_uid', 'verified')}"
+    return RedirectResponse(
+        url=f"/sales/mail-operations/drafts?reconcile_success={quote_plus(status_msg)}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 

@@ -357,6 +357,23 @@ class OutboundWorker:
             except Exception as e:
                 logger.warning(f"Could not update source draft status: {e}")
 
+            # Controlled Sent Reconciliation Handoff:
+            # Executes IMAP Sent reconciliation only if explicitly authorized via env flag
+            auto_reconcile_enabled = os.getenv("OUTBOUND_AUTO_SENT_RECONCILE", "false").strip().lower() in ("true", "1", "yes")
+            if auto_reconcile_enabled:
+                try:
+                    from sales_engine.sending.sent_reconciliation import SentReconciliationService
+                    rec_svc = SentReconciliationService(db_path=self.db_path)
+                    rec_svc.reconcile_job_sent_copy(
+                        job_id=job.job_id,
+                        dry_run=False,
+                        live_append=True,
+                        operator_username=job.approved_by,
+                    )
+                    logger.info(f"Worker auto-reconciliation completed for job {job.job_id}")
+                except Exception as rec_err:
+                    logger.error(f"Worker auto-reconciliation failed for job {job.job_id} (SMTP send untouched): {rec_err}")
+
             return {"job_id": job.job_id, "final_status": "smtp_accepted"}
 
         elif smtp_res.is_unknown_acceptance:

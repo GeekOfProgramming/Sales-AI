@@ -346,3 +346,148 @@ def test_8_two_accounts_strictly_isolated(temp_db, mock_cred_store):
     assert res["success"] is True
     assert res["account_id"] == "acc_info_it"
     assert res["sender_email"] == "info@pybim.it"
+
+
+def test_9_automatic_reconciliation_trigger_controlled_handoff(temp_db, mock_cred_store, monkeypatch):
+    """
+    Verifies that when OUTBOUND_AUTO_SENT_RECONCILE=true:
+    SMTP 250 acceptance immediately transitions the job through Sent reconciliation
+    to 'sent_reconciled' without requiring manual CLI command.
+    """
+    from scripts.run_outbound_pilot import execute_single_message_pilot
+    from sales_engine.sending.smtp_adapter import SMTPSubmissionResult
+
+    monkeypatch.setenv("OUTBOUND_AUTO_SENT_RECONCILE", "true")
+    monkeypatch.setenv("OUTBOUND_SEND_ENABLED", "true")
+    monkeypatch.setenv("PILOT_ALLOW_LIVE_SEND", "true")
+
+    raw_mime = b"From: pyBIM <info@pybim.com>\r\nTo: partner@example.com\r\nSubject: Test\r\nMessage-ID: <auto.rec@pybim.com>\r\n\r\nTest auto"
+    digest = hashlib.sha256(raw_mime).hexdigest()
+
+    job = OutboundQueueJob(
+        job_id="job_auto_01",
+        source_draft_id="drf_auto_01",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        envelope_from="info@pybim.com",
+        envelope_recipients_json=json.dumps(["partner@example.com"]),
+        header_to_json=json.dumps(["partner@example.com"]),
+        subject="Test",
+        body_plain_text="Test auto",
+        rfc_message_id="<auto.rec@pybim.com>",
+        scheduled_for_utc="2026-11-20T14:00:00Z",
+        scheduled_local_date="2026-11-20",
+        scheduled_local_time="15:00",
+        approved_by="admin",
+        approved_at_utc="2026-11-20T14:00:00Z",
+        idempotency_key="idemp_auto_01",
+        status="scheduled",
+    )
+    temp_db["queue"].enqueue_job(job)
+
+    # Mock SMTP server returning OK (smtplib.SMTP.send_message returns dict of refused recpts, empty on success)
+    mock_smtp_server = MagicMock()
+    mock_smtp_server.send_message.return_value = {}
+
+    with patch.object(SentReconciliationService, "connect_imap") as mock_conn:
+        mock_imap_client = MagicMock()
+        mock_imap_client.select.return_value = ("OK", [b"10"])
+        mock_imap_client.uid.side_effect = [
+            ("OK", [b""]),       # pre-check search: not found
+            ("OK", [b"777"]),    # post-append confirmation: found UID 777
+        ]
+        mock_imap_client.append.return_value = ("OK", [b"[APPENDUID 12345 777]"])
+        mock_conn.return_value = mock_imap_client
+
+        res = execute_single_message_pilot(
+            db_path=temp_db["db_path"],
+            job_id="job_auto_01",
+            allowed_recipient="partner@example.com",
+            dry_run=False,
+            credential_store=mock_cred_store,
+            custom_smtp_server=mock_smtp_server,
+        )
+
+        assert res["status"] == "smtp_accepted"
+        assert res["reconciliation"] is not None
+        assert res["reconciliation"]["status"] == "sent_reconciled"
+        assert res["reconciliation"]["imap_uid"] == "777"
+
+        # Check DB state
+        job_after = temp_db["queue"].get_job("job_auto_01")
+        assert job_after.status == "smtp_accepted"
+        assert job_after.reconciliation_status == "sent_reconciled"
+        assert job_after.imap_uid == "777"
+
+
+def test_10_ui_reconcile_endpoint_authenticated(temp_db, mock_cred_store):
+    """
+    Verifies that the /sales/mail-operations/reconcile-sent backend endpoint:
+    - Rejects unauthenticated callers / non-existent jobs.
+    - Idempotently reconciles and returns JSON with structured reconciliation outcome.
+    """
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    from backend.operator_auth import get_auth_service
+
+    auth_svc = get_auth_service(db_path=temp_db["db_path"])
+    client = TestClient(app)
+
+    # 1. Unauthenticated request without session
+    resp_unauth = client.post("/sales/mail-operations/reconcile-sent", data={"job_id": "job_any"})
+    assert resp_unauth.status_code in (302, 303, 401, 403)
+
+    # 2. Stage accepted job in test DB
+    raw_mime = b"From: pyBIM <info@pybim.com>\r\nTo: partner@example.com\r\nSubject: UI Test\r\nMessage-ID: <ui.test@pybim.com>\r\n\r\nUI Test"
+    digest = hashlib.sha256(raw_mime).hexdigest()
+    job = OutboundQueueJob(
+        job_id="job_ui_01",
+        source_draft_id="drf_ui_01",
+        account_id="acc_info_com",
+        sender_email="info@pybim.com",
+        envelope_from="info@pybim.com",
+        envelope_recipients_json=json.dumps(["partner@example.com"]),
+        header_to_json=json.dumps(["partner@example.com"]),
+        subject="UI Test",
+        body_plain_text="UI Test",
+        rfc_message_id="<ui.test@pybim.com>",
+        scheduled_for_utc="2026-11-20T14:00:00Z",
+        scheduled_local_date="2026-11-20",
+        scheduled_local_time="15:00",
+        approved_by="admin",
+        approved_at_utc="2026-11-20T14:00:00Z",
+        idempotency_key="idemp_ui_01",
+        status="smtp_accepted",
+        reconciliation_status="sent_pending",
+        submitted_mime_bytes=raw_mime,
+        submitted_mime_sha256=digest,
+    )
+    temp_db["queue"].enqueue_job(job)
+
+    # Authenticate operator and create session
+    auth_svc.create_user("admin", "AdminPass123!", role="admin")
+    user = auth_svc.authenticate_user("admin", "AdminPass123!")
+    assert user is not None
+    token = auth_svc.create_session(user.user_id)
+
+    with patch.dict(os.environ, {"SALES_OUTREACH_DB": temp_db["db_path"]}):
+        with patch.object(SentReconciliationService, "connect_imap") as mock_conn:
+            mock_imap_client = MagicMock()
+            mock_imap_client.select.return_value = ("OK", [b"10"])
+            mock_imap_client.uid.return_value = ("OK", [b"888"])
+            mock_conn.return_value = mock_imap_client
+
+            # Send authorized request with session cookie and matching CSRF cookie
+            client.cookies.set("sales_session", token)
+            client.cookies.set("sales_csrf_token", "valid_token")
+            headers = {"Accept": "application/json"}
+            resp = client.post(
+                "/sales/mail-operations/reconcile-sent",
+                data={"job_id": "job_ui_01", "csrf_token": "valid_token"},
+                headers=headers,
+            )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["success"] is True
+            assert data["status"] == "sent_reconciled"
+            assert data["matched_uids"] == ["888"]
