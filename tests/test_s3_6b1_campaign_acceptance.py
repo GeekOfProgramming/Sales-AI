@@ -27,6 +27,8 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+from tests.support.isolated_subprocess import run_isolated_subprocess
+
 from sales_engine.benchmark.external_runner import (
     BenchmarkCaseExecutionResult,
     BenchmarkRunReport,
@@ -78,7 +80,7 @@ class TestCLIPacingIntegration:
                 parse_args()
             assert exc_info.value.code == 2
 
-    def test_cli_entry_point_subprocess_propagation(self):
+    def test_cli_entry_point_subprocess_propagation(self, tmp_path: Path):
         """Invoke scripts/benchmark_external_llm.py directly via subprocess."""
         cmd = [
             sys.executable,
@@ -90,7 +92,13 @@ class TestCLIPacingIntegration:
             "--task",
             "website_extraction:pass_a",
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        isolated_db = tmp_path / "isolated_campaign_acceptance.db"
+        result = run_isolated_subprocess(
+            cmd,
+            isolated_db_path=isolated_db,
+            capture_output=True,
+            text=True,
+        )
         assert result.returncode == 0
         assert "Benchmark Execution Completed" in result.stdout
 

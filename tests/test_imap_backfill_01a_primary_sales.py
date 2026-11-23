@@ -25,6 +25,8 @@ import sqlite3
 import pytest
 from unittest.mock import MagicMock
 
+from tests.support.isolated_subprocess import run_isolated_subprocess
+
 from sales_engine.inbox.models import (
     MailboxAccountRecord,
     MailboxFolderRecord,
@@ -677,8 +679,9 @@ def test_12_cli_safety_requires_live_connect_and_confirmation(disposable_backfil
     env = disposable_backfill_env
 
     # 1. Without --live-connect
-    proc1 = subprocess.run(
+    proc1 = run_isolated_subprocess(
         [sys.executable, "scripts/run_mailbox_pilot.py", "--db-path", env["db_path"], "backfill"],
+        isolated_db_path=env["db_path"],
         capture_output=True,
         text=True,
     )
@@ -686,8 +689,9 @@ def test_12_cli_safety_requires_live_connect_and_confirmation(disposable_backfil
     assert "Live connection commands require explicit '--live-connect'" in proc1.stdout or "Live connection commands require explicit '--live-connect'" in proc1.stderr
 
     # 2. With --live-connect but without --confirm-backfill or --dry-run
-    proc2 = subprocess.run(
+    proc2 = run_isolated_subprocess(
         [sys.executable, "scripts/run_mailbox_pilot.py", "--db-path", env["db_path"], "backfill", "--live-connect"],
+        isolated_db_path=env["db_path"],
         capture_output=True,
         text=True,
     )
