@@ -349,6 +349,42 @@ def execute_single_message_pilot(
             f"Pilot job '{job_id}' has status '{job.status}'. Only 'scheduled' jobs can be piloted."
         )
 
+    # 2.1 Schedule timestamp guard: Validate scheduled_for_utc against current UTC time
+    # Critical Safety Invariant (MAIL-SEND-PILOT-SCHEDULE-GUARD):
+    # - Missing, malformed, or naive scheduled timestamps fail closed immediately.
+    # - Live pilot transmission cannot execute before scheduled delivery time.
+    # - Rejection does NOT record an attempt, does NOT consume attempt_count,
+    #   and does NOT alter job status or durable MIME bytes.
+    # - Dry-run validation of a future scheduled job is explicitly allowed to proceed without sending.
+    if not job.scheduled_for_utc or not isinstance(job.scheduled_for_utc, str):
+        raise ValueError(
+            f"Pilot job '{job_id}' rejected: missing or invalid scheduled timestamp ('{job.scheduled_for_utc}')."
+        )
+
+    try:
+        raw_ts = job.scheduled_for_utc.strip()
+        if raw_ts.endswith("Z"):
+            scheduled_dt = datetime.fromisoformat(raw_ts[:-1] + "+00:00")
+        else:
+            scheduled_dt = datetime.fromisoformat(raw_ts)
+
+        if scheduled_dt.tzinfo is None:
+            raise ValueError(f"Scheduled timestamp '{job.scheduled_for_utc}' is timezone-naive.")
+    except Exception as parse_err:
+        raise ValueError(
+            f"Pilot job '{job_id}' rejected: malformed scheduled_for_utc timestamp "
+            f"('{job.scheduled_for_utc}'): {parse_err}"
+        )
+
+    now_utc = datetime.now(timezone.utc)
+    if not dry_run and scheduled_dt > now_utc:
+        diff_seconds = (scheduled_dt - now_utc).total_seconds()
+        raise ValueError(
+            f"Live transmission blocked: Pilot job '{job_id}' is scheduled for future delivery at "
+            f"{scheduled_dt.isoformat()} (in {int(diff_seconds)}s / {diff_seconds/60:.1f}m). "
+            f"Current time is {now_utc.isoformat()}. Early live transmission is strictly prohibited."
+        )
+
     # 3. Sender allowlist verification
     if job.sender_email not in AUTHORIZED_PILOT_SENDERS:
         raise ValueError(
