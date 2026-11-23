@@ -1,0 +1,312 @@
+"""
+tests/test_db_resolver.py
+Isolated unit tests for sales_engine.db_resolver (no SQLite connections or app imports).
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from sales_engine.db_resolver import (
+    _DEFAULT_REPO_ROOT,
+    DatabaseConfigurationConflictError,
+    DatabaseResolutionError,
+    ProtectedDatabasePathError,
+    ResolutionPolicy,
+    resolve_database_path,
+)
+
+
+def test_explicit_db_path_overrides_env_values_including_conflicts(tmp_path: Path) -> None:
+    """Explicit db_path takes highest priority even when ambient env vars conflict."""
+    explicit_db = tmp_path / "explicit.db"
+    env = {
+        "SALES_OUTREACH_DB": str(tmp_path / "from_env_a.db"),
+        "SALESAI_DB_PATH": str(tmp_path / "from_env_b.db"),
+        "SALESAI_CANDIDATES_DB": str(tmp_path / "from_env_c.db"),
+    }
+
+    for policy in (ResolutionPolicy.STRICT_EXPLICIT, ResolutionPolicy.LEGACY_COMPATIBLE):
+        resolved = resolve_database_path(explicit_db, policy=policy, env=env)
+        assert resolved == explicit_db.resolve()
+
+
+def test_sales_outreach_db_takes_precedence_over_salesai_db_path(tmp_path: Path) -> None:
+    """SALES_OUTREACH_DB wins over SALESAI_DB_PATH and SALESAI_CANDIDATES_DB in legacy mode."""
+    primary = tmp_path / "primary.db"
+    secondary = tmp_path / "secondary.db"
+    tertiary = tmp_path / "tertiary.db"
+    env = {
+        "SALES_OUTREACH_DB": str(primary),
+        "SALESAI_DB_PATH": str(secondary),
+        "SALESAI_CANDIDATES_DB": str(tertiary),
+    }
+
+    resolved = resolve_database_path(
+        policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+        env=env,
+    )
+    assert resolved == primary.resolve()
+
+
+def test_salesai_db_path_takes_precedence_over_salesai_candidates_db(tmp_path: Path) -> None:
+    """SALESAI_DB_PATH wins over SALESAI_CANDIDATES_DB when SALES_OUTREACH_DB is unset."""
+    secondary = tmp_path / "secondary.db"
+    tertiary = tmp_path / "tertiary.db"
+    env = {
+        "SALESAI_DB_PATH": str(secondary),
+        "SALESAI_CANDIDATES_DB": str(tertiary),
+    }
+
+    resolved = resolve_database_path(
+        policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+        env=env,
+    )
+    assert resolved == secondary.resolve()
+
+
+def test_legacy_fallback_resolves_to_repo_operational_db_independent_of_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unconfigured LEGACY_COMPATIBLE resolves to <repo_root>/data/sales_outreach.db regardless of cwd."""
+    fake_repo = tmp_path / "repo_root"
+    other_cwd = tmp_path / "somewhere_else"
+    other_cwd.mkdir(parents=True)
+    monkeypatch.chdir(other_cwd)
+
+    resolved = resolve_database_path(
+        policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+        env={},
+        repo_root=fake_repo,
+    )
+    assert resolved == (fake_repo / "data" / "sales_outreach.db").resolve()
+
+
+def test_strict_mode_rejects_unconfigured_resolution(tmp_path: Path) -> None:
+    """STRICT_EXPLICIT fails closed when neither db_path nor env vars are configured."""
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            env={},
+            repo_root=tmp_path / "repo",
+        )
+
+
+def test_strict_mode_rejects_conflicting_env_vars(tmp_path: Path) -> None:
+    """STRICT_EXPLICIT raises DatabaseConfigurationConflictError when non-empty DB env vars diverge."""
+    db_a = tmp_path / "a.db"
+    db_b = tmp_path / "b.db"
+    env = {
+        "SALES_OUTREACH_DB": str(db_a),
+        "SALESAI_DB_PATH": str(db_b),
+    }
+
+    with pytest.raises(DatabaseConfigurationConflictError):
+        resolve_database_path(policy=ResolutionPolicy.STRICT_EXPLICIT, env=env)
+
+
+def test_strict_mode_rejects_operational_database_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """STRICT_EXPLICIT rejects operational data/ paths, backups, '..' traversals, and symlink escapes."""
+    fake_repo = tmp_path / "repo"
+    op_targets = [
+        fake_repo / "data" / "sales_outreach.db",
+        fake_repo / "data" / "backups" / ".." / "sales_outreach.db",
+        fake_repo / "data" / "sales_outreach.db.bak",
+    ]
+
+    for target in op_targets:
+        with pytest.raises(ProtectedDatabasePathError):
+            resolve_database_path(
+                target,
+                policy=ResolutionPolicy.STRICT_EXPLICIT,
+                repo_root=fake_repo,
+            )
+        with pytest.raises(ProtectedDatabasePathError):
+            resolve_database_path(
+                policy=ResolutionPolicy.STRICT_EXPLICIT,
+                env={"SALES_OUTREACH_DB": str(target)},
+                repo_root=fake_repo,
+            )
+
+    # Deterministic symlink/junction escape simulation via mocked Path.resolve
+    link_in_tmp = tmp_path / "disposable_link.db"
+    prod_resolved = (fake_repo / "data" / "sales_outreach.db").resolve()
+    orig_resolve = Path.resolve
+
+    def fake_resolve(self: Path, strict: bool = False) -> Path:
+        if os.path.normcase(str(self)) == os.path.normcase(str(link_in_tmp)):
+            return prod_resolved
+        return orig_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", fake_resolve)
+    with pytest.raises(ProtectedDatabasePathError):
+        resolve_database_path(
+            link_in_tmp,
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            repo_root=fake_repo,
+        )
+
+
+def test_relative_path_policy_semantics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Relative paths fail in STRICT_EXPLICIT and resolve cwd-relatively in LEGACY_COMPATIBLE."""
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path("rel/test.db", policy=ResolutionPolicy.STRICT_EXPLICIT)
+
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            env={"SALES_OUTREACH_DB": "rel/env.db"},
+        )
+
+    assert (
+        resolve_database_path("rel/test.db", policy=ResolutionPolicy.LEGACY_COMPATIBLE)
+        == (tmp_path / "rel" / "test.db").resolve()
+    )
+    assert (
+        resolve_database_path(
+            policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+            env={"SALES_OUTREACH_DB": "rel/env.db"},
+        )
+        == (tmp_path / "rel" / "env.db").resolve()
+    )
+
+
+def test_equivalent_normalized_paths_do_not_conflict(tmp_path: Path) -> None:
+    """Equivalent paths using mixed casing, slashes, or '..' pass STRICT_EXPLICIT without conflict."""
+    canonical = (tmp_path / "sub" / "shared.db").resolve()
+    sub_dir = tmp_path / "sub"
+    alt_traversal = str(sub_dir / "nested" / ".." / "shared.db")
+    alt_slashes = str(canonical).replace("\\", "/")
+    if os.name == "nt":
+        alt_slashes = alt_slashes.lower()
+
+    env = {
+        "SALES_OUTREACH_DB": str(canonical),
+        "SALESAI_DB_PATH": alt_traversal,
+        "SALESAI_CANDIDATES_DB": alt_slashes,
+    }
+
+    resolved = resolve_database_path(policy=ResolutionPolicy.STRICT_EXPLICIT, env=env)
+    assert resolved == canonical
+
+
+def test_empty_and_whitespace_env_values_treated_as_unset(tmp_path: Path) -> None:
+    """Empty or whitespace-only env vars are ignored in favor of next precedence or fallback."""
+    fallback_target = tmp_path / "fallback.db"
+    env = {
+        "SALES_OUTREACH_DB": "",
+        "SALESAI_DB_PATH": "   ",
+        "SALESAI_CANDIDATES_DB": str(fallback_target),
+    }
+
+    assert (
+        resolve_database_path(policy=ResolutionPolicy.STRICT_EXPLICIT, env=env)
+        == fallback_target.resolve()
+    )
+
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            env={"SALES_OUTREACH_DB": "", "SALESAI_DB_PATH": "  "},
+        )
+
+
+def test_memory_handling_is_explicit_and_controlled() -> None:
+    """':memory:' requires allow_memory=True and returns ':memory:' cleanly without Path resolution."""
+    for policy in (ResolutionPolicy.STRICT_EXPLICIT, ResolutionPolicy.LEGACY_COMPATIBLE):
+        with pytest.raises(DatabaseResolutionError):
+            resolve_database_path(":memory:", policy=policy, allow_memory=False)
+
+        assert (
+            resolve_database_path(":memory:", policy=policy, allow_memory=True)
+            == ":memory:"
+        )
+        assert (
+            resolve_database_path(":MEMORY:", policy=policy, allow_memory=True)
+            == ":memory:"
+        )
+
+
+def test_invalid_uri_unc_nul_and_padded_paths_rejected(tmp_path: Path) -> None:
+    """SQLite URIs, UNC paths, NUL bytes, and whitespace-padded paths fail closed in both policies."""
+    bad_inputs = [
+        "",
+        "   ",
+        f" {tmp_path / 'padded.db'}",
+        "file:test.db?mode=ro",
+        f"{tmp_path / 'query.db'}?cache=shared",
+        r"\\server\share\db.sqlite",
+        f"{tmp_path / 'bad.db'}\x00",
+    ]
+    for policy in (ResolutionPolicy.STRICT_EXPLICIT, ResolutionPolicy.LEGACY_COMPATIBLE):
+        for bad in bad_inputs:
+            with pytest.raises(DatabaseResolutionError):
+                resolve_database_path(bad, policy=policy)
+
+
+def test_resolver_does_not_create_files_dirs_or_mutate_env(tmp_path: Path) -> None:
+    """Resolving a nonexistent nested path creates neither parent directories nor SQLite files."""
+    nonexistent_parent = tmp_path / "never_created_dir"
+    target = nonexistent_parent / "never_created.db"
+    env = {"SALES_OUTREACH_DB": str(target)}
+    env_snapshot = dict(env)
+
+    resolved = resolve_database_path(policy=ResolutionPolicy.STRICT_EXPLICIT, env=env)
+    assert resolved == target.resolve()
+    assert not nonexistent_parent.exists()
+    assert not target.exists()
+    assert env == env_snapshot
+
+
+def test_custom_repo_root_cannot_bypass_actual_operational_protection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Passing a custom repo_root and chdir-ing away must not allow actual operational DB/backups."""
+    monkeypatch.chdir(tmp_path)
+    fake_repo = tmp_path / "fake_repo"
+
+    actual_protected = [
+        _DEFAULT_REPO_ROOT / "data" / "sales_outreach.db",
+        _DEFAULT_REPO_ROOT / "data" / "sales_outreach.db.backup",
+        _DEFAULT_REPO_ROOT / "data" / "sales_outreach.db-wal",
+        _DEFAULT_REPO_ROOT / "data" / "sales_outreach.db-shm",
+        _DEFAULT_REPO_ROOT / "data" / "sales_outreach.db-journal",
+        _DEFAULT_REPO_ROOT / "data" / "backups" / "auto.db",
+    ]
+    for target in actual_protected:
+        with pytest.raises(ProtectedDatabasePathError):
+            resolve_database_path(
+                target,
+                policy=ResolutionPolicy.STRICT_EXPLICIT,
+                repo_root=fake_repo,
+            )
+
+
+def test_windows_case_insensitive_env_keys(tmp_path: Path) -> None:
+    """Case-variant env keys resolve on Windows and reject duplicate case variants in strict mode."""
+    target = tmp_path / "cased.db"
+    other = tmp_path / "other.db"
+
+    resolved = resolve_database_path(
+        policy=ResolutionPolicy.STRICT_EXPLICIT,
+        env={"sales_outreach_db": str(target)},
+    )
+    if os.name == "nt":
+        assert resolved == target.resolve()
+        with pytest.raises(DatabaseConfigurationConflictError):
+            resolve_database_path(
+                policy=ResolutionPolicy.STRICT_EXPLICIT,
+                env={"SALES_OUTREACH_DB": str(target), "sales_outreach_db": str(other)},
+            )
+    else:
+        # On POSIX, lowercase key is distinct and ignored
+        assert resolved != target.resolve()  # pragma: no cover
