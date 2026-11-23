@@ -363,8 +363,6 @@ class OutboundWorker:
                 self.queue_store.record_attempt(
                     attempt=attempt,
                     new_job_status="scheduled",
-                    smtp_response_code=smtp_res.status_code,
-                    smtp_response_message=smtp_res.response_message,
                 )
                 return {"job_id": job.job_id, "final_status": "dry_run_simulated"}
 

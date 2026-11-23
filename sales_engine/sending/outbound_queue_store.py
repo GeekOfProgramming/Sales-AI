@@ -369,10 +369,22 @@ class OutboundQueueStore:
         Atomically records an attempt log and updates job status and attempt count.
         Optionally persists exact pre-submission raw MIME bytes and SHA-256 integrity hash.
         Releases worker lease.
+
+        CRITICAL SAFETY RULE (MAIL-SEND-DRYRUN-STATE-FIX):
+        If attempt.status == 'dry_run_simulated':
+        - The attempt record is inserted into outbound_attempts for audit visibility.
+        - outbound_jobs.attempt_count is NEVER incremented (does not consume max_attempts).
+        - outbound_jobs.smtp_response_code and smtp_response_message are NEVER updated with simulated values.
+        - outbound_jobs.last_attempt_at_utc is NOT updated.
+        - authoritative job status is preserved (cannot overwrite terminal state or fake smtp_accepted).
+        - worker lease is released.
+        - version is incremented and updated_at is refreshed.
         """
         now_utc = datetime.now(timezone.utc).isoformat()
+        is_simulation = (attempt.status == "dry_run_simulated")
+
         with self._lock, self._get_connection() as conn:
-            # 1. Insert attempt record
+            # 1. Insert attempt record (always recorded for audit trail)
             conn.execute("""
                 INSERT INTO outbound_attempts (
                     attempt_id, job_id, attempt_number, worker_id, status,
@@ -386,51 +398,200 @@ class OutboundQueueStore:
                 attempt.duration_ms, attempt.started_at_utc, attempt.completed_at_utc,
             ))
 
-            # 2. Update parent job (persisting exact submitted MIME bytes if provided)
-            reconcile_status_update = ", reconciliation_status = 'sent_pending'" if new_job_status == "smtp_accepted" else ""
-            if submitted_mime_bytes is not None:
-                conn.execute(f"""
+            # 2. Update parent job
+            if is_simulation:
+                # Simulation update: release lease, bump version, preserve scheduled/authoritative status,
+                # NEVER touch attempts or smtp response code.
+                # If the job was leased ('sending'), return it to 'scheduled'.
+                # If it was already in a terminal state (e.g. 'smtp_accepted'), protect and preserve it.
+                curr = conn.execute("SELECT status FROM outbound_jobs WHERE job_id = ?;", (attempt.job_id,)).fetchone()
+                curr_status = curr["status"] if curr else new_job_status
+                if curr_status == "sending":
+                    target_status = "scheduled"
+                elif curr_status in ("smtp_accepted", "failed", "requires_review", "acceptance_unknown"):
+                    target_status = curr_status
+                else:
+                    target_status = new_job_status
+
+                conn.execute("""
                     UPDATE outbound_jobs
                     SET status = ?,
-                        attempt_count = attempt_count + 1,
-                        last_attempt_at_utc = ?,
-                        smtp_response_code = ?,
-                        smtp_response_message = ?,
-                        review_reason = ?,
-                        submitted_mime_bytes = ?,
-                        submitted_mime_sha256 = ?,
                         worker_lease_id = NULL,
                         lease_expires_at_utc = NULL,
                         version = version + 1,
                         updated_at = ?
-                        {reconcile_status_update}
                     WHERE job_id = ?;
-                """, (
-                    new_job_status, now_utc, smtp_response_code, smtp_response_message,
-                    review_reason, submitted_mime_bytes, submitted_mime_sha256, now_utc, attempt.job_id,
-                ))
+                """, (target_status, now_utc, attempt.job_id))
             else:
-                conn.execute(f"""
-                    UPDATE outbound_jobs
-                    SET status = ?,
-                        attempt_count = attempt_count + 1,
-                        last_attempt_at_utc = ?,
-                        smtp_response_code = ?,
-                        smtp_response_message = ?,
-                        review_reason = ?,
-                        worker_lease_id = NULL,
-                        lease_expires_at_utc = NULL,
-                        version = version + 1,
-                        updated_at = ?
-                        {reconcile_status_update}
-                    WHERE job_id = ?;
-                """, (
-                    new_job_status, now_utc, smtp_response_code, smtp_response_message,
-                    review_reason, now_utc, attempt.job_id,
-                ))
+                # Real live attempt update: increment attempt_count and record authoritative SMTP results
+                reconcile_status_update = ", reconciliation_status = 'sent_pending'" if new_job_status == "smtp_accepted" else ""
+                if submitted_mime_bytes is not None:
+                    conn.execute(f"""
+                        UPDATE outbound_jobs
+                        SET status = ?,
+                            attempt_count = attempt_count + 1,
+                            last_attempt_at_utc = ?,
+                            smtp_response_code = ?,
+                            smtp_response_message = ?,
+                            review_reason = ?,
+                            submitted_mime_bytes = ?,
+                            submitted_mime_sha256 = ?,
+                            worker_lease_id = NULL,
+                            lease_expires_at_utc = NULL,
+                            version = version + 1,
+                            updated_at = ?
+                            {reconcile_status_update}
+                        WHERE job_id = ?;
+                    """, (
+                        new_job_status, now_utc, smtp_response_code, smtp_response_message,
+                        review_reason, submitted_mime_bytes, submitted_mime_sha256, now_utc, attempt.job_id,
+                    ))
+                else:
+                    conn.execute(f"""
+                        UPDATE outbound_jobs
+                        SET status = ?,
+                            attempt_count = attempt_count + 1,
+                            last_attempt_at_utc = ?,
+                            smtp_response_code = ?,
+                            smtp_response_message = ?,
+                            review_reason = ?,
+                            worker_lease_id = NULL,
+                            lease_expires_at_utc = NULL,
+                            version = version + 1,
+                            updated_at = ?
+                            {reconcile_status_update}
+                        WHERE job_id = ?;
+                    """, (
+                        new_job_status, now_utc, smtp_response_code, smtp_response_message,
+                        review_reason, now_utc, attempt.job_id,
+                    ))
 
             row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (attempt.job_id,)).fetchone()
             return self._row_to_job(row)
+
+    def repair_simulated_dry_run_job_metadata(
+        self,
+        job_id: str,
+        expected_account_id: str,
+        expected_sender_email: str,
+        expected_recipient_substr: str,
+        expected_rfc_message_id: Optional[str] = None,
+        operator_username: str = "operator_repair",
+    ) -> Dict[str, Any]:
+        """
+        Safely repairs metadata of an outbound job corrupted by simulated dry-run execution
+        (MAIL-SEND-DRYRUN-STATE-FIX).
+
+        Diagnostic & Safety Invariants:
+        1. Job must exist in outbound_jobs.
+        2. Account ID and sender email must match expected.
+        3. Recipient JSON must contain expected recipient substring.
+        4. If expected_rfc_message_id is provided, it must match.
+        5. Job status must be 'scheduled'.
+        6. Inspection of outbound_attempts must confirm NO live SMTP attempts occurred
+           (all attempts for this job must have status == 'dry_run_simulated').
+        7. If already repaired (attempt_count == 0, smtp_response_code IS NULL, smtp_response_message IS NULL),
+           returns ALREADY_REPAIRED idempotently without updating rows.
+        8. Atomic UPDATE resets attempt_count to 0, clears simulated smtp_response_code and
+           smtp_response_message to NULL, while preserving submitted_mime_bytes,
+           submitted_mime_sha256, scheduled_for_utc, and approval metadata.
+        9. Guarantees exactly one row updated; raises RuntimeError if rowcount != 1.
+        """
+        now_utc = datetime.now(timezone.utc).isoformat()
+        with self._lock, self._get_connection() as conn:
+            # 1. Fetch current job
+            row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            if not row:
+                raise ValueError(f"Job '{job_id}' not found in outbound_jobs.")
+
+            current_job = self._row_to_job(row)
+
+            # 2. Strict identity verification
+            if current_job.account_id != expected_account_id:
+                raise ValueError(
+                    f"Account mismatch for job '{job_id}': expected '{expected_account_id}', found '{current_job.account_id}'."
+                )
+            if current_job.sender_email != expected_sender_email:
+                raise ValueError(
+                    f"Sender mismatch for job '{job_id}': expected '{expected_sender_email}', found '{current_job.sender_email}'."
+                )
+            if expected_recipient_substr not in (current_job.envelope_recipients_json or ""):
+                raise ValueError(
+                    f"Recipient mismatch for job '{job_id}': '{expected_recipient_substr}' not found in envelope recipients: {current_job.envelope_recipients_json}."
+                )
+            if expected_rfc_message_id and current_job.rfc_message_id != expected_rfc_message_id:
+                raise ValueError(
+                    f"Message-ID mismatch for job '{job_id}': expected '{expected_rfc_message_id}', found '{current_job.rfc_message_id}'."
+                )
+            if current_job.status != "scheduled":
+                raise ValueError(
+                    f"Job '{job_id}' status is '{current_job.status}'. Repair only authorized for 'scheduled' jobs."
+                )
+
+            # 3. Verify outbound_attempts: MUST ONLY contain dry_run_simulated attempts (ZERO live sends)
+            attempt_rows = conn.execute(
+                "SELECT attempt_id, attempt_number, status, smtp_code, smtp_message FROM outbound_attempts WHERE job_id = ?;",
+                (job_id,),
+            ).fetchall()
+
+            for att in attempt_rows:
+                if att["status"] != "dry_run_simulated":
+                    raise RuntimeError(
+                        f"CRITICAL SAFETY VIOLATION: Job '{job_id}' has non-simulated attempt '{att['attempt_id']}' with status '{att['status']}'. Aborting repair to prevent data corruption."
+                    )
+
+            # 4. Check idempotency: already repaired?
+            if (
+                current_job.attempt_count == 0
+                and current_job.smtp_response_code is None
+                and current_job.smtp_response_message is None
+            ):
+                return {
+                    "action": "ALREADY_REPAIRED",
+                    "status": "scheduled",
+                    "job_id": job_id,
+                    "attempt_count": 0,
+                    "smtp_response_code": None,
+                    "smtp_response_message": None,
+                    "submitted_mime_bytes_len": len(current_job.submitted_mime_bytes) if current_job.submitted_mime_bytes else 0,
+                    "submitted_mime_sha256": current_job.submitted_mime_sha256,
+                    "message": f"Job '{job_id}' has already been repaired (attempt_count=0, smtp response cleared).",
+                }
+
+            # 5. Atomic repair update
+            cursor = conn.execute("""
+                UPDATE outbound_jobs
+                SET attempt_count = 0,
+                    smtp_response_code = NULL,
+                    smtp_response_message = NULL,
+                    last_attempt_at_utc = NULL,
+                    version = version + 1,
+                    updated_at = ?
+                WHERE job_id = ?
+                  AND status = 'scheduled';
+            """, (now_utc, job_id))
+
+            if cursor.rowcount != 1:
+                conn.rollback()
+                raise RuntimeError(f"Expected to update exactly 1 row for job '{job_id}', but updated {cursor.rowcount} rows. Rolled back.")
+
+            updated_row = conn.execute("SELECT * FROM outbound_jobs WHERE job_id = ?;", (job_id,)).fetchone()
+            repaired_job = self._row_to_job(updated_row)
+
+            return {
+                "action": "REPAIRED",
+                "status": repaired_job.status,
+                "job_id": job_id,
+                "attempt_count": repaired_job.attempt_count,
+                "smtp_response_code": repaired_job.smtp_response_code,
+                "smtp_response_message": repaired_job.smtp_response_message,
+                "submitted_mime_bytes_len": len(repaired_job.submitted_mime_bytes) if repaired_job.submitted_mime_bytes else 0,
+                "submitted_mime_sha256": repaired_job.submitted_mime_sha256,
+                "version": repaired_job.version,
+                "updated_at": repaired_job.updated_at,
+                "operator": operator_username,
+                "message": f"Job '{job_id}' dry-run simulated state successfully repaired.",
+            }
 
     def persist_pre_submission_mime(
         self,

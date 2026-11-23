@@ -470,8 +470,6 @@ def execute_single_message_pilot(
         queue_store.record_attempt(
             attempt=attempt,
             new_job_status="scheduled",  # Preserved in scheduled state
-            smtp_response_code=smtp_res.status_code,
-            smtp_response_message=smtp_res.response_message,
         )
         return {
             "success": True,
@@ -786,6 +784,44 @@ def main():
         help="Operator username authorizing the historical metadata reconciliation",
     )
 
+    # Command 9: repair-job
+    repair_parser = subparsers.add_parser(
+        "repair-job",
+        help="Diagnose and safely repair outbound job metadata corrupted by simulated dry-run (MAIL-SEND-DRYRUN-STATE-FIX)",
+    )
+    repair_parser.add_argument("--job-id", required=True, help="Job ID of the affected outbound job to diagnose or repair")
+    repair_parser.add_argument(
+        "--expected-account",
+        default="acc_info_it",
+        help="Expected account ID (default: acc_info_it)",
+    )
+    repair_parser.add_argument(
+        "--expected-sender",
+        default="info@pybim.it",
+        help="Expected sender email address (default: info@pybim.it)",
+    )
+    repair_parser.add_argument(
+        "--expected-recipient",
+        default="h.lotfalian98@gmail.com",
+        help="Expected recipient substring in envelope recipients (default: h.lotfalian98@gmail.com)",
+    )
+    repair_parser.add_argument(
+        "--expected-message-id",
+        default="<179541133922.2276.15229845794957036866@pybim.it>",
+        help="Expected RFC Message-ID to verify",
+    )
+    repair_parser.add_argument(
+        "--apply",
+        action="store_true",
+        default=False,
+        help="Explicitly apply the metadata correction (default is read-only diagnostic / dry-run)",
+    )
+    repair_parser.add_argument(
+        "--operator",
+        default="operator_repair",
+        help="Operator username authorizing the repair operation",
+    )
+
     args = parser.parse_args()
 
     if args.command == "status":
@@ -1069,6 +1105,104 @@ def main():
         except Exception as e:
             print(f"\n[ERROR] Historical sent reconciliation failed: {e}\n")
             sys.exit(1)
+
+    elif args.command == "repair-job":
+        queue_store = OutboundQueueStore(db_path=args.db_path, auto_apply_schema=False)
+        job = queue_store.get_job(args.job_id)
+        if not job:
+            print(f"\n[ERROR] Job '{args.job_id}' not found in database '{args.db_path}'.\n")
+            sys.exit(1)
+
+        is_dry_run = not args.apply
+        mode_label = "READ-ONLY PREFLIGHT (Dry-Run)" if is_dry_run else "EXECUTE REPAIR (--apply)"
+
+        print("\n======================================================================")
+        print(f"pyBIM Sales-AI: Outbound Job Dry-Run State Repair [{mode_label}]")
+        print("======================================================================")
+        print(f"Target Database:        {args.db_path}")
+        print(f"Job ID:                 {job.job_id}")
+        print(f"Account ID:             {job.account_id} (Expected: {args.expected_account})")
+        print(f"Sender Email:           {job.sender_email} (Expected: {args.expected_sender})")
+        print(f"Envelope Recipients:    {job.envelope_recipients_json} (Expected contains: {args.expected_recipient})")
+        print(f"RFC Message-ID:         {job.rfc_message_id} (Expected: {args.expected_message_id})")
+        print(f"Current Status:         {job.status}")
+        print(f"Current Attempt Count:  {job.attempt_count} / {job.max_attempts}")
+        print(f"Current SMTP Code:      {job.smtp_response_code}")
+        print(f"Current SMTP Message:   {job.smtp_response_message}")
+        print(f"Submitted MIME Bytes:   {len(job.submitted_mime_bytes) if job.submitted_mime_bytes else 0} bytes")
+        print(f"Submitted MIME SHA256:  {job.submitted_mime_sha256}")
+        print("----------------------------------------------------------------------")
+
+        # Perform safety validations
+        errors = []
+        if job.account_id != args.expected_account:
+            errors.append(f"Account ID mismatch: {job.account_id} != {args.expected_account}")
+        if job.sender_email != args.expected_sender:
+            errors.append(f"Sender email mismatch: {job.sender_email} != {args.expected_sender}")
+        if args.expected_recipient not in (job.envelope_recipients_json or ""):
+            errors.append(f"Recipient mismatch: '{args.expected_recipient}' not in {job.envelope_recipients_json}")
+        if args.expected_message_id and job.rfc_message_id != args.expected_message_id:
+            errors.append(f"Message-ID mismatch: {job.rfc_message_id} != {args.expected_message_id}")
+        if job.status != "scheduled":
+            errors.append(f"Job status '{job.status}' is not 'scheduled'. Cannot repair non-scheduled jobs.")
+
+        # Check attempts history for any live attempt
+        with queue_store._get_connection() as conn:
+            attempts = conn.execute(
+                "SELECT attempt_id, attempt_number, status, smtp_code, smtp_message FROM outbound_attempts WHERE job_id = ?;",
+                (job.job_id,),
+            ).fetchall()
+
+        print(f"Recorded Outbound Attempts: {len(attempts)}")
+        for att in attempts:
+            print(f"  - Attempt #{att['attempt_number']} ({att['attempt_id']}): status={att['status']}, code={att['smtp_code']}, msg='{att['smtp_message']}'")
+            if att["status"] != "dry_run_simulated":
+                errors.append(f"Safety violation: attempt {att['attempt_id']} has live status '{att['status']}'")
+
+        if errors:
+            print("\n[CRITICAL SAFETY CHECK FAILED]")
+            for err in errors:
+                print(f"  [X] {err}")
+            print("\nRepair aborted. Database left completely untouched.\n")
+            sys.exit(1)
+
+        print("[OK] All preflight invariants passed (no live attempts detected).")
+
+        if is_dry_run:
+            print("\n[DRY RUN SUMMARY]")
+            if job.attempt_count == 0 and job.smtp_response_code is None and job.smtp_response_message is None:
+                print("Status: ALREADY_REPAIRED (attempt_count=0, smtp response codes already NULL).")
+            else:
+                print("Planned changes on --apply:")
+                print(f"  - attempt_count:         {job.attempt_count} -> 0")
+                print(f"  - smtp_response_code:    {job.smtp_response_code} -> NULL")
+                print(f"  - smtp_response_message: '{job.smtp_response_message}' -> NULL")
+                print(f"  - last_attempt_at_utc:   '{job.last_attempt_at_utc}' -> NULL")
+                print(f"  - status:                '{job.status}' -> '{job.status}' (UNTOUCHED)")
+                print(f"  - submitted_mime_bytes:  {len(job.submitted_mime_bytes) if job.submitted_mime_bytes else 0} bytes (PRESERVED)")
+                print(f"  - submitted_mime_sha256: {job.submitted_mime_sha256} (PRESERVED)")
+                print(f"  - rfc_message_id:        {job.rfc_message_id} (PRESERVED)")
+            print("\nTo apply these changes, re-run with '--apply'.\n")
+        else:
+            try:
+                res = queue_store.repair_simulated_dry_run_job_metadata(
+                    job_id=args.job_id,
+                    expected_account_id=args.expected_account,
+                    expected_sender_email=args.expected_sender,
+                    expected_recipient_substr=args.expected_recipient,
+                    expected_rfc_message_id=args.expected_message_id,
+                    operator_username=args.operator,
+                )
+                print("\n======================================================================")
+                print(f"Repair Result: {res.get('action')}")
+                print(f"Status:        {res.get('status')}")
+                print(f"Message:       {res.get('message')}")
+                print("======================================================================")
+                print(json.dumps(res, indent=2))
+                print("======================================================================\n")
+            except Exception as rep_err:
+                print(f"\n[ERROR] Repair failed and rolled back: {rep_err}\n")
+                sys.exit(1)
 
     else:
         parser.print_help()
