@@ -9,7 +9,7 @@ import sqlite3
 import json
 import logging
 import hashlib
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
 from datetime import datetime, timezone
 import os
 
@@ -30,8 +30,18 @@ def compute_field_checksum(value: Any) -> str:
 
 
 class LeadRegisterStore:
-    def __init__(self, db_path: str = "data/sales_outreach.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Union[str, os.PathLike[str]]):
+        """Initialize LeadRegisterStore with a mandatory, non-empty explicit db_path."""
+        if db_path is None:
+            raise ValueError("LeadRegisterStore requires an explicit non-empty db_path; None is not permitted.")
+        if isinstance(db_path, (bytes, bytearray)):
+            raise TypeError(f"LeadRegisterStore db_path must be str or PathLike[str], not {type(db_path).__name__}")
+        raw_path = os.fspath(db_path)
+        if not isinstance(raw_path, str):
+            raise TypeError(f"LeadRegisterStore db_path os.fspath() must return str, not {type(raw_path).__name__}")
+        if not raw_path or not raw_path.strip():
+            raise ValueError("LeadRegisterStore requires a non-empty, non-whitespace db_path.")
+        self.db_path = raw_path
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
