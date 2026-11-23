@@ -61,13 +61,45 @@ def guard_operational_db():
     """
     Session-level safeguard:
     Records operational DB hash at test start and asserts it has not changed after all tests finish.
+    Also injects runtime connection guards preventing any non-read-only SQLite connection
+    to operational databases during test execution.
     """
     initial_hashes = {}
+    normalized_op_paths = set(os.path.normcase(os.path.abspath(p)) for p in _POSSIBLE_OP_PATHS)
+
     for p in set(_POSSIBLE_OP_PATHS):
         if os.path.exists(p):
             initial_hashes[p] = _compute_db_dump_hash(p)
 
-    yield
+    # Permanent prevention mechanism:
+    # Intercept sqlite3.connect to block write connections or file replacements targeting operational databases
+    orig_connect = sqlite3.connect
+
+    def guarded_connect(database, *args, **kwargs):
+        if isinstance(database, (str, bytes, os.PathLike)):
+            db_str = os.fsdecode(database)
+            # Ignore memory databases
+            if db_str not in (":memory:", "") and not db_str.startswith("file::memory:"):
+                norm_target = os.path.normcase(os.path.abspath(db_str.split("?")[0]))
+                if norm_target in normalized_op_paths:
+                    uri_mode = kwargs.get("uri", False)
+                    # Allow read-only URI connections used by dump hash calculation
+                    is_ro = "mode=ro" in db_str if uri_mode else False
+                    caller_is_hash = kwargs.get("timeout") == 10.0  # specific signature in _compute_db_dump_hash
+                    if not (is_ro and caller_is_hash):
+                        raise RuntimeError(
+                            f"CRITICAL TEST ISOLATION FAILURE: A test attempted to open connection to "
+                            f"operational database '{db_str}' without isolated fixture! "
+                            f"All tests must use tmp_path or disposable databases."
+                        )
+        return orig_connect(database, *args, **kwargs)
+
+    sqlite3.connect = guarded_connect
+
+    try:
+        yield
+    finally:
+        sqlite3.connect = orig_connect
 
     for p, init_hash in initial_hashes.items():
         if os.path.exists(p):
