@@ -46,14 +46,14 @@ _OFFICIAL_INFO_IT_PLAIN = (
 SIGNATURES_REGISTRY: Dict[str, Dict[str, str]] = {
     "info@pybim.com": {
         "id": "info-com",
-        "name": "pyBIM Global (info@pybim.com)",
+        "name": "pyBIM — info@pybim.com",
         "language": "en",
         "plain": _OFFICIAL_INFO_COM_PLAIN,
         "html": _OFFICIAL_INFO_COM_HTML,
     },
     "info@pybim.it": {
         "id": "info-it",
-        "name": "pyBIM Italia (info@pybim.it)",
+        "name": "pyBIM — info@pybim.it",
         "language": "it",
         "plain": _OFFICIAL_INFO_IT_PLAIN,
         "html": _OFFICIAL_INFO_IT_HTML,

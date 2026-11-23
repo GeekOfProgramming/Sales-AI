@@ -10185,10 +10185,10 @@ async def compose_email_view(
     db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
     repo = MailboxRepository(db_path=db_path)
 
-    # Authorized sender accounts
+    # Authorized sender accounts - Unified pyBIM Sender Branding
     authorized_senders = [
-        {"account_id": "acc_info_com", "email": "info@pybim.com", "label": "info@pybim.com (pyBIM Global / COM)"},
-        {"account_id": "acc_info_it", "email": "info@pybim.it", "label": "info@pybim.it (pyBIM Italia / IT)"},
+        {"account_id": "acc_info_com", "email": "info@pybim.com", "label": "pyBIM — info@pybim.com"},
+        {"account_id": "acc_info_it", "email": "info@pybim.it", "label": "pyBIM — info@pybim.it"},
     ]
 
     draft_record = None

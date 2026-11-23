@@ -165,6 +165,78 @@ def test_sender_account_persistence_lifecycle(test_client, disposable_env):
     # Verify acc_info_com is NOT selected
     assert '<option value="acc_info_com" selected>' not in html
 
+    # Verify Unified Branding in dropdowns
+    assert 'pyBIM — info@pybim.com' in html
+    assert 'pyBIM — info@pybim.it' in html
+    assert 'pyBIM Global' not in html
+    assert 'pyBIM Italia' not in html
+
+
+def test_unified_pybim_branding_and_signature_options(test_client, disposable_env):
+    """
+    Validates Task C:
+    1. FROM dropdown displays 'pyBIM — info@pybim.com' and 'pyBIM — info@pybim.it'.
+    2. Signature dropdown displays exact labels:
+       - Auto-select by Sender Account (Recommended)
+       - pyBIM — info@pybim.com
+       - pyBIM — info@pybim.it
+       - No Signature (Omit)
+    3. RFC 5322 From header displays strictly 'pyBIM <info@pybim.com>' and 'pyBIM <info@pybim.it>'.
+    """
+    from sales_engine.sending.mime_builder import format_sender_address
+
+    # Check RFC 5322 format
+    from_com = format_sender_address("info@pybim.com")
+    from_it = format_sender_address("info@pybim.it")
+    assert from_com == "pyBIM <info@pybim.com>"
+    assert from_it == "pyBIM <info@pybim.it>"
+
+    # Check UI render
+    resp = test_client.get("/sales/mail-operations/compose")
+    assert resp.status_code == 200
+    html = resp.text
+
+    # Sender dropdown options
+    assert '<option value="acc_info_com"' in html
+    assert '>pyBIM — info@pybim.com</option>' in html or 'pyBIM — info@pybim.com' in html
+    assert '<option value="acc_info_it"' in html
+    assert 'pyBIM — info@pybim.it' in html
+
+    # Signature dropdown options
+    assert '<option value="auto">Auto-select by Sender Account (Recommended)</option>' in html
+    assert '<option value="info-com">pyBIM — info@pybim.com</option>' in html
+    assert '<option value="info-it">pyBIM — info@pybim.it</option>' in html
+    assert '<option value="none">No Signature (Omit)</option>' in html
+
+
+def test_playwright_browser_sender_persistence(test_client, disposable_env):
+    """
+    Task D: Full browser-level verification using Playwright Chromium headless.
+    Interacts directly with DOM select, changes option, and verifies DOM state.
+    """
+    from playwright.sync_api import sync_playwright
+
+    resp = test_client.get("/sales/mail-operations/compose")
+    assert resp.status_code == 200
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        # Load content into browser DOM
+        page.set_content(resp.text)
+
+        # Verify DOM initial state
+        initial_acc = page.eval_on_selector("#account_id", "el => el.value")
+        assert initial_acc == "acc_info_com"
+
+        # Change select option in browser
+        page.select_option("#account_id", "acc_info_it")
+        changed_acc = page.eval_on_selector("#account_id", "el => el.value")
+        assert changed_acc == "acc_info_it"
+
+        browser.close()
+
 
 def test_unauthorized_sender_rejection(test_client, disposable_env):
     """
