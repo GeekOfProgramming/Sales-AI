@@ -310,3 +310,149 @@ def test_windows_case_insensitive_env_keys(tmp_path: Path) -> None:
     else:
         # On POSIX, lowercase key is distinct and ignored
         assert resolved != target.resolve()  # pragma: no cover
+
+
+@pytest.mark.parametrize(
+    "env_factory",
+    [
+        lambda valid: {
+            "SALES_OUTREACH_DB": str(valid),
+            "SALESAI_DB_PATH": "file:ignored.db?mode=ro",
+            "SALESAI_CANDIDATES_DB": r"\\server\share\ignored.db",
+        },
+        lambda valid: {
+            "SALESAI_DB_PATH": str(valid),
+            "SALESAI_CANDIDATES_DB": "file:ignored.db?mode=ro",
+        },
+        lambda valid: {
+            "SALES_OUTREACH_DB": str(valid),
+            "SALESAI_DB_PATH": ":memory:",
+        },
+    ],
+)
+def test_legacy_ignores_malformed_or_memory_lower_priority_env(
+    tmp_path: Path, env_factory
+) -> None:
+    """LEGACY_COMPATIBLE short-circuits on highest-priority var without validating ignored vars."""
+    valid_db = tmp_path / "selected.db"
+    env = env_factory(valid_db)
+
+    resolved = resolve_database_path(
+        policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+        env=env,
+        allow_memory=False,
+    )
+    assert resolved == valid_db.resolve()
+
+    # STRICT_EXPLICIT must still reject malformed/conflicting lower-priority env vars
+    with pytest.raises((DatabaseResolutionError, DatabaseConfigurationConflictError)):
+        resolve_database_path(
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            env=env,
+            allow_memory=False,
+        )
+
+
+def test_legacy_malformed_selected_high_priority_raises_without_fallback(
+    tmp_path: Path,
+) -> None:
+    """Malformed highest-priority env var raises instead of falling back to lower-priority or default."""
+    valid_lower = tmp_path / "lower.db"
+    env = {
+        "SALES_OUTREACH_DB": "file:invalid.db?mode=ro",
+        "SALESAI_DB_PATH": str(valid_lower),
+    }
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+            env=env,
+            repo_root=tmp_path / "repo",
+        )
+
+
+def test_relative_to_repo_root_anchoring_and_strict_rejection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify relative_to_repo_root anchors relative paths to repo_root only in LEGACY_COMPATIBLE."""
+    fake_repo = tmp_path / "repo"
+    other_cwd = tmp_path / "other_cwd"
+    other_cwd.mkdir(parents=True)
+    monkeypatch.chdir(other_cwd)
+
+    # Explicit relative db_path and relative env path with relative_to_repo_root=False -> cwd-relative
+    assert (
+        resolve_database_path(
+            "rel/explicit.db",
+            policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+            repo_root=fake_repo,
+            relative_to_repo_root=False,
+        )
+        == (other_cwd / "rel" / "explicit.db").resolve()
+    )
+    assert (
+        resolve_database_path(
+            policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+            env={"SALES_OUTREACH_DB": "rel/env.db"},
+            repo_root=fake_repo,
+            relative_to_repo_root=False,
+        )
+        == (other_cwd / "rel" / "env.db").resolve()
+    )
+
+    # With relative_to_repo_root=True -> repo_root-relative (BackupEngine-compatible)
+    assert (
+        resolve_database_path(
+            "rel/explicit.db",
+            policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+            repo_root=fake_repo,
+            relative_to_repo_root=True,
+        )
+        == (fake_repo / "rel" / "explicit.db").resolve()
+    )
+    assert (
+        resolve_database_path(
+            policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+            env={"SALES_OUTREACH_DB": "rel/env.db"},
+            repo_root=fake_repo,
+            relative_to_repo_root=True,
+        )
+        == (fake_repo / "rel" / "env.db").resolve()
+    )
+
+    # Absolute paths and default fallback behave consistently under both anchoring options
+    abs_db = tmp_path / "abs.db"
+    for anchor in (False, True):
+        assert (
+            resolve_database_path(
+                abs_db,
+                policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+                repo_root=fake_repo,
+                relative_to_repo_root=anchor,
+            )
+            == abs_db.resolve()
+        )
+        assert (
+            resolve_database_path(
+                policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+                env={},
+                repo_root=fake_repo,
+                relative_to_repo_root=anchor,
+            )
+            == (fake_repo / "data" / "sales_outreach.db").resolve()
+        )
+
+    # STRICT_EXPLICIT must still reject relative paths even when relative_to_repo_root=True
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            "rel/strict.db",
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            repo_root=fake_repo,
+            relative_to_repo_root=True,
+        )
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            env={"SALES_OUTREACH_DB": "rel/strict.db"},
+            repo_root=fake_repo,
+            relative_to_repo_root=True,
+        )

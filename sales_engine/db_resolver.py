@@ -118,6 +118,7 @@ def _resolve_single_candidate(
     policy: ResolutionPolicy,
     allow_memory: bool,
     repo_root_resolved: Path,
+    relative_to_repo_root: bool = False,
 ) -> Union[Path, str]:
     """Validate and resolve a single explicit or env-configured database target."""
     raw_str = _validate_raw_path_string(raw_value, label=label)
@@ -135,6 +136,8 @@ def _resolve_single_candidate(
             raise DatabaseResolutionError(
                 f"{label} must be an absolute path under STRICT_EXPLICIT policy; got '{raw_str}'"
             )
+        if relative_to_repo_root:
+            path_obj = repo_root_resolved / path_obj
 
     try:
         resolved = path_obj.resolve()
@@ -242,6 +245,7 @@ def resolve_database_path(
     env: Optional[Mapping[str, str]] = None,
     allow_memory: bool = False,
     repo_root: Optional[Union[str, os.PathLike[str]]] = None,
+    relative_to_repo_root: bool = False,
 ) -> Union[Path, str]:
     """
     Resolve the SQLite database path cleanly without opening or creating any file.
@@ -257,12 +261,17 @@ def resolve_database_path(
     Policies:
       - `STRICT_EXPLICIT` (default): Requires explicit `db_path` or unambiguous absolute env config;
         rejects relative paths, conflicting non-empty env values, and protected operational paths.
-      - `LEGACY_COMPATIBLE`: Preserves legacy precedence, cwd-relative explicit/env paths, and
-        zero-config fallback to `<repo_root>/data/sales_outreach.db` without failing on legacy
-        multi-var env divergence.
+      - `LEGACY_COMPATIBLE`: Preserves legacy precedence, short-circuits on the highest-priority
+        configured env var without validating ignored lower-priority vars, and allows zero-config
+        fallback to `<repo_root>/data/sales_outreach.db`. When `relative_to_repo_root=True`,
+        relative explicit/env paths anchor to `repo_root` instead of `cwd`.
     """
     if not isinstance(policy, ResolutionPolicy):
         raise TypeError(f"policy must be a ResolutionPolicy, not {type(policy).__name__}")
+    if not isinstance(relative_to_repo_root, bool):
+        raise TypeError(
+            f"relative_to_repo_root must be bool, not {type(relative_to_repo_root).__name__}"
+        )
 
     repo_root_resolved = _resolve_repo_root(repo_root)
 
@@ -274,6 +283,7 @@ def resolve_database_path(
             policy=policy,
             allow_memory=allow_memory,
             repo_root_resolved=repo_root_resolved,
+            relative_to_repo_root=relative_to_repo_root,
         )
 
     # 2. Environment variable resolution
@@ -281,6 +291,19 @@ def resolve_database_path(
     configured = _extract_env_candidates(env_map, policy=policy)
 
     if configured:
+        if policy is ResolutionPolicy.LEGACY_COMPATIBLE:
+            # Short-circuit on highest-priority configured env var; do not validate ignored vars
+            for key in ENV_VAR_PRECEDENCE:
+                if key in configured:
+                    return _resolve_single_candidate(
+                        configured[key],
+                        label=f"env[{key}]",
+                        policy=policy,
+                        allow_memory=allow_memory,
+                        repo_root_resolved=repo_root_resolved,
+                        relative_to_repo_root=relative_to_repo_root,
+                    )
+
         resolved_entries: dict[str, Union[Path, str]] = {}
         for key in ENV_VAR_PRECEDENCE:
             if key in configured:
@@ -290,9 +313,10 @@ def resolve_database_path(
                     policy=policy,
                     allow_memory=allow_memory,
                     repo_root_resolved=repo_root_resolved,
+                    relative_to_repo_root=relative_to_repo_root,
                 )
 
-        if policy is ResolutionPolicy.STRICT_EXPLICIT and len(resolved_entries) > 1:
+        if len(resolved_entries) > 1:
             normalized_set = {
                 v if isinstance(v, str) else _to_normcase_path(v)
                 for v in resolved_entries.values()
