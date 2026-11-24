@@ -90,9 +90,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"ℹ️ Local LLM (Ollama) not available at startup ({e}). Deterministic operation ready.")
         app.state.llm_client = None
+    with _sales_llm_client_lock:
+        try:
+            from sales_engine.llm_client import SalesLLMClient
+
+            app.state.sales_llm_client = SalesLLMClient()
+        except Exception as e:
+            print(f"ℹ️ Native SalesLLMClient initialization skipped at startup ({e}).")
+            app.state.sales_llm_client = None
     print("🎉 SalesAI Gateway is ready to serve requests.")
-    yield
-    print("🛑 Shutting down SalesAI Gateway.")
+    try:
+        yield
+    finally:
+        print("🛑 Shutting down SalesAI Gateway.")
+        with _sales_llm_client_lock:
+            app.state.sales_llm_client = None
 
 
 app = FastAPI(
@@ -203,6 +215,19 @@ def get_llm_client():
     if not hasattr(app.state, "llm_client") or app.state.llm_client is None:
         app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
     return app.state.llm_client
+
+
+_sales_llm_client_lock = threading.Lock()
+
+
+def get_sales_llm_client():
+    """Safely get or lazy-initialize the native Sales-AI LLM client."""
+    from sales_engine.llm_client import SalesLLMClient
+
+    with _sales_llm_client_lock:
+        if not hasattr(app.state, "sales_llm_client") or app.state.sales_llm_client is None:
+            app.state.sales_llm_client = SalesLLMClient()
+        return app.state.sales_llm_client
 
 
 def get_rag_retriever():
@@ -609,7 +634,7 @@ async def generate_email_drafts(request: GenerateDraftsRequest):
     """
     from sales_engine.outreach.outreach_orchestrator import OutreachOrchestrator
     try:
-        llm = getattr(app.state, "llm_client", None)
+        llm = get_sales_llm_client()
         from sales_engine.outreach.email_generator import EmailGenerator
         gen = EmailGenerator(llm_client=llm)
         orchestrator = OutreachOrchestrator(email_generator=gen)

@@ -137,8 +137,8 @@ def test_p8_draft_001_strong_bim_automation(golden_qualified_lead, sender_profil
     assert ctx.recipient_email == "jane@acme.com"
 
     mock_llm = MagicMock()
-    mock_llm.generate_code.return_value = MagicMock(
-        raw_response=json.dumps({
+    mock_llm.generate.return_value = MagicMock(
+        raw_text=json.dumps({
             "subject": "Streamlining Revit Automation at Acme",
             "body": "Hi Jane,\n\nI noticed Acme BIM Innovations is actively hiring a Revit API Developer to build custom plugins in C#. Scaling custom automation internally often introduces substantial maintenance overhead.\n\nAt pyBIM, our Tech-Enabled BIM Services help digital delivery teams deploy reliable automation workflows without increasing engineering strain.\n\nWould you be open to a brief 10-minute introductory call next Tuesday?",
             "service_used": "Tech-Enabled BIM Services",
@@ -751,8 +751,8 @@ def test_p8_prompt_003_language_preset(golden_qualified_lead, sender_profile, we
 
 def test_p8_parse_001_valid_json_single_call(golden_qualified_lead, sender_profile, website_profile_pybim):
     mock_llm = MagicMock()
-    mock_llm.generate_code.return_value = MagicMock(
-        raw_response=json.dumps({
+    mock_llm.generate.return_value = MagicMock(
+        raw_text=json.dumps({
             "subject": "Revit API Automation",
             "body": "Hi Jane,\n\nWe provide Tech-Enabled BIM Services.\n\nOpen to a chat?",
             "service_used": "Tech-Enabled BIM Services",
@@ -769,14 +769,14 @@ def test_p8_parse_001_valid_json_single_call(golden_qualified_lead, sender_profi
     )
     draft, err_code, _ = gen.generate_draft(ctx)
     assert draft is not None
-    assert mock_llm.generate_code.call_count == 1
+    assert mock_llm.generate.call_count == 1
 
 
 def test_p8_parse_002_invalid_then_repaired_json(golden_qualified_lead, sender_profile, website_profile_pybim):
     mock_llm = MagicMock()
-    res1 = MagicMock(raw_response="not json at all")
+    res1 = MagicMock(raw_text="not json at all")
     res2 = MagicMock(
-        raw_response=json.dumps({
+        raw_text=json.dumps({
             "subject": "Revit API Automation",
             "body": "Hi Jane,\n\nWe provide Tech-Enabled BIM Services.\n\nOpen to a chat?",
             "service_used": "Tech-Enabled BIM Services",
@@ -785,7 +785,7 @@ def test_p8_parse_002_invalid_then_repaired_json(golden_qualified_lead, sender_p
             "cta": "Chat?",
         })
     )
-    mock_llm.generate_code.side_effect = [res1, res2]
+    mock_llm.generate.side_effect = [res1, res2]
     gen = EmailGenerator(llm_client=mock_llm)
     ctx, _ = OutreachContextBuilder.build_context(
         lead=golden_qualified_lead,
@@ -794,14 +794,14 @@ def test_p8_parse_002_invalid_then_repaired_json(golden_qualified_lead, sender_p
     )
     draft, err_code, _ = gen.generate_draft(ctx)
     assert draft is not None
-    assert mock_llm.generate_code.call_count == 2
+    assert mock_llm.generate.call_count == 2
 
 
 def test_p8_parse_003_two_invalid_responses_fail_safely(golden_qualified_lead, sender_profile, website_profile_pybim):
     mock_llm = MagicMock()
-    res1 = MagicMock(raw_response="invalid 1")
-    res2 = MagicMock(raw_response="invalid 2")
-    mock_llm.generate_code.side_effect = [res1, res2]
+    res1 = MagicMock(raw_text="invalid 1")
+    res2 = MagicMock(raw_text="invalid 2")
+    mock_llm.generate.side_effect = [res1, res2]
     gen = EmailGenerator(llm_client=mock_llm)
     ctx, _ = OutreachContextBuilder.build_context(
         lead=golden_qualified_lead,
@@ -811,7 +811,7 @@ def test_p8_parse_003_two_invalid_responses_fail_safely(golden_qualified_lead, s
     draft, err_code, _ = gen.generate_draft(ctx)
     assert draft is None
     assert err_code == "parse_failed"
-    assert mock_llm.generate_code.call_count == 2
+    assert mock_llm.generate.call_count == 2
 
 
 # =========================================================================
@@ -883,8 +883,8 @@ def test_p8_wf_001_and_002_draft_safety_statuses(golden_qualified_lead, sender_p
         website_profile=website_profile_pybim,
     )
     mock_llm = MagicMock()
-    mock_llm.generate_code.return_value = MagicMock(
-        raw_response=json.dumps({
+    mock_llm.generate.return_value = MagicMock(
+        raw_text=json.dumps({
             "subject": "Revit API Automation",
             "body": "Hi Jane,\n\nWe provide Tech-Enabled BIM Services.\n\nOpen to a chat?",
             "service_used": "Tech-Enabled BIM Services",
@@ -981,8 +981,8 @@ def test_p8_idemp_001_to_003_deterministic_draft_id(golden_qualified_lead, sende
         website_profile=website_profile_pybim,
     )
     mock_llm = MagicMock()
-    mock_llm.generate_code.return_value = MagicMock(
-        raw_response=json.dumps({
+    mock_llm.generate.return_value = MagicMock(
+        raw_text=json.dumps({
             "subject": "Revit API Automation",
             "body": "Hi Jane,\n\nWe provide Tech-Enabled BIM Services.\n\nOpen to a chat?",
             "service_used": "Tech-Enabled BIM Services",
@@ -1175,7 +1175,7 @@ def test_p8_err_001_distinguishable_error_codes(golden_qualified_lead, sender_pr
 
     # 1. ConnectionError -> model_unavailable
     mock_llm_conn = MagicMock()
-    mock_llm_conn.generate_code.side_effect = ConnectionError("Ollama unreachable")
+    mock_llm_conn.generate.side_effect = ConnectionError("Ollama unreachable")
     gen_conn = EmailGenerator(llm_client=mock_llm_conn)
     draft_c, err_c, _ = gen_conn.generate_draft(ctx)
     assert draft_c is None
@@ -1183,7 +1183,7 @@ def test_p8_err_001_distinguishable_error_codes(golden_qualified_lead, sender_pr
 
     # 2. TimeoutError -> timeout (NOT model_unavailable)
     mock_llm_timeout = MagicMock()
-    mock_llm_timeout.generate_code.side_effect = TimeoutError("Request timed out after 30s")
+    mock_llm_timeout.generate.side_effect = TimeoutError("Request timed out after 30s")
     gen_timeout = EmailGenerator(llm_client=mock_llm_timeout)
     draft_t, err_t, _ = gen_timeout.generate_draft(ctx)
     assert draft_t is None
@@ -1196,7 +1196,7 @@ def test_p8_err_001_distinguishable_error_codes(golden_qualified_lead, sender_pr
 
 def test_p8_llm_001_model_unavailable(golden_qualified_lead, sender_profile, website_profile_pybim):
     mock_llm = MagicMock()
-    mock_llm.generate_code.side_effect = ConnectionError("Ollama unreachable")
+    mock_llm.generate.side_effect = ConnectionError("Ollama unreachable")
     gen = EmailGenerator(llm_client=mock_llm)
     ctx, _ = OutreachContextBuilder.build_context(
         lead=golden_qualified_lead,
@@ -1210,8 +1210,8 @@ def test_p8_llm_001_model_unavailable(golden_qualified_lead, sender_profile, web
 
 def test_p8_llm_003_client_reuse():
     import sales_engine.outreach.email_generator as eg
-    # Invariant: Must import BIMLLMClient
-    assert hasattr(eg, "BIMLLMClient")
+    # Invariant: Must import native SalesLLMClient
+    assert hasattr(eg, "SalesLLMClient")
 
 
 # =========================================================================

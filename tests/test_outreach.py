@@ -259,10 +259,10 @@ def test_generator_single_repair_retry(qualified_lead, sender, website_profile):
     # Mock LLM that returns broken JSON first, then valid JSON on retry
     mock_llm = MagicMock()
     first_response = MagicMock()
-    first_response.raw_response = "Here is your email: { subject: broken JSON missing quotes }"
+    first_response.raw_text = "Here is your email: { subject: broken JSON missing quotes }"
 
     second_response = MagicMock()
-    second_response.raw_response = """
+    second_response.raw_text = """
     {
       "subject": "BIM Automation for Revit",
       "body": "Hi Sarah,\\n\\nI saw your team is hiring for Revit API developers. We provide Tech-Enabled BIM Services to support automation roadmaps.\\n\\nWould you be open to a brief chat next week?",
@@ -272,7 +272,7 @@ def test_generator_single_repair_retry(qualified_lead, sender, website_profile):
       "cta": "Open to a brief chat next week?"
     }
     """
-    mock_llm.generate_code.side_effect = [first_response, second_response]
+    mock_llm.generate.side_effect = [first_response, second_response]
 
     gen = EmailGenerator(llm_client=mock_llm)
     ctx, _ = OutreachContextBuilder.build_context(
@@ -286,7 +286,7 @@ def test_generator_single_repair_retry(qualified_lead, sender, website_profile):
     assert err_code is None
     assert draft.subject == "BIM Automation for Revit"
     assert draft.service_used == "Tech-Enabled BIM Services"
-    assert mock_llm.generate_code.call_count == 2
+    assert mock_llm.generate.call_count == 2
 
 
 # =========================================================================

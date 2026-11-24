@@ -4,7 +4,7 @@ import os
 import re
 from typing import Optional, Tuple, Dict, Any
 
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 from sales_engine.outreach.schemas import (
     EmailDraft,
     LLMEmailResponse,
@@ -18,16 +18,16 @@ logger = logging.getLogger(__name__)
 
 class EmailGenerator:
     """
-    Invokes BIMLLMClient with sales_outreach environment to generate EmailDrafts.
+    Invokes SalesLLMClient with sales_outreach task profile to generate EmailDrafts.
     Handles JSON parsing with exactly one repair retry on syntax error.
     """
 
     def __init__(
         self,
-        llm_client: Optional[BIMLLMClient] = None,
+        llm_client: Optional[SalesLLMClient] = None,
         model_name: Optional[str] = None,
     ):
-        self.llm_client = llm_client or BIMLLMClient()
+        self.llm_client = llm_client or SalesLLMClient()
         self.model_name = (
             model_name
             or os.environ.get("OUTREACH_LLM_MODEL")
@@ -73,10 +73,10 @@ class EmailGenerator:
         """
         user_prompt = EmailPromptBuilder.build_prompt(context)
 
-        req = CodeGenerationRequest(
+        req = SalesLLMRequest(
             user_prompt=user_prompt,
-            environment="sales_outreach",
-            language="nlp",
+            task="sales_outreach",
+            output_format="text",
             model=self.model_name,
             temperature=0.2,
             num_ctx=4096,
@@ -84,8 +84,8 @@ class EmailGenerator:
 
         # 1. Primary generation call
         try:
-            gen_resp = self.llm_client.generate_code(req, model_name=self.model_name)
-            raw_output = gen_resp.raw_response
+            gen_resp = self.llm_client.generate(req, model_name=self.model_name)
+            raw_output = gen_resp.raw_text
         except (TimeoutError, TimeoutException if "TimeoutException" in globals() else TimeoutError) as e:
             logger.error(f"LLM call timed out: {e}")
             return None, "timeout", str(e)
@@ -107,17 +107,17 @@ class EmailGenerator:
                 f"'subject', 'body', 'service_used', 'personalization_notes', 'evidence_refs', 'cta'.\n\n"
                 f"Previous output:\n{raw_output}\n\nReturn ONLY the JSON object."
             )
-            repair_req = CodeGenerationRequest(
+            repair_req = SalesLLMRequest(
                 user_prompt=repair_prompt,
-                environment="sales_outreach",
-                language="nlp",
+                task="sales_outreach",
+                output_format="text",
                 model=self.model_name,
                 temperature=0.0,
                 num_ctx=4096,
             )
             try:
-                repair_resp = self.llm_client.generate_code(repair_req, model_name=self.model_name)
-                parsed, parse_err = self._parse_llm_response(repair_resp.raw_response)
+                repair_resp = self.llm_client.generate(repair_req, model_name=self.model_name)
+                parsed, parse_err = self._parse_llm_response(repair_resp.raw_text)
             except Exception as e:
                 return None, "generation_failed", f"Repair retry failed: {e}"
 

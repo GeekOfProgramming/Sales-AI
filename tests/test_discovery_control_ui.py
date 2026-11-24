@@ -97,14 +97,20 @@ def client(temp_db, temp_cand_store, temp_scope_store, temp_registry, monkeypatc
 # PRD-DISCUI-001: Discovery page renders with zero LLM calls
 # ============================================================================
 def test_prd_discui_001_discovery_page_renders_with_zero_llm_calls(client):
-    with patch("ai_engine.llm_client.BIMLLMClient.generate_code") as mock_generate:
+    with (
+        patch("ai_engine.llm_client.BIMLLMClient.generate_code") as mock_legacy_generate,
+        patch("sales_engine.llm_client.SalesLLMClient.generate") as mock_native_generate,
+        patch("sales_engine.llm_client.SalesLLMClient.generate_async") as mock_native_generate_async,
+    ):
         resp = client.get("/sales/discovery")
         assert resp.status_code == 200
         html = resp.text
         assert "Discovery Control" in html
         assert "Search Profiles" in html
         assert "Recent Discovery Runs" in html
-        assert mock_generate.call_count == 0, "Page render must perform ZERO LLM calls"
+        assert mock_legacy_generate.call_count == 0, "Page render must perform ZERO legacy LLM calls"
+        assert mock_native_generate.call_count == 0, "Page render must perform ZERO native sync LLM calls"
+        assert mock_native_generate_async.call_count == 0, "Page render must perform ZERO native async LLM calls"
 
 
 # ============================================================================
