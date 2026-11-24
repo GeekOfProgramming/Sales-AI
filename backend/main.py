@@ -59,8 +59,6 @@ except ImportError:
 
 from backend.auth import authenticate_admin, create_access_token, verify_admin_token
 from backend.schemas import (
-    ScriptGenerationRequest,
-    ScriptGenerationResponse,
     HealthResponse,
     IngestRequest,
     IngestResponse,
@@ -70,7 +68,6 @@ from backend.schemas import (
     ApprovalRequest,
     RejectionRequest,
     SalesLLMTestRequest,
-    SalesLLMTestResponse,
     WebsiteAnalyzeRequest,
     WebsiteAnalyzeResponse,
     DiscoveryRequest,
