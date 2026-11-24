@@ -903,8 +903,8 @@ def run_discovery(
     """
     Public top-level service entrypoint to execute discovery by scope_id.
     """
-    import os
-    resolved_db = db_path or os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db"))
+    from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
+    resolved_db = resolve_discovery_db_path(db_path=db_path)
     scope_store = DiscoveryScopeStore(db_path=resolved_db)
     cand_store = CandidateStore(db_path=resolved_db)
     runner = DiscoveryRunner(scope_store=scope_store, candidate_store=cand_store)

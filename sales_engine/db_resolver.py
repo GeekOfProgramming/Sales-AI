@@ -200,8 +200,9 @@ def _extract_env_candidates(
     policy: ResolutionPolicy,
 ) -> dict[str, str]:
     """
-    Extract non-empty values for ENV_VAR_PRECEDENCE without mutating env_map.
-    Empty or whitespace-only values are treated as unset.
+    Extract configured values for ENV_VAR_PRECEDENCE without mutating env_map.
+    Empty string ('') values are treated as unset, while whitespace-only values
+    are preserved so selected or strict-mode validation rejects them explicitly.
     """
     if not isinstance(env_map, Mapping):
         raise TypeError(f"env must be a Mapping[str, str], not {type(env_map).__name__}")
@@ -226,8 +227,8 @@ def _extract_env_candidates(
         if not isinstance(val, str):
             raise TypeError(f"Environment variable '{key}' must be str, not {type(val).__name__}")
 
-        if not val.strip():
-            # Empty or whitespace-only env values are treated as unset
+        if val == "":
+            # Empty string env values are treated as unset; whitespace-only values fail validation
             continue
 
         canonical_key = next(k for k in ENV_VAR_PRECEDENCE if k.upper() == key_upper)

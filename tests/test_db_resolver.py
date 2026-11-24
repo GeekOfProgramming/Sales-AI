@@ -199,12 +199,12 @@ def test_equivalent_normalized_paths_do_not_conflict(tmp_path: Path) -> None:
     assert resolved == canonical
 
 
-def test_empty_and_whitespace_env_values_treated_as_unset(tmp_path: Path) -> None:
-    """Empty or whitespace-only env vars are ignored in favor of next precedence or fallback."""
+def test_empty_env_values_treated_as_unset(tmp_path: Path) -> None:
+    """Empty string ('') env vars are ignored in favor of next precedence or fallback."""
     fallback_target = tmp_path / "fallback.db"
     env = {
         "SALES_OUTREACH_DB": "",
-        "SALESAI_DB_PATH": "   ",
+        "SALESAI_DB_PATH": "",
         "SALESAI_CANDIDATES_DB": str(fallback_target),
     }
 
@@ -216,8 +216,61 @@ def test_empty_and_whitespace_env_values_treated_as_unset(tmp_path: Path) -> Non
     with pytest.raises(DatabaseResolutionError):
         resolve_database_path(
             policy=ResolutionPolicy.STRICT_EXPLICIT,
-            env={"SALES_OUTREACH_DB": "", "SALESAI_DB_PATH": "  "},
+            env={"SALES_OUTREACH_DB": "", "SALESAI_DB_PATH": ""},
         )
+
+
+@pytest.mark.parametrize("policy", [ResolutionPolicy.STRICT_EXPLICIT, ResolutionPolicy.LEGACY_COMPATIBLE])
+def test_whitespace_only_selected_env_rejected_without_fallback(
+    tmp_path: Path, policy: ResolutionPolicy
+) -> None:
+    """Whitespace-only selected env value raises DatabaseResolutionError instead of falling back."""
+    # 1. No lower-priority configuration
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=policy,
+            env={"SALES_OUTREACH_DB": "   "},
+            repo_root=tmp_path / "repo",
+        )
+
+    # 2. Valid lower-priority configuration must not be silently selected
+    valid_lower = tmp_path / "lower.db"
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            policy=policy,
+            env={"SALES_OUTREACH_DB": "\t ", "SALESAI_DB_PATH": str(valid_lower)},
+            repo_root=tmp_path / "repo",
+        )
+
+
+def test_lower_priority_whitespace_ignored_in_legacy_but_rejected_in_strict(
+    tmp_path: Path,
+) -> None:
+    """Valid selected higher-priority var ignores lower-priority whitespace in legacy, fails in strict."""
+    valid_primary = tmp_path / "primary.db"
+    env = {
+        "SALES_OUTREACH_DB": str(valid_primary),
+        "SALESAI_DB_PATH": "   ",
+    }
+
+    assert (
+        resolve_database_path(policy=ResolutionPolicy.LEGACY_COMPATIBLE, env=env)
+        == valid_primary.resolve()
+    )
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(policy=ResolutionPolicy.STRICT_EXPLICIT, env=env)
+
+
+def test_explicit_db_path_overrides_whitespace_ambient_env(tmp_path: Path) -> None:
+    """Explicit db_path retains precedence over whitespace-containing ambient env vars."""
+    explicit_db = tmp_path / "explicit.db"
+    env = {
+        "SALES_OUTREACH_DB": "   ",
+        "SALESAI_DB_PATH": "\t",
+        "SALESAI_CANDIDATES_DB": "  ",
+    }
+    for policy in (ResolutionPolicy.STRICT_EXPLICIT, ResolutionPolicy.LEGACY_COMPATIBLE):
+        assert resolve_database_path(explicit_db, policy=policy, env=env) == explicit_db.resolve()
 
 
 def test_memory_handling_is_explicit_and_controlled() -> None:

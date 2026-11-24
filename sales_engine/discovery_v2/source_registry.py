@@ -220,7 +220,8 @@ class SourceRegistry:
         effective_sources_path = sources_path or config_path
         self.sources_path = Path(effective_sources_path) if effective_sources_path else (base_dir / "config" / "discovery_sources.yaml")
         self.markets_path = Path(markets_path) if markets_path else (base_dir / "config" / "markets.yaml")
-        self.db_path = db_path or os.getenv("SALESAI_DB_PATH", "data/sales_outreach.db")
+        from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
+        self.db_path = resolve_discovery_db_path(db_path=db_path, include_candidates_env=False)
         self.sources: Dict[str, SourceConfig] = {}
         self.markets: Dict[str, Dict[str, Any]] = {}
         self.health_map: Dict[str, SourceHealth] = {}

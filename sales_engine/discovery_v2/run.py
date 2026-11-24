@@ -20,6 +20,7 @@ from typing import List, Optional
 from sales_engine.candidates.candidate_store import CandidateStore
 from sales_engine.candidates.classifier import CompanyClassifier
 from sales_engine.discovery_v2.bridges import Phase10ConsoleBridge
+from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
 from sales_engine.discovery_v2.discovery_engine import DiscoveryEngineV2
 from sales_engine.discovery_v2.source_registry import SourceRegistry
 from sales_engine.historical.importer import HistoricalImporter
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_cli_services(db_path: Optional[str] = None):
-    db = db_path or os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db"))
+    db = resolve_discovery_db_path(db_path=db_path)
     store = CandidateStore(db_path=db)
     registry = SourceRegistry()
     from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge

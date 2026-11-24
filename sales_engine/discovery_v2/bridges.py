@@ -294,8 +294,9 @@ class Phase9AuthorityBridge:
     """
 
     def __init__(self, suppression_store: Optional[Any] = None, db_path: Optional[str] = None):
+        from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
         self.suppression_store = suppression_store
-        self.db_path = db_path or os.getenv("SALESAI_DB_PATH", "data/sales_outreach.db")
+        self.db_path = resolve_discovery_db_path(db_path=db_path, include_candidates_env=False)
 
     def _get_db_conn(self) -> Optional[sqlite3.Connection]:
         if hasattr(self.suppression_store, "store") and hasattr(self.suppression_store.store, "_get_connection"):
