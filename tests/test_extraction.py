@@ -28,29 +28,29 @@ def test_company_normalizer():
 @pytest.mark.asyncio
 async def test_job_analyzer_retry():
     from sales_engine.analysis.job_analyzer import JobAnalyzer
-    from ai_engine.llm_client import CodeGenerationResponse
+    from sales_engine.llm_client import SalesLLMResponse
     
     with patch('os.getenv', return_value='test-model'):
         analyzer = JobAnalyzer()
-        analyzer.llm_client.generate_code_async = AsyncMock(side_effect=[
-            CodeGenerationResponse(raw_response="invalid", extracted_code="invalid json", model="test", duration_seconds=1.0),
-            CodeGenerationResponse(raw_response="{}", extracted_code='{"technologies": ["Revit"]}', model="test", duration_seconds=1.0)
+        analyzer.llm_client.generate_async = AsyncMock(side_effect=[
+            SalesLLMResponse(raw_text="invalid", content="invalid json", model="test", duration_seconds=1.0),
+            SalesLLMResponse(raw_text="{}", content='{"technologies": ["Revit"]}', model="test", duration_seconds=1.0)
         ])
         
         job = await analyzer.analyze_job({"title": "Test", "description": "Test", "url": "http://test", "source": "generic"})
         assert "Revit" in job.technologies
-        assert analyzer.llm_client.generate_code_async.call_count == 2
+        assert analyzer.llm_client.generate_async.call_count == 2
         
 @pytest.mark.asyncio
 async def test_job_analyzer_failure():
     from sales_engine.analysis.job_analyzer import JobAnalyzer
-    from ai_engine.llm_client import CodeGenerationResponse
+    from sales_engine.llm_client import SalesLLMResponse
     
     with patch('os.getenv', return_value='test-model'):
         analyzer = JobAnalyzer()
-        analyzer.llm_client.generate_code_async = AsyncMock(side_effect=[
-            CodeGenerationResponse(raw_response="invalid", extracted_code="invalid json", model="test", duration_seconds=1.0),
-            CodeGenerationResponse(raw_response="invalid", extracted_code="invalid json 2", model="test", duration_seconds=1.0)
+        analyzer.llm_client.generate_async = AsyncMock(side_effect=[
+            SalesLLMResponse(raw_text="invalid", content="invalid json", model="test", duration_seconds=1.0),
+            SalesLLMResponse(raw_text="invalid", content="invalid json 2", model="test", duration_seconds=1.0)
         ])
         
         with pytest.raises(Exception, match="Failed to analyze job via LLM"):

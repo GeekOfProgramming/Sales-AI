@@ -1,13 +1,18 @@
 import os
 import json
-from typing import Dict, Any
-from backend.schemas import StructuredJob, JobSignal, WebsiteProfile, JobAnalysisResult
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from typing import Dict, Any, Optional
+from backend.schemas import StructuredJob, WebsiteProfile, JobAnalysisResult
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
+
 
 class JobAnalyzer:
-    def __init__(self):
-        self.llm_client = BIMLLMClient()
-        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
+    def __init__(
+        self,
+        llm_client: Optional[SalesLLMClient] = None,
+        model_name: Optional[str] = None,
+    ):
+        self.llm_client = llm_client or SalesLLMClient()
+        self.model_name = model_name or os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
         
     async def analyze_job(self, raw_job: Dict[str, Any], profile: WebsiteProfile = None) -> StructuredJob:
         system_prompt = """You are a B2B sales intelligence analyst.
@@ -45,11 +50,11 @@ Return JSON ONLY matching the following schema exactly:
             
         prompt = f"JOB POSTING TITLE: {raw_job.get('title')}\nCOMPANY: {raw_job.get('company')}\n\nDESCRIPTION:\n{raw_job.get('description', '')[:5000]}"
         
-        req = CodeGenerationRequest(
+        req = SalesLLMRequest(
             user_prompt=prompt,
-            context_rules=system_prompt,
-            environment="sales",
-            language="json"
+            context=system_prompt,
+            task="sales_analysis",
+            output_format="json",
         )
         
         analysis_result = None
@@ -58,8 +63,8 @@ Return JSON ONLY matching the following schema exactly:
                 if attempt == 1:
                     req.user_prompt += "\n\nIMPORTANT JSON REPAIR: Return ONLY valid JSON matching the exact schema."
                     
-                response = await self.llm_client.generate_code_async(req, model_name=self.model_name)
-                json_text = response.extracted_code.strip()
+                response = await self.llm_client.generate_async(req, model_name=self.model_name)
+                json_text = response.content.strip()
                 data = json.loads(json_text)
                 
                 # Validate with Pydantic model
