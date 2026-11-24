@@ -652,7 +652,9 @@ from sales_engine.sending import (
 
 # Global store & services instances for the FastAPI app
 def get_sending_services():
-    store = ReviewStore()
+    from backend.db_path import BackendDbMode, resolve_backend_db_path
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P4)
+    store = ReviewStore(db_path=db_path)
     approval_svc = ApprovalService(store)
     suppression_svc = SuppressionStore(store)
     orchestrator = SendOrchestrator(review_store=store, suppression_store=suppression_svc)
@@ -860,9 +862,20 @@ _discovery_engine_inst: Optional[_DiscoveryEngineV2] = None
 
 def get_discovery_services():
     global _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
+    from backend.db_path import BackendDbMode, resolve_backend_db_path
+    from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
+
+    # Validate required paths before constructing SQLite-backed stores to avoid partial init
+    pending_store_db = (
+        resolve_backend_db_path(mode=BackendDbMode.LEGACY_P3)
+        if _discovery_store_inst is None
+        else None
+    )
+    if _discovery_registry_inst is None:
+        resolve_discovery_db_path(include_candidates_env=False)
+
     if _discovery_store_inst is None:
-        db_path = os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db"))
-        _discovery_store_inst = _CandidateStore(db_path=db_path)
+        _discovery_store_inst = _CandidateStore(db_path=pending_store_db)
     if _discovery_registry_inst is None:
         _discovery_registry_inst = _SourceRegistry()
     if _discovery_classifier_inst is None:

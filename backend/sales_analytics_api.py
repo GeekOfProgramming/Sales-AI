@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, status, Body
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
+from backend.db_path import BackendDbMode, resolve_backend_db_path
 from sales_engine.analytics import (
     AnalyticsStore,
     AnalyticsProjector,
@@ -30,10 +31,7 @@ router = APIRouter(prefix="/api/sales/analytics", tags=["Sales-Analytics"])
 
 
 def get_analytics_db_path() -> str:
-    return os.getenv(
-        "SALES_OUTREACH_DB",
-        os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")),
-    )
+    return resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
 
 
 def get_analytics_services():

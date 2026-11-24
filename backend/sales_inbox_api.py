@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, status, Body
 from pydantic import BaseModel, Field
 
+from backend.db_path import BackendDbMode, resolve_backend_db_path
 from sales_engine.inbox.store import InboxStore
 from sales_engine.inbox.sync import InboxSyncManager
 from sales_engine.inbox.reply_sender import ReplySendOrchestrator
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/sales", tags=["Sales-Inbox-API"])
 
 
 def get_inbox_services():
-    db_path = os.getenv("SALES_OUTREACH_DB") or os.getenv("SALESAI_DB_PATH") or "data/sales_outreach.db"
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P2)
     cand_store = CandidateStore(db_path=db_path)
     inbox_store = InboxStore(db_path=db_path)
     rev_store = ReviewStore(db_path=db_path)

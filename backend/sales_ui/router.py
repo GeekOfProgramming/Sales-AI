@@ -34,6 +34,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+from backend.db_path import BackendDbMode, resolve_backend_db_path
+
 from fastapi import APIRouter, Request, Form, Query, HTTPException, status, Depends, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -460,7 +462,10 @@ def is_candidate_qualified_lead(cand: Any) -> bool:
 
 def get_console_services():
     """Lazily instantiate or retrieve authoritative stores and services."""
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
+    # Validate independent SourceRegistry path before constructing SQLite-backed stores
+    resolve_discovery_db_path(include_candidates_env=False)
     cand_store = CandidateStore(db_path=db_path)
     registry = SourceRegistry()
     authority_bridge = Phase9AuthorityBridge(db_path=cand_store.db_path)
@@ -9713,7 +9718,7 @@ async def mail_operations_view(
     from sales_engine.inbox.scheduled_sync import ScheduledSyncRunner
     import math
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     # Authorized primary sales accounts
@@ -9916,7 +9921,7 @@ async def api_candidates_search(
     Search candidate companies for operator mailbox reconciliation.
     Matches candidate_id, company_name, or company_domain.
     """
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     clean_q = (q or "").strip().lower()
     results = []
 
@@ -9974,7 +9979,7 @@ async def api_candidate_contacts(
     Retrieve registered contacts for a candidate company.
     Enforces real CRM contacts to prevent cross-company contamination.
     """
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     results = []
 
     with sqlite3.connect(str(db_path), timeout=15.0) as conn:
@@ -10031,7 +10036,7 @@ async def mail_operations_reconcile_action(
     """
     from sales_engine.inbox.mailbox_repository import MailboxRepository
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     # 1. Verify message exists and belongs to primary sales mailboxes
@@ -10120,7 +10125,7 @@ async def mail_operations_sync_now_action(
     from sales_engine.inbox.mailbox_repository import MailboxRepository
     from sales_engine.inbox.scheduled_sync import ScheduledSyncRunner
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
     runner = ScheduledSyncRunner(mailbox_repo=repo)
 
@@ -10182,7 +10187,7 @@ async def compose_email_view(
     from sales_engine.inbox.signatures import get_default_signature
     from sales_engine.inbox.html_sanitizer import sanitize_email_html
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     # Authorized sender accounts - Unified pyBIM Sender Branding
@@ -10340,7 +10345,7 @@ async def compose_email_save_action(
     from sales_engine.inbox.models import MailboxDraftRecord
     from sales_engine.inbox.html_sanitizer import sanitize_email_html
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     # 1. Validate authorized sender
@@ -10463,7 +10468,7 @@ async def compose_email_duplicate_action(
     """Duplicates an existing draft."""
     from sales_engine.inbox.mailbox_repository import MailboxRepository
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     new_draft = repo.duplicate_draft(draft_id, operator_username=user.username)
@@ -10486,7 +10491,7 @@ async def compose_email_discard_action(
     """Discards a draft with explicit confirmation."""
     from sales_engine.inbox.mailbox_repository import MailboxRepository
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     success = repo.discard_draft(draft_id, operator_username=user.username)
@@ -10515,7 +10520,7 @@ async def drafts_list_view(
     from sales_engine.inbox.mailbox_repository import MailboxRepository
     import math
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     primary_account_ids = ["acc_info_com", "acc_info_it"]
@@ -10679,7 +10684,7 @@ async def compose_email_schedule_action(
     """
     from sales_engine.inbox.mailbox_repository import MailboxRepository
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     clean_draft_id = draft_id.strip()
@@ -10772,7 +10777,7 @@ async def compose_email_cancel_schedule_action(
     """
     from sales_engine.inbox.mailbox_repository import MailboxRepository
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     repo = MailboxRepository(db_path=db_path)
 
     clean_draft_id = draft_id.strip()
@@ -10820,7 +10825,7 @@ async def mail_operations_reconcile_sent_endpoint(
     """
     from sales_engine.sending.sent_reconciliation import SentReconciliationService, SentReconciliationError
 
-    db_path = os.getenv("SALES_OUTREACH_DB", os.getenv("SALESAI_DB_PATH", os.getenv("SALESAI_CANDIDATES_DB", "data/sales_outreach.db")))
+    db_path = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P1)
     clean_job_id = (job_id or "").strip()
     if not clean_job_id:
         raise HTTPException(status_code=400, detail="Missing required job_id.")
