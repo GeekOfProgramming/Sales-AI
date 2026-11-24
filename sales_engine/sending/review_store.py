@@ -2,9 +2,12 @@ import os
 import json
 import sqlite3
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+
+from sales_engine.db_resolver import DatabaseResolutionError
 
 from sales_engine.sending.schemas import (
     StoredDraft,
@@ -14,9 +17,30 @@ from sales_engine.sending.schemas import (
 )
 from sales_engine.sending.sanitizer import sanitize_error_message
 
-def get_default_db_path() -> Path:
-    env_path = os.getenv("SALES_OUTREACH_DB")
-    if env_path:
+def _lookup_env_case_aware(env_map: Mapping[str, str], key: str) -> Optional[str]:
+    if key in env_map:
+        return env_map[key]
+    if os.name == "nt":
+        target = key.upper()
+        for existing_key, val in env_map.items():
+            if isinstance(existing_key, str) and existing_key.upper() == target:
+                return val
+    return None
+
+
+def get_default_db_path(env: Optional[Mapping[str, str]] = None) -> Path:
+    """
+    Resolve standalone ReviewStore default path preserving historical P-4 contract:
+    SALES_OUTREACH_DB > Path("data/sales_outreach.db") (cwd-relative).
+    Preserves empty-string fall-through; fails closed on whitespace-only values.
+    """
+    env_map = os.environ if env is None else env
+    env_path = _lookup_env_case_aware(env_map, "SALES_OUTREACH_DB")
+    if env_path is not None and env_path != "":
+        if not env_path.strip():
+            raise DatabaseResolutionError(
+                "Configured ReviewStore environment variable 'SALES_OUTREACH_DB' cannot be whitespace-only."
+            )
         return Path(env_path)
     return Path("data/sales_outreach.db")
 
@@ -30,6 +54,10 @@ class ReviewStore:
     """
 
     def __init__(self, db_path: Optional[Path | str] = None):
+        if db_path is not None:
+            raw_str = os.fspath(db_path)
+            if isinstance(raw_str, str) and raw_str != "" and not raw_str.strip():
+                raise DatabaseResolutionError("ReviewStore db_path cannot be whitespace-only.")
         self.db_path = Path(db_path) if db_path else get_default_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()

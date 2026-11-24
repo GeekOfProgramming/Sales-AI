@@ -59,6 +59,7 @@ from sales_engine.candidates.backup_engine import (
     verify_sqlite_backup_integrity,
     verify_restore_in_disposable_clone,
 )
+from sales_engine.db_resolver import DatabaseResolutionError
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,10 @@ class MailboxPilotRunner:
         provider_factory: Optional[Any] = None,
         account: Optional[MailboxAccountRecord] = None,
     ):
+        if db_path is not None:
+            raw_db = os.fspath(db_path)
+            if isinstance(raw_db, str) and raw_db != "" and not raw_db.strip():
+                raise DatabaseResolutionError("MailboxPilotRunner db_path cannot be whitespace-only.")
         self.db_path = db_path or str(resolve_configured_db_path())
         self.cred_store = cred_store or MailboxCredentialStore()
         self.repo = MailboxRepository(db_path=self.db_path)

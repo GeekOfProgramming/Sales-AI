@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union
 
+from sales_engine.db_resolver import ResolutionPolicy, resolve_database_path
+
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -52,19 +54,15 @@ def resolve_configured_db_path() -> Path:
     1. SALES_OUTREACH_DB
     2. SALESAI_DB_PATH
     3. SALESAI_CANDIDATES_DB
-    4. data/sales_outreach.db
+    4. data/sales_outreach.db (anchored to REPO_ROOT)
     """
-    env_path = (
-        os.getenv("SALES_OUTREACH_DB")
-        or os.getenv("SALESAI_DB_PATH")
-        or os.getenv("SALESAI_CANDIDATES_DB")
+    resolved = resolve_database_path(
+        policy=ResolutionPolicy.LEGACY_COMPATIBLE,
+        allow_memory=False,
+        repo_root=REPO_ROOT,
+        relative_to_repo_root=True,
     )
-    if env_path:
-        p = Path(env_path)
-        if not p.is_absolute():
-            p = REPO_ROOT / p
-        return p.resolve()
-    return (REPO_ROOT / DEFAULT_DB_REL).resolve()
+    return Path(resolved)
 
 
 def compute_streaming_sha256(file_path: Union[str, Path], chunk_size: int = 1024 * 1024) -> str:

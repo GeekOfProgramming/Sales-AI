@@ -64,13 +64,50 @@ from sales_engine.sending.sent_reconciliation import (
 )
 from sales_engine.inbox.mailbox_repository import MailboxRepository
 from sales_engine.inbox.credential_store import MailboxCredentialStore, WindowsDPAPI
+from sales_engine.db_resolver import DatabaseResolutionError
 from backend.operator_auth import get_auth_service
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("run_outbound_pilot")
 
-DEFAULT_DB_PATH = os.getenv("SALES_OUTREACH_DB", "data/sales_outreach.db")
+DEFAULT_DB_PATH = "data/sales_outreach.db"
 AUTHORIZED_PILOT_SENDERS = {"info@pybim.com", "info@pybim.it"}
+
+
+def resolve_outbound_db_path(
+    db_path: Optional[str] = None,
+    *,
+    env: Optional[Dict[str, str]] = None,
+) -> str:
+    """
+    Resolve the outbound pilot database path at call time preserving historical P-4 contract:
+    explicit db_path > SALES_OUTREACH_DB > "data/sales_outreach.db".
+    Ignores SALESAI_DB_PATH and SALESAI_CANDIDATES_DB.
+    Fails closed on selected empty ('') or whitespace-only values before opening SQLite.
+    """
+    if db_path is not None:
+        raw_explicit = os.fspath(db_path)
+        if not isinstance(raw_explicit, str) or not raw_explicit or not raw_explicit.strip():
+            raise DatabaseResolutionError(
+                "Explicit outbound CLI --db-path cannot be empty or whitespace-only."
+            )
+        return raw_explicit
+
+    env_map = os.environ if env is None else env
+    val = env_map.get("SALES_OUTREACH_DB")
+    if val is None and os.name == "nt":
+        for k, v in env_map.items():
+            if isinstance(k, str) and k.upper() == "SALES_OUTREACH_DB":
+                val = v
+                break
+    if val is not None:
+        if not isinstance(val, str) or not val or not val.strip():
+            raise DatabaseResolutionError(
+                "Configured outbound environment variable 'SALES_OUTREACH_DB' cannot be empty or whitespace-only."
+            )
+        return val
+
+    return DEFAULT_DB_PATH
 
 
 def check_draft_eligibility(
@@ -668,7 +705,7 @@ def execute_single_message_pilot(
 
 def main():
     parser = argparse.ArgumentParser(description="Sales-AI Outbound Pilot Harness & Diagnostic Inspector")
-    parser.add_argument("--db-path", default=DEFAULT_DB_PATH, help="Path to SQLite database")
+    parser.add_argument("--db-path", default=None, help="Path to SQLite database (default: SALES_OUTREACH_DB or data/sales_outreach.db)")
 
     subparsers = parser.add_subparsers(dest="command", help="Operational command")
 
@@ -859,6 +896,7 @@ def main():
     )
 
     args = parser.parse_args()
+    args.db_path = resolve_outbound_db_path(args.db_path)
 
     if args.command == "status":
         diag = get_diagnostics(args.db_path)

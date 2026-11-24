@@ -25,9 +25,12 @@ import json
 import sqlite3
 import logging
 import threading
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union
+
+from sales_engine.db_resolver import DatabaseResolutionError
 
 from sales_engine.inbox.models import (
     MailboxAccountRecord,
@@ -46,10 +49,33 @@ MAX_BODY_PLAIN_CHARS = 1_000_000  # ~1 MB text
 MAX_BODY_HTML_CHARS = 2_000_000   # ~2 MB sanitized HTML
 
 
-def get_default_inbox_db_path() -> Path:
-    env_path = os.getenv("SALES_OUTREACH_DB") or os.getenv("SALESAI_DB_PATH")
-    if env_path:
-        return Path(env_path)
+def _lookup_env_case_aware(env_map: Mapping[str, str], key: str) -> Optional[str]:
+    if key in env_map:
+        return env_map[key]
+    if os.name == "nt":
+        target = key.upper()
+        for existing_key, val in env_map.items():
+            if isinstance(existing_key, str) and existing_key.upper() == target:
+                return val
+    return None
+
+
+def get_default_inbox_db_path(env: Optional[Mapping[str, str]] = None) -> Path:
+    """
+    Resolve standalone MailboxRepository default path preserving historical P-2 contract:
+    SALES_OUTREACH_DB > SALESAI_DB_PATH > Path("data/sales_outreach.db") (cwd-relative).
+    Preserves empty-string fall-through; fails closed on selected whitespace-only values.
+    """
+    env_map = os.environ if env is None else env
+    for key in ("SALES_OUTREACH_DB", "SALESAI_DB_PATH"):
+        val = _lookup_env_case_aware(env_map, key)
+        if val is None or val == "":
+            continue
+        if not val.strip():
+            raise DatabaseResolutionError(
+                f"Configured MailboxRepository environment variable '{key}' cannot be whitespace-only."
+            )
+        return Path(val)
     return Path("data/sales_outreach.db")
 
 
@@ -62,6 +88,10 @@ class MailboxRepository:
     SCHEMA_VERSION = "mail_data_01_v1"
 
     def __init__(self, db_path: Optional[Union[Path, str]] = None, auto_migrate: bool = False):
+        if db_path is not None:
+            raw_str = os.fspath(db_path)
+            if isinstance(raw_str, str) and raw_str != "" and not raw_str.strip():
+                raise DatabaseResolutionError("MailboxRepository db_path cannot be whitespace-only.")
         self.db_path = Path(db_path) if db_path else get_default_inbox_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
