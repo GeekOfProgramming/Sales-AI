@@ -113,10 +113,15 @@ def resolve_backend_db_path(
         raw_explicit = os.fspath(db_path)
         if not isinstance(raw_explicit, str):
             raise TypeError(f"db_path os.fspath() must return str, not {type(raw_explicit).__name__}")
-        if raw_explicit != "":
-            if not raw_explicit.strip():
-                raise DatabaseResolutionError("Explicit db_path cannot be whitespace-only.")
-            return raw_explicit
+        if not raw_explicit or not raw_explicit.strip():
+            raise DatabaseResolutionError("Explicit db_path cannot be empty or whitespace-only.")
+        if raw_explicit.lower() == ":memory:":
+            if not allow_memory:
+                raise DatabaseResolutionError(
+                    "Explicit db_path specified ':memory:', which is disabled (allow_memory=False)."
+                )
+            return ":memory:"
+        return raw_explicit
 
     env_map = os.environ if env is None else env
     if not isinstance(env_map, Mapping):
@@ -139,6 +144,13 @@ def resolve_backend_db_path(
             raise DatabaseResolutionError(
                 f"Configured Backend database environment variable '{key}' cannot be whitespace-only."
             )
+        if val.lower() == ":memory:":
+            if not allow_memory:
+                raise DatabaseResolutionError(
+                    f"Configured Backend database environment variable '{key}' specified ':memory:', "
+                    "which is disabled (allow_memory=False)."
+                )
+            return ":memory:"
         return val
 
     return DEFAULT_BACKEND_DB_STR

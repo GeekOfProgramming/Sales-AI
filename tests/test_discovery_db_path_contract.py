@@ -326,3 +326,39 @@ def test_invalid_env_aborts_before_sqlite_initialization(
             mock_br_sql.assert_not_called()
             mock_scope_sql.assert_not_called()
             mock_cand_sql.assert_not_called()
+
+
+def test_discovery_allow_memory_and_explicit_empty_rejection(tmp_path: Path) -> None:
+    """Enforce allow_memory=False and reject explicit ''/'   ' while keeping None env resolution."""
+    for mode in (
+        DiscoveryDbMode.LEGACY_P3,
+        DiscoveryDbMode.CENTRALIZED_LEGACY,
+        DiscoveryDbMode.CENTRALIZED_STRICT,
+    ):
+        for bad_explicit in ("", "   "):
+            with pytest.raises(DatabaseResolutionError):
+                resolve_discovery_db_path(
+                    bad_explicit,
+                    mode=mode,
+                    env={"SALESAI_DB_PATH": str(tmp_path / "fallback.db")},
+                )
+        for mem_val in (":memory:", ":MEMORY:"):
+            assert resolve_discovery_db_path(mem_val, mode=mode, allow_memory=True) == ":memory:"
+            with pytest.raises(DatabaseResolutionError):
+                resolve_discovery_db_path(mem_val, mode=mode, allow_memory=False)
+            env_key = "SALESAI_DB_PATH" if mode is DiscoveryDbMode.LEGACY_P3 else "SALES_OUTREACH_DB"
+            assert resolve_discovery_db_path(mode=mode, env={env_key: mem_val}, allow_memory=True) == ":memory:"
+            with pytest.raises(DatabaseResolutionError):
+                resolve_discovery_db_path(mode=mode, env={env_key: mem_val}, allow_memory=False)
+
+    # Lower-priority :memory: stays ignored in LEGACY_P3 when SALESAI_DB_PATH is valid
+    valid = str(tmp_path / "valid_p3.db")
+    assert (
+        resolve_discovery_db_path(
+            None,
+            mode=DiscoveryDbMode.LEGACY_P3,
+            env={"SALESAI_DB_PATH": valid, "SALESAI_CANDIDATES_DB": ":memory:"},
+            allow_memory=False,
+        )
+        == valid
+    )

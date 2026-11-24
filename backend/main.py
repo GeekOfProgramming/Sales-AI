@@ -9,6 +9,7 @@ import json
 import re
 import ast
 import time
+import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any, Union, Tuple
@@ -859,36 +860,83 @@ _discovery_store_inst: Optional[_CandidateStore] = None
 _discovery_registry_inst: Optional[_SourceRegistry] = None
 _discovery_classifier_inst: Optional[_CompanyClassifier] = None
 _discovery_engine_inst: Optional[_DiscoveryEngineV2] = None
+_discovery_cache_key: Optional[Tuple[str, str]] = None
+_discovery_cache_lock = threading.Lock()
+
+
+def _prepare_discovery_cache_target(raw_path: str) -> Tuple[str, str]:
+    """Return (stable_db_path, cache_key_token) without blindly normalizing memory or URI targets."""
+    from sales_engine.db_resolver import DatabaseResolutionError
+
+    if not isinstance(raw_path, str):
+        raise TypeError(f"raw_path must be str, not {type(raw_path).__name__}")
+    stripped = raw_path.strip()
+    if not stripped:
+        raise DatabaseResolutionError("Discovery database target cannot be empty or whitespace-only.")
+    if stripped.lower() == ":memory:":
+        return ":memory:", ":memory:"
+    if stripped.lower().startswith("file:") or "?" in stripped:
+        return raw_path, raw_path
+    try:
+        resolved = str(Path(raw_path).resolve())
+    except (OSError, RuntimeError) as exc:
+        raise DatabaseResolutionError(
+            f"Unable to normalize Discovery database target '{raw_path}'"
+        ) from exc
+    return resolved, os.path.normcase(resolved)
+
+
+def _normalize_discovery_cache_target(raw_path: str) -> str:
+    """Normalize a Discovery database target for singleton cache comparison."""
+    _, cache_key = _prepare_discovery_cache_target(raw_path)
+    return cache_key
+
 
 def get_discovery_services():
-    global _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
+    global _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst, _discovery_cache_key
     from backend.db_path import BackendDbMode, resolve_backend_db_path
+    from sales_engine.db_resolver import DatabaseConfigurationConflictError
+    from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge
     from sales_engine.discovery_v2.db_path import resolve_discovery_db_path
 
-    # Validate required paths before constructing SQLite-backed stores to avoid partial init
-    pending_store_db = (
-        resolve_backend_db_path(mode=BackendDbMode.LEGACY_P3)
-        if _discovery_store_inst is None
-        else None
-    )
-    if _discovery_registry_inst is None:
-        resolve_discovery_db_path(include_candidates_env=False)
+    with _discovery_cache_lock:
+        # Resolve and validate both targets before opening SQLite or updating cache
+        raw_store_db = resolve_backend_db_path(mode=BackendDbMode.LEGACY_P3, allow_memory=True)
+        raw_registry_db = resolve_discovery_db_path(include_candidates_env=False, allow_memory=True)
+        store_db, store_key = _prepare_discovery_cache_target(raw_store_db)
+        registry_db, registry_key = _prepare_discovery_cache_target(raw_registry_db)
+        current_key = (store_key, registry_key)
 
-    if _discovery_store_inst is None:
-        _discovery_store_inst = _CandidateStore(db_path=pending_store_db)
-    if _discovery_registry_inst is None:
-        _discovery_registry_inst = _SourceRegistry()
-    if _discovery_classifier_inst is None:
-        from sales_engine.discovery_v2.bridges import Phase9AuthorityBridge
-        authority_bridge = Phase9AuthorityBridge(db_path=_discovery_store_inst.db_path)
-        _discovery_classifier_inst = _CompanyClassifier(suppression_store=authority_bridge)
-    if _discovery_engine_inst is None:
-        _discovery_engine_inst = _DiscoveryEngineV2(
-            candidate_store=_discovery_store_inst,
-            classifier=_discovery_classifier_inst,
-            source_registry=_discovery_registry_inst,
+        if _discovery_cache_key is not None:
+            if current_key != _discovery_cache_key:
+                raise DatabaseConfigurationConflictError(
+                    "Discovery singleton cache already initialized for "
+                    f"{_discovery_cache_key}, cannot rebind to {current_key}"
+                )
+            return (
+                _discovery_store_inst,
+                _discovery_registry_inst,
+                _discovery_classifier_inst,
+                _discovery_engine_inst,
+            )
+
+        cand_store = _CandidateStore(db_path=store_db)
+        registry = _SourceRegistry(db_path=registry_db)
+        authority_bridge = Phase9AuthorityBridge(db_path=cand_store.db_path)
+        classifier = _CompanyClassifier(suppression_store=authority_bridge)
+        engine = _DiscoveryEngineV2(
+            candidate_store=cand_store,
+            classifier=classifier,
+            source_registry=registry,
         )
-    return _discovery_store_inst, _discovery_registry_inst, _discovery_classifier_inst, _discovery_engine_inst
+
+        # Publish initialized bundle atomically so failed initialization leaves cache empty
+        _discovery_store_inst = cand_store
+        _discovery_registry_inst = registry
+        _discovery_classifier_inst = classifier
+        _discovery_engine_inst = engine
+        _discovery_cache_key = current_key
+        return cand_store, registry, classifier, engine
 
 
 class DiscoveryScopeApiRequest(_PydanticBaseModel):
