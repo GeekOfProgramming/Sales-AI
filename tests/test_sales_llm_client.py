@@ -446,3 +446,106 @@ def test_website_analyzer_import_isolation(tmp_path: Path) -> None:
         "langchain_core": False,
         "sqlite3": False,
     }
+
+
+def test_sync_payload_parity_with_legacy_bim_client_for_inbox_and_outreach() -> None:
+    """Verify sync generate() payload parity across sales_analysis (json/text) and sales_outreach profiles."""
+    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+
+    cases = [
+        # ReplyClassifier profile (temperature=0.0, json)
+        (
+            CodeGenerationRequest(
+                user_prompt="Classify reply",
+                environment="sales",
+                language="json",
+                temperature=0.0,
+            ),
+            SalesLLMRequest(
+                user_prompt="Classify reply",
+                task="sales_analysis",
+                output_format="json",
+                temperature=0.0,
+            ),
+            "qwen2.5:1.5b",
+            '```json\n{"category": "question", "confidence": 0.9, "reasoning": "asked about scope"}\n```',
+        ),
+        # ReplySuggestionEngine profile (temperature=0.1, text)
+        (
+            CodeGenerationRequest(
+                user_prompt="Draft concise reply",
+                environment="sales",
+                language="text",
+                temperature=0.1,
+            ),
+            SalesLLMRequest(
+                user_prompt="Draft concise reply",
+                task="sales_analysis",
+                output_format="text",
+                temperature=0.1,
+            ),
+            "qwen2.5:1.5b",
+            "  Thank you for reaching out. Happy to schedule a brief call next week.  ",
+        ),
+        # EmailGenerator initial outreach profile (temperature=0.2, num_ctx=4096, raw_text)
+        (
+            CodeGenerationRequest(
+                user_prompt="Generate outreach JSON",
+                environment="sales_outreach",
+                language="nlp",
+                model="qwen2.5:1.5b",
+                temperature=0.2,
+                num_ctx=4096,
+            ),
+            SalesLLMRequest(
+                user_prompt="Generate outreach JSON",
+                task="sales_outreach",
+                output_format="text",
+                model="qwen2.5:1.5b",
+                temperature=0.2,
+                num_ctx=4096,
+            ),
+            "qwen2.5:1.5b",
+            '```json\n{"subject": "Revit Automation", "body": "Hi team"}\n```',
+        ),
+        # EmailGenerator JSON repair profile (temperature=0.0, num_ctx=4096, raw_text)
+        (
+            CodeGenerationRequest(
+                user_prompt="Repair invalid JSON",
+                environment="sales_outreach",
+                language="nlp",
+                model="qwen2.5:1.5b",
+                temperature=0.0,
+                num_ctx=4096,
+            ),
+            SalesLLMRequest(
+                user_prompt="Repair invalid JSON",
+                task="sales_outreach",
+                output_format="text",
+                model="qwen2.5:1.5b",
+                temperature=0.0,
+                num_ctx=4096,
+            ),
+            "qwen2.5:1.5b",
+            '{"subject": "Revit Automation", "body": "Hi team"}',
+        ),
+    ]
+
+    for legacy_req, native_req, model_name, raw_reply in cases:
+        legacy_sync = MagicMock()
+        legacy_sync.chat.return_value = _make_provider_response(raw_reply)
+        legacy_client = BIMLLMClient.__new__(BIMLLMClient)
+        legacy_client.default_model = model_name
+        legacy_client._sync_client = legacy_sync
+
+        native_sync = MagicMock()
+        native_sync.chat.return_value = _make_provider_response(raw_reply)
+        native_client = SalesLLMClient(default_model=model_name, sync_client=native_sync)
+
+        legacy_resp = legacy_client.generate_code(legacy_req, model_name=model_name)
+        native_resp = native_client.generate(native_req, model_name=model_name)
+
+        assert native_sync.chat.call_args.kwargs == legacy_sync.chat.call_args.kwargs
+        assert native_resp.raw_text == legacy_resp.raw_response
+        assert native_resp.content == legacy_resp.extracted_code
+        assert native_resp.model == legacy_resp.model

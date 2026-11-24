@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from sales_engine.inbox.models import ReplyCategory
 from sales_engine.inbox.security import InboxSecurity
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 
 
 class ClassificationResult(BaseModel):
@@ -154,7 +154,7 @@ class ReplyClassifier:
     and strict fallback to 'unknown' / 'needs_review'.
     """
 
-    def __init__(self, llm_client: Optional[BIMLLMClient] = None):
+    def __init__(self, llm_client: Optional[SalesLLMClient] = None):
         self.llm_client = llm_client
 
     def classify(
@@ -339,7 +339,7 @@ class ReplyClassifier:
         )
 
     def _classify_with_llm(self, body_text: str) -> Optional[ClassificationResult]:
-        """Call Ollama via BIMLLMClient with strict untrusted source wrapping."""
+        """Call Ollama via SalesLLMClient with strict untrusted source wrapping."""
         try:
             untrusted_wrapped = InboxSecurity.wrap_untrusted_input(body_text)
             prompt = f"""You are a classification assistant. Classify the following inbound email into exactly one category:
@@ -352,14 +352,14 @@ Guidelines:
 
 {untrusted_wrapped}
 """
-            req = CodeGenerationRequest(
+            req = SalesLLMRequest(
                 user_prompt=prompt,
-                environment="sales",
-                language="json",
+                task="sales_analysis",
+                output_format="json",
                 temperature=0.0,
             )
-            resp = self.llm_client.generate_code(req) # type: ignore
-            raw = resp.extracted_code
+            resp = self.llm_client.generate(req)  # type: ignore
+            raw = resp.content
             data = json.loads(raw)
             cat = data.get("category", "").lower().strip()
             conf = float(data.get("confidence", 0.0))

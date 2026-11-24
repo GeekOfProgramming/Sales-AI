@@ -10,7 +10,7 @@ from sales_engine.inbox.models import (
     Conversation,
 )
 from sales_engine.inbox.security import InboxSecurity
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 
 
 _PROHIBITED_CLAIMS = [
@@ -31,7 +31,7 @@ class ReplySuggestionEngine:
     and strictly forbids fabricating pricing, deadlines, or discounts.
     """
 
-    def __init__(self, llm_client: Optional[BIMLLMClient] = None):
+    def __init__(self, llm_client: Optional[SalesLLMClient] = None):
         self.llm_client = llm_client
 
     def generate_suggestion(
@@ -212,14 +212,14 @@ Context:
 Inbound Email:
 {untrusted}
 """
-            req = CodeGenerationRequest(
+            req = SalesLLMRequest(
                 user_prompt=prompt,
-                environment="sales",
-                language="text",
+                task="sales_analysis",
+                output_format="text",
                 temperature=0.1,
             )
-            resp = self.llm_client.generate_code(req) # type: ignore
-            res_text = resp.extracted_code.strip()
+            resp = self.llm_client.generate(req)  # type: ignore
+            res_text = resp.content.strip()
             if len(res_text) > 20 and not InboxSecurity.contains_prompt_injection_signals(res_text):
                 return res_text
         except Exception:
