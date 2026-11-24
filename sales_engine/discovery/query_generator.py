@@ -3,7 +3,7 @@ import re
 import json
 from typing import List, Set, Tuple, Dict, Any, Optional
 from backend.schemas import WebsiteProfile, GeneratedQueriesResponse, GeneratedQuery
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 from sales_engine.analysis.website_analyzer import is_valid_job_title
 from sales_engine.discovery.query_evaluator import (
     normalize_query_for_qa,
@@ -12,10 +12,15 @@ from sales_engine.discovery.query_evaluator import (
 )
 
 class QueryGenerator:
-    def __init__(self, max_queries: int = 20):
-        self.llm_client = BIMLLMClient(timeout=180.0)
+    def __init__(
+        self,
+        max_queries: int = 20,
+        llm_client: Optional[SalesLLMClient] = None,
+        model_name: Optional[str] = None,
+    ):
+        self.llm_client = llm_client or SalesLLMClient(timeout=180.0)
         self.max_queries = max(10, min(max_queries, 25))
-        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
+        self.model_name = model_name or os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
         
     def _sanitize_signals(self, profile: WebsiteProfile) -> Tuple[List[str], List[str]]:
         """Filter out business goals, action verbs, and standalone tech from primary signals."""
@@ -301,14 +306,14 @@ Return ONLY valid JSON matching this schema:
         use_llm = os.getenv("DISCOVERY_USE_LLM", "false").lower() in ("true", "1")
         if use_llm:
             try:
-                req = CodeGenerationRequest(
+                req = SalesLLMRequest(
                     user_prompt=system_prompt,
-                    environment="sales",
-                    language="json",
-                    num_ctx=2048
+                    task="sales_analysis",
+                    output_format="json",
+                    num_ctx=2048,
                 )
-                response = await self.llm_client.generate_code_async(req, model_name=self.model_name)
-                json_text = response.extracted_code.strip()
+                response = await self.llm_client.generate_async(req, model_name=self.model_name)
+                json_text = response.content.strip()
                 if "```json" in json_text:
                     json_text = json_text.split("```json")[1].split("```")[0].strip()
                 elif "```" in json_text:

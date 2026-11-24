@@ -8,7 +8,7 @@ from backend.schemas import WebsiteAnalyzeResponse
 client = TestClient(app)
 
 @patch('sales_engine.web.website_fetcher.WebsiteFetcher.fetch_website_content')
-@patch('ai_engine.llm_client.BIMLLMClient.generate_code_async')
+@patch('sales_engine.llm_client.SalesLLMClient.generate_async')
 def test_successful_structured_analysis(mock_generate, mock_fetch):
     # Mock the fetcher
     mock_fetch.return_value = {
@@ -19,7 +19,7 @@ def test_successful_structured_analysis(mock_generate, mock_fetch):
     # Mock the LLM response
     class MockResponse:
         def __init__(self):
-            self.extracted_code = json.dumps({
+            self.content = json.dumps({
                 "company_name": "AI BIM Corp",
                 "company_summary": "AI solutions for BIM",
                 "services": ["BIM Automation"],
@@ -44,7 +44,7 @@ def test_successful_structured_analysis(mock_generate, mock_fetch):
     assert data["profile"]["services"] == ["BIM Automation"]
 
 @patch('sales_engine.web.website_fetcher.WebsiteFetcher.fetch_website_content')
-@patch('ai_engine.llm_client.BIMLLMClient.generate_code_async')
+@patch('sales_engine.llm_client.SalesLLMClient.generate_async')
 def test_malformed_json_then_successful_retry(mock_generate, mock_fetch):
     mock_fetch.return_value = {
         "base_url": "https://example.com",
@@ -54,11 +54,11 @@ def test_malformed_json_then_successful_retry(mock_generate, mock_fetch):
     # First response malformed, second response correct
     class BadMockResponse:
         def __init__(self):
-            self.extracted_code = "This is not JSON at all."
+            self.content = "This is not JSON at all."
             
     class GoodMockResponse:
         def __init__(self):
-            self.extracted_code = json.dumps({
+            self.content = json.dumps({
                 "company_name": "AI BIM Corp",
                 "company_summary": "AI solutions for BIM",
                 "services": [], "target_industries": [], "target_company_types": [],
@@ -78,7 +78,7 @@ def test_malformed_json_then_successful_retry(mock_generate, mock_fetch):
     assert "IMPORTANT JSON REPAIR:" in second_call_req.user_prompt
 
 @patch('sales_engine.web.website_fetcher.WebsiteFetcher.fetch_website_content')
-@patch('ai_engine.llm_client.BIMLLMClient.generate_code_async')
+@patch('sales_engine.llm_client.SalesLLMClient.generate_async')
 def test_malformed_json_after_both_attempts(mock_generate, mock_fetch):
     mock_fetch.return_value = {
         "base_url": "https://example.com",
@@ -87,7 +87,7 @@ def test_malformed_json_after_both_attempts(mock_generate, mock_fetch):
     
     class BadMockResponse:
         def __init__(self):
-            self.extracted_code = "Still not JSON."
+            self.content = "Still not JSON."
             
     mock_generate.side_effect = [BadMockResponse(), BadMockResponse()]
     

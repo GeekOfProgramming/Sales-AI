@@ -3,7 +3,7 @@ import re
 import json
 from typing import Dict, Any, List, Optional
 from backend.schemas import WebsiteProfile
-from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 
 ROLE_NOUNS = {
     "manager", "lead", "director", "head", "engineer", "developer", "specialist",
@@ -63,25 +63,30 @@ def is_valid_job_title(title: str) -> bool:
     return has_role_noun
 
 class WebsiteAnalyzer:
-    def __init__(self, timeout: float = 300.0):
-        self.llm_client = BIMLLMClient(timeout=timeout)
-        self.model_name = os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
+    def __init__(
+        self,
+        timeout: float = 300.0,
+        llm_client: Optional[SalesLLMClient] = None,
+        model_name: Optional[str] = None,
+    ):
+        self.llm_client = llm_client or SalesLLMClient(timeout=timeout)
+        self.model_name = model_name or os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
         
     async def _run_llm_json(self, prompt: str, num_ctx: int = 4096) -> Dict[str, Any]:
         """Execute LLM prompt and parse valid JSON with repair attempt."""
-        req = CodeGenerationRequest(
+        req = SalesLLMRequest(
             user_prompt=prompt,
-            environment="sales",
-            language="json",
-            num_ctx=num_ctx
+            task="sales_analysis",
+            output_format="json",
+            num_ctx=num_ctx,
         )
         
         for attempt in range(2):
             try:
                 if attempt == 1:
                     req.user_prompt += "\n\nIMPORTANT JSON REPAIR: Return ONLY one valid JSON object matching the schema. No markdown, no fences, no explanation."
-                response = await self.llm_client.generate_code_async(req, model_name=self.model_name)
-                json_text = response.extracted_code.strip()
+                response = await self.llm_client.generate_async(req, model_name=self.model_name)
+                json_text = response.content.strip()
                 if "```json" in json_text:
                     json_text = json_text.split("```json")[1].split("```")[0].strip()
                 elif "```" in json_text:

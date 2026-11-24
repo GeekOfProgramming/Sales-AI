@@ -283,3 +283,166 @@ def test_native_client_and_job_analyzer_import_isolation(tmp_path: Path) -> None
         "langchain_core": False,
         "sqlite3": False,
     }
+
+
+def test_website_analyzer_two_pass_timeout_ctx_repair_and_parity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify WebsiteAnalyzer Pass A/B, 300s timeout, num_ctx 4096/2048, fence repair, DI, and parity."""
+    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+    from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
+
+    monkeypatch.setenv("SALES_LLM_MODEL", "website-test-model")
+    default_analyzer = WebsiteAnalyzer()
+    assert default_analyzer.llm_client.timeout == 300.0
+    assert default_analyzer.model_name == "website-test-model"
+
+    pass_a_facts = {
+        "company_name": "Acme BIM",
+        "company_summary": "Acme BIM is a leading provider of BIM automation.",
+        "offerings": [{"name": "Tech-Enabled BIM Services", "status": "active"}],
+        "target_industries": ["AEC"],
+        "target_company_types": ["Engineering Firms"],
+        "pain_points": ["Manual coordination"],
+        "client_testimonial_roles": ["Senior BIM Manager"],
+        "internal_team_roles": ["Lead Algorithmic Engineer"],
+        "technologies": ["Revit", "Python"],
+        "standards": ["ISO 19650"],
+        "keywords": ["BIM", "Revit"],
+    }
+    pass_b_signals = {
+        "buyer_roles": ["Senior BIM Manager"],
+        "primary_job_signals": ["BIM Coordinator", "Revit API Developer"],
+        "secondary_job_signals": ["Revit", "Python"],
+        "negative_signals": ["student-only"],
+    }
+
+    async_mock = MagicMock()
+    async_mock.chat = AsyncMock(
+        side_effect=[
+            _make_provider_response("not valid json"),
+            _make_provider_response(f"```json\n{json.dumps(pass_a_facts)}\n```"),
+            _make_provider_response(json.dumps(pass_b_signals)),
+        ]
+    )
+    analyzer = WebsiteAnalyzer(
+        llm_client=SalesLLMClient(timeout=300.0, async_client=async_mock),
+        model_name="override-model",
+    )
+    fetch_result = {
+        "base_url": "https://acmebim.example",
+        "pages": [
+            {"url": "https://acmebim.example", "text": "Tech-Enabled BIM Services for AEC teams."},
+            {"url": "https://acmebim.example/services", "text": "Revit API automation and ISO 19650."},
+        ],
+    }
+
+    profile = asyncio.run(analyzer.analyze_website(fetch_result))
+    assert isinstance(profile, WebsiteProfile)
+    assert profile.company_name == "Acme BIM"
+    assert profile.services == ["Tech-Enabled BIM Services"]
+    assert "Senior BIM Manager" in profile.buyer_roles
+    assert "BIM Coordinator" in profile.primary_job_signals
+    assert async_mock.chat.call_count == 3
+
+    call_pass_a_1 = async_mock.chat.call_args_list[0].kwargs
+    call_pass_a_2 = async_mock.chat.call_args_list[1].kwargs
+    call_pass_b = async_mock.chat.call_args_list[2].kwargs
+
+    assert call_pass_a_1["model"] == "override-model"
+    assert call_pass_a_1["options"] == {"temperature": 0.1, "num_ctx": 4096}
+    assert "IMPORTANT JSON REPAIR:" in call_pass_a_2["messages"][1]["content"]
+    assert call_pass_b["options"] == {"temperature": 0.1, "num_ctx": 2048}
+
+    # Payload parity against legacy BIMLLMClient for Pass A
+    legacy_async = MagicMock()
+    legacy_async.chat = AsyncMock(return_value=_make_provider_response(json.dumps(pass_a_facts)))
+    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
+    legacy_client.default_model = "qwen2.5-coder:1.5b"
+    legacy_client._async_client = legacy_async
+    legacy_req = CodeGenerationRequest(
+        user_prompt=call_pass_a_1["messages"][1]["content"],
+        environment="sales",
+        language="json",
+        num_ctx=4096,
+    )
+    asyncio.run(legacy_client.generate_code_async(legacy_req, model_name="override-model"))
+    assert call_pass_a_1 == legacy_async.chat.call_args.kwargs
+
+
+def test_website_analyzer_exhausted_retry_and_pass_b_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify exhausted Pass A retries raise ValueError and Pass B failures/None fall back to {}."""
+    from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
+
+    monkeypatch.setenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
+    fetch_result = {
+        "base_url": "https://acmebim.example",
+        "pages": [{"url": "https://acmebim.example", "text": "BIM services."}],
+    }
+
+    # 1. Exhausted Pass A (including malformed None responses) raises ValueError
+    fail_a_async = MagicMock()
+    fail_a_async.chat = AsyncMock(
+        side_effect=[_make_provider_response(None), _make_provider_response("still bad")]
+    )
+    analyzer_fail_a = WebsiteAnalyzer(llm_client=SalesLLMClient(async_client=fail_a_async))
+    with pytest.raises(ValueError, match="Failed to parse LLM response into WebsiteProfile"):
+        asyncio.run(analyzer_fail_a.analyze_website(fetch_result))
+    assert fail_a_async.chat.call_count == 2
+
+    # 2. Pass A succeeds, Pass B fails twice -> falls back cleanly to {} without crashing
+    pass_a_facts = {
+        "company_name": "Acme BIM",
+        "company_summary": "Acme BIM provides engineering automation.",
+        "services": ["BIM Automation"],
+    }
+    fallback_b_async = MagicMock()
+    fallback_b_async.chat = AsyncMock(
+        side_effect=[
+            _make_provider_response(json.dumps(pass_a_facts)),
+            TimeoutError("pass b timeout 1"),
+            _make_provider_response(None),
+        ]
+    )
+    analyzer_b = WebsiteAnalyzer(llm_client=SalesLLMClient(async_client=fallback_b_async))
+    profile = asyncio.run(analyzer_b.analyze_website(fetch_result))
+    assert profile.company_name == "Acme BIM"
+    assert "BIM Manager" in profile.primary_job_signals
+    assert fallback_b_async.chat.call_count == 3
+
+
+def test_website_analyzer_import_isolation(tmp_path: Path) -> None:
+    """Importing WebsiteAnalyzer must not load ai_engine, ollama, chromadb, scrapling, or sqlite3."""
+    proc = run_isolated_subprocess(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            (
+                "import json, sys; "
+                "import sales_engine.analysis.website_analyzer; "
+                "loaded = {m: (m in sys.modules) for m in ("
+                "'ai_engine', 'ai_engine.llm_client', 'ollama', 'chromadb', "
+                "'scrapling', 'langchain_core', 'sqlite3')}; "
+                "print(json.dumps(loaded))"
+            ),
+        ],
+        isolated_db_path=tmp_path / "isolated_wa_probe.db",
+        trusted_dir=tmp_path,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    assert json.loads(proc.stdout.strip()) == {
+        "ai_engine": False,
+        "ai_engine.llm_client": False,
+        "ollama": False,
+        "chromadb": False,
+        "scrapling": False,
+        "langchain_core": False,
+        "sqlite3": False,
+    }
