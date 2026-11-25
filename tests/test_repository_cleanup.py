@@ -33,7 +33,6 @@ def test_prd_clean_001_release_manifest_contains_required_runtime_modules():
     required_roots = [
         "sales_engine",
         "backend",
-        "ai_engine",
         "config",
         "data/rules",
         "static",
@@ -43,6 +42,7 @@ def test_prd_clean_001_release_manifest_contains_required_runtime_modules():
     ]
     for req in required_roots:
         assert req in roots, f"Required root {req} must be in release manifest include roots"
+    assert "ai_engine" not in roots
 
 
 def test_prd_clean_002_release_excludes_runtime_db_files(tmp_path):

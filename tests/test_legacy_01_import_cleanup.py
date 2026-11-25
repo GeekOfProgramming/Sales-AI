@@ -35,49 +35,81 @@ def _run_clean_import_probe(code: str, tmp_path: Path) -> dict[str, object]:
 
 
 def test_ai_engine_submodule_imports_do_not_load_chromadb_or_scrapling(tmp_path: Path) -> None:
-    """Importing `ai_engine` and Sales-AI callers must not eagerly import RAG, scraping, or retired LLM modules."""
+    """Sales-AI callers must not load retired `ai_engine` modules, ChromaDB, or scraping dependencies."""
     probe = _run_clean_import_probe(
-        "import importlib.util, json, sys; "
-        "import ai_engine; "
-        "import sales_engine.inbox.classifier; "
-        "import sales_engine.inbox.suggestion; "
-        "import sales_engine.outreach.email_generator; "
+        "import importlib.util, json, sys\n"
+        "def has_spec(m):\n"
+        "    try:\n"
+        "        return importlib.util.find_spec(m) is not None\n"
+        "    except ModuleNotFoundError:\n"
+        "        return False\n"
+        "import sales_engine.inbox.classifier\n"
+        "import sales_engine.inbox.suggestion\n"
+        "import sales_engine.outreach.email_generator\n"
         "loaded = {m: (m in sys.modules) for m in ("
-        "'chromadb', 'opentelemetry', 'scrapling', 'markdownify', "
-        "'ai_engine.rag_retriever', 'ai_engine.data_ingestor')}; "
-        "loaded['retired_llm_client_exists'] = importlib.util.find_spec('ai_engine.llm_client') is not None; "
-        "print(json.dumps(loaded))",
+        "'ai_engine', 'chromadb', 'opentelemetry', 'scrapling', 'markdownify')}\n"
+        "retired_specs = {m: has_spec(m) for m in ("
+        "'ai_engine.llm_client', 'ai_engine.rag_retriever', "
+        "'ai_engine.data_ingestor', 'ai_engine.ingest_queue')}\n"
+        "print(json.dumps({'loaded': loaded, 'retired_specs': retired_specs}))",
         tmp_path=tmp_path,
     )
-    assert probe == {
+    assert probe["loaded"] == {
+        "ai_engine": False,
         "chromadb": False,
         "opentelemetry": False,
         "scrapling": False,
         "markdownify": False,
+    }
+    assert probe["retired_specs"] == {
+        "ai_engine.llm_client": False,
         "ai_engine.rag_retriever": False,
         "ai_engine.data_ingestor": False,
-        "retired_llm_client_exists": False,
+        "ai_engine.ingest_queue": False,
     }
 
 
-def test_ai_engine_package_preserves_lazy_public_api_and_attribute_error() -> None:
-    """`ai_engine` retires legacy LLM exports while preserving lazy RAG/ingest `__all__` and AttributeError."""
-    import ai_engine
+def test_ai_engine_package_completely_retired() -> None:
+    """Verify legacy `ai_engine` tracked implementation files and symbols are retired cleanly."""
+    import importlib
+    import importlib.util
 
-    assert set(ai_engine.__all__) == {
-        "BIMRAGRetriever",
-        "BIMDataIngestor",
-    }
-    assert "BIMRAGRetriever" in dir(ai_engine)
-    assert "BIMDataIngestor" in dir(ai_engine)
+    # Tolerate residual empty or __pycache__ directories (PEP 420 namespace case),
+    # but assert zero legacy Python source files remain in ai_engine/.
+    ai_dir = REPO_ROOT / "ai_engine"
+    if ai_dir.exists():
+        assert list(ai_dir.rglob("*.py")) == []
 
-    for retired_sym in ("BIMLLMClient", "CodeGenerationRequest", "CodeGenerationResponse"):
-        assert retired_sym not in dir(ai_engine)
-        with pytest.raises(AttributeError):
-            getattr(ai_engine, retired_sym)
+    for mod_name in (
+        "ai_engine.llm_client",
+        "ai_engine.rag_retriever",
+        "ai_engine.data_ingestor",
+        "ai_engine.ingest_queue",
+    ):
+        try:
+            spec = importlib.util.find_spec(mod_name)
+        except ModuleNotFoundError:
+            spec = None
+        assert spec is None
 
-    with pytest.raises(AttributeError):
-        getattr(ai_engine, "DOES_NOT_EXIST_LEGACY_SYMBOL")
+    # Even if an empty residual directory acts as a PEP 420 namespace package,
+    # none of the retired legacy symbols are importable from `ai_engine`.
+    try:
+        ns_pkg = importlib.import_module("ai_engine")
+    except ModuleNotFoundError:
+        ns_pkg = None
+
+    if ns_pkg is not None:
+        assert getattr(ns_pkg, "__file__", None) is None
+        for sym in (
+            "BIMLLMClient",
+            "CodeGenerationRequest",
+            "CodeGenerationResponse",
+            "BIMRAGRetriever",
+            "BIMDataIngestor",
+            "ingest_queue",
+        ):
+            assert not hasattr(ns_pkg, sym)
 
 
 def test_backend_package_preserves_lazy_schema_exports_without_eager_load(tmp_path: Path) -> None:

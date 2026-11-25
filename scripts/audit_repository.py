@@ -119,7 +119,7 @@ def audit_repository(repo_root: Path) -> Dict[str, Any]:
         violations["manifest_missing_roots"].append("release_manifest.json missing")
 
     # 3. Scan source directories for forbidden files, unexpected binaries, large files
-    scan_dirs = ["sales_engine", "backend", "ai_engine", "config", "data", "docs", "scripts", "tests", "static"]
+    scan_dirs = ["sales_engine", "backend", "config", "data", "docs", "scripts", "tests", "static"]
     for d in scan_dirs:
         dir_path = repo_root / d
         if not dir_path.exists():

@@ -22,10 +22,6 @@
       "category": "production_runtime"
     },
     {
-      "pattern": "ai_engine/**",
-      "category": "production_runtime"
-    },
-    {
       "pattern": "start_server.py",
       "category": "production_runtime"
     },
