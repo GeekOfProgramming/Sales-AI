@@ -73,29 +73,11 @@ class ScriptGenerationResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """System health check response verifying connectivity to Ollama and Vector DB."""
+    """System health check response verifying connectivity to local Ollama LLM."""
     status: Literal["healthy", "degraded", "unhealthy"] = Field(..., description="Overall service health state.")
     ollama_connected: bool = Field(..., description="Status of connection to local Ollama instance.")
-    chromadb_connected: bool = Field(..., description="Status of ChromaDB vector store.")
     available_models: List[str] = Field(default=[], description="List of local LLM models ready for inference.")
-    indexed_rules_count: int = Field(default=0, description="Number of active knowledge chunks in ChromaDB.")
     version: str = Field(default="0.1.0", description="API Gateway version.")
-
-
-class IngestRequest(BaseModel):
-    """Request payload for online documentation ingestion."""
-    url: str = Field(..., description="Target documentation URL to scrape, clean, and inject into RAG.")
-    slug: Optional[str] = Field(default=None, description="Optional custom filename/slug for the rule.")
-    submitter: Optional[str] = Field(default="Revit Client / Web User", description="Submitter identifier or network host.")
-
-
-class IngestResponse(BaseModel):
-    """Acknowledgement response when background ingestion task is accepted into the review queue."""
-    status: str = Field(default="pending", description="Status of the ingestion request (pending, approved, rejected).")
-    message: str = Field(..., description="Status message detailing the queue registration.")
-    url: str = Field(..., description="Target URL queued for review.")
-    request_id: str = Field(..., description="Unique tracking identifier for querying submission status.")
-    current_state: str = Field(default="pending", description="Current workflow state in Admin-Gate pipeline.")
 
 
 class LoginRequest(BaseModel):
@@ -111,29 +93,6 @@ class TokenResponse(BaseModel):
     role: str = Field(default="admin", description="Assigned role.")
     username: str = Field(..., description="Authenticated username.")
     expires_in_minutes: int = Field(default=1440, description="Token validity window in minutes.")
-
-
-class QueueItemResponse(BaseModel):
-    """Item representation in the Admin-Gate Knowledge Queue."""
-    request_id: str = Field(..., description="Tracking ID.")
-    url: str = Field(..., description="Target documentation URL.")
-    slug: Optional[str] = Field(default=None, description="Slug identifier.")
-    status: str = Field(..., description="Current status: pending, processing, approved, or rejected.")
-    submitter: str = Field(..., description="Submitting user or network host.")
-    submitted_at: str = Field(..., description="ISO timestamp of submission.")
-    processed_at: Optional[str] = Field(default=None, description="ISO timestamp of decision/processing.")
-    message: Optional[str] = Field(default=None, description="Audit note or error details.")
-
-
-class ApprovalRequest(BaseModel):
-    """Payload to approve a pending knowledge request and trigger ChromaDB ingestion."""
-    request_id: str = Field(..., description="Tracking ID of the pending queue item to approve.")
-
-
-class RejectionRequest(BaseModel):
-    """Payload to reject a pending knowledge request without vector database modification."""
-    request_id: str = Field(..., description="Tracking ID of the pending queue item to reject.")
-    reason: Optional[str] = Field(default="Rejected by administrator due to compliance standards.", description="Audit reason for rejection.")
 
 
 class SalesLLMTestRequest(BaseModel):

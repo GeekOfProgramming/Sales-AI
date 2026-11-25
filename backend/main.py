@@ -17,7 +17,7 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 
-from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks, Depends
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse
@@ -39,16 +39,11 @@ try:
 except ImportError:
     WebsiteAnalyzer = None  # type: ignore
 
-from backend.auth import authenticate_admin, create_access_token, verify_admin_token
+from backend.auth import authenticate_admin, create_access_token
 from backend.schemas import (
     HealthResponse,
-    IngestRequest,
-    IngestResponse,
     LoginRequest,
     TokenResponse,
-    QueueItemResponse,
-    ApprovalRequest,
-    RejectionRequest,
     SalesLLMTestRequest,
     WebsiteAnalyzeRequest,
     WebsiteAnalyzeResponse,
@@ -123,12 +118,11 @@ async def operator_security_middleware(request: Request, call_next):
 
     path = request.url.path
 
-    # 1. Exempt public endpoints: login, logout, static files, health check, and legacy ingest/status
+    # 1. Exempt public endpoints: login, logout, static files, and health check
     is_public = (
         path in ("/health", "/sales/login", "/sales/logout")
         or path.startswith("/static")
         or path.startswith("/api/auth/login")
-        or path.startswith("/api/ingest")  # Knowledge queue submissions and public tracking
     )
 
     # 2. Check authentication if users exist in the database
@@ -199,7 +193,6 @@ def ui_endpoint():
 
 _llm_client_lock = threading.Lock()
 _sales_llm_client_lock = threading.Lock()
-_rag_retriever_lock = threading.Lock()
 
 
 def _ensure_ollama_dependency_available() -> None:
@@ -240,56 +233,10 @@ def get_sales_llm_client():
         return app.state.sales_llm_client
 
 
-def get_rag_retriever():
-    """Safely get or lazy-initialize the legacy ChromaDB RAG retriever."""
-    try:
-        from ai_engine.rag_retriever import BIMRAGRetriever
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="RAG retriever dependencies (ChromaDB) not installed or available.",
-        ) from exc
-    with _rag_retriever_lock:
-        if not hasattr(app.state, "rag_retriever") or app.state.rag_retriever is None:
-            project_root = Path(__file__).parent.parent
-            persist_dir = str(project_root / "chroma_db")
-            app.state.rag_retriever = BIMRAGRetriever(
-                persist_dir=persist_dir,
-                collection_name="bim_rules",
-                embedding_model="nomic-embed-text",
-            )
-        return app.state.rag_retriever
-
-
-def _get_legacy_ingest_queue():
-    """Lazily load the legacy knowledge ingestion queue only when an ingest route executes."""
-    try:
-        from ai_engine.ingest_queue import ingest_queue as legacy_ingest_queue
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Legacy knowledge ingestion queue is not available.",
-        ) from exc
-    return legacy_ingest_queue
-
-
-def _get_legacy_data_ingestor_cls():
-    """Lazily load legacy BIMDataIngestor only when an ingest route or worker executes."""
-    try:
-        from ai_engine.data_ingestor import BIMDataIngestor as legacy_ingestor_cls
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Legacy data ingestion dependencies (ChromaDB/Scrapling) are not installed or available.",
-        ) from exc
-    return legacy_ingestor_cls
-
-
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check():
-    """Verify connectivity to local Ollama LLM and ChromaDB vector store."""
+    """Verify connectivity to local Ollama LLM."""
     llm_client: SalesLLMClient = get_llm_client()
-    rag_retriever = get_rag_retriever()
 
     ollama_ok = llm_client.is_healthy()
     models = []
@@ -299,65 +246,21 @@ def health_check():
         except Exception:
             ollama_ok = False
 
-    try:
-        rules_count = rag_retriever.count()
-        chroma_ok = True
-    except Exception:
-        rules_count = 0
-        chroma_ok = False
-
-    if ollama_ok and chroma_ok:
-        overall_status = "healthy"
-    elif ollama_ok or chroma_ok:
-        overall_status = "degraded"
-    else:
-        overall_status = "unhealthy"
+    overall_status = "healthy" if ollama_ok else "unhealthy"
 
     return HealthResponse(
         status=overall_status,
         ollama_connected=ollama_ok,
-        chromadb_connected=chroma_ok,
         available_models=models,
-        indexed_rules_count=rules_count,
         version="0.1.0",
     )
-
-
-def _run_approved_ingest(request_id: str, url: str, slug: Optional[str] = None):
-    """Worker executed when administrator approves an item from the knowledge queue."""
-    queue = None
-    try:
-        print(f"🕸️ [Admin-Gate Ingest] Processing approved URL: {url} (ID: {request_id})")
-        queue = _get_legacy_ingest_queue()
-        queue.update_status(request_id, "processing", message="Scraping and vectorizing documentation...")
-        ingestor = _get_legacy_data_ingestor_cls()()
-        result = ingestor.ingest_url(url, slug=slug)
-        chunk_count = result.get("indexed_chunks", 0)
-        file_path = result.get("file_path", "")
-        effective_slug = result.get("effective_slug", "")
-        slug_feedback = result.get("slug_feedback")
-
-        if slug_feedback:
-            success_msg = f"Indexed as '{effective_slug}' ({chunk_count} chunks). 💡 Note: {slug_feedback}"
-        else:
-            success_msg = f"Successfully indexed as '{effective_slug}' ({chunk_count} chunks)."
-
-        queue.update_status(request_id, "approved", message=success_msg, slug=effective_slug)
-        print(f"✅ [Admin-Gate Ingest] Approved & Indexed {url} -> {file_path} ({chunk_count} chunks)")
-        if slug_feedback:
-            print(f"💡 [Admin-Gate Ingest] Naming note: {slug_feedback}")
-    except Exception as e:
-        err_msg = f"Ingestion error: {str(e)}"
-        if queue is not None:
-            queue.update_status(request_id, "rejected", message=err_msg)
-        print(f"❌ [Admin-Gate Ingest] Error ingesting {url}: {e}")
 
 
 @app.post(
     "/api/auth/login",
     response_model=TokenResponse,
     summary="Admin Login to obtain JWT Bearer Token",
-    description="Authenticates administrator to authorize Knowledge Queue approvals and vector DB changes.",
+    description="Authenticates administrator and issues a signed JWT bearer token.",
     tags=["Authentication"],
 )
 async def login_admin(credentials: LoginRequest):
@@ -376,155 +279,6 @@ async def login_admin(credentials: LoginRequest):
         username=credentials.username,
         expires_in_minutes=1440,
     )
-
-
-@app.post(
-    "/api/ingest",
-    response_model=IngestResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Submit documentation into Admin-Gate Review Queue",
-    description="Stage 1: Enqueues URL for admin review to prevent Data Poisoning. Does not modify ChromaDB directly.",
-    tags=["Knowledge Ingestion Queue"],
-)
-async def submit_ingest_request(request: IngestRequest):
-    """Register an online documentation URL into the review queue."""
-    target_url = str(request.url).strip()
-    if not target_url.startswith("http://") and not target_url.startswith("https://"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid URL scheme. Only http:// and https:// URLs are supported.",
-        )
-
-    ingestor_cls = _get_legacy_data_ingestor_cls()
-    queue = _get_legacy_ingest_queue()
-    initial_slug, slug_note = ingestor_cls.generate_smart_slug(target_url, user_slug=request.slug)
-    item = queue.enqueue(
-        url=target_url,
-        slug=initial_slug,
-        submitter=request.submitter or "Revit Client / Web User",
-    )
-    resp_msg = "Documentation request queued for administrator review. Use request_id to track approval status."
-    if slug_note:
-        resp_msg += f" 💡 Note: {slug_note}"
-
-    return IngestResponse(
-        status="pending",
-        message=resp_msg,
-        url=target_url,
-        request_id=item["request_id"],
-        current_state="pending",
-    )
-
-
-@app.get(
-    "/api/ingest/queue",
-    response_model=List[QueueItemResponse],
-    summary="List all items in the Knowledge Ingestion Queue (Admin Only)",
-    description="Retrieves pending, approved, or rejected knowledge submissions. Requires Bearer JWT token.",
-    tags=["Knowledge Ingestion Queue"],
-)
-async def list_knowledge_queue(
-    status_filter: Optional[str] = None,
-    admin_user: dict = Depends(verify_admin_token),
-):
-    """Admin endpoint: Fetch pending or history queue items."""
-    items = _get_legacy_ingest_queue().list_items(status_filter=status_filter)
-    return [QueueItemResponse(**item) for item in items]
-
-
-@app.post(
-    "/api/ingest/approve",
-    summary="Approve pending request and trigger ChromaDB indexing (Admin Only)",
-    description="Stage 2: Scrapes, sanitizes into Markdown, and injects into vector store in background.",
-    tags=["Knowledge Ingestion Queue"],
-)
-async def approve_knowledge_request(
-    request: ApprovalRequest,
-    background_tasks: BackgroundTasks,
-    admin_user: dict = Depends(verify_admin_token),
-):
-    """Admin endpoint: Approve queue item and launch scraper/vectorizer in background."""
-    queue = _get_legacy_ingest_queue()
-    item = queue.get(request.request_id)
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Queue item '{request.request_id}' not found.",
-        )
-    if item.get("status") == "approved":
-        return {"status": "approved", "message": "Item is already approved and indexed.", "item": item}
-
-    queue.update_status(request.request_id, "processing", message="Approved by admin. Processing...")
-    background_tasks.add_task(_run_approved_ingest, request.request_id, item["url"], item.get("slug"))
-    return {
-        "status": "processing",
-        "message": f"Request '{request.request_id}' approved. Background scraping and ChromaDB injection launched.",
-        "request_id": request.request_id,
-    }
-
-
-@app.post(
-    "/api/ingest/reject",
-    summary="Reject pending request without vector store modification (Admin Only)",
-    description="Blocks link from entering ChromaDB and archives request as rejected.",
-    tags=["Knowledge Ingestion Queue"],
-)
-async def reject_knowledge_request(
-    request: RejectionRequest,
-    admin_user: dict = Depends(verify_admin_token),
-):
-    """Admin endpoint: Reject and archive unverified link."""
-    queue = _get_legacy_ingest_queue()
-    item = queue.get(request.request_id)
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Queue item '{request.request_id}' not found.",
-        )
-    updated = queue.update_status(
-        request.request_id,
-        "rejected",
-        message=request.reason or "Rejected by administrator due to compliance standards.",
-    )
-    return {
-        "status": "rejected",
-        "message": f"Request '{request.request_id}' rejected. No data added to ChromaDB.",
-        "item": updated,
-    }
-
-
-@app.post(
-    "/api/ingest/queue/clear-history",
-    summary="Purge processed items (approved/rejected) from knowledge queue history (Admin Only)",
-    description="Removes historical approved and rejected records to keep the database and UI clean. Pending items are retained.",
-    tags=["Knowledge Ingestion Queue"],
-)
-async def clear_queue_history(admin_user: dict = Depends(verify_admin_token)):
-    """Admin endpoint: Clear approved/rejected historical logs."""
-    removed_count = _get_legacy_ingest_queue().clear_processed()
-    return {
-        "status": "success",
-        "message": f"Purged {removed_count} historical records from queue.",
-        "removed_count": removed_count,
-    }
-
-
-@app.get(
-    "/api/ingest/status/{request_id}",
-    response_model=QueueItemResponse,
-    summary="Query submission status by tracking ID (Public)",
-    description="Allows clients or users to track real-time workflow status (pending, processing, approved, rejected).",
-    tags=["Knowledge Ingestion Queue"],
-)
-async def get_submission_status(request_id: str):
-    """Public endpoint: Query real-time workflow status by tracking ID."""
-    item = _get_legacy_ingest_queue().get(request_id)
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tracking ID '{request_id}' not found in knowledge queue.",
-        )
-    return QueueItemResponse(**item)
 
 
 @app.post("/api/sales/test-llm", tags=["SalesAI"])

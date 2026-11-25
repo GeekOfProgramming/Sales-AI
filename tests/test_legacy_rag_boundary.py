@@ -1,16 +1,17 @@
 """
 tests/test_legacy_rag_boundary.py
-Isolated regression tests for LEGACY-07: Legacy RAG and Ingestion Boundary Separation.
+Isolated regression tests for LEGACY-08C1: Legacy Ingestion API Retirement and
+Health Decoupling from BIM RAG.
 
 Verifies:
 - Active Sales-AI modules (Search, Crawl, Gemini Analysis, Discovery, Outreach, Inbox)
   do not import legacy `ai_engine`, `chromadb`, or `langchain*`.
-- Importing `backend.main` and `backend.sales_ui.router` does not eagerly load
-  `ai_engine.rag_retriever`, `ai_engine.data_ingestor`, `ai_engine.ingest_queue`,
-  `chromadb`, `ollama`, or start any ingestion worker.
-- Legacy RAG and `/api/ingest*` routes lazily load dependencies only when invoked,
-  preserve HTTP 503 failure semantics when optional dependencies are missing,
-  preserve `HealthResponse` fields, and retain `Depends(verify_admin_token)` admin gates.
+- Importing `backend.main` and `backend.sales_ui.router` loads zero legacy RAG/ingestion
+  modules and exposes zero retired `/api/ingest*` routes while preserving active routes.
+- `operator_security_middleware` no longer exempts `/api/ingest*` while preserving
+  `/health`, `/sales/login`, `/sales/logout`, `/static`, and `/api/auth/login`.
+- `GET /health` operates cleanly with local Ollama only (zero RAG/ChromaDB dependency),
+  preserves HTTP 503 when `ollama` is unavailable, and omits retired ChromaDB fields.
 
 Zero operational SQLite access, zero real ChromaDB/embedding/scraping instantiation,
 zero live provider or network calls.
@@ -25,24 +26,26 @@ from pathlib import Path
 import sys
 import threading
 from types import ModuleType, SimpleNamespace
-from typing import Any, List, Optional
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.schemas import (
-    ApprovalRequest,
-    HealthResponse,
-    IngestRequest,
-    IngestResponse,
-    QueueItemResponse,
-    RejectionRequest,
-)
+from backend.schemas import HealthResponse
 from sales_engine.llm_client import SalesLLMClient
 from tests.support.isolated_subprocess import run_isolated_subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+RETIRED_INGEST_ROUTES = {
+    "/api/ingest",
+    "/api/ingest/queue",
+    "/api/ingest/approve",
+    "/api/ingest/reject",
+    "/api/ingest/queue/clear-history",
+    "/api/ingest/status/{request_id}",
+}
 
 
 class _DummyHTTPException(Exception):
@@ -53,8 +56,16 @@ class _DummyHTTPException(Exception):
 
 
 class _DummyStatus:
-    HTTP_400_BAD_REQUEST = 400
-    HTTP_404_NOT_FOUND = 404
+    HTTP_303_SEE_OTHER = 303
+    HTTP_401_UNAUTHORIZED = 401
+
+
+class _DummyResponse:
+    def __init__(self, status_code: int = 200, content: Any = None, url: str | None = None, headers: Any = None):
+        self.status_code = status_code
+        self.content = content
+        self.url = url
+        self.headers = headers or {}
 
 
 def _run_probe(code: str, tmp_path: Path) -> dict[str, Any]:
@@ -71,32 +82,17 @@ def _run_probe(code: str, tmp_path: Path) -> dict[str, Any]:
     return json.loads(proc.stdout.strip())
 
 
-def _load_backend_legacy_boundary_namespace(
+def _load_backend_functions(
+    wanted_funcs: set[str],
     *,
     fake_app: Any | None = None,
     llm_client: Any = None,
 ) -> dict[str, Any]:
-    """Compile real legacy RAG and `/api/ingest*` handlers from `backend/main.py` AST."""
+    """Compile selected real functions from `backend/main.py` AST without starting FastAPI."""
     main_path = REPO_ROOT / "backend" / "main.py"
     tree = ast.parse(main_path.read_text(encoding="utf-8"), filename=str(main_path))
 
-    wanted_locks = {"_llm_client_lock", "_sales_llm_client_lock", "_rag_retriever_lock"}
-    wanted_funcs = {
-        "_ensure_ollama_dependency_available",
-        "get_llm_client",
-        "get_rag_retriever",
-        "_get_legacy_ingest_queue",
-        "_get_legacy_data_ingestor_cls",
-        "health_check",
-        "_run_approved_ingest",
-        "submit_ingest_request",
-        "list_knowledge_queue",
-        "approve_knowledge_request",
-        "reject_knowledge_request",
-        "clear_queue_history",
-        "get_submission_status",
-    }
-
+    wanted_locks = {"_llm_client_lock", "_sales_llm_client_lock"}
     selected: list[ast.stmt] = []
     found_locks: set[str] = set()
     found_funcs: set[str] = set()
@@ -134,23 +130,17 @@ def _load_backend_legacy_boundary_namespace(
     ns: dict[str, Any] = {
         "__file__": str(main_path),
         "app": app_obj,
-        "Path": Path,
-        "Optional": Optional,
-        "List": List,
         "threading": threading,
+        "Request": object,
         "HTTPException": _DummyHTTPException,
         "status": _DummyStatus,
-        "Depends": lambda dep: dep,
-        "BackgroundTasks": object,
-        "verify_admin_token": lambda: {"sub": "admin", "role": "admin"},
+        "RedirectResponse": lambda url, status_code=303: _DummyResponse(status_code=status_code, url=url),
+        "JSONResponse": lambda status_code=200, content=None, headers=None: _DummyResponse(
+            status_code=status_code, content=content, headers=headers
+        ),
         "SalesLLMClient": SalesLLMClient,
         "SalesLLMRequest": object,
         "HealthResponse": HealthResponse,
-        "IngestRequest": IngestRequest,
-        "IngestResponse": IngestResponse,
-        "QueueItemResponse": QueueItemResponse,
-        "ApprovalRequest": ApprovalRequest,
-        "RejectionRequest": RejectionRequest,
     }
     mod = ast.Module(body=selected, type_ignores=[])
     ast.fix_missing_locations(mod)
@@ -182,8 +172,8 @@ def test_active_sales_imports_exclude_legacy_rag_and_ingestion(tmp_path: Path) -
     assert all(loaded is False for loaded in probe.values()), f"Unexpected legacy modules loaded: {probe}"
 
 
-def test_backend_main_and_sales_ui_import_without_legacy_rag_or_queue_init(tmp_path: Path) -> None:
-    """Importing `backend.main` and `backend.sales_ui.router` must not eagerly load legacy RAG/ingestion."""
+def test_backend_main_retires_ingest_routes_and_loads_no_legacy_rag(tmp_path: Path) -> None:
+    """Importing `backend.main` loads zero legacy RAG/ingestion modules and omits retired `/api/ingest*` routes."""
     probe = _run_probe(
         "import json, sys; "
         "import backend.main; "
@@ -197,22 +187,18 @@ def test_backend_main_and_sales_ui_import_without_legacy_rag_or_queue_init(tmp_p
         "print(json.dumps({'loaded': loaded, 'rag_initialized': rag_initialized, 'routes': routes}))",
         tmp_path=tmp_path,
     )
-    assert all(v is False for v in probe["loaded"].values()), f"Eager legacy import detected: {probe['loaded']}"
+    assert all(v is False for v in probe["loaded"].values()), f"Legacy module loaded: {probe['loaded']}"
     assert probe["rag_initialized"] is False
-    expected_routes = {
-        "/health",
-        "/api/ingest",
-        "/api/ingest/queue",
-        "/api/ingest/approve",
-        "/api/ingest/reject",
-        "/api/ingest/queue/clear-history",
-        "/api/ingest/status/{request_id}",
-    }
-    assert expected_routes.issubset(set(probe["routes"]))
+
+    registered = set(probe["routes"])
+    assert RETIRED_INGEST_ROUTES.isdisjoint(registered), f"Retired routes still registered: {RETIRED_INGEST_ROUTES & registered}"
+    assert {"/health", "/api/auth/login", "/api/sales/test-llm", "/api/sales/analyze-website", "/api/sales/discover"}.issubset(
+        registered
+    )
 
 
-def test_static_source_boundaries_settings_and_admin_auth_preserved() -> None:
-    """Verify static import boundaries across Sales-AI, backend/main.py, Settings UI, and admin gates."""
+def test_static_source_boundaries_backend_settings_and_auth_preserved() -> None:
+    """Verify zero active backend references to legacy RAG/ingestion, preserved auth helpers, and clean Settings UI."""
     # 1. Protected active Sales-AI modules never import legacy ai_engine, chromadb, or langchain
     protected_sales_files = (
         "sales_engine/discovery/brave_search.py",
@@ -238,62 +224,49 @@ def test_static_source_boundaries_settings_and_admin_auth_preserved() -> None:
             elif isinstance(node, ast.ImportFrom) and node.module:
                 assert not node.module.startswith(forbidden_prefixes), f"Forbidden import {node.module} in {rel_path}"
 
-    # 2. backend/main.py has zero top-level legacy imports, no dead imports, and preserves admin Depends + clean lifespan
+    # 2. backend/main.py has zero imports or references to legacy RAG/ingestion anywhere (top-level or inline)
     main_src = (REPO_ROOT / "backend" / "main.py").read_text(encoding="utf-8")
     main_tree = ast.parse(main_src, filename="backend/main.py")
+    for node in ast.walk(main_tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                assert not a.name.startswith(("ai_engine", "chromadb", "langchain")), f"Forbidden import {a.name}"
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith(("ai_engine", "chromadb", "langchain")), f"Forbidden import {node.module}"
 
-    def _iter_top_level_imports(stmts: list[ast.stmt]):
-        for stmt in stmts:
-            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
-                yield stmt
-            elif isinstance(stmt, ast.Try):
-                yield from _iter_top_level_imports(stmt.body)
-                for h in stmt.handlers:
-                    yield from _iter_top_level_imports(h.body)
-
-    top_modules: set[str] = set()
-    top_names: set[str] = set()
-    for imp in _iter_top_level_imports(main_tree.body):
-        if isinstance(imp, ast.Import):
-            for a in imp.names:
-                top_modules.add(a.name)
-                top_names.add(a.name)
-        elif isinstance(imp, ast.ImportFrom):
-            if imp.module:
-                top_modules.add(imp.module)
-            for a in imp.names:
-                top_names.add(a.name)
-
-    for mod in top_modules:
-        assert not mod.startswith(("ai_engine", "chromadb", "langchain")), f"Eager top-level legacy import: {mod}"
-    for removed_dead in ("re", "ast", "time", "FileResponse"):
-        assert removed_dead not in top_names, f"Dead legacy import still present: {removed_dead}"
-
-    funcs_by_name = {
-        node.name: node
+    func_names = {
+        node.name
         for node in main_tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-
-    # Lifespan must not touch RAG or ingestion workers
-    lifespan_names = {n.id for n in ast.walk(funcs_by_name["lifespan"]) if isinstance(n, ast.Name)}
-    for forbidden in ("BIMRAGRetriever", "BIMDataIngestor", "ingest_queue", "_run_approved_ingest", "get_rag_retriever"):
-        assert forbidden not in lifespan_names
-
-    # All 4 admin ingest routes retain Depends(verify_admin_token)
-    for admin_fn_name in (
+    for retired_fn in (
+        "get_rag_retriever",
+        "_get_legacy_ingest_queue",
+        "_get_legacy_data_ingestor_cls",
+        "_run_approved_ingest",
+        "submit_ingest_request",
         "list_knowledge_queue",
         "approve_knowledge_request",
         "reject_knowledge_request",
         "clear_queue_history",
+        "get_submission_status",
     ):
-        fn = funcs_by_name[admin_fn_name]
-        default_sources = [ast.unparse(d) for d in fn.args.defaults]
-        assert any("Depends(verify_admin_token)" in s for s in default_sources), (
-            f"Admin dependency missing on {admin_fn_name}: {default_sources}"
-        )
+        assert retired_fn not in func_names, f"Retired function still present: {retired_fn}"
 
-    # 3. backend/sales_ui/router.py and settings.html no longer import chromadb or render legacy ChromaDB badge
+    assert "/api/ingest" not in main_src
+    assert "_rag_retriever_lock" not in main_src
+    assert "chromadb_connected" not in main_src
+    assert "indexed_rules_count" not in main_src
+    assert "login_admin" in func_names
+    assert "health_check" in func_names
+    assert "operator_security_middleware" in func_names
+
+    # 3. backend/auth.py preserves admin authentication & JWT helpers
+    auth_tree = ast.parse((REPO_ROOT / "backend" / "auth.py").read_text(encoding="utf-8"), filename="backend/auth.py")
+    auth_funcs = {n.name for n in auth_tree.body if isinstance(n, ast.FunctionDef)}
+    assert {"authenticate_admin", "create_access_token", "verify_admin_token"}.issubset(auth_funcs)
+
+    # 4. backend/sales_ui/router.py and settings.html remain free of chromadb while keeping active indicators
     router_src = (REPO_ROOT / "backend" / "sales_ui" / "router.py").read_text(encoding="utf-8")
     router_tree = ast.parse(router_src, filename="backend/sales_ui/router.py")
     for node in ast.walk(router_tree):
@@ -311,223 +284,86 @@ def test_static_source_boundaries_settings_and_admin_auth_preserved() -> None:
     assert "research_storage_available" in settings_html
 
 
-def test_rag_retriever_lazy_boundary_concurrency_and_missing_dep_503() -> None:
-    """`get_rag_retriever` lazily initializes once under lock and returns HTTP 503 if ChromaDB is unavailable."""
+def test_decoupled_health_check_without_rag_or_chromadb() -> None:
+    """`health_check` succeeds without ChromaDB/ai_engine, handles Ollama failures, and raises 503 if ollama missing."""
     sync_ok = MagicMock()
     sync_ok.list.return_value = SimpleNamespace(models=[SimpleNamespace(model="qwen2.5:1.5b")])
     llm = SalesLLMClient(default_model="qwen2.5-coder:1.5b", sync_client=sync_ok)
     fake_app = SimpleNamespace(state=SimpleNamespace())
-    ns = _load_backend_legacy_boundary_namespace(fake_app=fake_app, llm_client=llm)
+    ns = _load_backend_functions(
+        {"_ensure_ollama_dependency_available", "get_llm_client", "health_check"},
+        fake_app=fake_app,
+        llm_client=llm,
+    )
 
-    # 1. Missing `ai_engine.rag_retriever` -> HTTP 503 both directly and via health_check
-    with patch.dict(sys.modules, {"ai_engine.rag_retriever": None}):
-        with pytest.raises(_DummyHTTPException) as exc_direct:
-            ns["get_rag_retriever"]()
-        assert exc_direct.value.status_code == 503
-        assert "ChromaDB" in exc_direct.value.detail
+    # 1. Even with chromadb and ai_engine blocked in sys.modules, health_check works cleanly
+    with patch.dict(sys.modules, {"chromadb": None, "ai_engine": None, "ai_engine.rag_retriever": None}):
+        resp = ns["health_check"]()
+        assert isinstance(resp, HealthResponse)
+        assert resp.status == "healthy"
+        assert resp.ollama_connected is True
+        assert resp.available_models == ["qwen2.5:1.5b"]
+        assert resp.version == "0.1.0"
+        dumped = resp.model_dump()
+        assert "chromadb_connected" not in dumped
+        assert "indexed_rules_count" not in dumped
+        assert not hasattr(fake_app.state, "rag_retriever")
 
-        with pytest.raises(_DummyHTTPException) as exc_health:
+        # 2. Ollama unreachable -> status="unhealthy", ollama_connected=False
+        sync_down = MagicMock()
+        sync_down.list.side_effect = ConnectionError("ollama offline")
+        fake_app.state.llm_client = SalesLLMClient(sync_client=sync_down)
+        resp_down = ns["health_check"]()
+        assert resp_down.status == "unhealthy"
+        assert resp_down.ollama_connected is False
+        assert resp_down.available_models == []
+
+    # 3. Missing `ollama` package -> HTTP 503 preserved
+    with patch.dict(sys.modules, {"ollama": None}):
+        with pytest.raises(_DummyHTTPException) as exc_503:
             ns["health_check"]()
-        assert exc_health.value.status_code == 503
-        assert "ChromaDB" in exc_health.value.detail
-
-    # 2. Thread-safe lazy initialization with mocked BIMRAGRetriever (zero real ChromaDB touched)
-    init_calls: list[dict[str, Any]] = []
-
-    class FakeBIMRAGRetriever:
-        def __init__(self, *, persist_dir: str, collection_name: str, embedding_model: str):
-            init_calls.append(
-                {
-                    "persist_dir": persist_dir,
-                    "collection_name": collection_name,
-                    "embedding_model": embedding_model,
-                }
-            )
-
-        def count(self) -> int:
-            return 17
-
-    fake_rag_mod = ModuleType("ai_engine.rag_retriever")
-    fake_rag_mod.BIMRAGRetriever = FakeBIMRAGRetriever  # type: ignore[attr-defined]
-
-    with patch.dict(sys.modules, {"ai_engine.rag_retriever": fake_rag_mod}):
-        barrier = threading.Barrier(4)
-        results: list[Any] = []
-
-        def worker() -> None:
-            barrier.wait(timeout=5.0)
-            results.append(ns["get_rag_retriever"]())
-
-        threads = [threading.Thread(target=worker) for _ in range(4)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=5.0)
-            assert not t.is_alive()
-
-        assert len(init_calls) == 1
-        assert init_calls[0]["collection_name"] == "bim_rules"
-        assert init_calls[0]["embedding_model"] == "nomic-embed-text"
-        assert len(results) == 4 and all(r is results[0] for r in results)
-
-        # 3. health_check preserves HealthResponse fields & semantics
-        health = ns["health_check"]()
-        assert isinstance(health, HealthResponse)
-        assert health.status == "healthy"
-        assert health.ollama_connected is True
-        assert health.chromadb_connected is True
-        assert health.indexed_rules_count == 17
-        assert health.available_models == ["qwen2.5:1.5b"]
+        assert exc_503.value.status_code == 503
+        assert "Ollama" in exc_503.value.detail
 
 
-def test_legacy_ingest_routes_lazy_boundary_503_and_contract_preservation() -> None:
-    """All `/api/ingest*` routes preserve contracts with mocked queue/ingestor and raise 503 when unavailable."""
-    ns = _load_backend_legacy_boundary_namespace()
+def test_operator_middleware_removes_retired_ingest_exemption_and_preserves_auth() -> None:
+    """`operator_security_middleware` no longer exempts `/api/ingest*` while preserving public & protected routes."""
+    ns = _load_backend_functions({"operator_security_middleware"})
+    middleware = ns["operator_security_middleware"]
 
-    # 1. Missing legacy modules -> HTTP 503 instead of AttributeError
-    with patch.dict(sys.modules, {"ai_engine.ingest_queue": None, "ai_engine.data_ingestor": None}):
-        with pytest.raises(_DummyHTTPException) as exc_q:
-            asyncio.run(ns["list_knowledge_queue"](status_filter=None, admin_user={"sub": "admin"}))
-        assert exc_q.value.status_code == 503
+    fake_auth_mod = ModuleType("backend.operator_auth")
+    fake_auth_svc = SimpleNamespace(get_user_count=lambda: 1)
 
-        with pytest.raises(_DummyHTTPException) as exc_sub:
-            asyncio.run(ns["submit_ingest_request"](IngestRequest(url="https://docs.example.com/revit")))
-        assert exc_sub.value.status_code == 503
+    async def _no_user(_request: Any) -> None:
+        return None
 
-    # 2. Mocked legacy queue & ingestor preserve full route contracts without touching disk or ChromaDB
-    queue_store: dict[str, dict[str, Any]] = {}
+    fake_auth_mod.get_auth_service = lambda: fake_auth_svc  # type: ignore[attr-defined]
+    fake_auth_mod.SESSION_COOKIE_NAME = "sales_session"  # type: ignore[attr-defined]
+    fake_auth_mod.get_current_user_optional = _no_user  # type: ignore[attr-defined]
 
-    class FakeQueue:
-        def enqueue(self, *, url: str, slug: Optional[str], submitter: str) -> dict[str, Any]:
-            item = {
-                "request_id": "req_mock0001",
-                "url": url,
-                "slug": slug,
-                "status": "pending",
-                "submitter": submitter,
-                "submitted_at": "2026-11-25T12:00:00Z",
-                "processed_at": None,
-                "message": "Awaiting administrator approval before indexing into ChromaDB.",
-            }
-            queue_store[item["request_id"]] = item
-            return item
+    called_paths: list[str] = []
 
-        def list_items(self, status_filter: Optional[str] = None) -> list[dict[str, Any]]:
-            items = list(queue_store.values())
-            return [i for i in items if status_filter is None or i["status"] == status_filter]
+    async def _call_next(req: Any) -> _DummyResponse:
+        called_paths.append(req.url.path)
+        return _DummyResponse(status_code=200)
 
-        def get(self, request_id: str) -> Optional[dict[str, Any]]:
-            return queue_store.get(request_id)
-
-        def update_status(
-            self,
-            request_id: str,
-            status: str,
-            message: Optional[str] = None,
-            slug: Optional[str] = None,
-        ) -> Optional[dict[str, Any]]:
-            item = queue_store.get(request_id)
-            if not item:
-                return None
-            item["status"] = status
-            if message is not None:
-                item["message"] = message
-            if slug is not None:
-                item["slug"] = slug
-            return item
-
-        def clear_processed(self) -> int:
-            before = len(queue_store)
-            for rid in [k for k, v in queue_store.items() if v["status"] in ("approved", "rejected")]:
-                del queue_store[rid]
-            return before - len(queue_store)
-
-    class FakeIngestor:
-        @classmethod
-        def generate_smart_slug(cls, url: str, user_slug: Optional[str] = None):
-            return ("revit_api_sample", "Normalized slug.") if user_slug else ("revit_api_sample", None)
-
-        def ingest_url(self, url: str, slug: Optional[str] = None) -> dict[str, Any]:
-            return {
-                "indexed_chunks": 3,
-                "file_path": "data/rules/revit_api_sample.md",
-                "effective_slug": slug or "revit_api_sample",
-                "slug_feedback": None,
-            }
-
-    fake_queue_mod = ModuleType("ai_engine.ingest_queue")
-    fake_queue_mod.ingest_queue = FakeQueue()  # type: ignore[attr-defined]
-    fake_ingestor_mod = ModuleType("ai_engine.data_ingestor")
-    fake_ingestor_mod.BIMDataIngestor = FakeIngestor  # type: ignore[attr-defined]
-
-    with patch.dict(
-        sys.modules,
-        {"ai_engine.ingest_queue": fake_queue_mod, "ai_engine.data_ingestor": fake_ingestor_mod},
-    ):
-        # Invalid URL scheme -> HTTP 400
-        with pytest.raises(_DummyHTTPException) as exc_bad_url:
-            asyncio.run(ns["submit_ingest_request"](IngestRequest(url="ftp://invalid.example.com/doc")))
-        assert exc_bad_url.value.status_code == 400
-
-        # Submit -> IngestResponse(status="pending")
-        sub = asyncio.run(
-            ns["submit_ingest_request"](
-                IngestRequest(url="https://docs.example.com/revit", slug="Sample", submitter="QA")
-            )
+    def _make_req(path: str, method: str = "GET") -> Any:
+        return SimpleNamespace(
+            url=SimpleNamespace(path=path, query=""),
+            method=method,
+            headers={"accept": "application/json"},
+            state=SimpleNamespace(),
         )
-        assert isinstance(sub, IngestResponse)
-        assert sub.status == "pending"
-        assert sub.current_state == "pending"
-        assert sub.request_id == "req_mock0001"
-        assert "Normalized slug." in sub.message
 
-        # List queue & public status
-        listed = asyncio.run(ns["list_knowledge_queue"](status_filter="pending", admin_user={"sub": "admin"}))
-        assert len(listed) == 1 and isinstance(listed[0], QueueItemResponse)
-        tracked = asyncio.run(ns["get_submission_status"]("req_mock0001"))
-        assert isinstance(tracked, QueueItemResponse) and tracked.slug == "revit_api_sample"
+    with patch.dict(sys.modules, {"backend.operator_auth": fake_auth_mod}):
+        # Surviving public endpoints pass through
+        for pub_path in ("/health", "/api/auth/login", "/sales/login", "/static/app.css"):
+            res = asyncio.run(middleware(_make_req(pub_path), _call_next))
+            assert res.status_code == 200
+        assert called_paths == ["/health", "/api/auth/login", "/sales/login", "/static/app.css"]
 
-        # Unknown tracking ID -> HTTP 404
-        with pytest.raises(_DummyHTTPException) as exc_404:
-            asyncio.run(ns["get_submission_status"]("req_missing"))
-        assert exc_404.value.status_code == 404
-
-        # Approve -> schedules background task without starting worker automatically on import
-        scheduled: list[tuple[Any, tuple[Any, ...]]] = []
-        bg = SimpleNamespace(add_task=lambda fn, *args: scheduled.append((fn, args)))
-        approved = asyncio.run(
-            ns["approve_knowledge_request"](
-                ApprovalRequest(request_id="req_mock0001"),
-                bg,
-                admin_user={"sub": "admin"},
-            )
-        )
-        assert approved["status"] == "processing"
-        assert len(scheduled) == 1
-        assert scheduled[0][0] is ns["_run_approved_ingest"]
-        assert scheduled[0][1] == ("req_mock0001", "https://docs.example.com/revit", "revit_api_sample")
-
-        # Execute scheduled worker with mocked ingestor -> transitions to approved
-        ns["_run_approved_ingest"](*scheduled[0][1])
-        assert queue_store["req_mock0001"]["status"] == "approved"
-
-        # Already-approved idempotency
-        approved_again = asyncio.run(
-            ns["approve_knowledge_request"](
-                ApprovalRequest(request_id="req_mock0001"),
-                bg,
-                admin_user={"sub": "admin"},
-            )
-        )
-        assert approved_again["status"] == "approved"
-
-        # Reject and clear-history contracts
-        rejected = asyncio.run(
-            ns["reject_knowledge_request"](
-                RejectionRequest(request_id="req_mock0001", reason="Not compliant"),
-                admin_user={"sub": "admin"},
-            )
-        )
-        assert rejected["status"] == "rejected"
-        cleared = asyncio.run(ns["clear_queue_history"](admin_user={"sub": "admin"}))
-        assert cleared["status"] == "success" and cleared["removed_count"] == 1
+        # Retired `/api/ingest*` paths are NO LONGER exempted (blocked with 401 when operator accounts exist)
+        for retired_path in ("/api/ingest", "/api/ingest/queue", "/api/ingest/status/req_1"):
+            res = asyncio.run(middleware(_make_req(retired_path, method="POST"), _call_next))
+            assert res.status_code == 401
+        assert "/api/ingest" not in called_paths

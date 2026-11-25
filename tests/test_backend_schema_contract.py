@@ -37,11 +37,20 @@ REMOVED_S1_SYMBOLS = (
     "ACCConfigStatusResponse",
 )
 
+RETIRED_INGEST_SCHEMAS = (
+    "IngestRequest",
+    "IngestResponse",
+    "QueueItemResponse",
+    "ApprovalRequest",
+    "RejectionRequest",
+)
+
 
 def test_removed_s1_acc_and_alias_symbols_absent_everywhere() -> None:
-    """Confirm removed S1 schemas do not exist on `backend.schemas` and have no tracked Python refs."""
-    for name in REMOVED_S1_SYMBOLS:
-        assert not hasattr(schemas, name), f"Obsolete S1 symbol {name} still exists on backend.schemas"
+    """Confirm removed S1 & retired ingestion schemas do not exist on `backend.schemas` or tracked Python code."""
+    all_removed = REMOVED_S1_SYMBOLS + RETIRED_INGEST_SCHEMAS
+    for name in all_removed:
+        assert not hasattr(schemas, name), f"Obsolete schema symbol {name} still exists on backend.schemas"
 
     scan_roots = ("backend", "sales_engine", "scripts", "tests")
     for root in scan_roots:
@@ -49,7 +58,7 @@ def test_removed_s1_acc_and_alias_symbols_absent_everywhere() -> None:
             if path.resolve() == Path(__file__).resolve():
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
-            for name in REMOVED_S1_SYMBOLS:
+            for name in all_removed:
                 if name in text:
                     tree = ast.parse(text, filename=str(path))
                     for node in ast.walk(tree):
@@ -88,33 +97,38 @@ def test_public_exports_and_s2_revit_schemas_preserved() -> None:
     assert "properties" in backend.ScriptGenerationRequest.model_json_schema()
 
 
-def test_health_auth_and_ingestion_schemas_contract() -> None:
-    """Verify HealthResponse, Auth, and active Ingestion schemas preserve defaults, Literals, and JSON schemas."""
+def test_health_and_auth_schemas_contract() -> None:
+    """Verify decoupled HealthResponse, Auth schemas, and active sending DraftApprovalRequest contract."""
+    from sales_engine.sending.schemas import DraftApprovalRequest
+
     health = schemas.HealthResponse(
         status="healthy",
         ollama_connected=True,
-        chromadb_connected=False,
     )
     assert health.available_models == []
-    assert health.indexed_rules_count == 0
     assert health.version == "0.1.0"
     assert json.loads(health.model_dump_json())["status"] == "healthy"
-    assert "ollama_connected" in schemas.HealthResponse.model_json_schema()["properties"]
+    health_props = schemas.HealthResponse.model_json_schema()["properties"]
+    assert "ollama_connected" in health_props
+    assert "chromadb_connected" not in health_props
+    assert "indexed_rules_count" not in health_props
+    assert "chromadb_connected" not in schemas.HealthResponse.model_fields
+    assert "indexed_rules_count" not in schemas.HealthResponse.model_fields
 
     with pytest.raises(ValidationError):
-        schemas.HealthResponse(status="invalid_status", ollama_connected=True, chromadb_connected=True)
+        schemas.HealthResponse(status="invalid_status", ollama_connected=True)
 
-    ingest_req = schemas.IngestRequest(url="https://docs.example.com/bim")
-    assert ingest_req.slug is None
-    assert ingest_req.submitter == "Revit Client / Web User"
+    login_req = schemas.LoginRequest(username="admin", password="secret")
+    assert login_req.username == "admin"
 
     token_resp = schemas.TokenResponse(access_token="tok", username="admin")
     assert token_resp.token_type == "bearer"
     assert token_resp.role == "admin"
     assert token_resp.expires_in_minutes == 1440
 
-    rej = schemas.RejectionRequest(request_id="req_1")
-    assert rej.reason is not None and "compliance" in rej.reason
+    # Active Sales-AI sending approval schema remains untouched
+    draft_approval = DraftApprovalRequest(revision=1, reviewer="operator")
+    assert draft_approval.revision == 1
 
 
 def test_sales_discovery_analysis_enrichment_and_lead_schemas_contract() -> None:

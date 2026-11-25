@@ -122,11 +122,20 @@ def test_backend_main_removed_dead_legacy_schema_imports_and_parses_cleanly() ->
         if isinstance(node, ast.ImportFrom) and node.module == "backend.schemas":
             imported_names.update(alias.name for alias in node.names)
 
-    for removed in ("ScriptGenerationRequest", "ScriptGenerationResponse", "SalesLLMTestResponse"):
+    for removed in (
+        "ScriptGenerationRequest",
+        "ScriptGenerationResponse",
+        "SalesLLMTestResponse",
+        "IngestRequest",
+        "IngestResponse",
+        "QueueItemResponse",
+        "ApprovalRequest",
+        "RejectionRequest",
+    ):
         assert removed not in imported_names
 
     # Active endpoints/schemas remain imported
-    assert {"HealthResponse", "IngestRequest", "WebsiteAnalyzeRequest"}.issubset(imported_names)
+    assert {"HealthResponse", "LoginRequest", "TokenResponse", "WebsiteAnalyzeRequest"}.issubset(imported_names)
 
 
 def test_deterministic_inbox_callers_operate_without_chromadb_or_llm_calls() -> None:

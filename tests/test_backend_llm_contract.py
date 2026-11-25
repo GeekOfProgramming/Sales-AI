@@ -50,7 +50,6 @@ def _load_backend_llm_namespace(
     fake_app: Any | None = None,
     sales_llm_cls: Any = SalesLLMClient,
     sales_llm_req_cls: Any = SalesLLMRequest,
-    rag_retriever_getter: Any = None,
 ) -> dict[str, Any]:
     """Compile real Backend LLM lifecycle and route handlers from `backend/main.py` AST."""
     main_path = REPO_ROOT / "backend" / "main.py"
@@ -107,11 +106,9 @@ def _load_backend_llm_namespace(
         "HTTPException": _DummyHTTPException,
         "SalesLLMClient": sales_llm_cls,
         "SalesLLMRequest": sales_llm_req_cls,
-        "BIMRAGRetriever": object,
         "HealthResponse": HealthResponse,
         "SalesLLMTestRequest": SalesLLMTestRequest,
         "GenerateDraftsRequest": object,
-        "get_rag_retriever": rag_retriever_getter or MagicMock(),
     }
     mod = ast.Module(body=selected, type_ignores=[])
     ast.fix_missing_locations(mod)
@@ -220,51 +217,43 @@ def test_backend_llm_lifecycle_profiles_concurrency_and_shutdown_refresh(
     assert second_cfg == ("http://127.0.0.1:22222", "model-v2")
 
 
-def test_backend_health_endpoint_preserves_schema_models_and_rag_checks() -> None:
-    """Verify /health healthy, degraded, unhealthy, list-exception, and untouched RAG count semantics."""
-    # 1. Both healthy
+def test_backend_health_endpoint_preserves_ollama_schema_and_decoupled_status() -> None:
+    """Verify /health healthy, unhealthy, list-exception, and zero-ChromaDB decoupled semantics."""
+    # 1. Ollama healthy -> status="healthy"
     sync_ok = MagicMock()
     sync_ok.list.return_value = SimpleNamespace(
         models=[SimpleNamespace(model="qwen2.5:1.5b"), SimpleNamespace(model="llama3")]
     )
-    rag_ok = MagicMock()
-    rag_ok.count.return_value = 42
     fake_app = SimpleNamespace(
         state=SimpleNamespace(llm_client=SalesLLMClient(default_model="qwen2.5-coder:1.5b", sync_client=sync_ok))
     )
-    ns = _load_backend_llm_namespace(fake_app=fake_app, rag_retriever_getter=lambda: rag_ok)
+    ns = _load_backend_llm_namespace(fake_app=fake_app)
     resp = ns["health_check"]()
     assert isinstance(resp, HealthResponse)
     assert resp.status == "healthy"
     assert resp.ollama_connected is True
-    assert resp.chromadb_connected is True
     assert resp.available_models == ["qwen2.5:1.5b", "llama3"]
-    assert resp.indexed_rules_count == 42
     assert resp.version == "0.1.0"
+    assert "chromadb_connected" not in resp.model_dump()
+    assert "indexed_rules_count" not in resp.model_dump()
 
-    # 2. Ollama unavailable, RAG healthy -> degraded
+    # 2. Ollama unavailable -> status="unhealthy"
     sync_down = MagicMock()
     sync_down.list.side_effect = ConnectionError("ollama down")
     fake_app.state.llm_client = SalesLLMClient(sync_client=sync_down)
-    resp_deg = ns["health_check"]()
-    assert resp_deg.status == "degraded"
-    assert resp_deg.ollama_connected is False
-    assert resp_deg.chromadb_connected is True
-    assert resp_deg.available_models == []
-    assert resp_deg.indexed_rules_count == 42
+    resp_down = ns["health_check"]()
+    assert resp_down.status == "unhealthy"
+    assert resp_down.ollama_connected is False
+    assert resp_down.available_models == []
 
-    # 3. is_healthy() succeeds then list_available_models() raises -> ollama_connected False
+    # 3. is_healthy() succeeds then list_available_models() raises -> ollama_connected False, status="unhealthy"
     sync_flaky = MagicMock()
     sync_flaky.list.side_effect = [SimpleNamespace(models=[]), RuntimeError("list error")]
     fake_app.state.llm_client = SalesLLMClient(sync_client=sync_flaky)
-    rag_fail = MagicMock()
-    rag_fail.count.side_effect = RuntimeError("chroma offline")
-    ns_unhealthy = _load_backend_llm_namespace(fake_app=fake_app, rag_retriever_getter=lambda: rag_fail)
-    resp_bad = ns_unhealthy["health_check"]()
+    resp_bad = ns["health_check"]()
     assert resp_bad.status == "unhealthy"
     assert resp_bad.ollama_connected is False
-    assert resp_bad.chromadb_connected is False
-    assert resp_bad.indexed_rules_count == 0
+    assert resp_bad.available_models == []
 
 
 def test_backend_test_llm_endpoint_payload_parity_and_error_handling() -> None:
