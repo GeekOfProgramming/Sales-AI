@@ -9494,13 +9494,6 @@ async def settings_view(request: Request):
     except Exception:
         ollama_reachable = False
 
-    chroma_operational = False
-    try:
-        import chromadb
-        chroma_operational = True
-    except ImportError:
-        chroma_operational = False
-
     # Safe credential configuration indicators (NO secret values exposed)
     brave_configured = bool(os.getenv("BRAVE_SEARCH_API_KEY"))
     resend_configured = bool(os.getenv("RESEND_API_KEY"))
@@ -9536,7 +9529,6 @@ async def settings_view(request: Request):
             "sheets_configured": sheets_configured,
             "llm_model": os.getenv("SALES_LLM_MODEL", "qwen2.5:1.5b"),
             "ollama_reachable": ollama_reachable,
-            "chroma_operational": chroma_operational,
         },
     )
 

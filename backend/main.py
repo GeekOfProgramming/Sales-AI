@@ -6,9 +6,6 @@ import os
 import sys
 import io
 import json
-import re
-import ast
-import time
 import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -23,9 +20,9 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
 from fastapi import FastAPI, HTTPException, Request, status, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
-# Safe lazy import guards for optional AI/scraping dependencies (ChromaDB, Scrapling, Ollama)
+# Safe optional import guards for Sales-AI LLM and website analysis modules
 try:
     from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 except ImportError:
@@ -41,21 +38,6 @@ try:
     from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
 except ImportError:
     WebsiteAnalyzer = None  # type: ignore
-
-try:
-    from ai_engine.rag_retriever import BIMRAGRetriever
-except ImportError:
-    BIMRAGRetriever = None  # type: ignore
-
-try:
-    from ai_engine.data_ingestor import BIMDataIngestor
-except ImportError:
-    BIMDataIngestor = None  # type: ignore
-
-try:
-    from ai_engine.ingest_queue import ingest_queue
-except ImportError:
-    ingest_queue = None  # type: ignore
 
 from backend.auth import authenticate_admin, create_access_token, verify_admin_token
 from backend.schemas import (
@@ -217,6 +199,7 @@ def ui_endpoint():
 
 _llm_client_lock = threading.Lock()
 _sales_llm_client_lock = threading.Lock()
+_rag_retriever_lock = threading.Lock()
 
 
 def _ensure_ollama_dependency_available() -> None:
@@ -258,25 +241,55 @@ def get_sales_llm_client():
 
 
 def get_rag_retriever():
-    """Safely get or lazy-initialize the ChromaDB RAG retriever."""
-    if BIMRAGRetriever is None:
-        raise HTTPException(status_code=503, detail="RAG retriever dependencies (ChromaDB) not installed or available.")
-    if not hasattr(app.state, "rag_retriever") or app.state.rag_retriever is None:
-        project_root = Path(__file__).parent.parent
-        persist_dir = str(project_root / "chroma_db")
-        app.state.rag_retriever = BIMRAGRetriever(
-            persist_dir=persist_dir,
-            collection_name="bim_rules",
-            embedding_model="nomic-embed-text",
-        )
-    return app.state.rag_retriever
+    """Safely get or lazy-initialize the legacy ChromaDB RAG retriever."""
+    try:
+        from ai_engine.rag_retriever import BIMRAGRetriever
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG retriever dependencies (ChromaDB) not installed or available.",
+        ) from exc
+    with _rag_retriever_lock:
+        if not hasattr(app.state, "rag_retriever") or app.state.rag_retriever is None:
+            project_root = Path(__file__).parent.parent
+            persist_dir = str(project_root / "chroma_db")
+            app.state.rag_retriever = BIMRAGRetriever(
+                persist_dir=persist_dir,
+                collection_name="bim_rules",
+                embedding_model="nomic-embed-text",
+            )
+        return app.state.rag_retriever
+
+
+def _get_legacy_ingest_queue():
+    """Lazily load the legacy knowledge ingestion queue only when an ingest route executes."""
+    try:
+        from ai_engine.ingest_queue import ingest_queue as legacy_ingest_queue
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Legacy knowledge ingestion queue is not available.",
+        ) from exc
+    return legacy_ingest_queue
+
+
+def _get_legacy_data_ingestor_cls():
+    """Lazily load legacy BIMDataIngestor only when an ingest route or worker executes."""
+    try:
+        from ai_engine.data_ingestor import BIMDataIngestor as legacy_ingestor_cls
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Legacy data ingestion dependencies (ChromaDB/Scrapling) are not installed or available.",
+        ) from exc
+    return legacy_ingestor_cls
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check():
     """Verify connectivity to local Ollama LLM and ChromaDB vector store."""
     llm_client: SalesLLMClient = get_llm_client()
-    rag_retriever: BIMRAGRetriever = get_rag_retriever()
+    rag_retriever = get_rag_retriever()
 
     ollama_ok = llm_client.is_healthy()
     models = []
@@ -312,10 +325,12 @@ def health_check():
 
 def _run_approved_ingest(request_id: str, url: str, slug: Optional[str] = None):
     """Worker executed when administrator approves an item from the knowledge queue."""
+    queue = None
     try:
         print(f"🕸️ [Admin-Gate Ingest] Processing approved URL: {url} (ID: {request_id})")
-        ingest_queue.update_status(request_id, "processing", message="Scraping and vectorizing documentation...")
-        ingestor = BIMDataIngestor()
+        queue = _get_legacy_ingest_queue()
+        queue.update_status(request_id, "processing", message="Scraping and vectorizing documentation...")
+        ingestor = _get_legacy_data_ingestor_cls()()
         result = ingestor.ingest_url(url, slug=slug)
         chunk_count = result.get("indexed_chunks", 0)
         file_path = result.get("file_path", "")
@@ -327,13 +342,14 @@ def _run_approved_ingest(request_id: str, url: str, slug: Optional[str] = None):
         else:
             success_msg = f"Successfully indexed as '{effective_slug}' ({chunk_count} chunks)."
 
-        ingest_queue.update_status(request_id, "approved", message=success_msg, slug=effective_slug)
+        queue.update_status(request_id, "approved", message=success_msg, slug=effective_slug)
         print(f"✅ [Admin-Gate Ingest] Approved & Indexed {url} -> {file_path} ({chunk_count} chunks)")
         if slug_feedback:
             print(f"💡 [Admin-Gate Ingest] Naming note: {slug_feedback}")
     except Exception as e:
         err_msg = f"Ingestion error: {str(e)}"
-        ingest_queue.update_status(request_id, "rejected", message=err_msg)
+        if queue is not None:
+            queue.update_status(request_id, "rejected", message=err_msg)
         print(f"❌ [Admin-Gate Ingest] Error ingesting {url}: {e}")
 
 
@@ -379,8 +395,10 @@ async def submit_ingest_request(request: IngestRequest):
             detail="Invalid URL scheme. Only http:// and https:// URLs are supported.",
         )
 
-    initial_slug, slug_note = BIMDataIngestor.generate_smart_slug(target_url, user_slug=request.slug)
-    item = ingest_queue.enqueue(
+    ingestor_cls = _get_legacy_data_ingestor_cls()
+    queue = _get_legacy_ingest_queue()
+    initial_slug, slug_note = ingestor_cls.generate_smart_slug(target_url, user_slug=request.slug)
+    item = queue.enqueue(
         url=target_url,
         slug=initial_slug,
         submitter=request.submitter or "Revit Client / Web User",
@@ -410,7 +428,7 @@ async def list_knowledge_queue(
     admin_user: dict = Depends(verify_admin_token),
 ):
     """Admin endpoint: Fetch pending or history queue items."""
-    items = ingest_queue.list_items(status_filter=status_filter)
+    items = _get_legacy_ingest_queue().list_items(status_filter=status_filter)
     return [QueueItemResponse(**item) for item in items]
 
 
@@ -426,7 +444,8 @@ async def approve_knowledge_request(
     admin_user: dict = Depends(verify_admin_token),
 ):
     """Admin endpoint: Approve queue item and launch scraper/vectorizer in background."""
-    item = ingest_queue.get(request.request_id)
+    queue = _get_legacy_ingest_queue()
+    item = queue.get(request.request_id)
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -435,7 +454,7 @@ async def approve_knowledge_request(
     if item.get("status") == "approved":
         return {"status": "approved", "message": "Item is already approved and indexed.", "item": item}
 
-    ingest_queue.update_status(request.request_id, "processing", message="Approved by admin. Processing...")
+    queue.update_status(request.request_id, "processing", message="Approved by admin. Processing...")
     background_tasks.add_task(_run_approved_ingest, request.request_id, item["url"], item.get("slug"))
     return {
         "status": "processing",
@@ -455,13 +474,14 @@ async def reject_knowledge_request(
     admin_user: dict = Depends(verify_admin_token),
 ):
     """Admin endpoint: Reject and archive unverified link."""
-    item = ingest_queue.get(request.request_id)
+    queue = _get_legacy_ingest_queue()
+    item = queue.get(request.request_id)
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Queue item '{request.request_id}' not found.",
         )
-    updated = ingest_queue.update_status(
+    updated = queue.update_status(
         request.request_id,
         "rejected",
         message=request.reason or "Rejected by administrator due to compliance standards.",
@@ -481,7 +501,7 @@ async def reject_knowledge_request(
 )
 async def clear_queue_history(admin_user: dict = Depends(verify_admin_token)):
     """Admin endpoint: Clear approved/rejected historical logs."""
-    removed_count = ingest_queue.clear_processed()
+    removed_count = _get_legacy_ingest_queue().clear_processed()
     return {
         "status": "success",
         "message": f"Purged {removed_count} historical records from queue.",
@@ -498,7 +518,7 @@ async def clear_queue_history(admin_user: dict = Depends(verify_admin_token)):
 )
 async def get_submission_status(request_id: str):
     """Public endpoint: Query real-time workflow status by tracking ID."""
-    item = ingest_queue.get(request_id)
+    item = _get_legacy_ingest_queue().get(request_id)
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
