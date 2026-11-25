@@ -545,7 +545,7 @@ def test_batch_send_partial_failure_isolation(review_store, suppression_store, s
 # =========================================================================
 
 def test_no_llm_calls_in_sending_module():
-    """Verify Phase 9 modules do not import or call BIMLLMClient or invoke any LLM."""
+    """Verify Phase 9 modules do not import or call SalesLLMClient or invoke any LLM."""
     import sales_engine.sending.review_store as rs
     import sales_engine.sending.approval_service as app_svc
     import sales_engine.sending.send_orchestrator as orch
@@ -555,8 +555,9 @@ def test_no_llm_calls_in_sending_module():
     modules = [rs, app_svc, orch, smtp, val]
     for mod in modules:
         src = inspect.getsource(mod)
-        assert "BIMLLMClient" not in src
-        assert "generate_code" not in src
+        assert "SalesLLMClient" not in src
+        assert "sales_engine.llm_client" not in src
+        assert "ai_engine" not in src
         assert "ollama" not in src.lower()
 
 

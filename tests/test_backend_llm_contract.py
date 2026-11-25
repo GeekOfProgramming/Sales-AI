@@ -28,6 +28,10 @@ from sales_engine.llm_client import (
     SalesLLMClient,
     SalesLLMRequest,
 )
+from tests.fixtures.historical_llm_contracts import (
+    HISTORICAL_SALES_SYSTEM_PROMPT,
+    expected_ollama_chat_payload,
+)
 from tests.support.isolated_subprocess import run_isolated_subprocess
 
 
@@ -264,9 +268,7 @@ def test_backend_health_endpoint_preserves_schema_models_and_rag_checks() -> Non
 
 
 def test_backend_test_llm_endpoint_payload_parity_and_error_handling() -> None:
-    """Verify /api/sales/test-llm exact legacy payload parity, llama3 override, errors, and empty/None handling."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-
+    """Verify /api/sales/test-llm matches frozen historical payload, llama3 override, errors, and empty/None handling."""
     async_mock = MagicMock()
     async_mock.chat = AsyncMock(
         return_value=SimpleNamespace(message=SimpleNamespace(content="  Sells BIM automation to AEC firms.  "))
@@ -288,24 +290,14 @@ def test_backend_test_llm_endpoint_payload_parity_and_error_handling() -> None:
     assert native_kwargs["model"] == "llama3"
     assert native_kwargs["options"] == {"temperature": 0.1, "num_ctx": 4096}
     assert [m["role"] for m in native_kwargs["messages"]] == ["system", "user"]
-    assert native_kwargs["messages"][0]["content"] == SALES_ANALYSIS_SYSTEM_PROMPT
-
-    # Exact payload parity with legacy BIMLLMClient + CodeGenerationRequest(environment="sales", language="text")
-    legacy_async = MagicMock()
-    legacy_async.chat = AsyncMock(
-        return_value=SimpleNamespace(message=SimpleNamespace(content="  Sells BIM automation to AEC firms.  "))
-    )
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5-coder:1.5b"
-    legacy_client._async_client = legacy_async
-    legacy_req = CodeGenerationRequest(
+    assert native_kwargs["messages"][0]["content"] == HISTORICAL_SALES_SYSTEM_PROMPT
+    assert native_kwargs == expected_ollama_chat_payload(
         user_prompt=native_kwargs["messages"][1]["content"],
-        environment="sales",
-        language="text",
+        task="sales_analysis",
+        model="llama3",
+        temperature=0.1,
+        num_ctx=4096,
     )
-    legacy_resp = asyncio.run(legacy_client.generate_code_async(legacy_req, model_name="llama3"))
-    assert native_kwargs == legacy_async.chat.call_args.kwargs
-    assert result["response"] == legacy_resp.extracted_code
 
     # Provider exception -> status="error"
     err_async = MagicMock()

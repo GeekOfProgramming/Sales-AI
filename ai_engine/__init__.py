@@ -1,14 +1,11 @@
-"""AI Engine package for pyBIM-LLM.
-Provides local LLM inference and RAG integration for Revit and BIM workflows.
+"""AI Engine package for legacy pyBIM-LLM RAG and ingestion compatibility.
+Provides lazy exports for BIMRAGRetriever and BIMDataIngestor.
 """
 
 from importlib import import_module
 from typing import Any
 
 _LAZY_EXPORTS: dict[str, tuple[str, str]] = {
-    "BIMLLMClient": (".llm_client", "BIMLLMClient"),
-    "CodeGenerationRequest": (".llm_client", "CodeGenerationRequest"),
-    "CodeGenerationResponse": (".llm_client", "CodeGenerationResponse"),
     "BIMRAGRetriever": (".rag_retriever", "BIMRAGRetriever"),
     "BIMDataIngestor": (".data_ingestor", "BIMDataIngestor"),
 }

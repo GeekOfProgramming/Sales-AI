@@ -28,6 +28,10 @@ from sales_engine.llm_client import (
     SalesLLMRequest,
     SalesLLMResponse,
 )
+from tests.fixtures.historical_llm_contracts import (
+    HISTORICAL_SALES_SYSTEM_PROMPT,
+    expected_ollama_chat_payload,
+)
 from tests.support.isolated_subprocess import run_isolated_subprocess
 
 
@@ -158,29 +162,16 @@ def test_async_generate_timeout_exception_and_empty_response_handling() -> None:
         unhealthy_client.list_available_models()
 
 
-def test_payload_parity_with_legacy_bim_client_for_sales_analysis() -> None:
-    """Verify identical Ollama chat payload between legacy BIMLLMClient and native SalesLLMClient."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-
+def test_payload_parity_with_historical_sales_analysis_contract() -> None:
+    """Verify native SalesLLMClient matches frozen historical Ollama chat payload for sales analysis."""
     prompt = "JOB POSTING TITLE: BIM Manager\nCOMPANY: Acme\n\nDESCRIPTION:\nRevit API automation"
     context = "Analyze this job posting and return JSON."
-
-    legacy_async = MagicMock()
-    legacy_async.chat = AsyncMock(return_value=_make_provider_response('{"technologies": ["Revit"]}'))
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5:1.5b"
-    legacy_client._async_client = legacy_async
+    raw_reply = '{"technologies": ["Revit"]}'
 
     native_async = MagicMock()
-    native_async.chat = AsyncMock(return_value=_make_provider_response('{"technologies": ["Revit"]}'))
+    native_async.chat = AsyncMock(return_value=_make_provider_response(raw_reply))
     native_client = SalesLLMClient(default_model="qwen2.5:1.5b", async_client=native_async)
 
-    legacy_req = CodeGenerationRequest(
-        user_prompt=prompt,
-        context_rules=context,
-        environment="sales",
-        language="json",
-    )
     native_req = SalesLLMRequest(
         user_prompt=prompt,
         context=context,
@@ -188,13 +179,19 @@ def test_payload_parity_with_legacy_bim_client_for_sales_analysis() -> None:
         output_format="json",
     )
 
-    legacy_resp = asyncio.run(legacy_client.generate_code_async(legacy_req, model_name="qwen2.5:1.5b"))
     native_resp = asyncio.run(native_client.generate_async(native_req, model_name="qwen2.5:1.5b"))
 
-    assert native_async.chat.call_args.kwargs == legacy_async.chat.call_args.kwargs
-    assert native_resp.content == legacy_resp.extracted_code
-    assert native_resp.raw_text == legacy_resp.raw_response
-    assert native_resp.model == legacy_resp.model
+    assert native_async.chat.call_args.kwargs == expected_ollama_chat_payload(
+        user_prompt=prompt,
+        task="sales_analysis",
+        model="qwen2.5:1.5b",
+        context=context,
+        temperature=0.1,
+        num_ctx=4096,
+    )
+    assert native_resp.content == '{"technologies": ["Revit"]}'
+    assert native_resp.raw_text == raw_reply
+    assert native_resp.model == "qwen2.5:1.5b"
 
 
 def test_job_analyzer_migration_di_retry_and_error_compatibility(
@@ -288,8 +285,7 @@ def test_native_client_and_job_analyzer_import_isolation(tmp_path: Path) -> None
 def test_website_analyzer_two_pass_timeout_ctx_repair_and_parity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify WebsiteAnalyzer Pass A/B, 300s timeout, num_ctx 4096/2048, fence repair, DI, and parity."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+    """Verify WebsiteAnalyzer Pass A/B, 300s timeout, num_ctx 4096/2048, fence repair, DI, and frozen payload."""
     from sales_engine.analysis.website_analyzer import WebsiteAnalyzer
 
     monkeypatch.setenv("SALES_LLM_MODEL", "website-test-model")
@@ -351,23 +347,24 @@ def test_website_analyzer_two_pass_timeout_ctx_repair_and_parity(
 
     assert call_pass_a_1["model"] == "override-model"
     assert call_pass_a_1["options"] == {"temperature": 0.1, "num_ctx": 4096}
+    assert call_pass_a_1["messages"][0]["content"] == HISTORICAL_SALES_SYSTEM_PROMPT
     assert "IMPORTANT JSON REPAIR:" in call_pass_a_2["messages"][1]["content"]
     assert call_pass_b["options"] == {"temperature": 0.1, "num_ctx": 2048}
 
-    # Payload parity against legacy BIMLLMClient for Pass A
-    legacy_async = MagicMock()
-    legacy_async.chat = AsyncMock(return_value=_make_provider_response(json.dumps(pass_a_facts)))
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5-coder:1.5b"
-    legacy_client._async_client = legacy_async
-    legacy_req = CodeGenerationRequest(
+    assert call_pass_a_1 == expected_ollama_chat_payload(
         user_prompt=call_pass_a_1["messages"][1]["content"],
-        environment="sales",
-        language="json",
+        task="sales_analysis",
+        model="override-model",
+        temperature=0.1,
         num_ctx=4096,
     )
-    asyncio.run(legacy_client.generate_code_async(legacy_req, model_name="override-model"))
-    assert call_pass_a_1 == legacy_async.chat.call_args.kwargs
+    assert call_pass_b == expected_ollama_chat_payload(
+        user_prompt=call_pass_b["messages"][1]["content"],
+        task="sales_analysis",
+        model="override-model",
+        temperature=0.1,
+        num_ctx=2048,
+    )
 
 
 def test_website_analyzer_exhausted_retry_and_pass_b_fallback(
@@ -448,19 +445,11 @@ def test_website_analyzer_import_isolation(tmp_path: Path) -> None:
     }
 
 
-def test_sync_payload_parity_with_legacy_bim_client_for_inbox_and_outreach() -> None:
-    """Verify sync generate() payload parity across sales_analysis (json/text) and sales_outreach profiles."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-
+def test_sync_payload_parity_with_historical_inbox_and_outreach_contracts() -> None:
+    """Verify sync generate() matches frozen historical payloads across analysis (json/text) and outreach profiles."""
     cases = [
         # ReplyClassifier profile (temperature=0.0, json)
         (
-            CodeGenerationRequest(
-                user_prompt="Classify reply",
-                environment="sales",
-                language="json",
-                temperature=0.0,
-            ),
             SalesLLMRequest(
                 user_prompt="Classify reply",
                 task="sales_analysis",
@@ -469,15 +458,10 @@ def test_sync_payload_parity_with_legacy_bim_client_for_inbox_and_outreach() -> 
             ),
             "qwen2.5:1.5b",
             '```json\n{"category": "question", "confidence": 0.9, "reasoning": "asked about scope"}\n```',
+            '{"category": "question", "confidence": 0.9, "reasoning": "asked about scope"}',
         ),
         # ReplySuggestionEngine profile (temperature=0.1, text)
         (
-            CodeGenerationRequest(
-                user_prompt="Draft concise reply",
-                environment="sales",
-                language="text",
-                temperature=0.1,
-            ),
             SalesLLMRequest(
                 user_prompt="Draft concise reply",
                 task="sales_analysis",
@@ -486,17 +470,10 @@ def test_sync_payload_parity_with_legacy_bim_client_for_inbox_and_outreach() -> 
             ),
             "qwen2.5:1.5b",
             "  Thank you for reaching out. Happy to schedule a brief call next week.  ",
+            "Thank you for reaching out. Happy to schedule a brief call next week.",
         ),
-        # EmailGenerator initial outreach profile (temperature=0.2, num_ctx=4096, raw_text)
+        # EmailGenerator initial outreach profile (temperature=0.2, num_ctx=4096, text / raw_text preserves fence)
         (
-            CodeGenerationRequest(
-                user_prompt="Generate outreach JSON",
-                environment="sales_outreach",
-                language="nlp",
-                model="qwen2.5:1.5b",
-                temperature=0.2,
-                num_ctx=4096,
-            ),
             SalesLLMRequest(
                 user_prompt="Generate outreach JSON",
                 task="sales_outreach",
@@ -507,17 +484,10 @@ def test_sync_payload_parity_with_legacy_bim_client_for_inbox_and_outreach() -> 
             ),
             "qwen2.5:1.5b",
             '```json\n{"subject": "Revit Automation", "body": "Hi team"}\n```',
+            '```json\n{"subject": "Revit Automation", "body": "Hi team"}\n```',
         ),
-        # EmailGenerator JSON repair profile (temperature=0.0, num_ctx=4096, raw_text)
+        # EmailGenerator JSON repair profile (temperature=0.0, num_ctx=4096, text)
         (
-            CodeGenerationRequest(
-                user_prompt="Repair invalid JSON",
-                environment="sales_outreach",
-                language="nlp",
-                model="qwen2.5:1.5b",
-                temperature=0.0,
-                num_ctx=4096,
-            ),
             SalesLLMRequest(
                 user_prompt="Repair invalid JSON",
                 task="sales_outreach",
@@ -528,24 +498,25 @@ def test_sync_payload_parity_with_legacy_bim_client_for_inbox_and_outreach() -> 
             ),
             "qwen2.5:1.5b",
             '{"subject": "Revit Automation", "body": "Hi team"}',
+            '{"subject": "Revit Automation", "body": "Hi team"}',
         ),
     ]
 
-    for legacy_req, native_req, model_name, raw_reply in cases:
-        legacy_sync = MagicMock()
-        legacy_sync.chat.return_value = _make_provider_response(raw_reply)
-        legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-        legacy_client.default_model = model_name
-        legacy_client._sync_client = legacy_sync
-
+    for native_req, model_name, raw_reply, expected_content in cases:
         native_sync = MagicMock()
         native_sync.chat.return_value = _make_provider_response(raw_reply)
         native_client = SalesLLMClient(default_model=model_name, sync_client=native_sync)
 
-        legacy_resp = legacy_client.generate_code(legacy_req, model_name=model_name)
         native_resp = native_client.generate(native_req, model_name=model_name)
 
-        assert native_sync.chat.call_args.kwargs == legacy_sync.chat.call_args.kwargs
-        assert native_resp.raw_text == legacy_resp.raw_response
-        assert native_resp.content == legacy_resp.extracted_code
-        assert native_resp.model == legacy_resp.model
+        assert native_sync.chat.call_args.kwargs == expected_ollama_chat_payload(
+            user_prompt=native_req.user_prompt,
+            task=native_req.task,
+            model=model_name,
+            context=native_req.context,
+            temperature=native_req.temperature,
+            num_ctx=native_req.num_ctx,
+        )
+        assert native_resp.raw_text == raw_reply
+        assert native_resp.content == expected_content
+        assert native_resp.model == model_name

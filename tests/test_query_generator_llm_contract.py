@@ -19,7 +19,11 @@ import pytest
 
 from backend.schemas import WebsiteProfile
 from sales_engine.discovery.query_generator import QueryGenerator
-from sales_engine.llm_client import SALES_ANALYSIS_SYSTEM_PROMPT, SalesLLMClient
+from sales_engine.llm_client import SalesLLMClient
+from tests.fixtures.historical_llm_contracts import (
+    HISTORICAL_SALES_SYSTEM_PROMPT,
+    expected_ollama_chat_payload,
+)
 from tests.support.isolated_subprocess import run_isolated_subprocess
 
 
@@ -73,9 +77,7 @@ def test_query_generator_llm_disabled_deterministic_and_no_live_client(
 def test_query_generator_llm_enabled_payload_parity_and_limits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Enabled DISCOVERY_USE_LLM sends identical payload as legacy BIMLLMClient and preserves limits/order."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-
+    """Enabled DISCOVERY_USE_LLM sends frozen historical Ollama payload and preserves limits/order."""
     monkeypatch.setenv("DISCOVERY_USE_LLM", "true")
     monkeypatch.setenv("SALES_LLM_MODEL", "qwen2.5:1.5b")
 
@@ -101,22 +103,15 @@ def test_query_generator_llm_enabled_payload_parity_and_limits(
     assert native_kwargs["model"] == "qwen2.5:1.5b"
     assert native_kwargs["options"] == {"temperature": 0.1, "num_ctx": 2048}
     assert [m["role"] for m in native_kwargs["messages"]] == ["system", "user"]
-    assert native_kwargs["messages"][0]["content"] == SALES_ANALYSIS_SYSTEM_PROMPT
+    assert native_kwargs["messages"][0]["content"] == HISTORICAL_SALES_SYSTEM_PROMPT
 
-    # Compare observable Ollama payload against legacy BIMLLMClient with mocked _async_client
-    legacy_async = MagicMock()
-    legacy_async.chat = AsyncMock(return_value=_make_provider_response(raw_json))
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5-coder:1.5b"
-    legacy_client._async_client = legacy_async
-    legacy_req = CodeGenerationRequest(
+    assert native_kwargs == expected_ollama_chat_payload(
         user_prompt=native_kwargs["messages"][1]["content"],
-        environment="sales",
-        language="json",
+        task="sales_analysis",
+        model="qwen2.5:1.5b",
+        temperature=0.1,
         num_ctx=2048,
     )
-    asyncio.run(legacy_client.generate_code_async(legacy_req, model_name="qwen2.5:1.5b"))
-    assert native_kwargs == legacy_async.chat.call_args.kwargs
 
     # Deduplication, unapproved buyer_role filtering, sorting, and max_queries cap preserved
     queries_text = [q.query for q in resp.queries]

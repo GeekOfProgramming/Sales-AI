@@ -19,7 +19,12 @@ import pytest
 from sales_engine.inbox.classifier import ReplyClassifier
 from sales_engine.inbox.models import Conversation, InboundMessage
 from sales_engine.inbox.suggestion import ReplySuggestionEngine
-from sales_engine.llm_client import SALES_ANALYSIS_SYSTEM_PROMPT, SalesLLMClient, SalesLLMRequest
+from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
+from tests.fixtures.historical_llm_contracts import (
+    HISTORICAL_OUTREACH_SYSTEM_PROMPT,
+    HISTORICAL_SALES_SYSTEM_PROMPT,
+    expected_ollama_chat_payload,
+)
 from tests.support.isolated_subprocess import run_isolated_subprocess
 
 
@@ -96,8 +101,6 @@ def test_reply_classifier_deterministic_rules_skip_llm_calls(
 
 def test_reply_classifier_ambiguous_uses_native_sync_payload_and_zero_temp() -> None:
     """Ambiguous reply checks is_healthy() and sends exact temperature=0.0 JSON payload."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-
     raw_json = '{"category": "positive_interest", "confidence": 0.88, "reasoning": "expressed subtle interest"}'
     sync_mock = MagicMock()
     sync_mock.list.return_value = SimpleNamespace(models=[])
@@ -123,23 +126,16 @@ def test_reply_classifier_ambiguous_uses_native_sync_payload_and_zero_temp() -> 
     assert native_kwargs["model"] == "qwen2.5:1.5b"
     assert native_kwargs["options"] == {"temperature": 0.0, "num_ctx": 4096}
     assert [m["role"] for m in native_kwargs["messages"]] == ["system", "user"]
-    assert native_kwargs["messages"][0]["content"] == SALES_ANALYSIS_SYSTEM_PROMPT
+    assert native_kwargs["messages"][0]["content"] == HISTORICAL_SALES_SYSTEM_PROMPT
     assert "<UNTRUSTED_INBOUND_EMAIL>" in native_kwargs["messages"][1]["content"]
 
-    # Parity check against legacy BIMLLMClient
-    legacy_sync = MagicMock()
-    legacy_sync.chat.return_value = _make_provider_response(raw_json)
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5:1.5b"
-    legacy_client._sync_client = legacy_sync
-    legacy_req = CodeGenerationRequest(
+    assert native_kwargs == expected_ollama_chat_payload(
         user_prompt=native_kwargs["messages"][1]["content"],
-        environment="sales",
-        language="json",
+        task="sales_analysis",
+        model="qwen2.5:1.5b",
         temperature=0.0,
+        num_ctx=4096,
     )
-    legacy_client.generate_code(legacy_req)
-    assert native_kwargs == legacy_sync.chat.call_args.kwargs
 
 
 @pytest.mark.parametrize(
@@ -213,9 +209,7 @@ def test_reply_suggestion_deterministic_italian_and_english_pybim_branding() -> 
 
 
 def test_reply_suggestion_llm_success_payload_parity_and_fallbacks() -> None:
-    """Verify native text-output LLM suggestion payload parity and fallbacks on errors/None."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-
+    """Verify native text-output LLM suggestion payload matches frozen historical contract and fallbacks."""
     conv, msg = _make_inbound(
         subject="Revit API question",
         body_text="Hello, could we discuss your custom Revit plugins next week?",
@@ -236,21 +230,15 @@ def test_reply_suggestion_llm_success_payload_parity_and_fallbacks() -> None:
 
     native_kwargs = sync_mock.chat.call_args.kwargs
     assert native_kwargs["options"] == {"temperature": 0.1, "num_ctx": 4096}
-    assert native_kwargs["messages"][0]["content"] == SALES_ANALYSIS_SYSTEM_PROMPT
+    assert native_kwargs["messages"][0]["content"] == HISTORICAL_SALES_SYSTEM_PROMPT
 
-    legacy_sync = MagicMock()
-    legacy_sync.chat.return_value = _make_provider_response(llm_reply)
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5:1.5b"
-    legacy_client._sync_client = legacy_sync
-    legacy_req = CodeGenerationRequest(
+    assert native_kwargs == expected_ollama_chat_payload(
         user_prompt=native_kwargs["messages"][1]["content"],
-        environment="sales",
-        language="text",
+        task="sales_analysis",
+        model="qwen2.5:1.5b",
         temperature=0.1,
+        num_ctx=4096,
     )
-    legacy_client.generate_code(legacy_req)
-    assert native_kwargs == legacy_sync.chat.call_args.kwargs
 
     # Fallback scenarios: offline, provider exception, empty, None
     for healthy, effect in (
@@ -391,9 +379,7 @@ def _valid_outreach_json(*, language: str = "en") -> str:
 def test_email_generator_native_payload_parity_model_precedence_and_fences(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify EmailGenerator model precedence, fenced raw_text parsing, branding, IT/EN, and legacy parity."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
-    from sales_engine.llm_client import SALES_OUTREACH_SYSTEM_PROMPT
+    """Verify EmailGenerator model precedence, fenced raw_text parsing, branding, IT/EN, and frozen payload."""
     from sales_engine.outreach.email_generator import EmailGenerator
 
     # Model precedence: explicit > OUTREACH_LLM_MODEL > SALES_LLM_MODEL > default
@@ -432,23 +418,15 @@ def test_email_generator_native_payload_parity_model_precedence_and_fences(
     native_kwargs = sync_mock.chat.call_args.kwargs
     assert native_kwargs["model"] == "outreach-model"
     assert native_kwargs["options"] == {"temperature": 0.2, "num_ctx": 4096}
-    assert native_kwargs["messages"][0]["content"] == SALES_OUTREACH_SYSTEM_PROMPT
+    assert native_kwargs["messages"][0]["content"] == HISTORICAL_OUTREACH_SYSTEM_PROMPT
 
-    legacy_sync = MagicMock()
-    legacy_sync.chat.return_value = _make_provider_response(fenced_en)
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5-coder:1.5b"
-    legacy_client._sync_client = legacy_sync
-    legacy_req = CodeGenerationRequest(
+    assert native_kwargs == expected_ollama_chat_payload(
         user_prompt=native_kwargs["messages"][1]["content"],
-        environment="sales_outreach",
-        language="nlp",
+        task="sales_outreach",
         model="outreach-model",
         temperature=0.2,
         num_ctx=4096,
     )
-    legacy_client.generate_code(legacy_req, model_name="outreach-model")
-    assert native_kwargs == legacy_sync.chat.call_args.kwargs
 
     # Multilingual Italian draft preservation
     sync_it = MagicMock()
@@ -461,13 +439,12 @@ def test_email_generator_native_payload_parity_model_precedence_and_fences(
 
 
 def test_email_generator_repair_payload_parity_and_error_contracts() -> None:
-    """Verify repair temp=0.0 payload parity, exhausted repair, timeout, connection, empty/None, validation."""
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+    """Verify repair temp=0.0 frozen payload contract, exhausted repair, timeout, connection, empty/None, validation."""
     from sales_engine.outreach.email_generator import EmailGenerator
 
     ctx = _make_outreach_context()
 
-    # 1. Single repair retry succeeds with exact repair payload parity (temp=0.0, num_ctx=4096)
+    # 1. Single repair retry succeeds with exact repair payload (temp=0.0, num_ctx=4096)
     repair_sync = MagicMock()
     repair_sync.chat.side_effect = [
         _make_provider_response("broken json { subject:"),
@@ -480,23 +457,13 @@ def test_email_generator_repair_payload_parity_and_error_contracts() -> None:
     repair_kwargs = repair_sync.chat.call_args_list[1].kwargs
     assert repair_kwargs["options"] == {"temperature": 0.0, "num_ctx": 4096}
 
-    legacy_sync = MagicMock()
-    legacy_sync.chat.return_value = _make_provider_response(_valid_outreach_json())
-    legacy_client = BIMLLMClient.__new__(BIMLLMClient)
-    legacy_client.default_model = "qwen2.5-coder:1.5b"
-    legacy_client._sync_client = legacy_sync
-    legacy_client.generate_code(
-        CodeGenerationRequest(
-            user_prompt=repair_kwargs["messages"][1]["content"],
-            environment="sales_outreach",
-            language="nlp",
-            model="m1",
-            temperature=0.0,
-            num_ctx=4096,
-        ),
-        model_name="m1",
+    assert repair_kwargs == expected_ollama_chat_payload(
+        user_prompt=repair_kwargs["messages"][1]["content"],
+        task="sales_outreach",
+        model="m1",
+        temperature=0.0,
+        num_ctx=4096,
     )
-    assert repair_kwargs == legacy_sync.chat.call_args.kwargs
 
     # 2. Exhausted repair (invalid, empty, None) -> parse_failed
     for pair in (

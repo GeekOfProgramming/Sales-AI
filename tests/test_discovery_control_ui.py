@@ -98,9 +98,10 @@ def client(temp_db, temp_cand_store, temp_scope_store, temp_registry, monkeypatc
 # ============================================================================
 def test_prd_discui_001_discovery_page_renders_with_zero_llm_calls(client):
     with (
-        patch("ai_engine.llm_client.BIMLLMClient.generate_code") as mock_legacy_generate,
         patch("sales_engine.llm_client.SalesLLMClient.generate") as mock_native_generate,
         patch("sales_engine.llm_client.SalesLLMClient.generate_async") as mock_native_generate_async,
+        patch("sales_engine.llm_client.SalesLLMClient._get_sync_client") as mock_sync_factory,
+        patch("sales_engine.llm_client.SalesLLMClient._get_async_client") as mock_async_factory,
     ):
         resp = client.get("/sales/discovery")
         assert resp.status_code == 200
@@ -108,9 +109,10 @@ def test_prd_discui_001_discovery_page_renders_with_zero_llm_calls(client):
         assert "Discovery Control" in html
         assert "Search Profiles" in html
         assert "Recent Discovery Runs" in html
-        assert mock_legacy_generate.call_count == 0, "Page render must perform ZERO legacy LLM calls"
         assert mock_native_generate.call_count == 0, "Page render must perform ZERO native sync LLM calls"
         assert mock_native_generate_async.call_count == 0, "Page render must perform ZERO native async LLM calls"
+        assert mock_sync_factory.call_count == 0, "Page render must perform ZERO Ollama sync client creations"
+        assert mock_async_factory.call_count == 0, "Page render must perform ZERO Ollama async client creations"
 
 
 # ============================================================================

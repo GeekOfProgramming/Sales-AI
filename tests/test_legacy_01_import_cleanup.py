@@ -35,16 +35,17 @@ def _run_clean_import_probe(code: str, tmp_path: Path) -> dict[str, object]:
 
 
 def test_ai_engine_submodule_imports_do_not_load_chromadb_or_scrapling(tmp_path: Path) -> None:
-    """Sales-AI callers importing ai_engine.llm_client must not eagerly import RAG or scraping deps."""
+    """Importing `ai_engine` and Sales-AI callers must not eagerly import RAG, scraping, or retired LLM modules."""
     probe = _run_clean_import_probe(
-        "import json, sys; "
-        "import ai_engine.llm_client; "
+        "import importlib.util, json, sys; "
+        "import ai_engine; "
         "import sales_engine.inbox.classifier; "
         "import sales_engine.inbox.suggestion; "
         "import sales_engine.outreach.email_generator; "
         "loaded = {m: (m in sys.modules) for m in ("
         "'chromadb', 'opentelemetry', 'scrapling', 'markdownify', "
         "'ai_engine.rag_retriever', 'ai_engine.data_ingestor')}; "
+        "loaded['retired_llm_client_exists'] = importlib.util.find_spec('ai_engine.llm_client') is not None; "
         "print(json.dumps(loaded))",
         tmp_path=tmp_path,
     )
@@ -55,26 +56,25 @@ def test_ai_engine_submodule_imports_do_not_load_chromadb_or_scrapling(tmp_path:
         "markdownify": False,
         "ai_engine.rag_retriever": False,
         "ai_engine.data_ingestor": False,
+        "retired_llm_client_exists": False,
     }
 
 
 def test_ai_engine_package_preserves_lazy_public_api_and_attribute_error() -> None:
-    """`ai_engine` preserves `__all__` and resolves exports lazily via `__getattr__`."""
+    """`ai_engine` retires legacy LLM exports while preserving lazy RAG/ingest `__all__` and AttributeError."""
     import ai_engine
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest, CodeGenerationResponse
 
     assert set(ai_engine.__all__) == {
-        "BIMLLMClient",
-        "CodeGenerationRequest",
-        "CodeGenerationResponse",
         "BIMRAGRetriever",
         "BIMDataIngestor",
     }
-    assert ai_engine.BIMLLMClient is BIMLLMClient
-    assert ai_engine.CodeGenerationRequest is CodeGenerationRequest
-    assert ai_engine.CodeGenerationResponse is CodeGenerationResponse
-    assert "BIMLLMClient" in dir(ai_engine)
     assert "BIMRAGRetriever" in dir(ai_engine)
+    assert "BIMDataIngestor" in dir(ai_engine)
+
+    for retired_sym in ("BIMLLMClient", "CodeGenerationRequest", "CodeGenerationResponse"):
+        assert retired_sym not in dir(ai_engine)
+        with pytest.raises(AttributeError):
+            getattr(ai_engine, retired_sym)
 
     with pytest.raises(AttributeError):
         getattr(ai_engine, "DOES_NOT_EXIST_LEGACY_SYMBOL")
