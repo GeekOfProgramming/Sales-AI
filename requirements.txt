@@ -12,9 +12,6 @@ python-multipart>=0.0.9
 
 # Data Pipeline & Vector Database (RAG)
 chromadb>=0.5.0
-langchain-core>=0.3.0
-langchain-ollama>=0.2.0
-langchain-chroma>=0.1.4
 scrapling>=0.4.0
 markdownify>=1.2.0
 curl_cffi>=0.16.0
