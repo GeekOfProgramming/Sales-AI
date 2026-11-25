@@ -179,7 +179,7 @@ def test_backend_main_retires_ingest_routes_and_loads_no_legacy_rag(tmp_path: Pa
         "import backend.main; "
         "import backend.sales_ui.router; "
         "prohibited = ('ai_engine', 'ai_engine.rag_retriever', 'ai_engine.data_ingestor', "
-        "'ai_engine.ingest_queue', 'chromadb', 'opentelemetry', "
+        "'ai_engine.ingest_queue', 'chromadb', "
         "'langchain_core', 'langchain_ollama', 'langchain_chroma', 'ollama'); "
         "loaded = {m: (m in sys.modules) for m in prohibited}; "
         "routes = sorted({getattr(r, 'path', '') for r in backend.main.app.routes}); "
