@@ -19,7 +19,7 @@ import pytest
 from sales_engine.inbox.classifier import ReplyClassifier
 from sales_engine.inbox.models import Conversation, InboundMessage
 from sales_engine.inbox.suggestion import ReplySuggestionEngine
-from sales_engine.llm_client import SALES_ANALYSIS_SYSTEM_PROMPT, SalesLLMClient
+from sales_engine.llm_client import SALES_ANALYSIS_SYSTEM_PROMPT, SalesLLMClient, SalesLLMRequest
 from tests.support.isolated_subprocess import run_isolated_subprocess
 
 
@@ -556,14 +556,21 @@ def test_backend_generate_drafts_injection_boundary_isolated(
 
     main_path = REPO_ROOT / "backend" / "main.py"
     tree = ast.parse(main_path.read_text(encoding="utf-8"), filename=str(main_path))
-    wanted_funcs = {"lifespan", "get_llm_client", "get_sales_llm_client", "generate_email_drafts"}
+    wanted_locks = {"_llm_client_lock", "_sales_llm_client_lock"}
+    wanted_funcs = {
+        "lifespan",
+        "_ensure_ollama_dependency_available",
+        "get_llm_client",
+        "get_sales_llm_client",
+        "generate_email_drafts",
+    }
     selected = []
     for node in tree.body:
         if (
             isinstance(node, ast.Assign)
             and len(node.targets) == 1
             and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == "_sales_llm_client_lock"
+            and node.targets[0].id in wanted_locks
         ):
             selected.append(node)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted_funcs:
@@ -595,13 +602,13 @@ def test_backend_generate_drafts_injection_boundary_isolated(
 
     # Start with completely uninitialized app.state (missing both llm_client and sales_llm_client)
     fake_app = SimpleNamespace(state=SimpleNamespace())
-    fake_bim_cls = MagicMock(return_value="created-legacy-bim")
     ns: dict[str, object] = {
         "app": fake_app,
         "threading": threading,
         "asynccontextmanager": asynccontextmanager,
         "FastAPI": object,
-        "BIMLLMClient": fake_bim_cls,
+        "SalesLLMClient": SalesLLMClient,
+        "SalesLLMRequest": SalesLLMRequest,
         "HTTPException": DummyHTTPException,
         "GenerateDraftsRequest": object,
     }
@@ -670,7 +677,9 @@ def test_backend_generate_drafts_injection_boundary_isolated(
     m1, m2 = asyncio.run(run_two_lifecycles())
     assert m1 == "cycle-one-model"
     assert m2 == "cycle-two-model"
-    assert ns["get_llm_client"]() == "created-legacy-bim"
+    gateway_client = ns["get_llm_client"]()
+    assert isinstance(gateway_client, SalesLLMClient)
+    assert gateway_client.default_model == "qwen2.5-coder:1.5b"
 
 
 def test_email_generator_import_isolation(tmp_path: Path) -> None:

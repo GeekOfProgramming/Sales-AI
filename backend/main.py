@@ -25,12 +25,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 
-# Safe lazy import guards for heavy optional AI/scraping dependencies (ChromaDB, Scrapling, Ollama)
+# Safe lazy import guards for optional AI/scraping dependencies (ChromaDB, Scrapling, Ollama)
 try:
-    from ai_engine.llm_client import BIMLLMClient, CodeGenerationRequest
+    from sales_engine.llm_client import SalesLLMClient, SalesLLMRequest
 except ImportError:
-    BIMLLMClient = None  # type: ignore
-    CodeGenerationRequest = None  # type: ignore
+    SalesLLMClient = None  # type: ignore
+    SalesLLMRequest = None  # type: ignore
 
 try:
     from sales_engine.web.website_fetcher import WebsiteFetcher
@@ -85,16 +85,21 @@ from sales_engine.outreach.schemas import GenerateDraftsRequest
 async def lifespan(app: FastAPI):
     """Lifecycle manager: initializes SalesAI AI services on startup without blocking on Ollama."""
     print("🚀 Initializing SalesAI services...")
-    try:
-        app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
-    except Exception as e:
-        print(f"ℹ️ Local LLM (Ollama) not available at startup ({e}). Deterministic operation ready.")
-        app.state.llm_client = None
+    with _llm_client_lock:
+        try:
+            app.state.llm_client = (
+                SalesLLMClient(default_model="qwen2.5-coder:1.5b")
+                if SalesLLMClient is not None
+                else None
+            )
+        except Exception as e:
+            print(f"ℹ️ Local LLM (Ollama) not available at startup ({e}). Deterministic operation ready.")
+            app.state.llm_client = None
     with _sales_llm_client_lock:
         try:
-            from sales_engine.llm_client import SalesLLMClient
-
-            app.state.sales_llm_client = SalesLLMClient()
+            app.state.sales_llm_client = (
+                SalesLLMClient() if SalesLLMClient is not None else None
+            )
         except Exception as e:
             print(f"ℹ️ Native SalesLLMClient initialization skipped at startup ({e}).")
             app.state.sales_llm_client = None
@@ -103,6 +108,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         print("🛑 Shutting down SalesAI Gateway.")
+        with _llm_client_lock:
+            app.state.llm_client = None
         with _sales_llm_client_lock:
             app.state.sales_llm_client = None
 
@@ -208,25 +215,45 @@ def ui_endpoint():
     return RedirectResponse(url="/sales", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
-def get_llm_client():
-    """Safely get or lazy-initialize the LLM client."""
-    if BIMLLMClient is None:
-        raise HTTPException(status_code=503, detail="Local LLM client dependencies (Ollama) not installed or available.")
-    if not hasattr(app.state, "llm_client") or app.state.llm_client is None:
-        app.state.llm_client = BIMLLMClient(default_model="qwen2.5-coder:1.5b")
-    return app.state.llm_client
-
-
+_llm_client_lock = threading.Lock()
 _sales_llm_client_lock = threading.Lock()
+
+
+def _ensure_ollama_dependency_available() -> None:
+    """Verify optional `ollama` dependency and required client symbols are importable."""
+    if SalesLLMClient is None or SalesLLMRequest is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Local LLM client dependencies (Ollama) not installed or available.",
+        )
+    try:
+        import ollama
+
+        if not (hasattr(ollama, "Client") and hasattr(ollama, "AsyncClient")):
+            raise ImportError("ollama.Client or ollama.AsyncClient unavailable")
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Local LLM client dependencies (Ollama) not installed or available.",
+        ) from exc
+
+
+def get_llm_client():
+    """Safely get or lazy-initialize the native gateway LLM client."""
+    _ensure_ollama_dependency_available()
+    with _llm_client_lock:
+        if not hasattr(app.state, "llm_client") or app.state.llm_client is None:
+            app.state.llm_client = SalesLLMClient(default_model="qwen2.5-coder:1.5b")
+        return app.state.llm_client
 
 
 def get_sales_llm_client():
     """Safely get or lazy-initialize the native Sales-AI LLM client."""
-    from sales_engine.llm_client import SalesLLMClient
+    from sales_engine.llm_client import SalesLLMClient as _SalesLLMClient
 
     with _sales_llm_client_lock:
         if not hasattr(app.state, "sales_llm_client") or app.state.sales_llm_client is None:
-            app.state.sales_llm_client = SalesLLMClient()
+            app.state.sales_llm_client = _SalesLLMClient()
         return app.state.sales_llm_client
 
 
@@ -248,7 +275,7 @@ def get_rag_retriever():
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check():
     """Verify connectivity to local Ollama LLM and ChromaDB vector store."""
-    llm_client: BIMLLMClient = get_llm_client()
+    llm_client: SalesLLMClient = get_llm_client()
     rag_retriever: BIMRAGRetriever = get_rag_retriever()
 
     ollama_ok = llm_client.is_healthy()
@@ -496,18 +523,25 @@ Return a concise explanation of:
 """
 
     llm_client = get_llm_client()
-    llm_req = CodeGenerationRequest(
+    llm_req = SalesLLMRequest(
         user_prompt=prompt,
-        environment="sales",
-        language="text"
+        task="sales_analysis",
+        output_format="text",
     )
 
     try:
-        response = await llm_client.generate_code_async(llm_req, model_name="llama3")
+        response = await llm_client.generate_async(llm_req, model_name="llama3")
+        content = (response.content or "").strip()
+        if not content:
+            return {
+                "status": "error",
+                "model": "llama3",
+                "response": "LLM provider returned an empty or malformed response.",
+            }
         return {
             "status": "ok",
             "model": "llama3",
-            "response": response.extracted_code
+            "response": content,
         }
     except Exception as e:
         return {
