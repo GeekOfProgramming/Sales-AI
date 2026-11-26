@@ -148,6 +148,7 @@ class MailboxCredentialStore:
                         capture_output=True,
                         text=True,
                         timeout=5.0,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )
             else:
                 os.chmod(str(target_path), 0o600)

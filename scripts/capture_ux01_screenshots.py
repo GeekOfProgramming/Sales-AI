@@ -52,12 +52,18 @@ def run_capture():
     env["SALESAI_PORT"] = "8899"
     env["EMAIL_SEND_ENABLED"] = "false"
 
+    popen_kwargs = {
+        "cwd": str(salesai_dir),
+        "env": env,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
     server_proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8899"],
-        cwd=str(salesai_dir),
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        **popen_kwargs,
     )
 
     try:
