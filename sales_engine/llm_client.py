@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 from typing import Any, Dict, List, Literal, Optional
 
@@ -93,20 +94,30 @@ class SalesLLMClient:
         self.timeout = timeout
         self._sync_client = sync_client
         self._async_client = async_client
+        self._sync_client_lock = threading.Lock()
+        self._async_client_lock = threading.Lock()
 
     def _get_sync_client(self) -> Any:
-        if self._sync_client is None:
-            import ollama
+        if self._sync_client is not None:
+            return self._sync_client
+        with self._sync_client_lock:
+            if self._sync_client is None:
+                import ollama
 
-            self._sync_client = ollama.Client(host=self.host, timeout=self.timeout)
-        return self._sync_client
+                client = ollama.Client(host=self.host, timeout=self.timeout)
+                self._sync_client = client
+            return self._sync_client
 
     def _get_async_client(self) -> Any:
-        if self._async_client is None:
-            import ollama
+        if self._async_client is not None:
+            return self._async_client
+        with self._async_client_lock:
+            if self._async_client is None:
+                import ollama
 
-            self._async_client = ollama.AsyncClient(host=self.host, timeout=self.timeout)
-        return self._async_client
+                client = ollama.AsyncClient(host=self.host, timeout=self.timeout)
+                self._async_client = client
+            return self._async_client
 
     def is_healthy(self) -> bool:
         """Return True if the configured Ollama provider responds to a model listing check."""

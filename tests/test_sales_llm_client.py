@@ -12,8 +12,9 @@ import asyncio
 import json
 from pathlib import Path
 import sys
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+import threading
+from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -520,3 +521,177 @@ def test_sync_payload_parity_with_historical_inbox_and_outreach_contracts() -> N
         assert native_resp.raw_text == raw_reply
         assert native_resp.content == expected_content
         assert native_resp.model == model_name
+
+
+def test_sync_lazy_client_initialization_is_thread_safe_and_non_blocking_across_chat() -> None:
+    """Concurrent sync access constructs exactly one provider, retries on error, and does not lock `.chat()`."""
+    client = SalesLLMClient(host="http://127.0.0.1:11434", default_model="qwen2.5:1.5b")
+    assert client._sync_client is None
+
+    ctor_calls: list[tuple[str, float]] = []
+    chat_barrier = threading.Barrier(2)
+
+    class FakeSyncProvider:
+        def __init__(self, host: str, timeout: float):
+            ctor_calls.append((host, timeout))
+
+        def chat(self, **kwargs: object) -> SimpleNamespace:
+            return _make_provider_response("ok")
+
+    fake_ollama = ModuleType("ollama")
+    fake_ollama.Client = FakeSyncProvider  # type: ignore[attr-defined]
+    fake_ollama.AsyncClient = MagicMock()  # type: ignore[attr-defined]
+
+    with patch.dict(sys.modules, {"ollama": fake_ollama}):
+        start_barrier = threading.Barrier(6)
+        resolved: list[object] = []
+
+        def worker() -> None:
+            start_barrier.wait(timeout=5.0)
+            resolved.append(client._get_sync_client())
+
+        threads = [threading.Thread(target=worker) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+            assert not t.is_alive()
+
+        assert len(ctor_calls) == 1
+        assert ctor_calls[0] == ("http://127.0.0.1:11434", 180.0)
+        assert len(resolved) == 6 and all(inst is resolved[0] for inst in resolved)
+        # Subsequent access reuses cached provider
+        assert client._get_sync_client() is resolved[0]
+        assert len(ctor_calls) == 1
+
+    # Ordinary generation does not hold initialization lock across provider `.chat()`
+    def barrier_chat(**kwargs: object) -> SimpleNamespace:
+        chat_barrier.wait(timeout=5.0)
+        return _make_provider_response("concurrent")
+
+    parallel_client = SalesLLMClient(sync_client=SimpleNamespace(chat=barrier_chat))
+    outputs: list[str] = []
+
+    def gen_worker() -> None:
+        resp = parallel_client.generate(SalesLLMRequest(user_prompt="Hi", output_format="text"))
+        outputs.append(resp.content)
+
+    g_threads = [threading.Thread(target=gen_worker) for _ in range(2)]
+    for t in g_threads:
+        t.start()
+    for t in g_threads:
+        t.join(timeout=5.0)
+        assert not t.is_alive()
+    assert outputs == ["concurrent", "concurrent"]
+
+
+def test_async_lazy_client_initialization_thread_and_loop_safety() -> None:
+    """Async lazy init constructs once across threads and persistent event-loop calls without locking `await`."""
+    client = SalesLLMClient(host="http://127.0.0.1:11434", default_model="qwen2.5:1.5b")
+    assert client._async_client is None
+
+    ctor_calls: list[tuple[str, float]] = []
+
+    class FakeAsyncProvider:
+        def __init__(self, host: str, timeout: float):
+            ctor_calls.append((host, timeout))
+
+        async def chat(self, **kwargs: object) -> SimpleNamespace:
+            await asyncio.sleep(0)
+            return _make_provider_response('{"ok": true}')
+
+    fake_ollama = ModuleType("ollama")
+    fake_ollama.Client = MagicMock()  # type: ignore[attr-defined]
+    fake_ollama.AsyncClient = FakeAsyncProvider  # type: ignore[attr-defined]
+
+    with patch.dict(sys.modules, {"ollama": fake_ollama}):
+        # 1. Real OS thread race on `_get_async_client()`
+        barrier = threading.Barrier(6)
+        resolved: list[object] = []
+
+        def worker() -> None:
+            barrier.wait(timeout=5.0)
+            resolved.append(client._get_async_client())
+
+        threads = [threading.Thread(target=worker) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+            assert not t.is_alive()
+
+        assert len(ctor_calls) == 1
+        assert len(resolved) == 6 and all(inst is resolved[0] for inst in resolved)
+
+        # 2. Concurrent coroutines on one persistent event loop reuse cached AsyncClient
+        async def run_loop_batch() -> list[str]:
+            resps = await asyncio.gather(
+                *(
+                    client.generate_async(SalesLLMRequest(user_prompt=f"p{i}", output_format="json"))
+                    for i in range(4)
+                )
+            )
+            return [r.content for r in resps]
+
+        assert asyncio.run(run_loop_batch()) == ['{"ok": true}'] * 4
+        assert len(ctor_calls) == 1
+
+
+def test_lazy_init_failure_recovery_injection_bypass_and_instance_isolation() -> None:
+    """Failed ctor leaves cache empty for retry; injected clients bypass ctor; instances stay independent."""
+    client = SalesLLMClient(host="http://127.0.0.1:11434", default_model="qwen2.5:1.5b")
+    attempts = {"sync": 0, "async": 0}
+
+    def sync_factory(*, host: str, timeout: float) -> SimpleNamespace:
+        attempts["sync"] += 1
+        if attempts["sync"] == 1:
+            raise RuntimeError("transient sync init failure")
+        return SimpleNamespace(label="sync_ok", host=host)
+
+    def async_factory(*, host: str, timeout: float) -> SimpleNamespace:
+        attempts["async"] += 1
+        if attempts["async"] == 1:
+            raise RuntimeError("transient async init failure")
+        return SimpleNamespace(label="async_ok", host=host)
+
+    fake_ollama = ModuleType("ollama")
+    fake_ollama.Client = sync_factory  # type: ignore[attr-defined]
+    fake_ollama.AsyncClient = async_factory  # type: ignore[attr-defined]
+
+    with patch.dict(sys.modules, {"ollama": fake_ollama}):
+        with pytest.raises(RuntimeError, match="transient sync init failure"):
+            client._get_sync_client()
+        assert client._sync_client is None
+
+        sync_ok = client._get_sync_client()
+        assert sync_ok.label == "sync_ok"
+        assert client._get_sync_client() is sync_ok
+        assert attempts["sync"] == 2
+
+        with pytest.raises(RuntimeError, match="transient async init failure"):
+            client._get_async_client()
+        assert client._async_client is None
+
+        async_ok = client._get_async_client()
+        assert async_ok.label == "async_ok"
+        assert client._get_async_client() is async_ok
+        assert attempts["async"] == 2
+
+        # Distinct client instances remain independent
+        other = SalesLLMClient(host="http://127.0.0.1:22434")
+        other_sync = other._get_sync_client()
+        assert other_sync is not sync_ok
+        assert other_sync.host == "http://127.0.0.1:22434"
+
+    # Injected providers never trigger lazy constructor calls
+    ctor_guard = MagicMock()
+    guard_ollama = ModuleType("ollama")
+    guard_ollama.Client = ctor_guard  # type: ignore[attr-defined]
+    guard_ollama.AsyncClient = ctor_guard  # type: ignore[attr-defined]
+    inj_sync = SimpleNamespace(marker="sync")
+    inj_async = SimpleNamespace(marker="async")
+    injected = SalesLLMClient(sync_client=inj_sync, async_client=inj_async)
+    with patch.dict(sys.modules, {"ollama": guard_ollama}):
+        assert injected._get_sync_client() is inj_sync
+        assert injected._get_async_client() is inj_async
+        ctor_guard.assert_not_called()
