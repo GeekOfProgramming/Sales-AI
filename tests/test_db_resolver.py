@@ -509,3 +509,126 @@ def test_relative_to_repo_root_anchoring_and_strict_rejection(
             repo_root=fake_repo,
             relative_to_repo_root=True,
         )
+
+
+def test_centralized_operational_explicit_env_conflict_and_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CENTRALIZED_OPERATIONAL enforces conflict checks, repo-root anchoring, and safe fallback."""
+    fake_repo = tmp_path / "op_repo"
+    other_cwd = tmp_path / "other_cwd"
+    other_cwd.mkdir(parents=True)
+    monkeypatch.chdir(other_cwd)
+
+    # 1. Unconfigured fallback -> <repo_root>/data/sales_outreach.db
+    assert (
+        resolve_database_path(
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            env={},
+            repo_root=fake_repo,
+        )
+        == (fake_repo / "data" / "sales_outreach.db").resolve()
+    )
+
+    # 2. Relative explicit and env paths anchor to repo_root regardless of cwd
+    assert (
+        resolve_database_path(
+            "data/custom.db",
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            env={},
+            repo_root=fake_repo,
+        )
+        == (fake_repo / "data" / "custom.db").resolve()
+    )
+    assert (
+        resolve_database_path(
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            env={"SALESAI_CANDIDATES_DB": "data/env_rel.db"},
+            repo_root=fake_repo,
+        )
+        == (fake_repo / "data" / "env_rel.db").resolve()
+    )
+
+    # 3. Equivalent explicit + env targets succeed; disagreeing explicit vs env fail closed
+    matching_abs = (fake_repo / "data" / "sales_outreach.db").resolve()
+    assert (
+        resolve_database_path(
+            matching_abs,
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            env={
+                "SALES_OUTREACH_DB": "data/sales_outreach.db",
+                "SALESAI_DB_PATH": str(matching_abs),
+            },
+            repo_root=fake_repo,
+        )
+        == matching_abs
+    )
+    with pytest.raises(DatabaseConfigurationConflictError):
+        resolve_database_path(
+            tmp_path / "explicit_other.db",
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            env={"SALES_OUTREACH_DB": str(matching_abs)},
+            repo_root=fake_repo,
+        )
+
+    # 4. In-memory rejected by default; explicit allow_memory=True permitted when consistent
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(":memory:", policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL)
+    assert (
+        resolve_database_path(
+            ":memory:",
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            allow_memory=True,
+            env={},
+        )
+        == ":memory:"
+    )
+
+
+def test_additional_protected_roots_do_not_weaken_strict_explicit(tmp_path: Path) -> None:
+    """Additional protected_roots protect sibling trees while preserving all mandatory STRICT protections."""
+    fake_dev_repo = tmp_path / "dev_repo"
+    fake_op_data = tmp_path / "sibling_op" / "data"
+
+    # Mandatory _DEFAULT_REPO_ROOT/data protection still holds in STRICT_EXPLICIT even with custom protected_roots
+    with pytest.raises(ProtectedDatabasePathError):
+        resolve_database_path(
+            _DEFAULT_REPO_ROOT / "data" / "sales_outreach.db",
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            repo_root=fake_dev_repo,
+            protected_roots=[fake_op_data],
+        )
+
+    # Sibling operational root blocked in both STRICT_EXPLICIT and CENTRALIZED_OPERATIONAL
+    for policy in (
+        ResolutionPolicy.STRICT_EXPLICIT,
+        ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+    ):
+        with pytest.raises(ProtectedDatabasePathError):
+            resolve_database_path(
+                fake_op_data / "backups" / ".." / "sales_outreach.db",
+                policy=policy,
+                repo_root=fake_dev_repo,
+                protected_roots=[fake_op_data],
+            )
+        with pytest.raises(ProtectedDatabasePathError):
+            resolve_database_path(
+                policy=policy,
+                env={"SALESAI_DB_PATH": str(fake_op_data / "sales_outreach.db-wal")},
+                repo_root=fake_dev_repo,
+                protected_roots=[fake_op_data],
+            )
+
+    # Invalid protected_roots input fails closed
+    with pytest.raises(TypeError):
+        resolve_database_path(
+            tmp_path / "ok.db",
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            protected_roots=str(fake_op_data),  # type: ignore[arg-type]
+        )
+    with pytest.raises(DatabaseResolutionError):
+        resolve_database_path(
+            tmp_path / "ok.db",
+            policy=ResolutionPolicy.STRICT_EXPLICIT,
+            protected_roots=["   "],
+        )

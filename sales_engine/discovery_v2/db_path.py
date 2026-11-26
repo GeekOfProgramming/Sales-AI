@@ -10,7 +10,7 @@ strict explicit resolution.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 import os
 from typing import Optional, Union
@@ -18,6 +18,7 @@ from typing import Optional, Union
 from sales_engine.db_resolver import (
     DatabaseResolutionError,
     ResolutionPolicy,
+    enforce_protected_roots,
     resolve_database_path,
 )
 
@@ -31,6 +32,7 @@ class DiscoveryDbMode(str, Enum):
     LEGACY_P3 = "legacy_p3"
     CENTRALIZED_LEGACY = "centralized_legacy"
     CENTRALIZED_STRICT = "centralized_strict"
+    CENTRALIZED_OPERATIONAL = "centralized_operational"
 
 
 def _lookup_env_case_aware(env_map: Mapping[str, str], key: str) -> Optional[str]:
@@ -51,9 +53,10 @@ def resolve_discovery_db_path(
     mode: DiscoveryDbMode = DiscoveryDbMode.LEGACY_P3,
     env: Optional[Mapping[str, str]] = None,
     include_candidates_env: bool = True,
-    allow_memory: bool = True,
+    allow_memory: Optional[bool] = None,
     repo_root: Optional[Union[str, os.PathLike[str]]] = None,
     relative_to_repo_root: bool = False,
+    protected_roots: Optional[Sequence[Union[str, os.PathLike[str]]]] = None,
 ) -> str:
     """
     Resolve the SQLite database path string for Discovery v2 without opening SQLite.
@@ -69,18 +72,29 @@ def resolve_discovery_db_path(
         using P-1 precedence (`db_path > SALES_OUTREACH_DB > SALESAI_DB_PATH > SALESAI_CANDIDATES_DB`).
       - `CENTRALIZED_STRICT`: Delegates to `resolve_database_path(..., policy=STRICT_EXPLICIT)`
         for isolated tooling (rejects unconfigured, conflicting, relative, or operational paths).
+      - `CENTRALIZED_OPERATIONAL`: Delegates to `resolve_database_path(..., policy=CENTRALIZED_OPERATIONAL)`
+        (conflict-checked, repo-root anchored, defaults `allow_memory` to `False`).
     """
     if not isinstance(mode, DiscoveryDbMode):
         raise TypeError(f"mode must be a DiscoveryDbMode, not {type(mode).__name__}")
+    if allow_memory is not None and not isinstance(allow_memory, bool):
+        raise TypeError(f"allow_memory must be bool or None, not {type(allow_memory).__name__}")
+
+    effective_allow_memory = (
+        (False if allow_memory is None else allow_memory)
+        if mode is DiscoveryDbMode.CENTRALIZED_OPERATIONAL
+        else (True if allow_memory is None else allow_memory)
+    )
 
     if mode is DiscoveryDbMode.CENTRALIZED_LEGACY:
         resolved = resolve_database_path(
             db_path,
             policy=ResolutionPolicy.LEGACY_COMPATIBLE,
             env=env,
-            allow_memory=allow_memory,
+            allow_memory=effective_allow_memory,
             repo_root=repo_root,
             relative_to_repo_root=relative_to_repo_root,
+            protected_roots=protected_roots,
         )
         return str(resolved)
 
@@ -89,9 +103,22 @@ def resolve_discovery_db_path(
             db_path,
             policy=ResolutionPolicy.STRICT_EXPLICIT,
             env=env,
-            allow_memory=allow_memory,
+            allow_memory=effective_allow_memory,
             repo_root=repo_root,
             relative_to_repo_root=relative_to_repo_root,
+            protected_roots=protected_roots,
+        )
+        return str(resolved)
+
+    if mode is DiscoveryDbMode.CENTRALIZED_OPERATIONAL:
+        resolved = resolve_database_path(
+            db_path,
+            policy=ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            env=env,
+            allow_memory=effective_allow_memory,
+            repo_root=repo_root,
+            relative_to_repo_root=relative_to_repo_root,
+            protected_roots=protected_roots,
         )
         return str(resolved)
 
@@ -105,11 +132,25 @@ def resolve_discovery_db_path(
         if not raw_explicit or not raw_explicit.strip():
             raise DatabaseResolutionError("Explicit db_path cannot be empty or whitespace-only.")
         if raw_explicit.lower() == ":memory:":
-            if not allow_memory:
+            if not effective_allow_memory:
                 raise DatabaseResolutionError(
                     "Explicit db_path specified ':memory:', which is disabled (allow_memory=False)."
                 )
+            enforce_protected_roots(
+                ":memory:",
+                protected_roots=protected_roots,
+                repo_root=repo_root,
+                relative_to_repo_root=relative_to_repo_root,
+                label="db_path",
+            )
             return ":memory:"
+        enforce_protected_roots(
+            raw_explicit,
+            protected_roots=protected_roots,
+            repo_root=repo_root,
+            relative_to_repo_root=relative_to_repo_root,
+            label="db_path",
+        )
         return raw_explicit
 
     env_map = os.environ if env is None else env
@@ -128,12 +169,33 @@ def resolve_discovery_db_path(
                 f"Configured Discovery database environment variable '{key}' cannot be empty or whitespace-only."
             )
         if val.lower() == ":memory:":
-            if not allow_memory:
+            if not effective_allow_memory:
                 raise DatabaseResolutionError(
                     f"Configured Discovery database environment variable '{key}' specified ':memory:', "
                     "which is disabled (allow_memory=False)."
                 )
+            enforce_protected_roots(
+                ":memory:",
+                protected_roots=protected_roots,
+                repo_root=repo_root,
+                relative_to_repo_root=relative_to_repo_root,
+                label=f"env[{key}]",
+            )
             return ":memory:"
+        enforce_protected_roots(
+            val,
+            protected_roots=protected_roots,
+            repo_root=repo_root,
+            relative_to_repo_root=relative_to_repo_root,
+            label=f"env[{key}]",
+        )
         return val
 
+    enforce_protected_roots(
+        DEFAULT_DISCOVERY_DB_STR,
+        protected_roots=protected_roots,
+        repo_root=repo_root,
+        relative_to_repo_root=relative_to_repo_root,
+        label="default_fallback",
+    )
     return DEFAULT_DISCOVERY_DB_STR

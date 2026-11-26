@@ -8,7 +8,7 @@ creating directories or files, reading .env files, or mutating process state.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 import os
 from pathlib import Path
@@ -18,6 +18,13 @@ from typing import Optional, Union
 # Repository root derived from sales_engine/db_resolver.py -> sales_engine -> repo root
 _DEFAULT_REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_OPERATIONAL_REL_PATH = Path("data") / "sales_outreach.db"
+_SIDECAR_AND_BACKUP_SUFFIXES: tuple[str, ...] = (
+    ".backup",
+    ".bak",
+    "-wal",
+    "-shm",
+    "-journal",
+)
 
 ENV_VAR_PRECEDENCE: tuple[str, ...] = (
     "SALES_OUTREACH_DB",
@@ -26,6 +33,14 @@ ENV_VAR_PRECEDENCE: tuple[str, ...] = (
 )
 _ENV_VARS_UPPER = frozenset(k.upper() for k in ENV_VAR_PRECEDENCE)
 _WINDOWS_INVALID_PATH_CHARS = '<>|"*'
+_WINDOWS_RESERVED_DEVICE_NAMES = frozenset({
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
 
 
 class ResolutionPolicy(str, Enum):
@@ -33,6 +48,7 @@ class ResolutionPolicy(str, Enum):
 
     LEGACY_COMPATIBLE = "legacy_compatible"
     STRICT_EXPLICIT = "strict_explicit"
+    CENTRALIZED_OPERATIONAL = "centralized_operational"
 
 
 class DatabaseResolutionError(ValueError):
@@ -96,6 +112,10 @@ def _validate_raw_path_string(
         )
 
     if os.name == "nt" and lower_str != ":memory:":
+        if raw_str[0] in ("\\", "/"):
+            raise DatabaseResolutionError(
+                f"{label} uses unsupported Windows rooted path without drive specification: '{raw_str}'"
+            )
         colon_indices = [idx for idx, ch in enumerate(raw_str) if ch == ":"]
         if any(idx != 1 for idx in colon_indices) or (
             colon_indices == [1] and not raw_str[0].isalpha()
@@ -103,12 +123,137 @@ def _validate_raw_path_string(
             raise DatabaseResolutionError(
                 f"{label} contains invalid colon or alternate data stream syntax: '{raw_str}'"
             )
+        if colon_indices == [1] and (len(raw_str) == 2 or raw_str[2] not in ("\\", "/")):
+            raise DatabaseResolutionError(
+                f"{label} uses unsupported Windows drive-relative path syntax: '{raw_str}'"
+            )
         if any(ch in raw_str for ch in _WINDOWS_INVALID_PATH_CHARS):
             raise DatabaseResolutionError(
                 f"{label} contains invalid Windows path characters: '{raw_str}'"
             )
+        for segment in raw_str.replace("/", "\\").split("\\"):
+            if not segment or segment in (".", "..") or (len(segment) == 2 and segment[1] == ":"):
+                continue
+            if segment.endswith((".", " ")):
+                raise DatabaseResolutionError(
+                    f"{label} contains Windows path segment with trailing dot or space: '{raw_str}'"
+                )
+            stem = segment.split(".", 1)[0].rstrip(" ").upper()
+            if stem in _WINDOWS_RESERVED_DEVICE_NAMES:
+                raise DatabaseResolutionError(
+                    f"{label} contains reserved Windows device name: '{raw_str}'"
+                )
 
     return raw_str
+
+
+def _normalize_protected_roots(
+    protected_roots: Optional[Sequence[Union[str, os.PathLike[str]]]],
+    *,
+    repo_root_resolved: Path,
+    anchor_relative_to_repo: bool,
+) -> list[tuple[Path, Path]]:
+    """Validate and resolve additional protected filesystem roots without touching disk contents."""
+    if protected_roots is None:
+        return []
+    if isinstance(protected_roots, (str, bytes, bytearray, os.PathLike)):
+        raise TypeError(
+            "protected_roots must be a sequence of path strings or PathLike objects, "
+            f"not {type(protected_roots).__name__}"
+        )
+    if not isinstance(protected_roots, Sequence):
+        raise TypeError(
+            f"protected_roots must be a sequence, not {type(protected_roots).__name__}"
+        )
+
+    normalized: list[tuple[Path, Path]] = []
+    for idx, entry in enumerate(protected_roots):
+        label = f"protected_roots[{idx}]"
+        raw_str = _validate_raw_path_string(entry, label=label)
+        if raw_str.lower() == ":memory:":
+            raise DatabaseResolutionError(f"{label} cannot be ':memory:'")
+
+        root_path = Path(raw_str)
+        if not root_path.is_absolute() and anchor_relative_to_repo:
+            root_path = repo_root_resolved / root_path
+
+        try:
+            resolved_root = root_path.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise DatabaseResolutionError(
+                f"{label} could not be resolved safely: '{raw_str}'"
+            ) from exc
+
+        if str(resolved_root).startswith(("\\\\", "//")):
+            raise DatabaseResolutionError(
+                f"{label} resolved to a UNC or extended device path: '{resolved_root}'"
+            )
+        normalized.append((resolved_root, _to_normcase_path(resolved_root)))
+
+    return normalized
+
+
+def _assert_not_in_protected_roots(
+    resolved_target: Path,
+    *,
+    protected_roots_normalized: Sequence[tuple[Path, Path]],
+    label: str,
+) -> None:
+    """Fail closed when resolved_target falls within any explicitly protected root or its sidecars."""
+    if not protected_roots_normalized:
+        return
+
+    norm_target = _to_normcase_path(resolved_target)
+    target_str = str(norm_target)
+    for raw_root, norm_root in protected_roots_normalized:
+        if _is_same_or_within(norm_target, norm_root):
+            raise ProtectedDatabasePathError(
+                f"{label} resolves to protected path '{raw_root}': '{resolved_target}'"
+            )
+        if raw_root.suffix.lower() in (".db", ".sqlite", ".sqlite3"):
+            root_str = str(norm_root)
+            if any(target_str == root_str + suffix for suffix in _SIDECAR_AND_BACKUP_SUFFIXES):
+                raise ProtectedDatabasePathError(
+                    f"{label} resolves to protected database sidecar/backup for '{raw_root}': '{resolved_target}'"
+                )
+
+
+def enforce_protected_roots(
+    candidate: Union[str, os.PathLike[str]],
+    *,
+    protected_roots: Optional[Sequence[Union[str, os.PathLike[str]]]],
+    repo_root: Optional[Union[str, os.PathLike[str]]] = None,
+    relative_to_repo_root: bool = False,
+    label: str = "db_path",
+) -> None:
+    """Validate protected_roots and fail closed if a non-memory candidate targets any protected root."""
+    if protected_roots is None:
+        return
+    repo_root_resolved = _resolve_repo_root(repo_root)
+    protected_roots_normalized = _normalize_protected_roots(
+        protected_roots,
+        repo_root_resolved=repo_root_resolved,
+        anchor_relative_to_repo=relative_to_repo_root,
+    )
+    raw_str = _validate_raw_path_string(candidate, label=label)
+    if raw_str.lower() == ":memory:":
+        return
+    path_obj = Path(raw_str)
+    if not path_obj.is_absolute() and relative_to_repo_root:
+        path_obj = repo_root_resolved / path_obj
+    try:
+        resolved = path_obj.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise DatabaseResolutionError(f"{label} could not be resolved safely: '{raw_str}'") from exc
+    if str(resolved).startswith(("\\\\", "//")):
+        raise DatabaseResolutionError(
+            f"{label} resolved to a UNC or extended device path: '{resolved}'"
+        )
+    _assert_not_in_protected_roots(
+        resolved,
+        protected_roots_normalized=protected_roots_normalized,
+        label=label,
+    )
 
 
 def _resolve_single_candidate(
@@ -119,6 +264,7 @@ def _resolve_single_candidate(
     allow_memory: bool,
     repo_root_resolved: Path,
     relative_to_repo_root: bool = False,
+    protected_roots_normalized: Sequence[tuple[Path, Path]] = (),
 ) -> Union[Path, str]:
     """Validate and resolve a single explicit or env-configured database target."""
     raw_str = _validate_raw_path_string(raw_value, label=label)
@@ -136,7 +282,7 @@ def _resolve_single_candidate(
             raise DatabaseResolutionError(
                 f"{label} must be an absolute path under STRICT_EXPLICIT policy; got '{raw_str}'"
             )
-        if relative_to_repo_root:
+        if relative_to_repo_root or policy is ResolutionPolicy.CENTRALIZED_OPERATIONAL:
             path_obj = repo_root_resolved / path_obj
 
     try:
@@ -151,6 +297,13 @@ def _resolve_single_candidate(
 
     if policy is ResolutionPolicy.STRICT_EXPLICIT:
         _assert_not_protected_operational(resolved, repo_root_resolved=repo_root_resolved, label=label)
+
+    if policy in (ResolutionPolicy.STRICT_EXPLICIT, ResolutionPolicy.CENTRALIZED_OPERATIONAL) or protected_roots_normalized:
+        _assert_not_in_protected_roots(
+            resolved,
+            protected_roots_normalized=protected_roots_normalized,
+            label=label,
+        )
 
     return resolved
 
@@ -218,7 +371,10 @@ def _extract_env_candidates(
             continue
 
         if os.name == "nt":
-            if key_upper in seen_upper and policy is ResolutionPolicy.STRICT_EXPLICIT:
+            if key_upper in seen_upper and policy in (
+                ResolutionPolicy.STRICT_EXPLICIT,
+                ResolutionPolicy.CENTRALIZED_OPERATIONAL,
+            ):
                 raise DatabaseConfigurationConflictError(
                     f"Duplicate case-insensitive database env key: '{key}' conflicts with '{seen_upper[key_upper]}'"
                 )
@@ -247,17 +403,19 @@ def resolve_database_path(
     allow_memory: bool = False,
     repo_root: Optional[Union[str, os.PathLike[str]]] = None,
     relative_to_repo_root: bool = False,
+    protected_roots: Optional[Sequence[Union[str, os.PathLike[str]]]] = None,
 ) -> Union[Path, str]:
     """
     Resolve the SQLite database path cleanly without opening or creating any file.
 
     Precedence:
-      1. Explicit `db_path` argument (overrides environment variables)
+      1. Explicit `db_path` argument (overrides env vars in `LEGACY_COMPATIBLE`/`STRICT_EXPLICIT`;
+         must agree with any configured env vars in `CENTRALIZED_OPERATIONAL`)
       2. `SALES_OUTREACH_DB`
       3. `SALESAI_DB_PATH`
       4. `SALESAI_CANDIDATES_DB`
       5. Repository-root operational fallback (`<repo_root>/data/sales_outreach.db`),
-         permitted ONLY under `ResolutionPolicy.LEGACY_COMPATIBLE`.
+         permitted under `LEGACY_COMPATIBLE` and `CENTRALIZED_OPERATIONAL`.
 
     Policies:
       - `STRICT_EXPLICIT` (default): Requires explicit `db_path` or unambiguous absolute env config;
@@ -266,18 +424,31 @@ def resolve_database_path(
         configured env var without validating ignored lower-priority vars, and allows zero-config
         fallback to `<repo_root>/data/sales_outreach.db`. When `relative_to_repo_root=True`,
         relative explicit/env paths anchor to `repo_root` instead of `cwd`.
+      - `CENTRALIZED_OPERATIONAL`: Conflict-checked operational P-1 policy. Anchors all relative
+        paths to `repo_root`, normalizes paths to canonical absolutes, validates all non-empty
+        env vars (failing closed on whitespace/invalid syntax or disagreeing targets, including
+        explicit `db_path` vs configured env), permits `<repo_root>/data/sales_outreach.db`
+        unless blocked by `protected_roots`, and rejects `:memory:` unless `allow_memory=True`.
     """
     if not isinstance(policy, ResolutionPolicy):
         raise TypeError(f"policy must be a ResolutionPolicy, not {type(policy).__name__}")
+    if not isinstance(allow_memory, bool):
+        raise TypeError(f"allow_memory must be bool, not {type(allow_memory).__name__}")
     if not isinstance(relative_to_repo_root, bool):
         raise TypeError(
             f"relative_to_repo_root must be bool, not {type(relative_to_repo_root).__name__}"
         )
 
     repo_root_resolved = _resolve_repo_root(repo_root)
+    anchor_relative = relative_to_repo_root or (policy is ResolutionPolicy.CENTRALIZED_OPERATIONAL)
+    protected_roots_normalized = _normalize_protected_roots(
+        protected_roots,
+        repo_root_resolved=repo_root_resolved,
+        anchor_relative_to_repo=anchor_relative,
+    )
 
-    # 1. Explicit db_path overrides all environment variables
-    if db_path is not None:
+    # 1. Explicit db_path in LEGACY_COMPATIBLE and STRICT_EXPLICIT overrides ambient env
+    if db_path is not None and policy is not ResolutionPolicy.CENTRALIZED_OPERATIONAL:
         return _resolve_single_candidate(
             db_path,
             label="db_path",
@@ -285,11 +456,84 @@ def resolve_database_path(
             allow_memory=allow_memory,
             repo_root_resolved=repo_root_resolved,
             relative_to_repo_root=relative_to_repo_root,
+            protected_roots_normalized=protected_roots_normalized,
         )
 
     # 2. Environment variable resolution
     env_map = os.environ if env is None else env
     configured = _extract_env_candidates(env_map, policy=policy)
+
+    if policy is ResolutionPolicy.CENTRALIZED_OPERATIONAL:
+        explicit_resolved: Optional[Union[Path, str]] = None
+        if db_path is not None:
+            explicit_resolved = _resolve_single_candidate(
+                db_path,
+                label="db_path",
+                policy=policy,
+                allow_memory=allow_memory,
+                repo_root_resolved=repo_root_resolved,
+                relative_to_repo_root=True,
+                protected_roots_normalized=protected_roots_normalized,
+            )
+
+        resolved_entries: dict[str, Union[Path, str]] = {}
+        for key in ENV_VAR_PRECEDENCE:
+            if key in configured:
+                resolved_entries[key] = _resolve_single_candidate(
+                    configured[key],
+                    label=f"env[{key}]",
+                    policy=policy,
+                    allow_memory=allow_memory,
+                    repo_root_resolved=repo_root_resolved,
+                    relative_to_repo_root=True,
+                    protected_roots_normalized=protected_roots_normalized,
+                )
+
+        if len(resolved_entries) > 1:
+            normalized_set = {
+                v if isinstance(v, str) else _to_normcase_path(v)
+                for v in resolved_entries.values()
+            }
+            if len(normalized_set) > 1:
+                details = ", ".join(f"{k}={configured[k]!r}" for k in resolved_entries)
+                raise DatabaseConfigurationConflictError(
+                    "Conflicting database environment variables under CENTRALIZED_OPERATIONAL policy: "
+                    f"{details}"
+                )
+
+        if explicit_resolved is not None:
+            if resolved_entries:
+                norm_explicit = (
+                    explicit_resolved
+                    if isinstance(explicit_resolved, str)
+                    else _to_normcase_path(explicit_resolved)
+                )
+                first_env_key = next(iter(resolved_entries))
+                first_env_val = resolved_entries[first_env_key]
+                norm_env = (
+                    first_env_val
+                    if isinstance(first_env_val, str)
+                    else _to_normcase_path(first_env_val)
+                )
+                if norm_explicit != norm_env:
+                    raise DatabaseConfigurationConflictError(
+                        "Explicit db_path conflicts with configured database environment variable "
+                        f"{first_env_key}={configured[first_env_key]!r} under CENTRALIZED_OPERATIONAL policy"
+                    )
+            return explicit_resolved
+
+        if resolved_entries:
+            for key in ENV_VAR_PRECEDENCE:
+                if key in resolved_entries:
+                    return resolved_entries[key]
+
+        fallback_path = (repo_root_resolved / _DEFAULT_OPERATIONAL_REL_PATH).resolve()
+        _assert_not_in_protected_roots(
+            fallback_path,
+            protected_roots_normalized=protected_roots_normalized,
+            label="default_fallback",
+        )
+        return fallback_path
 
     if configured:
         if policy is ResolutionPolicy.LEGACY_COMPATIBLE:
@@ -303,9 +547,10 @@ def resolve_database_path(
                         allow_memory=allow_memory,
                         repo_root_resolved=repo_root_resolved,
                         relative_to_repo_root=relative_to_repo_root,
+                        protected_roots_normalized=protected_roots_normalized,
                     )
 
-        resolved_entries: dict[str, Union[Path, str]] = {}
+        resolved_entries = {}
         for key in ENV_VAR_PRECEDENCE:
             if key in configured:
                 resolved_entries[key] = _resolve_single_candidate(
@@ -315,6 +560,7 @@ def resolve_database_path(
                     allow_memory=allow_memory,
                     repo_root_resolved=repo_root_resolved,
                     relative_to_repo_root=relative_to_repo_root,
+                    protected_roots_normalized=protected_roots_normalized,
                 )
 
         if len(resolved_entries) > 1:
@@ -334,7 +580,13 @@ def resolve_database_path(
 
     # 3. Unconfigured fallback
     if policy is ResolutionPolicy.LEGACY_COMPATIBLE:
-        return (repo_root_resolved / _DEFAULT_OPERATIONAL_REL_PATH).resolve()
+        fallback_path = (repo_root_resolved / _DEFAULT_OPERATIONAL_REL_PATH).resolve()
+        _assert_not_in_protected_roots(
+            fallback_path,
+            protected_roots_normalized=protected_roots_normalized,
+            label="default_fallback",
+        )
+        return fallback_path
 
     raise DatabaseResolutionError(
         "No explicit db_path or configured database environment variable "
