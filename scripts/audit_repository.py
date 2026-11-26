@@ -17,7 +17,9 @@ if hasattr(sys.stdout, "buffer") and getattr(sys.stdout, "encoding", "") != "utf
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 ALLOWED_ROOT_FILES = {
+    ".gitattributes",
     ".gitignore",
+    "backup_sales_ai.ps1",
     "pyrefly.toml",
     "pyrightconfig.json",
     "pytest.ini",
@@ -25,6 +27,7 @@ ALLOWED_ROOT_FILES = {
     "README.md",
     "README-TEST.md",
     "run_sales_ai.bat",
+    "run_sales_ai.ps1",
     "start_server.py",
     "release_manifest.json",
     "repo_manifest.json",
@@ -56,6 +59,12 @@ SENSITIVE_PATTERNS = {
     "token.json",
     "smtp_pass",
 }
+
+# Exact relative paths of reviewed source utilities that manage credential refs
+# without storing actual credentials. Subject to all other audit checks.
+APPROVED_CREDENTIAL_UTILITY_PATHS = frozenset({
+    "scripts/manage_mailbox_credentials.py",
+})
 
 
 import subprocess
@@ -157,8 +166,8 @@ def audit_repository(repo_root: Path) -> Dict[str, Any]:
             if file_path.suffix.lower() == ".zip":
                 violations["nested_zips"].append(rel)
 
-            # Secret-like filenames
-            if any(p in lower_name for p in SENSITIVE_PATTERNS):
+            # Secret-like filenames (exempt only the exact reviewed credential CLI utility path)
+            if rel not in APPROVED_CREDENTIAL_UTILITY_PATHS and any(p in lower_name for p in SENSITIVE_PATTERNS):
                 if "golden" not in lower_rel and "report" not in lower_rel and "schema" not in lower_rel:
                     violations["secret_filenames"].append(rel)
 
