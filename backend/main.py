@@ -107,60 +107,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# SEC-01: Global Operator Authentication & Access Control Middleware
+# SEC-01 / ARCH-01C2: Global Operator Authentication & Fail-Closed Bootstrap Middleware
 @app.middleware("http")
 async def operator_security_middleware(request: Request, call_next):
     from backend.operator_auth import (
         get_auth_service,
-        SESSION_COOKIE_NAME,
         get_current_user_optional,
     )
 
     path = request.url.path
 
-    # 1. Exempt public endpoints: login, logout, static files, and health check
+    # 1. Exact public endpoints and static asset directory prefix only
     is_public = (
-        path in ("/health", "/sales/login", "/sales/logout")
-        or path.startswith("/static")
-        or path.startswith("/api/auth/login")
+        path in ("/health", "/sales/login", "/sales/logout", "/api/auth/login")
+        or path.startswith("/static/")
     )
 
-    # 2. Check authentication if users exist in the database
-    auth_svc = get_auth_service()
-    user_count = auth_svc.get_user_count()
-
-    # If operator accounts have been set up, enforce authentication on all non-public routes
-    if user_count > 0 and not is_public:
-        user = await get_current_user_optional(request)
-        if not user:
-            # Check if this is a browser navigation to HTML view
-            accept = request.headers.get("accept", "").lower()
-            is_html_req = "text/html" in accept or path.startswith("/sales") and not path.startswith("/api/")
-            
-            if is_html_req and request.method == "GET":
-                next_url = path
-                if request.url.query:
-                    next_url += f"?{request.url.query}"
-                return RedirectResponse(
-                    url=f"/sales/login?next={next_url}",
-                    status_code=status.HTTP_303_SEE_OTHER,
-                )
-            
-            # API or non-GET requests receive 401 Unauthorized
+    # 2. Check operator authentication service & provisioned user count (preserve baseline public-route order)
+    try:
+        auth_svc = get_auth_service()
+        user_count = auth_svc.get_user_count()
+    except Exception:
+        if not is_public:
+            request.state.current_user = None
             return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Authentication required. Please log in."},
-                headers={"WWW-Authenticate": "Cookie"},
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"detail": "Operator authentication service is unavailable."},
+            )
+        raise
+
+    if is_public:
+        request.state.current_user = await get_current_user_optional(request)
+        return await call_next(request)
+
+    if user_count <= 0:
+        request.state.current_user = None
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": (
+                    "Operator authentication is not initialized. "
+                    "Administrator setup via CLI is required before accessing protected routes."
+                )
+            },
+        )
+
+    try:
+        user = await get_current_user_optional(request)
+    except Exception:
+        request.state.current_user = None
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Operator authentication service is unavailable."},
+        )
+
+    if not user:
+        # Check if this is a browser navigation to HTML view
+        accept = request.headers.get("accept", "").lower()
+        is_html_req = "text/html" in accept or path.startswith("/sales") and not path.startswith("/api/")
+
+        if is_html_req and request.method == "GET":
+            next_url = path
+            if request.url.query:
+                next_url += f"?{request.url.query}"
+            return RedirectResponse(
+                url=f"/sales/login?next={next_url}",
+                status_code=status.HTTP_303_SEE_OTHER,
             )
 
-        # Attach authenticated user to request.state for downstream views & audits
-        request.state.current_user = user
-    else:
-        # If no accounts exist yet (initial setup mode), attempt session lookup without blocking
-        request.state.current_user = await get_current_user_optional(request)
+        # API or non-GET requests receive 401 Unauthorized
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Authentication required. Please log in."},
+            headers={"WWW-Authenticate": "Cookie"},
+        )
 
-    response = await call_next(request)
-    return response
+    # Attach authenticated user to request.state for downstream views & audits
+    request.state.current_user = user
+    return await call_next(request)
 
 static_path = Path(__file__).parent / "static"
 if static_path.exists():
